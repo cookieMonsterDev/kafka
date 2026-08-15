@@ -17,13 +17,8 @@ export default tseslint.config(
       },
     },
     rules: {
-      // noUncheckedIndexedAccess makes the protocol layer verbose; ban `!` there instead of
-      // repo-wide so decode helpers stay honest about optional index access (see PLAN.md §10).
-      '@typescript-eslint/no-non-null-assertion': 'off',
-      // kafkajs's ported surface keeps `async` on many methods purely so callers have a
-      // uniform Promise-returning API to `await`, even when a given method has no internal
-      // await today (e.g. Lock#release). Faithful to the original public API shape.
       '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
@@ -41,8 +36,6 @@ export default tseslint.config(
       'vitest/no-focused-tests': 'error',
       'vitest/no-disabled-tests': 'warn',
       'vitest/no-commented-out-tests': 'error',
-      // Mock return values (vi.fn(), vi.mocked()) are inherently loosely typed; fighting that
-      // at test boundaries adds noise without catching real bugs.
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',

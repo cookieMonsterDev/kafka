@@ -36,8 +36,12 @@ export interface KafkaJSErrorOptions {
   cause?: unknown
 }
 
-/** An error-like value carrying an optional `helpUrl`, as protocol errors do. */
-type ErrorLike = Error & { helpUrl?: string }
+/**
+ * Anything with a `.message`, e.g. a real `Error` or a plain protocol error-code descriptor
+ * (`{ type, code, retriable, message }`, see `protocol/error-codes.ts`). Also carries the
+ * optional `helpUrl` some error codes attach.
+ */
+type ErrorLike = { message: string; helpUrl?: string; stack?: string }
 
 export class KafkaJSError extends Error {
   override readonly name: KafkaJSErrorName = 'KafkaJSError'

@@ -99,3 +99,7 @@ pnpm --filter @kafka/<name> add @kafka/core --workspace
 pnpm 11 reads **only** auth and registry settings from `.npmrc`. Everything else
 (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in
 `pnpm-workspace.yaml` — settings placed in `.npmrc` are silently ignored.
+
+## License
+
+[MIT](LICENSE) © Mykhailo Toporkov

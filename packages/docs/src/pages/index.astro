@@ -1,0 +1,24 @@
+---
+import { getCollection } from 'astro:content'
+import { greet } from '@kafka/core'
+import BaseLayout from '../layouts/BaseLayout.astro'
+
+const entries = (await getCollection('docs')).sort(
+  (a, b) => a.data.order - b.data.order,
+)
+---
+
+<BaseLayout title="Kafka docs" description="Documentation for the kafka monorepo">
+  <h1>Kafka docs</h1>
+  <p>{greet('docs')}</p>
+  <ul>
+    {
+      entries.map((entry) => (
+        <li>
+          <a href={`/docs/${entry.id}/`}>{entry.data.title}</a>
+          {entry.data.description && <span> — {entry.data.description}</span>}
+        </li>
+      ))
+    }
+  </ul>
+</BaseLayout>

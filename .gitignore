@@ -3,6 +3,7 @@ dist/
 build/
 coverage/
 .pnpm-store/
+.astro/
 
 .DS_Store
 *.log

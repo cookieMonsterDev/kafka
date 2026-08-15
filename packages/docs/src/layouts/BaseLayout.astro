@@ -1,0 +1,59 @@
+---
+interface Props {
+  title: string
+  description?: string | undefined
+}
+
+const { title, description } = Astro.props
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+  </head>
+  <body>
+    <header>
+      <a href="/">Kafka docs</a>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <style is:global>
+      :root {
+        color-scheme: light dark;
+        --fg: #1a1a1a;
+        --bg: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #e8e8e8;
+          --bg: #16161a;
+        }
+      }
+      body {
+        margin: 0 auto;
+        padding: 2rem 1.25rem;
+        max-width: 44rem;
+        color: var(--fg);
+        background: var(--bg);
+        font: 16px/1.65 ui-sans-serif, system-ui, sans-serif;
+      }
+      header {
+        margin-bottom: 2.5rem;
+        font-weight: 600;
+      }
+      a {
+        color: inherit;
+      }
+      pre {
+        padding: 1rem;
+        border-radius: 6px;
+        overflow-x: auto;
+      }
+    </style>
+  </body>
+</html>

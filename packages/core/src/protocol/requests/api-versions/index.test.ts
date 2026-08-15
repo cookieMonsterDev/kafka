@@ -7,9 +7,9 @@ describe('protocol/requests/api-versions', () => {
   })
 
   it('logs response errors on v0 only', () => {
-    expect(ApiVersions.protocol({ version: 0 })().logResponseError).toBe(true)
-    expect(ApiVersions.protocol({ version: 1 })().logResponseError).toBe(false)
-    expect(ApiVersions.protocol({ version: 2 })().logResponseError).toBe(false)
+    expect(ApiVersions.protocol({ version: 0 })({}).logResponseError).toBe(true)
+    expect(ApiVersions.protocol({ version: 1 })({}).logResponseError).toBe(false)
+    expect(ApiVersions.protocol({ version: 2 })({}).logResponseError).toBe(false)
   })
 
   it('throws for an unimplemented version', () => {

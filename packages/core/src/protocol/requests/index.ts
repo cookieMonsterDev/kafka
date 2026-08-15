@@ -21,20 +21,22 @@ export interface ProtocolResult {
 }
 
 /**
- * The per-version factory a family's `protocol({version})` resolves to — e.g. ApiVersions's is
- * zero-arg (`() => ProtocolResult`), Metadata's takes `{topics, allowAutoTopicCreation}`. Kept
- * loosely typed at this generic dispatch layer (matching kafkajs's own untyped JS here); each
- * family's concrete exports (e.g. `apiVersionsRequestV0`) stay fully typed and are what Phase 4's
- * broker layer calls directly.
+ * The per-version factory a family's `protocol({version})` resolves to, e.g. SaslHandshake's is
+ * `(values: {mechanism: string}) => ProtocolResult`, ApiVersions's is `(values: {}) => ProtocolResult`
+ * — every family takes exactly one options object, mirroring kafkajs's own calling convention
+ * (`metadata({topics, allowAutoTopicCreation})`). `Options` carries the real per-family field
+ * shape through `RequestFamily<Options>`, so a concrete family export (e.g. `SaslHandshake`) is
+ * fully typed at its call site; only `NOT_IMPLEMENTED_REQUEST_DEFINITIONS` and other
+ * apiKey-generic code default it to `unknown`.
  */
-export type ProtocolFactory = (...args: never[]) => ProtocolResult
+export type ProtocolFactory<Options> = (values: Options) => ProtocolResult
 
-export interface RequestFamily {
+export interface RequestFamily<Options = unknown> {
   readonly versions: readonly number[]
-  protocol(options: { version: number }): ProtocolFactory
+  protocol(options: { version: number }): ProtocolFactory<Options>
 }
 
-export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily = Object.freeze({
+export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily<never> = Object.freeze({
   versions: Object.freeze([]),
   protocol(): never {
     throw new KafkaJSNotImplemented('This API is not implemented')
@@ -48,7 +50,7 @@ export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily = Object.freeze(
  */
 export function lookup(
   brokerVersions: Readonly<Record<number, { maxVersion: number } | undefined>>
-): (apiKey: number, family: RequestFamily) => ProtocolFactory {
+): <Options>(apiKey: number, family: RequestFamily<Options>) => ProtocolFactory<Options> {
   return (apiKey, family) => {
     const version = brokerVersions[apiKey]
     if (version == null || version.maxVersion == null) {

@@ -75,6 +75,16 @@ export const nullableBytes: FieldCodec<Buffer | null> = codec(
   (d) => d.readBytes()
 )
 
+/**
+ * A buffer with no length prefix at all — e.g. `SaslAuthenticate`'s request body, which is just
+ * the raw SASL mechanism bytes. Only meaningful as the last field in a schema: reading consumes
+ * everything remaining in the buffer.
+ */
+export const rawBytes: FieldCodec<Buffer> = codec(
+  (e, v) => void e.writeBuffer(v),
+  (d) => d.readAll()
+)
+
 function readArrayBody<T>(d: Decoder, length: number, element: FieldCodec<T>): T[] {
   if (length === -1) return []
   const values = new Array<T>(length)

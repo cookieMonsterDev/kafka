@@ -3,8 +3,8 @@ import { Decoder } from './decoder.js'
 import { Encoder } from './encoder.js'
 
 /**
- * Property-based round-trip coverage for the codec primitives (PLAN.md §7): generate many random
- * values, encode then decode, and assert equality. A seeded LCG keeps failures reproducible.
+ * Property-based round-trip coverage for the codec primitives: generate many random values,
+ * encode then decode, and assert equality. A seeded LCG keeps failures reproducible.
  */
 function makeRandom(seed: number): () => number {
   let state = seed >>> 0

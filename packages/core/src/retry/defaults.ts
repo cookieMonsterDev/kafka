@@ -1,7 +1,7 @@
-export const RETRY_DEFAULTS = {
+export const RETRY_DEFAULTS = Object.freeze({
   maxRetryTime: 30 * 1000,
   initialRetryTime: 300,
   factor: 0.2, // randomization factor
   multiplier: 2, // exponential factor
   retries: 5, // max retries
-} as const
+})

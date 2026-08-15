@@ -3,13 +3,13 @@ import type { Encoder } from '../encoder.js'
 import { gzipCodec } from './gzip.js'
 import { zstdCodec } from './zstd.js'
 
-export const COMPRESSION_TYPES = {
+export const COMPRESSION_TYPES = Object.freeze({
   None: 0,
   GZIP: 1,
   Snappy: 2,
   LZ4: 3,
   ZSTD: 4,
-} as const
+})
 
 export type CompressionType = (typeof COMPRESSION_TYPES)[keyof typeof COMPRESSION_TYPES]
 

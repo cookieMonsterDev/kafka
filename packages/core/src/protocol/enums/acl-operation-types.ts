@@ -1,5 +1,5 @@
 // https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/common/acl/AclOperation.java#L44
-export const ACL_OPERATION_TYPES = {
+export const ACL_OPERATION_TYPES = Object.freeze({
   UNKNOWN: 0,
   ANY: 1,
   ALL: 2,
@@ -13,6 +13,6 @@ export const ACL_OPERATION_TYPES = {
   DESCRIBE_CONFIGS: 10,
   ALTER_CONFIGS: 11,
   IDEMPOTENT_WRITE: 12,
-} as const
+})
 
 export type AclOperationType = (typeof ACL_OPERATION_TYPES)[keyof typeof ACL_OPERATION_TYPES]

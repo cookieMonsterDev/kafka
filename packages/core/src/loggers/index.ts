@@ -1,10 +1,10 @@
-export const LOG_LEVELS = {
+export const LOG_LEVELS = Object.freeze({
   NOTHING: 0,
   ERROR: 1,
   WARN: 2,
   INFO: 4,
   DEBUG: 5,
-} as const
+})
 
 export type LogLevel = (typeof LOG_LEVELS)[keyof typeof LOG_LEVELS]
 

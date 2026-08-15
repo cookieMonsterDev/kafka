@@ -1,5 +1,5 @@
 // https://github.com/apache/kafka/blob/a15387f34d142684859c2a57fcbef25edcdce25a/clients/src/main/java/org/apache/kafka/common/resource/ResourceType.java#L25-L31
-export const ACL_RESOURCE_TYPES = {
+export const ACL_RESOURCE_TYPES = Object.freeze({
   UNKNOWN: 0,
   ANY: 1,
   TOPIC: 2,
@@ -7,6 +7,6 @@ export const ACL_RESOURCE_TYPES = {
   CLUSTER: 4,
   TRANSACTIONAL_ID: 5,
   DELEGATION_TOKEN: 6,
-} as const
+})
 
 export type AclResourceType = (typeof ACL_RESOURCE_TYPES)[keyof typeof ACL_RESOURCE_TYPES]

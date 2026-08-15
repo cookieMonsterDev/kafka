@@ -26,7 +26,7 @@ export interface ArrayReader<T> {
 /**
  * Wire-format reader for the Kafka protocol, the mirror image of `Encoder`. Every read advances
  * an internal offset; out-of-range reads throw rather than silently returning `undefined`, so
- * callers never have to null-check a decoded primitive (see PLAN.md §10 on `noUncheckedIndexedAccess`).
+ * callers never have to null-check a decoded primitive.
  */
 export class Decoder {
   static int32Size(): number {

@@ -5,7 +5,7 @@ A pnpm workspace containing:
 | Package       | Path            | What it is               |
 | ------------- | --------------- | ------------------------ |
 | `@kafka/core` | `packages/core` | TypeScript library       |
-| `@kafka/docs` | `packages/docs` | Astro documentation site |
+| `@kafka/docs` | `packages/docs` | Astro documentation site (Tailwind + shadcn/ui) |
 
 ## Requirements
 

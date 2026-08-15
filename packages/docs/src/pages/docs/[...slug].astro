@@ -1,7 +1,8 @@
 ---
 import { getCollection, render } from 'astro:content'
 import type { GetStaticPaths } from 'astro'
-import BaseLayout from '../../layouts/BaseLayout.astro'
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import { buttonVariants } from '@/components/ui/button'
 
 export const getStaticPaths = (async () => {
   const entries = await getCollection('docs')
@@ -16,6 +17,14 @@ const { Content } = await render(entry)
 ---
 
 <BaseLayout title={entry.data.title} description={entry.data.description}>
-  <h1>{entry.data.title}</h1>
-  <Content />
+  <article class="prose prose-neutral dark:prose-invert max-w-none">
+    <h1>{entry.data.title}</h1>
+    <Content />
+  </article>
+
+  <div class="mt-10">
+    <a href="/" class={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      ← Back to index
+    </a>
+  </div>
 </BaseLayout>

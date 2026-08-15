@@ -1,5 +1,5 @@
 {
-  "name": "kafka-monorepo",
+  "name": "kafka",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,16 @@
     "build": "pnpm -r --if-present run build",
     "dev": "pnpm -r --parallel --if-present run dev",
     "test": "pnpm -r --if-present run test",
-    "lint": "pnpm -r --if-present run lint",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vitest/eslint-plugin": "^1.6.27",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.67.0"
   }
 }

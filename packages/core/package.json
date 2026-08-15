@@ -16,12 +16,22 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch",
+    "build": "pnpm run build:js && pnpm run build:types",
+    "build:js": "vite build",
+    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "vite build --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest --project unit",
+    "coverage": "vitest run --coverage",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "typescript": "catalog:"
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

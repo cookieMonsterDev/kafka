@@ -1,4 +1,4 @@
-# kafka-monorepo
+# kafka
 
 A pnpm workspace containing:
 

@@ -1,0 +1,66 @@
+/**
+ * https://kafka.apache.org/protocol.html#protocol_api_keys
+ *
+ * Ported verbatim from kafkajs's `protocol/requests/apiKeys.js`, including its naming quirks
+ * (`GroupCoordinator` for FindCoordinator's apiKey 10, `ElectPreferredLeaders` for what current
+ * Kafka calls ElectLeaders) — this is the fixed set of API keys kafkajs knows about; newer
+ * KRaft-native APIs (DescribeQuorum, ConsumerGroupHeartbeat/KIP-848, …) are out of scope for this
+ * port (see the flexible-versions stretch goal).
+ */
+export const API_KEYS = Object.freeze({
+  Produce: 0,
+  Fetch: 1,
+  ListOffsets: 2,
+  Metadata: 3,
+  LeaderAndIsr: 4,
+  StopReplica: 5,
+  UpdateMetadata: 6,
+  ControlledShutdown: 7,
+  OffsetCommit: 8,
+  OffsetFetch: 9,
+  GroupCoordinator: 10,
+  JoinGroup: 11,
+  Heartbeat: 12,
+  LeaveGroup: 13,
+  SyncGroup: 14,
+  DescribeGroups: 15,
+  ListGroups: 16,
+  SaslHandshake: 17,
+  ApiVersions: 18,
+  CreateTopics: 19,
+  DeleteTopics: 20,
+  DeleteRecords: 21,
+  InitProducerId: 22,
+  OffsetForLeaderEpoch: 23,
+  AddPartitionsToTxn: 24,
+  AddOffsetsToTxn: 25,
+  EndTxn: 26,
+  WriteTxnMarkers: 27,
+  TxnOffsetCommit: 28,
+  DescribeAcls: 29,
+  CreateAcls: 30,
+  DeleteAcls: 31,
+  DescribeConfigs: 32,
+  AlterConfigs: 33,
+  AlterReplicaLogDirs: 34,
+  DescribeLogDirs: 35,
+  SaslAuthenticate: 36,
+  CreatePartitions: 37,
+  CreateDelegationToken: 38,
+  RenewDelegationToken: 39,
+  ExpireDelegationToken: 40,
+  DescribeDelegationToken: 41,
+  DeleteGroups: 42,
+  ElectPreferredLeaders: 43,
+  IncrementalAlterConfigs: 44,
+  AlterPartitionReassignments: 45,
+  ListPartitionReassignments: 46,
+})
+
+export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS]
+
+const NAMES_BY_KEY: ReadonlyMap<number, string> = new Map(Object.entries(API_KEYS).map(([name, key]) => [key, name]))
+
+export function apiKeyName(apiKey: number): string | undefined {
+  return NAMES_BY_KEY.get(apiKey)
+}

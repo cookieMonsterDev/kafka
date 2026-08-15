@@ -5,6 +5,6 @@ export const RESOURCE_PATTERN_TYPES = Object.freeze({
   MATCH: 2,
   LITERAL: 3,
   PREFIXED: 4,
-})
+});
 
-export type ResourcePatternType = (typeof RESOURCE_PATTERN_TYPES)[keyof typeof RESOURCE_PATTERN_TYPES]
+export type ResourcePatternType = (typeof RESOURCE_PATTERN_TYPES)[keyof typeof RESOURCE_PATTERN_TYPES];

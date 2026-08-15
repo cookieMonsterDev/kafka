@@ -4,6 +4,6 @@ export const CONFIG_RESOURCE_TYPES = Object.freeze({
   TOPIC: 2,
   BROKER: 4,
   BROKER_LOGGER: 8,
-})
+});
 
-export type ConfigResourceType = (typeof CONFIG_RESOURCE_TYPES)[keyof typeof CONFIG_RESOURCE_TYPES]
+export type ConfigResourceType = (typeof CONFIG_RESOURCE_TYPES)[keyof typeof CONFIG_RESOURCE_TYPES];

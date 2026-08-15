@@ -4,36 +4,36 @@ export const LOG_LEVELS = Object.freeze({
   WARN: 2,
   INFO: 4,
   DEBUG: 5,
-})
+});
 
-export type LogLevel = (typeof LOG_LEVELS)[keyof typeof LOG_LEVELS]
+export type LogLevel = (typeof LOG_LEVELS)[keyof typeof LOG_LEVELS];
 
 export interface LogEntry {
-  namespace: string | undefined
-  level: LogLevel
-  label: string
+  namespace: string | undefined;
+  level: LogLevel;
+  label: string;
   log: {
-    timestamp: string
-    logger: string
-    message: string
-    [key: string]: unknown
-  }
+    timestamp: string;
+    logger: string;
+    message: string;
+    [key: string]: unknown;
+  };
 }
 
-export type LogCreator = (logLevel: LogLevel) => (entry: LogEntry) => void
+export type LogCreator = (logLevel: LogLevel) => (entry: LogEntry) => void;
 
 export interface Logger {
-  info(message: string, extra?: Record<string, unknown>): void
-  error(message: string, extra?: Record<string, unknown>): void
-  warn(message: string, extra?: Record<string, unknown>): void
-  debug(message: string, extra?: Record<string, unknown>): void
-  namespace(namespace: string, logLevel?: LogLevel | null): Logger
-  setLogLevel(newLevel: LogLevel): void
+  info(message: string, extra?: Record<string, unknown>): void;
+  error(message: string, extra?: Record<string, unknown>): void;
+  warn(message: string, extra?: Record<string, unknown>): void;
+  debug(message: string, extra?: Record<string, unknown>): void;
+  namespace(namespace: string, logLevel?: LogLevel | null): Logger;
+  setLogLevel(newLevel: LogLevel): void;
 }
 
 export interface LoggerConfig {
-  level?: LogLevel
-  logCreator: LogCreator
+  level?: LogLevel;
+  logCreator: LogCreator;
 }
 
 function createLevel(
@@ -41,10 +41,10 @@ function createLevel(
   level: LogLevel,
   currentLevel: () => LogLevel,
   namespace: string | undefined,
-  logFunction: (entry: LogEntry) => void
+  logFunction: (entry: LogEntry) => void,
 ) {
   return (message: string, extra: Record<string, unknown> = {}): void => {
-    if (level > currentLevel()) return
+    if (level > currentLevel()) return;
 
     logFunction({
       namespace,
@@ -56,27 +56,27 @@ function createLevel(
         message,
         ...extra,
       },
-    })
-  }
+    });
+  };
 }
 
-function evaluateLogLevel(level: LogLevel): LogLevel
-function evaluateLogLevel(level: LogLevel | null): LogLevel | null
+function evaluateLogLevel(level: LogLevel): LogLevel;
+function evaluateLogLevel(level: LogLevel | null): LogLevel | null;
 function evaluateLogLevel(level: LogLevel | null): LogLevel | null {
-  const envLogLevel = (process.env.KAFKAJS_LOG_LEVEL ?? '').toUpperCase()
-  const envLevel = (LOG_LEVELS as Record<string, LogLevel | undefined>)[envLogLevel]
-  return envLevel == null ? level : envLevel
+  const envLogLevel = (process.env.KAFKAJS_LOG_LEVEL ?? '').toUpperCase();
+  const envLevel = (LOG_LEVELS as Record<string, LogLevel | undefined>)[envLogLevel];
+  return envLevel == null ? level : envLevel;
 }
 
 export function createLogger({ level = LOG_LEVELS.INFO, logCreator }: LoggerConfig): Logger {
-  let logLevel: LogLevel = evaluateLogLevel(level)
-  const logFunction = logCreator(logLevel)
+  let logLevel: LogLevel = evaluateLogLevel(level);
+  const logFunction = logCreator(logLevel);
 
   const createNamespace = (namespace: string, namespaceLevel: LogLevel | null = null): Logger =>
-    createLogFunctions(namespace, evaluateLogLevel(namespaceLevel))
+    createLogFunctions(namespace, evaluateLogLevel(namespaceLevel));
 
   const createLogFunctions = (namespace?: string, namespaceLogLevel: LogLevel | null = null): Logger => {
-    const currentLogLevel = (): LogLevel => (namespaceLogLevel == null ? logLevel : namespaceLogLevel)
+    const currentLogLevel = (): LogLevel => (namespaceLogLevel == null ? logLevel : namespaceLogLevel);
 
     return {
       info: createLevel('INFO', LOG_LEVELS.INFO, currentLogLevel, namespace, logFunction),
@@ -85,10 +85,10 @@ export function createLogger({ level = LOG_LEVELS.INFO, logCreator }: LoggerConf
       debug: createLevel('DEBUG', LOG_LEVELS.DEBUG, currentLogLevel, namespace, logFunction),
       namespace: createNamespace,
       setLogLevel: (newLevel: LogLevel) => {
-        logLevel = newLevel
+        logLevel = newLevel;
       },
-    }
-  }
+    };
+  };
 
-  return createLogFunctions()
+  return createLogFunctions();
 }

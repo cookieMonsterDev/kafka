@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import { Encoder } from '../../../encoder.js'
-import { saslHandshakeRequestV0 } from './request.js'
+import { describe, expect, it } from 'vitest';
+import { Encoder } from '../../../encoder.js';
+import { saslHandshakeRequestV0 } from './request.js';
 
 describe('protocol/requests/sasl-handshake/v0/request', () => {
   it('encodes the mechanism as a string', async () => {
-    const definition = saslHandshakeRequestV0({ mechanism: 'PLAIN' })
-    const encoder = await definition.encode()
+    const definition = saslHandshakeRequestV0({ mechanism: 'PLAIN' });
+    const encoder = await definition.encode();
 
-    expect(definition.apiKey).toBe(17)
-    expect(definition.apiVersion).toBe(0)
-    expect(encoder.buffer).toEqual(new Encoder().writeString('PLAIN').buffer)
-  })
-})
+    expect(definition.apiKey).toBe(17);
+    expect(definition.apiVersion).toBe(0);
+    expect(encoder.buffer).toEqual(new Encoder().writeString('PLAIN').buffer);
+  });
+});

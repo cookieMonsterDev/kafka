@@ -5,6 +5,6 @@ export const ISOLATION_LEVEL = Object.freeze({
   // (last stable offset); includes the list of aborted transactions so consumers can discard
   // ABORTED transactional records.
   READ_COMMITTED: 1,
-})
+});
 
-export type IsolationLevel = (typeof ISOLATION_LEVEL)[keyof typeof ISOLATION_LEVEL]
+export type IsolationLevel = (typeof ISOLATION_LEVEL)[keyof typeof ISOLATION_LEVEL];

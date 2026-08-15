@@ -1,23 +1,24 @@
-import { KafkaJSNotImplemented, KafkaJSServerDoesNotSupportApiKey } from '../../errors.js'
-import type { Encoder } from '../encoder.js'
-import { apiKeyName } from './api-keys.js'
+import { KafkaJSNotImplemented, KafkaJSServerDoesNotSupportApiKey } from '../../errors.js';
+import type { Encoder } from '../encoder.js';
+import { apiKeyName } from './api-keys.js';
 
 export interface AnyRequestDefinition {
-  apiKey: number
-  apiVersion: number
-  apiName: string
-  encode(): Promise<Encoder>
+  apiKey: number;
+  apiVersion: number;
+  apiName: string;
+  encode(): Promise<Encoder>;
+  expectResponse?(): boolean;
 }
 
 export interface AnyResponseDefinition {
-  decode(rawData: Buffer): Promise<unknown>
-  parse(data: unknown): Promise<unknown>
+  decode(rawData: Buffer): Promise<unknown>;
+  parse(data: unknown): Promise<unknown>;
 }
 
 export interface ProtocolResult {
-  request: AnyRequestDefinition
-  response: AnyResponseDefinition
-  logResponseError?: boolean
+  request: AnyRequestDefinition;
+  response: AnyResponseDefinition;
+  logResponseError?: boolean;
 }
 
 /**
@@ -29,19 +30,19 @@ export interface ProtocolResult {
  * fully typed at its call site; only `NOT_IMPLEMENTED_REQUEST_DEFINITIONS` and other
  * apiKey-generic code default it to `unknown`.
  */
-export type ProtocolFactory<Options> = (values: Options) => ProtocolResult
+export type ProtocolFactory<Options> = (values: Options) => ProtocolResult;
 
 export interface RequestFamily<Options = unknown> {
-  readonly versions: readonly number[]
-  protocol(options: { version: number }): ProtocolFactory<Options>
+  readonly versions: readonly number[];
+  protocol(options: { version: number }): ProtocolFactory<Options>;
 }
 
 export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily<never> = Object.freeze({
   versions: Object.freeze([]),
   protocol(): never {
-    throw new KafkaJSNotImplemented('This API is not implemented')
+    throw new KafkaJSNotImplemented('This API is not implemented');
   },
-})
+});
 
 /**
  * `lookup(brokerVersions)(apiKey, family)` picks `min(highest version we implement, highest the
@@ -49,19 +50,19 @@ export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily<never> = Object.
  * advertised the API at all.
  */
 export function lookup(
-  brokerVersions: Readonly<Record<number, { maxVersion: number } | undefined>>
+  brokerVersions: Readonly<Record<number, { maxVersion: number } | undefined>>,
 ): <Options>(apiKey: number, family: RequestFamily<Options>) => ProtocolFactory<Options> {
   return (apiKey, family) => {
-    const version = brokerVersions[apiKey]
+    const version = brokerVersions[apiKey];
     if (version == null || version.maxVersion == null) {
       throw new KafkaJSServerDoesNotSupportApiKey('The Kafka server does not support the requested API version', {
         apiKey,
         apiName: apiKeyName(apiKey),
-      })
+      });
     }
 
-    const bestImplementedVersion = Math.max(...family.versions)
-    const bestSupportedVersion = Math.min(bestImplementedVersion, version.maxVersion)
-    return family.protocol({ version: bestSupportedVersion })
-  }
+    const bestImplementedVersion = Math.max(...family.versions);
+    const bestSupportedVersion = Math.min(bestImplementedVersion, version.maxVersion);
+    return family.protocol({ version: bestSupportedVersion });
+  };
 }

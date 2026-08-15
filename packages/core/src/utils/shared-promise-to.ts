@@ -3,24 +3,24 @@
  * instead of triggering the underlying operation multiple times in parallel.
  */
 export function sharedPromiseTo<Args extends unknown[], R>(
-  asyncFunction: (...args: Args) => Promise<R>
+  asyncFunction: (...args: Args) => Promise<R>,
 ): (...args: Args) => Promise<R> {
-  let promise: Promise<R> | null = null
+  let promise: Promise<R> | null = null;
 
   return (...args: Args): Promise<R> => {
     if (promise == null) {
-      const current = asyncFunction(...args)
+      const current = asyncFunction(...args);
       promise = current.then(
         (value) => {
-          promise = null
-          return value
+          promise = null;
+          return value;
         },
         (error) => {
-          promise = null
-          throw error
-        }
-      )
+          promise = null;
+          throw error;
+        },
+      );
     }
-    return promise
-  }
+    return promise;
+  };
 }

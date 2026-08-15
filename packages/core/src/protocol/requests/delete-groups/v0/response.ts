@@ -1,22 +1,22 @@
-import { Decoder } from '../../../decoder.js'
-import { createErrorFromCode, failure } from '../../../error-codes.js'
-import type { KafkaJSProtocolError } from '../../../../errors.js'
-import { array, field, int16, object, string } from '../../../schema.js'
-import type { ResponseDefinition } from '../../../schema.js'
+import { Decoder } from '../../../decoder.js';
+import { createErrorFromCode, failure } from '../../../error-codes.js';
+import type { KafkaJSProtocolError } from '../../../../errors.js';
+import { array, field, int16, object, string } from '../../../schema.js';
+import type { ResponseDefinition } from '../../../schema.js';
 
 export interface DeleteGroupsResult {
-  groupId: string
-  errorCode: number
-  error?: KafkaJSProtocolError
+  groupId: string;
+  errorCode: number;
+  error?: KafkaJSProtocolError;
 }
 
 export interface DeleteGroupsResponseV0Body {
-  throttleTime: number
-  results: DeleteGroupsResult[]
+  throttleTime: number;
+  results: DeleteGroupsResult[];
 }
 
-const resultSchema = object([field('groupId', string), field('errorCode', int16)])
-const resultsSchema = array(resultSchema)
+const resultSchema = object([field('groupId', string), field('errorCode', int16)]);
+const resultsSchema = array(resultSchema);
 
 /**
  * DeleteGroups Response (Version: 0) => throttle_time_ms [results]
@@ -35,13 +35,15 @@ const resultsSchema = array(resultSchema)
  */
 export const deleteGroupsResponseV0: ResponseDefinition<DeleteGroupsResponseV0Body> = {
   decode: async (rawData) => {
-    const decoder = new Decoder(rawData)
-    const throttleTime = decoder.readInt32()
+    const decoder = new Decoder(rawData);
+    const throttleTime = decoder.readInt32();
     const results = resultsSchema
       .read(decoder)
-      .map((result) => (failure(result.errorCode) ? { ...result, error: createErrorFromCode(result.errorCode) } : result))
+      .map((result) =>
+        failure(result.errorCode) ? { ...result, error: createErrorFromCode(result.errorCode) } : result,
+      );
 
-    return { throttleTime, results }
+    return { throttleTime, results };
   },
   parse: async (data) => data,
-}
+};

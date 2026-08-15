@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js'
-import { array, bytes, defineResponse, field, int16, int32, object, string } from '../../../schema.js'
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
+import { array, bytes, defineResponse, field, int16, int32, object, string } from '../../../schema.js';
 
 /**
  * JoinGroup Response (Version: 0) => error_code generation_id group_protocol leader_id member_id [members]
@@ -12,7 +12,7 @@ import { array, bytes, defineResponse, field, int16, int32, object, string } fro
  *     member_id => STRING
  *     member_metadata => BYTES
  */
-export const memberSchema = object([field('memberId', string), field('memberMetadata', bytes)])
+export const memberSchema = object([field('memberId', string), field('memberMetadata', bytes)]);
 const bodySchema = object([
   field('errorCode', int16),
   field('generationId', int32),
@@ -20,13 +20,13 @@ const bodySchema = object([
   field('leaderId', string),
   field('memberId', string),
   field('members', array(memberSchema)),
-])
+]);
 
 export const joinGroupResponseV0 = defineResponse({
   schema: bodySchema,
   parse: async (data) => {
-    failIfVersionNotSupported(data.errorCode)
-    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode)
-    return data
+    failIfVersionNotSupported(data.errorCode);
+    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
+    return data;
   },
-})
+});

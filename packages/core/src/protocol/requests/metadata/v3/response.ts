@@ -8,8 +8,8 @@ import {
   nullableString,
   object,
   string,
-} from '../../../schema.js'
-import { checkTopicMetadataErrors } from '../shared.js'
+} from '../../../schema.js';
+import { checkTopicMetadataErrors } from '../shared.js';
 
 /**
  * Metadata Response (Version: 3) => throttle_time_ms [brokers] cluster_id controller_id [topic_metadata]
@@ -37,32 +37,32 @@ const brokerSchema = object([
   field('host', string),
   field('port', int32),
   field('rack', nullableString),
-])
+]);
 const partitionMetadataSchema = object([
   field('partitionErrorCode', int16),
   field('partitionId', int32),
   field('leader', int32),
   field('replicas', array(int32)),
   field('isr', array(int32)),
-])
+]);
 const topicMetadataSchema = object([
   field('topicErrorCode', int16),
   field('topic', string),
   field('isInternal', boolean),
   field('partitionMetadata', array(partitionMetadataSchema)),
-])
+]);
 const bodySchema = object([
   field('throttleTime', int32),
   field('brokers', array(brokerSchema)),
   field('clusterId', nullableString),
   field('controllerId', int32),
   field('topicMetadata', array(topicMetadataSchema)),
-])
+]);
 
 export const metadataResponseV3 = defineResponse({
   schema: bodySchema,
   parse: async (data) => {
-    checkTopicMetadataErrors(data.topicMetadata)
-    return data
+    checkTopicMetadataErrors(data.topicMetadata);
+    return data;
   },
-})
+});

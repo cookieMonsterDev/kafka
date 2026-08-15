@@ -1,8 +1,8 @@
-import type { Decoder } from '../decoder.js'
-import { Encoder } from '../encoder.js'
-import type { TimestampType } from '../enums/timestamp-types.js'
-import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js'
-import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header.js'
+import type { Decoder } from '../decoder.js';
+import { Encoder } from '../encoder.js';
+import type { TimestampType } from '../enums/timestamp-types.js';
+import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js';
+import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header.js';
 
 /**
  * v2
@@ -18,42 +18,42 @@ import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header.js'
  *     HeaderValue => VarInt|Bytes
  */
 
-export type HeaderValue = Buffer | string | null
+export type HeaderValue = Buffer | string | null;
 
 export interface RecordHeaders {
-  [key: string]: HeaderValue | HeaderValue[]
+  [key: string]: HeaderValue | HeaderValue[];
 }
 
 export interface EncodeRecordOptions {
-  offsetDelta?: number
-  timestampDelta?: bigint
-  key?: Buffer | string | null
-  value?: Buffer | string | null
-  headers?: RecordHeaders
+  offsetDelta?: number;
+  timestampDelta?: bigint;
+  key?: Buffer | string | null;
+  value?: Buffer | string | null;
+  headers?: RecordHeaders;
 }
 
 function flattenHeaders(headers: RecordHeaders): RecordHeaderInput[] {
   return Object.entries(headers).flatMap(([key, value]) =>
-    Array.isArray(value) ? value.map((v) => ({ key, value: v })) : [{ key, value }]
-  )
+    Array.isArray(value) ? value.map((v) => ({ key, value: v })) : [{ key, value }],
+  );
 }
 
 function sizeOfHeaders(headersArray: readonly RecordHeaderInput[]): number {
-  let size = Encoder.sizeOfVarInt(headersArray.length)
+  let size = Encoder.sizeOfVarInt(headersArray.length);
 
   for (const header of headersArray) {
-    const keySize = Buffer.byteLength(header.key)
-    size += Encoder.sizeOfVarInt(keySize) + keySize
+    const keySize = Buffer.byteLength(header.key);
+    size += Encoder.sizeOfVarInt(keySize) + keySize;
 
     if (header.value === null) {
-      size += Encoder.sizeOfVarInt(-1)
+      size += Encoder.sizeOfVarInt(-1);
     } else {
-      const valueSize = Buffer.byteLength(header.value)
-      size += Encoder.sizeOfVarInt(valueSize) + valueSize
+      const valueSize = Buffer.byteLength(header.value);
+      size += Encoder.sizeOfVarInt(valueSize) + valueSize;
     }
   }
 
-  return size
+  return size;
 }
 
 export function encodeRecord({
@@ -63,7 +63,7 @@ export function encodeRecord({
   value = null,
   headers = {},
 }: EncodeRecordOptions = {}): Encoder {
-  const headersArray = flattenHeaders(headers)
+  const headersArray = flattenHeaders(headers);
 
   const sizeOfBody =
     1 + // always one byte for attributes
@@ -71,7 +71,7 @@ export function encodeRecord({
     Encoder.sizeOfVarInt(offsetDelta) +
     Encoder.sizeOfVarIntBytes(key) +
     Encoder.sizeOfVarIntBytes(value) +
-    sizeOfHeaders(headersArray)
+    sizeOfHeaders(headersArray);
 
   return new Encoder()
     .writeVarInt(sizeOfBody)
@@ -80,62 +80,62 @@ export function encodeRecord({
     .writeVarInt(offsetDelta)
     .writeVarIntBytes(key)
     .writeVarIntBytes(value)
-    .writeVarIntArray(headersArray.map(encodeHeader))
+    .writeVarIntArray(headersArray.map(encodeHeader));
 }
 
 export interface RecordBatchContext {
-  firstOffset: bigint
-  firstTimestamp: bigint
-  partitionLeaderEpoch: number
-  inTransaction: boolean
-  isControlBatch: boolean
-  lastOffsetDelta: number
-  producerId: bigint
-  producerEpoch: number
-  firstSequence: number
-  maxTimestamp: bigint
-  timestampType: TimestampType
+  firstOffset: bigint;
+  firstTimestamp: bigint;
+  partitionLeaderEpoch: number;
+  inTransaction: boolean;
+  isControlBatch: boolean;
+  lastOffsetDelta: number;
+  producerId: bigint;
+  producerEpoch: number;
+  firstSequence: number;
+  maxTimestamp: bigint;
+  timestampType: TimestampType;
   /**
    * The magic byte is read by the Fetch protocol to distinguish the record batch from the
    * legacy message set; it's carried through the batch context rather than used directly.
    */
-  magicByte: number
+  magicByte: number;
 }
 
 export interface DecodedRecord {
-  magicByte: number
-  attributes: number
-  timestamp: bigint
-  offset: bigint
-  key: Buffer | null
-  value: Buffer | null
-  headers: Record<string, HeaderValue | HeaderValue[]>
-  isControlRecord: boolean
-  batchContext: RecordBatchContext
+  magicByte: number;
+  attributes: number;
+  timestamp: bigint;
+  offset: bigint;
+  key: Buffer | null;
+  value: Buffer | null;
+  headers: Record<string, HeaderValue | HeaderValue[]>;
+  isControlRecord: boolean;
+  batchContext: RecordBatchContext;
 }
 
 export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext): DecodedRecord {
-  const { firstOffset, firstTimestamp, magicByte, isControlBatch, timestampType, maxTimestamp } = batchContext
-  const attributes = decoder.readInt8()
+  const { firstOffset, firstTimestamp, magicByte, isControlBatch, timestampType, maxTimestamp } = batchContext;
+  const attributes = decoder.readInt8();
 
-  const timestampDelta = decoder.readVarLong()
-  const timestamp = timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + timestampDelta
+  const timestampDelta = decoder.readVarLong();
+  const timestamp = timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + timestampDelta;
 
-  const offsetDelta = decoder.readVarInt()
-  const offset = firstOffset + BigInt(offsetDelta)
+  const offsetDelta = decoder.readVarInt();
+  const offset = firstOffset + BigInt(offsetDelta);
 
-  const key = decoder.readVarIntBytes()
-  const value = decoder.readVarIntBytes()
+  const key = decoder.readVarIntBytes();
+  const value = decoder.readVarIntBytes();
 
-  const headers: Record<string, HeaderValue | HeaderValue[]> = {}
+  const headers: Record<string, HeaderValue | HeaderValue[]> = {};
   for (const { key: headerKey, value: headerValue } of decoder.readVarIntArray(decodeHeader)) {
-    const existing = headers[String(headerKey)]
+    const existing = headers[String(headerKey)];
     if (existing === undefined) {
-      headers[String(headerKey)] = headerValue
+      headers[String(headerKey)] = headerValue;
     } else if (Array.isArray(existing)) {
-      existing.push(headerValue)
+      existing.push(headerValue);
     } else {
-      headers[String(headerKey)] = [existing, headerValue]
+      headers[String(headerKey)] = [existing, headerValue];
     }
   }
 
@@ -149,5 +149,5 @@ export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext)
     headers,
     isControlRecord: isControlBatch,
     batchContext,
-  }
+  };
 }

@@ -1,20 +1,20 @@
-import { setTimeout as delay } from 'node:timers/promises'
-import { KafkaJSTimeout } from '../errors.js'
+import { setTimeout as delay } from 'node:timers/promises';
+import { KafkaJSTimeout } from '../errors.js';
 
 export interface SleepOptions {
-  signal?: AbortSignal
+  signal?: AbortSignal;
 }
 
 export function sleep(ms: number, options: SleepOptions = {}): Promise<void> {
-  return delay(ms, undefined, options)
+  return delay(ms, undefined, options);
 }
 
 export interface WaitForOptions {
-  delay?: number
-  maxWait?: number
-  timeoutMessage?: string
-  ignoreTimeout?: boolean
-  signal?: AbortSignal
+  delay?: number;
+  maxWait?: number;
+  timeoutMessage?: string;
+  ignoreTimeout?: boolean;
+  signal?: AbortSignal;
 }
 
 /**
@@ -22,55 +22,55 @@ export interface WaitForOptions {
  * Rejects with `KafkaJSTimeout` after `maxWait` ms, or with `signal`'s abort reason.
  */
 export function waitFor<T>(fn: (elapsed: number) => T | Promise<T>, options: WaitForOptions = {}): Promise<T> {
-  const { delay: interval = 50, maxWait = 10_000, timeoutMessage = 'Timeout', ignoreTimeout = false, signal } = options
+  const { delay: interval = 50, maxWait = 10_000, timeoutMessage = 'Timeout', ignoreTimeout = false, signal } = options;
 
   return new Promise<T>((resolve, reject) => {
-    let settled = false
-    let timeoutId: NodeJS.Timeout | undefined
-    let elapsed = 0
+    let settled = false;
+    let timeoutId: NodeJS.Timeout | undefined;
+    let elapsed = 0;
 
     const settle = (action: () => void): void => {
-      if (settled) return
-      settled = true
-      clearTimeout(timeoutId)
-      action()
-    }
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      action();
+    };
 
     const check = (): void => {
-      elapsed += interval
-      if (settled) return
+      elapsed += interval;
+      if (settled) return;
 
       void (async () => {
         try {
-          await sleep(interval)
-          if (settled) return
+          await sleep(interval);
+          if (settled) return;
 
-          const result = await fn(elapsed)
+          const result = await fn(elapsed);
           if (result) {
-            settle(() => resolve(result))
+            settle(() => resolve(result));
           } else {
-            check()
+            check();
           }
         } catch (error) {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward fn's/sleep's rejection reason as-is
-          settle(() => reject(error))
+          settle(() => reject(error));
         }
-      })()
-    }
+      })();
+    };
 
-    check()
+    check();
 
     if (!ignoreTimeout) {
       timeoutId = setTimeout(() => {
-        settle(() => reject(new KafkaJSTimeout(timeoutMessage)))
-      }, maxWait)
+        settle(() => reject(new KafkaJSTimeout(timeoutMessage)));
+      }, maxWait);
     }
 
     signal?.addEventListener(
       'abort',
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- propagate the caller's abort reason as-is, matching AbortSignal semantics
       () => settle(() => reject(signal.reason)),
-      { once: true }
-    )
-  })
+      { once: true },
+    );
+  });
 }

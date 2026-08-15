@@ -1,6 +1,6 @@
-import { defineCollection } from 'astro:content'
-import { glob } from 'astro/loaders'
-import { z } from 'astro/zod'
+import { defineCollection } from 'astro:content';
+import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
 
 // Every .md file under src/content/docs becomes an entry in this collection,
 // and src/pages/docs/[...slug].astro turns each entry into a page.
@@ -11,6 +11,6 @@ const docs = defineCollection({
     description: z.string().optional(),
     order: z.number().default(999),
   }),
-})
+});
 
-export const collections = { docs }
+export const collections = { docs };

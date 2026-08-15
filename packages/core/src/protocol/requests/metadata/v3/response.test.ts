@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import v3ResponseFixture from '../fixtures/v3-response.json' with { type: 'json' }
-import { metadataResponseV3 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v3ResponseFixture from '../fixtures/v3-response.json' with { type: 'json' };
+import { metadataResponseV3 } from './response.js';
 
 describe('protocol/requests/metadata/v3/response', () => {
   it('decodes a real fixture', async () => {
-    const data = await metadataResponseV3.decode(Buffer.from(v3ResponseFixture.data))
+    const data = await metadataResponseV3.decode(Buffer.from(v3ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -23,7 +23,7 @@ describe('protocol/requests/metadata/v3/response', () => {
           partitionMetadata: [{ partitionErrorCode: 0, partitionId: 0, leader: 2, replicas: [2], isr: [2] }],
         },
       ],
-    })
-    await expect(metadataResponseV3.parse(data)).resolves.toBeTruthy()
-  })
-})
+    });
+    await expect(metadataResponseV3.parse(data)).resolves.toBeTruthy();
+  });
+});

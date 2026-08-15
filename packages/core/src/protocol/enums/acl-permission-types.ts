@@ -4,6 +4,6 @@ export const ACL_PERMISSION_TYPES = Object.freeze({
   ANY: 1,
   DENY: 2,
   ALLOW: 3,
-})
+});
 
-export type AclPermissionType = (typeof ACL_PERMISSION_TYPES)[keyof typeof ACL_PERMISSION_TYPES]
+export type AclPermissionType = (typeof ACL_PERMISSION_TYPES)[keyof typeof ACL_PERMISSION_TYPES];

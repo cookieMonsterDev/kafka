@@ -1,4 +1,4 @@
-import { createErrorFromCode, failure } from '../../error-codes.js'
+import { createErrorFromCode, failure } from '../../error-codes.js';
 
 /**
  * Every Metadata response version shares this error-checking shape (topic-level error code, then
@@ -8,16 +8,16 @@ import { createErrorFromCode, failure } from '../../error-codes.js'
  * return type is never widened down to v0's.
  */
 export interface TopicMetadataErrorShape {
-  topicErrorCode: number
-  partitionMetadata: readonly { partitionErrorCode: number }[]
+  topicErrorCode: number;
+  partitionMetadata: readonly { partitionErrorCode: number }[];
 }
 
 export function checkTopicMetadataErrors(topicMetadata: readonly TopicMetadataErrorShape[]): void {
-  const topicWithError = topicMetadata.find((topic) => failure(topic.topicErrorCode))
-  if (topicWithError) throw createErrorFromCode(topicWithError.topicErrorCode)
+  const topicWithError = topicMetadata.find((topic) => failure(topic.topicErrorCode));
+  if (topicWithError) throw createErrorFromCode(topicWithError.topicErrorCode);
 
   for (const topic of topicMetadata) {
-    const partitionWithError = topic.partitionMetadata.find((partition) => failure(partition.partitionErrorCode))
-    if (partitionWithError) throw createErrorFromCode(partitionWithError.partitionErrorCode)
+    const partitionWithError = topic.partitionMetadata.find((partition) => failure(partition.partitionErrorCode));
+    if (partitionWithError) throw createErrorFromCode(partitionWithError.partitionErrorCode);
   }
 }

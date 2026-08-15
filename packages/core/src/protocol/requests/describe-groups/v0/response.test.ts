@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' }
-import { describeGroupsResponseV0 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
+import { describeGroupsResponseV0 } from './response.js';
 
 describe('protocol/requests/describe-groups/v0/response', () => {
   it('decodes a real fixture', async () => {
-    const data = await describeGroupsResponseV0.decode(Buffer.from(v0ResponseFixture.data))
+    const data = await describeGroupsResponseV0.decode(Buffer.from(v0ResponseFixture.data));
 
     expect(data).toEqual({
       groups: [
@@ -25,9 +25,9 @@ describe('protocol/requests/describe-groups/v0/response', () => {
           ],
         },
       ],
-    })
-    await expect(describeGroupsResponseV0.parse(data)).resolves.toBeTruthy()
-  })
+    });
+    await expect(describeGroupsResponseV0.parse(data)).resolves.toBeTruthy();
+  });
 
   it('throws using the first errored group', async () => {
     const data = {
@@ -35,7 +35,7 @@ describe('protocol/requests/describe-groups/v0/response', () => {
         { errorCode: 0, groupId: 'ok', state: '', protocolType: '', protocol: '', members: [] },
         { errorCode: 35, groupId: 'bad', state: '', protocolType: '', protocol: '', members: [] },
       ],
-    }
-    await expect(describeGroupsResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/)
-  })
-})
+    };
+    await expect(describeGroupsResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/);
+  });
+});

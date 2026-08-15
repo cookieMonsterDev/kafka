@@ -55,12 +55,12 @@ export const API_KEYS = Object.freeze({
   IncrementalAlterConfigs: 44,
   AlterPartitionReassignments: 45,
   ListPartitionReassignments: 46,
-})
+});
 
-export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS]
+export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];
 
-const NAMES_BY_KEY: ReadonlyMap<number, string> = new Map(Object.entries(API_KEYS).map(([name, key]) => [key, name]))
+const NAMES_BY_KEY: ReadonlyMap<number, string> = new Map(Object.entries(API_KEYS).map(([name, key]) => [key, name]));
 
 export function apiKeyName(apiKey: number): string | undefined {
-  return NAMES_BY_KEY.get(apiKey)
+  return NAMES_BY_KEY.get(apiKey);
 }

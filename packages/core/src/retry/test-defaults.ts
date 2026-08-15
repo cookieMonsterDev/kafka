@@ -9,4 +9,4 @@ export const FAST_RETRY_DEFAULTS = Object.freeze({
   factor: 0.02, // randomization factor
   multiplier: 1.5, // exponential factor
   retries: 15, // max retries
-})
+});

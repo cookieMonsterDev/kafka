@@ -7,6 +7,6 @@ export const CONFIG_SOURCE = Object.freeze({
   STATIC_BROKER_CONFIG: 4,
   DEFAULT_CONFIG: 5,
   DYNAMIC_BROKER_LOGGER_CONFIG: 6,
-})
+});
 
-export type ConfigSource = (typeof CONFIG_SOURCE)[keyof typeof CONFIG_SOURCE]
+export type ConfigSource = (typeof CONFIG_SOURCE)[keyof typeof CONFIG_SOURCE];

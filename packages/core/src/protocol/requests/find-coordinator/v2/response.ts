@@ -1,12 +1,12 @@
-import type { ResponseDefinition } from '../../../schema.js'
-import { findCoordinatorResponseV1 } from '../v1/response.js'
+import type { ResponseDefinition } from '../../../schema.js';
+import { findCoordinatorResponseV1 } from '../v1/response.js';
 
 export interface FindCoordinatorResponseV2Body {
-  errorCode: number
-  errorMessage: string | null
-  coordinator: { nodeId: number; host: string; port: number }
-  throttleTime: number
-  clientSideThrottleTime: number
+  errorCode: number;
+  errorMessage: string | null;
+  coordinator: { nodeId: number; host: string; port: number };
+  throttleTime: number;
+  clientSideThrottleTime: number;
 }
 
 /**
@@ -17,11 +17,11 @@ export interface FindCoordinatorResponseV2Body {
  */
 export const findCoordinatorResponseV2: ResponseDefinition<FindCoordinatorResponseV2Body> = {
   decode: async (rawData) => {
-    const decoded = await findCoordinatorResponseV1.decode(rawData)
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime }
+    const decoded = await findCoordinatorResponseV1.decode(rawData);
+    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
   },
   parse: async (data) => {
-    await findCoordinatorResponseV1.parse(data)
-    return data
+    await findCoordinatorResponseV1.parse(data);
+    return data;
   },
-}
+};

@@ -13,6 +13,6 @@ export const ACL_OPERATION_TYPES = Object.freeze({
   DESCRIBE_CONFIGS: 10,
   ALTER_CONFIGS: 11,
   IDEMPOTENT_WRITE: 12,
-})
+});
 
-export type AclOperationType = (typeof ACL_OPERATION_TYPES)[keyof typeof ACL_OPERATION_TYPES]
+export type AclOperationType = (typeof ACL_OPERATION_TYPES)[keyof typeof ACL_OPERATION_TYPES];

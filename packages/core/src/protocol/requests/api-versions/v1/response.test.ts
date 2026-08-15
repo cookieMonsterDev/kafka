@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' }
-import v1ResponseMissingThrottleTimeFixture from '../fixtures/v1-response-missing-throttle-time.json' with { type: 'json' }
-import { apiVersionsResponseV1 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
+import v1ResponseMissingThrottleTimeFixture from '../fixtures/v1-response-missing-throttle-time.json' with { type: 'json' };
+import { apiVersionsResponseV1 } from './response.js';
 
 function unsupportedVersionResponse(): Buffer {
-  return Buffer.from([0, 35, 0, 0, 0, 0])
+  return Buffer.from([0, 35, 0, 0, 0, 0]);
 }
 
 const EXPECTED_API_VERSIONS = [
@@ -42,23 +42,23 @@ const EXPECTED_API_VERSIONS = [
   { apiKey: 31, maxVersion: 0, minVersion: 0 },
   { apiKey: 32, maxVersion: 0, minVersion: 0 },
   { apiKey: 33, maxVersion: 0, minVersion: 0 },
-]
+];
 
 describe('protocol/requests/api-versions/v1/response', () => {
   it('decodes a real fixture', async () => {
-    const data = await apiVersionsResponseV1.decode(Buffer.from(v1ResponseFixture.data))
+    const data = await apiVersionsResponseV1.decode(Buffer.from(v1ResponseFixture.data));
 
-    expect(data).toEqual({ apiVersions: EXPECTED_API_VERSIONS, errorCode: 0, throttleTime: 0 })
-    await expect(apiVersionsResponseV1.parse(data)).resolves.toBeTruthy()
-  })
+    expect(data).toEqual({ apiVersions: EXPECTED_API_VERSIONS, errorCode: 0, throttleTime: 0 });
+    await expect(apiVersionsResponseV1.parse(data)).resolves.toBeTruthy();
+  });
 
   it('defaults throttle_time_ms to 0 when the broker omits it (kafkajs#491)', async () => {
-    const data = await apiVersionsResponseV1.decode(Buffer.from(v1ResponseMissingThrottleTimeFixture.data))
-    expect(data).toEqual({ apiVersions: EXPECTED_API_VERSIONS, errorCode: 0, throttleTime: 0 })
-  })
+    const data = await apiVersionsResponseV1.decode(Buffer.from(v1ResponseMissingThrottleTimeFixture.data));
+    expect(data).toEqual({ apiVersions: EXPECTED_API_VERSIONS, errorCode: 0, throttleTime: 0 });
+  });
 
   it('throws a KafkaJSProtocolError if the api is not supported', async () => {
-    const data = await apiVersionsResponseV1.decode(unsupportedVersionResponse())
-    await expect(apiVersionsResponseV1.parse(data)).rejects.toThrow(/version of API is not supported/)
-  })
-})
+    const data = await apiVersionsResponseV1.decode(unsupportedVersionResponse());
+    await expect(apiVersionsResponseV1.parse(data)).rejects.toThrow(/version of API is not supported/);
+  });
+});

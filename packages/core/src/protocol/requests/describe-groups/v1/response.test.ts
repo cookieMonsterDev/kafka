@@ -1,12 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import v1MemberAssignmentFixture from '../fixtures/v1-member-assignment.json' with { type: 'json' }
-import v1MemberMetadataFixture from '../fixtures/v1-member-metadata.json' with { type: 'json' }
-import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' }
-import { describeGroupsResponseV1 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v1MemberAssignmentFixture from '../fixtures/v1-member-assignment.json' with { type: 'json' };
+import v1MemberMetadataFixture from '../fixtures/v1-member-metadata.json' with { type: 'json' };
+import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
+import { describeGroupsResponseV1 } from './response.js';
 
 describe('protocol/requests/describe-groups/v1/response', () => {
   it('decodes a real fixture, including throttleTime', async () => {
-    const data = await describeGroupsResponseV1.decode(Buffer.from(v1ResponseFixture.data))
+    const data = await describeGroupsResponseV1.decode(Buffer.from(v1ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -29,7 +29,7 @@ describe('protocol/requests/describe-groups/v1/response', () => {
           ],
         },
       ],
-    })
-    await expect(describeGroupsResponseV1.parse(data)).resolves.toBeTruthy()
-  })
-})
+    });
+    await expect(describeGroupsResponseV1.parse(data)).resolves.toBeTruthy();
+  });
+});

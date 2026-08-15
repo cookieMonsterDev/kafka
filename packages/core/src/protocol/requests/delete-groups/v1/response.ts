@@ -1,11 +1,11 @@
-import type { ResponseDefinition } from '../../../schema.js'
-import type { DeleteGroupsResult } from '../v0/response.js'
-import { deleteGroupsResponseV0 } from '../v0/response.js'
+import type { ResponseDefinition } from '../../../schema.js';
+import type { DeleteGroupsResult } from '../v0/response.js';
+import { deleteGroupsResponseV0 } from '../v0/response.js';
 
 export interface DeleteGroupsResponseV1Body {
-  results: DeleteGroupsResult[]
-  throttleTime: number
-  clientSideThrottleTime: number
+  results: DeleteGroupsResult[];
+  throttleTime: number;
+  clientSideThrottleTime: number;
 }
 
 /**
@@ -16,8 +16,8 @@ export interface DeleteGroupsResponseV1Body {
  */
 export const deleteGroupsResponseV1: ResponseDefinition<DeleteGroupsResponseV1Body> = {
   decode: async (rawData) => {
-    const decoded = await deleteGroupsResponseV0.decode(rawData)
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime }
+    const decoded = await deleteGroupsResponseV0.decode(rawData);
+    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
   },
   parse: async (data) => data,
-}
+};

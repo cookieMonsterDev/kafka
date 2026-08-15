@@ -1,5 +1,5 @@
-import { array, defineRequest, field, nullableString, object, string } from '../../../schema.js'
-import { API_KEYS } from '../../api-keys.js'
+import { array, defineRequest, field, nullableString, object, string } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys.js';
 
 /**
  * Version 3 changes LeaveGroup to operate on a batch of members and adds group_instance_id to
@@ -12,12 +12,12 @@ import { API_KEYS } from '../../api-keys.js'
  *     member_id => STRING
  *     group_instance_id => NULLABLE_STRING
  */
-const memberSchema = object([field('memberId', string), field('groupInstanceId', nullableString)])
-const requestSchema = object([field('groupId', string), field('members', array(memberSchema))])
+const memberSchema = object([field('memberId', string), field('groupInstanceId', nullableString)]);
+const requestSchema = object([field('groupId', string), field('members', array(memberSchema))]);
 
 export const leaveGroupRequestV3 = defineRequest({
   apiKey: API_KEYS.LeaveGroup,
   apiVersion: 3,
   apiName: 'LeaveGroup',
   schema: requestSchema,
-})
+});

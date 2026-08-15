@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import v1AssignerMetadataFixture from '../fixtures/v1-assigner-metadata.json' with { type: 'json' }
-import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' }
-import { joinGroupRequestV1 } from './request.js'
+import { describe, expect, it } from 'vitest';
+import v1AssignerMetadataFixture from '../fixtures/v1-assigner-metadata.json' with { type: 'json' };
+import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
+import { joinGroupRequestV1 } from './request.js';
 
 describe('protocol/requests/join-group/v1/request', () => {
   it('encodes to match the real fixture, including rebalanceTimeout', async () => {
@@ -12,8 +12,8 @@ describe('protocol/requests/join-group/v1/request', () => {
       memberId: '',
       protocolType: 'consumer',
       groupProtocols: [{ name: 'AssignerName', metadata: Buffer.from(v1AssignerMetadataFixture.data) }],
-    })
-    const encoder = await definition.encode()
-    expect(encoder.buffer).toEqual(Buffer.from(v1RequestFixture.data))
-  })
-})
+    });
+    const encoder = await definition.encode();
+    expect(encoder.buffer).toEqual(Buffer.from(v1RequestFixture.data));
+  });
+});

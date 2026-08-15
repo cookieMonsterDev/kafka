@@ -7,6 +7,6 @@ export const ACL_RESOURCE_TYPES = Object.freeze({
   CLUSTER: 4,
   TRANSACTIONAL_ID: 5,
   DELEGATION_TOKEN: 6,
-})
+});
 
-export type AclResourceType = (typeof ACL_RESOURCE_TYPES)[keyof typeof ACL_RESOURCE_TYPES]
+export type AclResourceType = (typeof ACL_RESOURCE_TYPES)[keyof typeof ACL_RESOURCE_TYPES];

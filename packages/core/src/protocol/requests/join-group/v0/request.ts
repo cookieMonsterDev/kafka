@@ -1,17 +1,17 @@
-import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema.js'
-import { API_KEYS } from '../../api-keys.js'
+import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys.js';
 
 export interface GroupProtocol {
-  name: string
-  metadata?: Buffer
+  name: string;
+  metadata?: Buffer;
 }
 
 export interface JoinGroupRequestV0Fields {
-  groupId: string
-  sessionTimeout: number
-  memberId: string
-  protocolType: string
-  groupProtocols: GroupProtocol[]
+  groupId: string;
+  sessionTimeout: number;
+  memberId: string;
+  protocolType: string;
+  groupProtocols: GroupProtocol[];
 }
 
 /**
@@ -24,24 +24,22 @@ export interface JoinGroupRequestV0Fields {
  *     protocol_name => STRING
  *     protocol_metadata => BYTES
  */
-const groupProtocolSchema = object([field('name', string), field('metadata', bytes)])
+const groupProtocolSchema = object([field('name', string), field('metadata', bytes)]);
 const requestSchema = object([
   field('groupId', string),
   field('sessionTimeout', int32),
   field('memberId', string),
   field('protocolType', string),
   field('groupProtocols', array(groupProtocolSchema)),
-])
+]);
 
 export const joinGroupRequestV0 = defineRequest({
   apiKey: API_KEYS.JoinGroup,
   apiVersion: 0,
   apiName: 'JoinGroup',
   schema: requestSchema,
-})
+});
 
-export function withDefaultMetadata(
-  groupProtocols: readonly GroupProtocol[]
-): { name: string; metadata: Buffer }[] {
-  return groupProtocols.map(({ name, metadata = Buffer.alloc(0) }) => ({ name, metadata }))
+export function withDefaultMetadata(groupProtocols: readonly GroupProtocol[]): { name: string; metadata: Buffer }[] {
+  return groupProtocols.map(({ name, metadata = Buffer.alloc(0) }) => ({ name, metadata }));
 }

@@ -105,7 +105,7 @@ import { buttonVariants } from '@/components/ui/button'
 <Button asChild><a href="/docs/">Read</a></Button>
 ```
 
-`asChild` works normally *inside* `.tsx` components, where children are real React elements.
+`asChild` works normally _inside_ `.tsx` components, where children are real React elements.
 
 ### Theming
 

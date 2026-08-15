@@ -1,27 +1,27 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js'
-import { Decoder } from '../../../decoder.js'
-import { array, field, int16, nullableString, object, string } from '../../../schema.js'
-import type { ResponseDefinition } from '../../../schema.js'
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
+import { Decoder } from '../../../decoder.js';
+import { array, field, int16, nullableString, object, string } from '../../../schema.js';
+import type { ResponseDefinition } from '../../../schema.js';
 
 export interface LeaveGroupResponseV3Member {
-  memberId: string
-  groupInstanceId: string | null
-  errorCode: number
+  memberId: string;
+  groupInstanceId: string | null;
+  errorCode: number;
 }
 
 export interface LeaveGroupResponseV3Body {
-  throttleTime: number
-  clientSideThrottleTime: number
-  errorCode: number
-  members: LeaveGroupResponseV3Member[]
+  throttleTime: number;
+  clientSideThrottleTime: number;
+  errorCode: number;
+  members: LeaveGroupResponseV3Member[];
 }
 
 const memberSchema = object([
   field('memberId', string),
   field('groupInstanceId', nullableString),
   field('errorCode', int16),
-])
-const membersSchema = array(memberSchema)
+]);
+const membersSchema = array(memberSchema);
 
 /**
  * LeaveGroup Response (Version: 3) => throttle_time_ms error_code [members]
@@ -34,20 +34,20 @@ const membersSchema = array(memberSchema)
  */
 export const leaveGroupResponseV3: ResponseDefinition<LeaveGroupResponseV3Body> = {
   decode: async (rawData) => {
-    const decoder = new Decoder(rawData)
-    const throttleTime = decoder.readInt32()
-    const errorCode = decoder.readInt16()
-    const members = membersSchema.read(decoder)
+    const decoder = new Decoder(rawData);
+    const throttleTime = decoder.readInt32();
+    const errorCode = decoder.readInt16();
+    const members = membersSchema.read(decoder);
 
-    return { throttleTime: 0, clientSideThrottleTime: throttleTime, errorCode, members }
+    return { throttleTime: 0, clientSideThrottleTime: throttleTime, errorCode, members };
   },
   parse: async (data) => {
-    failIfVersionNotSupported(data.errorCode)
-    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode)
+    failIfVersionNotSupported(data.errorCode);
+    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
 
-    const memberWithError = data.members.find((member) => failure(member.errorCode))
-    if (memberWithError) throw createErrorFromCode(memberWithError.errorCode)
+    const memberWithError = data.members.find((member) => failure(member.errorCode));
+    if (memberWithError) throw createErrorFromCode(memberWithError.errorCode);
 
-    return data
+    return data;
   },
-}
+};

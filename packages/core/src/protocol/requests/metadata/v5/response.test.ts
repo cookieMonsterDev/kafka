@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import v5OfflineReplicasResponseFixture from '../fixtures/v5-offline-replicas-response.json' with { type: 'json' }
-import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' }
-import { metadataResponseV5 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v5OfflineReplicasResponseFixture from '../fixtures/v5-offline-replicas-response.json' with { type: 'json' };
+import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
+import { metadataResponseV5 } from './response.js';
 
 describe('protocol/requests/metadata/v5/response', () => {
   it('decodes a real fixture, including empty offlineReplicas', async () => {
-    const data = await metadataResponseV5.decode(Buffer.from(v5ResponseFixture.data))
+    const data = await metadataResponseV5.decode(Buffer.from(v5ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -26,12 +26,12 @@ describe('protocol/requests/metadata/v5/response', () => {
           ],
         },
       ],
-    })
-    await expect(metadataResponseV5.parse(data)).resolves.toBeTruthy()
-  })
+    });
+    await expect(metadataResponseV5.parse(data)).resolves.toBeTruthy();
+  });
 
   it('throws on a real fixture with a genuine offline-replicas election error', async () => {
-    const data = await metadataResponseV5.decode(Buffer.from(v5OfflineReplicasResponseFixture.data))
+    const data = await metadataResponseV5.decode(Buffer.from(v5OfflineReplicasResponseFixture.data));
     expect(data.topicMetadata[0]?.partitionMetadata[0]).toEqual({
       isr: [],
       leader: -1,
@@ -39,9 +39,9 @@ describe('protocol/requests/metadata/v5/response', () => {
       partitionErrorCode: 5,
       partitionId: 2,
       replicas: [2],
-    })
+    });
     await expect(metadataResponseV5.parse(data)).rejects.toThrow(
-      'There is no leader for this topic-partition as we are in the middle of a leadership election'
-    )
-  })
-})
+      'There is no leader for this topic-partition as we are in the middle of a leadership election',
+    );
+  });
+});

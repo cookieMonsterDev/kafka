@@ -1,14 +1,14 @@
-import { describe, expect, it } from 'vitest'
-import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' }
-import { apiVersionsResponseV0 } from './response.js'
+import { describe, expect, it } from 'vitest';
+import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
+import { apiVersionsResponseV0 } from './response.js';
 
 function unsupportedVersionResponse(): Buffer {
-  return Buffer.from([0, 35, 0, 0, 0, 0])
+  return Buffer.from([0, 35, 0, 0, 0, 0]);
 }
 
 describe('protocol/requests/api-versions/v0/response', () => {
   it('decodes a real fixture', async () => {
-    const data = await apiVersionsResponseV0.decode(Buffer.from(v0ResponseFixture.data))
+    const data = await apiVersionsResponseV0.decode(Buffer.from(v0ResponseFixture.data));
 
     expect(data).toEqual({
       errorCode: 0,
@@ -35,13 +35,13 @@ describe('protocol/requests/api-versions/v0/response', () => {
         { apiKey: 19, minVersion: 0, maxVersion: 1 },
         { apiKey: 20, minVersion: 0, maxVersion: 0 },
       ],
-    })
+    });
 
-    await expect(apiVersionsResponseV0.parse(data)).resolves.toBeTruthy()
-  })
+    await expect(apiVersionsResponseV0.parse(data)).resolves.toBeTruthy();
+  });
 
   it('throws a KafkaJSProtocolError if the api is not supported', async () => {
-    const data = await apiVersionsResponseV0.decode(unsupportedVersionResponse())
-    await expect(apiVersionsResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/)
-  })
-})
+    const data = await apiVersionsResponseV0.decode(unsupportedVersionResponse());
+    await expect(apiVersionsResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/);
+  });
+});

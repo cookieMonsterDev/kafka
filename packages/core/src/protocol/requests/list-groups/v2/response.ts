@@ -1,11 +1,11 @@
-import type { ResponseDefinition } from '../../../schema.js'
-import { listGroupsResponseV1 } from '../v1/response.js'
+import type { ResponseDefinition } from '../../../schema.js';
+import { listGroupsResponseV1 } from '../v1/response.js';
 
 export interface ListGroupsResponseV2Body {
-  errorCode: number
-  groups: { groupId: string; protocolType: string }[]
-  throttleTime: number
-  clientSideThrottleTime: number
+  errorCode: number;
+  groups: { groupId: string; protocolType: string }[];
+  throttleTime: number;
+  clientSideThrottleTime: number;
 }
 
 /**
@@ -16,11 +16,11 @@ export interface ListGroupsResponseV2Body {
  */
 export const listGroupsResponseV2: ResponseDefinition<ListGroupsResponseV2Body> = {
   decode: async (rawData) => {
-    const decoded = await listGroupsResponseV1.decode(rawData)
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime }
+    const decoded = await listGroupsResponseV1.decode(rawData);
+    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
   },
   parse: async (data) => {
-    await listGroupsResponseV1.parse(data)
-    return data
+    await listGroupsResponseV1.parse(data);
+    return data;
   },
-}
+};

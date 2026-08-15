@@ -1,7 +1,7 @@
-import { KafkaJSNotImplemented } from '../../errors.js'
-import type { Encoder } from '../encoder.js'
-import { gzipCodec } from './gzip.js'
-import { zstdCodec } from './zstd.js'
+import { KafkaJSNotImplemented } from '../../errors.js';
+import type { Encoder } from '../encoder.js';
+import { gzipCodec } from './gzip.js';
+import { zstdCodec } from './zstd.js';
 
 export const COMPRESSION_TYPES = Object.freeze({
   None: 0,
@@ -9,23 +9,23 @@ export const COMPRESSION_TYPES = Object.freeze({
   Snappy: 2,
   LZ4: 3,
   ZSTD: 4,
-})
+});
 
-export type CompressionType = (typeof COMPRESSION_TYPES)[keyof typeof COMPRESSION_TYPES]
+export type CompressionType = (typeof COMPRESSION_TYPES)[keyof typeof COMPRESSION_TYPES];
 
-export const COMPRESSION_CODEC_MASK = 0x07
+export const COMPRESSION_CODEC_MASK = 0x07;
 
 export interface CompressionCodec {
-  compress(encoder: Encoder): Promise<Buffer>
-  decompress(buffer: Buffer): Promise<Buffer>
+  compress(encoder: Encoder): Promise<Buffer>;
+  decompress(buffer: Buffer): Promise<Buffer>;
 }
 
-export type CompressionCodecFactory = () => CompressionCodec
+export type CompressionCodecFactory = () => CompressionCodec;
 
 function notImplemented(name: string): CompressionCodecFactory {
   return () => {
-    throw new KafkaJSNotImplemented(`${name} compression not implemented`)
-  }
+    throw new KafkaJSNotImplemented(`${name} compression not implemented`);
+  };
 }
 
 /**
@@ -37,13 +37,13 @@ export const CompressionCodecs: Record<number, CompressionCodecFactory> = {
   [COMPRESSION_TYPES.ZSTD]: () => zstdCodec,
   [COMPRESSION_TYPES.Snappy]: notImplemented('Snappy'),
   [COMPRESSION_TYPES.LZ4]: notImplemented('LZ4'),
-}
+};
 
 export function lookupCodec(type: number): CompressionCodec | null {
-  const factory = CompressionCodecs[type]
-  return factory ? factory() : null
+  const factory = CompressionCodecs[type];
+  return factory ? factory() : null;
 }
 
 export function lookupCodecByAttributes(attributes: number): CompressionCodec | null {
-  return lookupCodec(attributes & COMPRESSION_CODEC_MASK)
+  return lookupCodec(attributes & COMPRESSION_CODEC_MASK);
 }

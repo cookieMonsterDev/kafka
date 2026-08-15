@@ -35,13 +35,13 @@ const CRC_C_TABLE = new Int32Array([
   0x69e9f0d5, 0x9b8273d6, 0x88d28022, 0x7ab90321, 0xae7367ca, 0x5c18e4c9, 0x4f48173d, 0xbd23943e,
   0xf36e6f75, 0x0105ec76, 0x12551f82, 0xe03e9c81, 0x34f4f86a, 0xc69f7b69, 0xd5cf889d, 0x27a40b9e,
   0x79b737ba, 0x8bdcb4b9, 0x988c474d, 0x6ae7c44e, 0xbe2da0a5, 0x4c4623a6, 0x5f16d052, 0xad7d5351,
-])
+]);
 
 export function crc32c(buffer: Buffer): number {
-  let crc = 0 ^ -1
+  let crc = 0 ^ -1;
   for (let i = 0; i < buffer.length; i++) {
-    const byte = buffer[i] as number
-    crc = (CRC_C_TABLE[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8)
+    const byte = buffer[i] as number;
+    crc = (CRC_C_TABLE[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8);
   }
-  return (crc ^ -1) >>> 0
+  return (crc ^ -1) >>> 0;
 }

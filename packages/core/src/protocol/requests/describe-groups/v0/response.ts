@@ -1,5 +1,5 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js'
-import { array, bytes, defineResponse, field, int16, object, string } from '../../../schema.js'
+import { createErrorFromCode, failure } from '../../../error-codes.js';
+import { array, bytes, defineResponse, field, int16, object, string } from '../../../schema.js';
 
 /**
  * DescribeGroups Response (Version: 0) => [groups]
@@ -22,7 +22,7 @@ export const memberSchema = object([
   field('clientHost', string),
   field('memberMetadata', bytes),
   field('memberAssignment', bytes),
-])
+]);
 export const groupSchema = object([
   field('errorCode', int16),
   field('groupId', string),
@@ -30,14 +30,14 @@ export const groupSchema = object([
   field('protocolType', string),
   field('protocol', string),
   field('members', array(memberSchema)),
-])
-const bodySchema = object([field('groups', array(groupSchema))])
+]);
+const bodySchema = object([field('groups', array(groupSchema))]);
 
 export const describeGroupsResponseV0 = defineResponse({
   schema: bodySchema,
   parse: async (data) => {
-    const groupWithError = data.groups.find((group) => failure(group.errorCode))
-    if (groupWithError) throw createErrorFromCode(groupWithError.errorCode)
-    return data
+    const groupWithError = data.groups.find((group) => failure(group.errorCode));
+    if (groupWithError) throw createErrorFromCode(groupWithError.errorCode);
+    return data;
   },
-})
+});

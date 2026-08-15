@@ -1,11 +1,11 @@
-import { KafkaJSProtocolError } from '../errors.js'
+import { KafkaJSProtocolError } from '../errors.js';
 
 export interface ErrorCodeEntry {
-  type: string
-  code: number
-  retriable: boolean
-  message: string
-  helpUrl?: string
+  type: string;
+  code: number;
+  retriable: boolean;
+  message: string;
+  helpUrl?: string;
 }
 
 // https://kafka.apache.org/protocol.html#protocol_error_codes
@@ -558,7 +558,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: true,
     message: 'There are unstable offsets that need to be cleared',
   },
-]
+];
 
 function unknownErrorCode(errorCode: number): ErrorCodeEntry {
   return {
@@ -566,24 +566,24 @@ function unknownErrorCode(errorCode: number): ErrorCodeEntry {
     code: -99,
     retriable: false,
     message: `Unknown error code ${errorCode}`,
-  }
+  };
 }
 
-const SUCCESS_CODE = 0
-const UNSUPPORTED_VERSION_CODE = 35
+const SUCCESS_CODE = 0;
+const UNSUPPORTED_VERSION_CODE = 35;
 
 export function failure(code: number): boolean {
-  return code !== SUCCESS_CODE
+  return code !== SUCCESS_CODE;
 }
 
 export function createErrorFromCode(code: number): KafkaJSProtocolError {
-  const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code)
-  return new KafkaJSProtocolError(entry)
+  const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code);
+  return new KafkaJSProtocolError(entry);
 }
 
 export function failIfVersionNotSupported(code: number): void {
   if (code === UNSUPPORTED_VERSION_CODE) {
-    throw createErrorFromCode(UNSUPPORTED_VERSION_CODE)
+    throw createErrorFromCode(UNSUPPORTED_VERSION_CODE);
   }
 }
 
@@ -592,5 +592,5 @@ export function staleMetadata(e: { type?: string }): boolean {
     e.type === 'UNKNOWN_TOPIC_OR_PARTITION' ||
     e.type === 'LEADER_NOT_AVAILABLE' ||
     e.type === 'NOT_LEADER_FOR_PARTITION'
-  )
+  );
 }

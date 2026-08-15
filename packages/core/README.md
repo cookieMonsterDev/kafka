@@ -38,7 +38,7 @@ runnable by Node's native type stripping). Override per-package settings in
 Consumers import from the package name, not a relative path:
 
 ```ts
-import { greet } from "@kafka/core";
+import { greet } from '@kafka/core';
 ```
 
 The `exports` field points at `dist/`, so **`dist/` must exist** before a

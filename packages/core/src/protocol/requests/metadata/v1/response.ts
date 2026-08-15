@@ -1,5 +1,15 @@
-import { array, boolean, defineResponse, field, int16, int32, nullableString, object, string } from '../../../schema.js'
-import { checkTopicMetadataErrors } from '../shared.js'
+import {
+  array,
+  boolean,
+  defineResponse,
+  field,
+  int16,
+  int32,
+  nullableString,
+  object,
+  string,
+} from '../../../schema.js';
+import { checkTopicMetadataErrors } from '../shared.js';
 
 /**
  * Metadata Response (Version: 1) => [brokers] controller_id [topic_metadata]
@@ -25,30 +35,30 @@ const brokerSchema = object([
   field('host', string),
   field('port', int32),
   field('rack', nullableString),
-])
+]);
 const partitionMetadataSchema = object([
   field('partitionErrorCode', int16),
   field('partitionId', int32),
   field('leader', int32),
   field('replicas', array(int32)),
   field('isr', array(int32)),
-])
+]);
 const topicMetadataSchema = object([
   field('topicErrorCode', int16),
   field('topic', string),
   field('isInternal', boolean),
   field('partitionMetadata', array(partitionMetadataSchema)),
-])
+]);
 const bodySchema = object([
   field('brokers', array(brokerSchema)),
   field('controllerId', int32),
   field('topicMetadata', array(topicMetadataSchema)),
-])
+]);
 
 export const metadataResponseV1 = defineResponse({
   schema: bodySchema,
   parse: async (data) => {
-    checkTopicMetadataErrors(data.topicMetadata)
-    return data
+    checkTopicMetadataErrors(data.topicMetadata);
+    return data;
   },
-})
+});

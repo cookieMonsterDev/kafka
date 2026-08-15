@@ -1,25 +1,25 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js'
-import { type GroupProtocol, joinGroupRequestV0, withDefaultMetadata } from './v0/request.js'
-import { joinGroupResponseV0 } from './v0/response.js'
-import { joinGroupRequestV1 } from './v1/request.js'
-import { joinGroupResponseV1 } from './v1/response.js'
-import { joinGroupRequestV2 } from './v2/request.js'
-import { joinGroupResponseV2 } from './v2/response.js'
-import { joinGroupRequestV3 } from './v3/request.js'
-import { joinGroupResponseV3 } from './v3/response.js'
-import { joinGroupRequestV4 } from './v4/request.js'
-import { joinGroupResponseV4 } from './v4/response.js'
-import { joinGroupRequestV5 } from './v5/request.js'
-import { joinGroupResponseV5 } from './v5/response.js'
+import type { ProtocolFactory, RequestFamily } from '../index.js';
+import { type GroupProtocol, joinGroupRequestV0, withDefaultMetadata } from './v0/request.js';
+import { joinGroupResponseV0 } from './v0/response.js';
+import { joinGroupRequestV1 } from './v1/request.js';
+import { joinGroupResponseV1 } from './v1/response.js';
+import { joinGroupRequestV2 } from './v2/request.js';
+import { joinGroupResponseV2 } from './v2/response.js';
+import { joinGroupRequestV3 } from './v3/request.js';
+import { joinGroupResponseV3 } from './v3/response.js';
+import { joinGroupRequestV4 } from './v4/request.js';
+import { joinGroupResponseV4 } from './v4/response.js';
+import { joinGroupRequestV5 } from './v5/request.js';
+import { joinGroupResponseV5 } from './v5/response.js';
 
 export interface JoinGroupOptions {
-  groupId: string
-  sessionTimeout: number
-  rebalanceTimeout?: number
-  memberId: string
-  groupInstanceId?: string | null
-  protocolType: string
-  groupProtocols: GroupProtocol[]
+  groupId: string;
+  sessionTimeout: number;
+  rebalanceTimeout?: number;
+  memberId: string;
+  groupInstanceId?: string | null;
+  protocolType: string;
+  groupProtocols: GroupProtocol[];
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
@@ -68,13 +68,13 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
     }),
     response: joinGroupResponseV5,
   }),
-}
+};
 
 export const JoinGroup: RequestFamily<JoinGroupOptions> = Object.freeze({
   versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
   protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version]
-    if (!factory) throw new Error(`Invariant violated: no JoinGroup protocol for version ${version}`)
-    return factory
+    const factory = VERSIONS[version];
+    if (!factory) throw new Error(`Invariant violated: no JoinGroup protocol for version ${version}`);
+    return factory;
   },
-})
+});

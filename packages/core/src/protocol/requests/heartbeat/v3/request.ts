@@ -1,5 +1,5 @@
-import { defineRequest, field, int32, nullableString, object, string } from '../../../schema.js'
-import { API_KEYS } from '../../api-keys.js'
+import { defineRequest, field, int32, nullableString, object, string } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys.js';
 
 /**
  * Version 3 adds group_instance_id to indicate member identity across restarts.
@@ -16,11 +16,11 @@ const requestSchema = object([
   field('groupGenerationId', int32),
   field('memberId', string),
   field('groupInstanceId', nullableString),
-])
+]);
 
 export const heartbeatRequestV3 = defineRequest({
   apiKey: API_KEYS.Heartbeat,
   apiVersion: 3,
   apiName: 'Heartbeat',
   schema: requestSchema,
-})
+});

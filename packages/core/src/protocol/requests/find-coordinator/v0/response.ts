@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js'
-import { defineResponse, field, int16, int32, object, string } from '../../../schema.js'
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
+import { defineResponse, field, int16, int32, object, string } from '../../../schema.js';
 
 /**
  * FindCoordinator Response (Version: 0) => error_code coordinator
@@ -9,14 +9,14 @@ import { defineResponse, field, int16, int32, object, string } from '../../../sc
  *     host => STRING
  *     port => INT32
  */
-const coordinatorSchema = object([field('nodeId', int32), field('host', string), field('port', int32)])
-const bodySchema = object([field('errorCode', int16), field('coordinator', coordinatorSchema)])
+const coordinatorSchema = object([field('nodeId', int32), field('host', string), field('port', int32)]);
+const bodySchema = object([field('errorCode', int16), field('coordinator', coordinatorSchema)]);
 
 export const findCoordinatorResponseV0 = defineResponse({
   schema: bodySchema,
   parse: async (data) => {
-    failIfVersionNotSupported(data.errorCode)
-    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode)
-    return data
+    failIfVersionNotSupported(data.errorCode);
+    if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
+    return data;
   },
-})
+});

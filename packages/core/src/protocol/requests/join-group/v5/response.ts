@@ -1,10 +1,10 @@
-import { Decoder } from '../../../decoder.js'
-import { KafkaJSMemberIdRequired } from '../../../../errors.js'
-import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure } from '../../../error-codes.js'
-import { array, bytes, field, int16, int32, nullableString, object, string } from '../../../schema.js'
-import type { ResponseDefinition } from '../../../schema.js'
+import { Decoder } from '../../../decoder.js';
+import { KafkaJSMemberIdRequired } from '../../../../errors.js';
+import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure } from '../../../error-codes.js';
+import { array, bytes, field, int16, int32, nullableString, object, string } from '../../../schema.js';
+import type { ResponseDefinition } from '../../../schema.js';
 
-const MEMBER_ID_REQUIRED_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'MEMBER_ID_REQUIRED')?.code
+const MEMBER_ID_REQUIRED_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'MEMBER_ID_REQUIRED')?.code;
 
 /**
  * JoinGroup Response (Version: 5) => throttle_time_ms error_code generation_id group_protocol leader_id member_id [members]
@@ -26,7 +26,7 @@ const memberSchema = object([
   field('memberId', string),
   field('groupInstanceId', nullableString),
   field('memberMetadata', bytes),
-])
+]);
 const restSchema = object([
   field('errorCode', int16),
   field('generationId', int32),
@@ -34,34 +34,34 @@ const restSchema = object([
   field('leaderId', string),
   field('memberId', string),
   field('members', array(memberSchema)),
-])
+]);
 
 export interface JoinGroupResponseV5Body {
-  throttleTime: number
-  clientSideThrottleTime: number
-  errorCode: number
-  generationId: number
-  groupProtocol: string
-  leaderId: string
-  memberId: string
-  members: { memberId: string; groupInstanceId: string | null; memberMetadata: Buffer }[]
+  throttleTime: number;
+  clientSideThrottleTime: number;
+  errorCode: number;
+  generationId: number;
+  groupProtocol: string;
+  leaderId: string;
+  memberId: string;
+  members: { memberId: string; groupInstanceId: string | null; memberMetadata: Buffer }[];
 }
 
 export const joinGroupResponseV5: ResponseDefinition<JoinGroupResponseV5Body> = {
   decode: async (rawData) => {
-    const decoder = new Decoder(rawData)
-    const clientSideThrottleTime = decoder.readInt32()
-    const rest = restSchema.read(decoder)
-    return { throttleTime: 0, clientSideThrottleTime, ...rest }
+    const decoder = new Decoder(rawData);
+    const clientSideThrottleTime = decoder.readInt32();
+    const rest = restSchema.read(decoder);
+    return { throttleTime: 0, clientSideThrottleTime, ...rest };
   },
   parse: async (data) => {
-    failIfVersionNotSupported(data.errorCode)
+    failIfVersionNotSupported(data.errorCode);
     if (failure(data.errorCode)) {
       if (data.errorCode === MEMBER_ID_REQUIRED_ERROR_CODE) {
-        throw new KafkaJSMemberIdRequired(createErrorFromCode(data.errorCode), { memberId: data.memberId })
+        throw new KafkaJSMemberIdRequired(createErrorFromCode(data.errorCode), { memberId: data.memberId });
       }
-      throw createErrorFromCode(data.errorCode)
+      throw createErrorFromCode(data.errorCode);
     }
-    return data
+    return data;
   },
-}
+};

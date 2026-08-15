@@ -1,25 +1,25 @@
-import { describe, expect, it } from 'vitest'
-import { shuffle } from './shuffle.js'
+import { describe, expect, it } from 'vitest';
+import { shuffle } from './shuffle.js';
 
 describe('utils/shuffle', () => {
   it('shuffles', () => {
-    const array = Array.from({ length: 500 }, (_, i) => i)
-    const shuffled = shuffle(array)
+    const array = Array.from({ length: 500 }, (_, i) => i);
+    const shuffled = shuffle(array);
 
-    expect(shuffled).not.toEqual(array)
-    expect([...shuffled].sort((a, b) => a - b)).toEqual(array)
-  })
+    expect(shuffled).not.toEqual(array);
+    expect([...shuffled].sort((a, b) => a - b)).toEqual(array);
+  });
 
   it('returns the same order for single element arrays', () => {
-    expect(shuffle([1])).toEqual([1])
-  })
+    expect(shuffle([1])).toEqual([1]);
+  });
 
   it('throws if it receives a non-array', () => {
     // @ts-expect-error exercising the runtime guard against non-array input
-    expect(() => shuffle(undefined)).toThrow(TypeError)
+    expect(() => shuffle(undefined)).toThrow(TypeError);
     // @ts-expect-error exercising the runtime guard against non-array input
-    expect(() => shuffle('foo')).toThrow(TypeError)
+    expect(() => shuffle('foo')).toThrow(TypeError);
     // @ts-expect-error exercising the runtime guard against non-array input
-    expect(() => shuffle({})).toThrow(TypeError)
-  })
-})
+    expect(() => shuffle({})).toThrow(TypeError);
+  });
+});

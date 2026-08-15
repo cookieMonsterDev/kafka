@@ -75,6 +75,13 @@ export const nullableBytes: FieldCodec<Buffer | null> = codec(
   (d) => d.readBytes()
 )
 
+function readArrayBody<T>(d: Decoder, length: number, element: FieldCodec<T>): T[] {
+  if (length === -1) return []
+  const values = new Array<T>(length)
+  for (let i = 0; i < length; i++) values[i] = element.read(d)
+  return values
+}
+
 /**
  * A protocol array is just a length prefix followed by that many elements, each read by the
  * element codec in sequence — no need for `Encoder`'s own `writeArray`/`readArray`, which exist
@@ -86,13 +93,28 @@ export function array<T>(element: FieldCodec<T>): FieldCodec<T[]> {
       e.writeInt32(values.length)
       for (const value of values) element.write(e, value)
     },
-    (d) => {
-      const length = d.readInt32()
-      if (length === -1) return []
-      const values = new Array<T>(length)
-      for (let i = 0; i < length; i++) values[i] = element.read(d)
-      return values
-    }
+    (d) => readArrayBody(d, d.readInt32(), element)
+  )
+}
+
+/**
+ * Mirrors `Encoder#writeNullableArray`: an empty input array is written as wire length `-1`
+ * (kafkajs's collapsed stand-in for "null", meaning e.g. "all topics" to a `Metadata` request)
+ * rather than an actual `0`-length array — there's no way to request a true `0`-length array
+ * through this codec, matching kafkajs's own behavior byte-for-byte. Reading is identical to
+ * `array()`: a `-1` length (or `0`) always comes back as `[]`.
+ */
+export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
+  return codec(
+    (e, values) => {
+      if (values.length === 0) {
+        e.writeInt32(-1)
+        return
+      }
+      e.writeInt32(values.length)
+      for (const value of values) element.write(e, value)
+    },
+    (d) => readArrayBody(d, d.readInt32(), element)
   )
 }
 

@@ -8,6 +8,7 @@ import {
   int16,
   int32,
   int64,
+  nullableArray,
   nullableString,
   object,
   string,
@@ -58,6 +59,17 @@ describe('protocol/schema', () => {
     const encoder2 = new Encoder()
     shape.write(encoder2, withValues)
     expect(shape.read(new Decoder(encoder2.buffer))).toEqual(withValues)
+  })
+
+  it('nullableArray writes an empty input array as wire length -1', () => {
+    const empty = new Encoder()
+    nullableArray(string).write(empty, [])
+    expect(empty.buffer).toEqual(new Encoder().writeInt32(-1).buffer)
+    expect(nullableArray(string).read(new Decoder(empty.buffer))).toEqual([])
+
+    const withValues = new Encoder()
+    nullableArray(string).write(withValues, ['a', 'b'])
+    expect(nullableArray(string).read(new Decoder(withValues.buffer))).toEqual(['a', 'b'])
   })
 
   it('throws when a non-nullable string field is null on the wire', () => {

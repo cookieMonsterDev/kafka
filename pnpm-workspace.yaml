@@ -1,0 +1,12 @@
+# https://pnpm.io/workspaces
+packages:
+  - packages/*
+
+# Link local packages into node_modules instead of fetching them from the registry.
+linkWorkspacePackages: true
+# Write `workspace:^` when adding a local package as a dependency.
+saveWorkspaceProtocol: rolling
+# Fail the install if workspace packages form a dependency cycle.
+disallowWorkspaceCycles: true
+# Enforce the `engines` field in package.json instead of only warning.
+engineStrict: true

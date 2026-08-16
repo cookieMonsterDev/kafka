@@ -246,6 +246,9 @@ export class Decoder {
     let i = 0;
 
     do {
+      if (i > 28) {
+        throw new KafkaInvalidVarIntError('Invalid VarInt, must contain 5 bytes or less');
+      }
       currentByte = this.#readByte(this.offset++);
       result += (currentByte & OTHER_BITS) << i;
       i += 7;

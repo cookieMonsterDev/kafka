@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KafkaInvalidVarIntError } from '../errors';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
 
@@ -127,6 +128,12 @@ describe('protocol/Decoder', () => {
     it('throws a RangeError when readVarInt runs past the end of the buffer', () => {
       // Continuation bit set, no following byte.
       expect(() => new Decoder(Buffer.from([0x80])).readVarInt()).toThrow(RangeError);
+    });
+
+    it('throws KafkaInvalidVarIntError when a signed varint never terminates within 5 bytes', () => {
+      expect(() => new Decoder(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0x01])).readVarInt()).toThrow(
+        KafkaInvalidVarIntError,
+      );
     });
 
     it('throws a RangeError when readUVarInt runs past the end of the buffer', () => {

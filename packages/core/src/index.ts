@@ -72,7 +72,6 @@ export type {
   Assigner,
   AuthenticationProviderArgs,
   AutoOffsetReset,
-  AutoOffsetReset,
   Batch,
   BrokersFunction,
   CompressionType,

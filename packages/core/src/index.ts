@@ -25,6 +25,7 @@ export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './prot
 export { CONFIG_RESOURCE_TYPES as ConfigResourceTypes } from './protocol/enums/config-resource-types';
 export { INCREMENTAL_ALTER_CONFIGS_OPERATIONS as ConfigOperations } from './protocol/enums/incremental-alter-configs-operations';
 export { CONFIG_SOURCE as ConfigSource } from './protocol/enums/config-source';
+export { CONFIG_TYPE as ConfigType } from './protocol/enums/config-type';
 export { ACL_RESOURCE_TYPES as AclResourceTypes } from './protocol/enums/acl-resource-types';
 export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-operation-types';
 export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types';

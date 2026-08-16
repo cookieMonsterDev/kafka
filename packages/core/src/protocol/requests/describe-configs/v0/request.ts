@@ -12,7 +12,8 @@ export interface DescribeConfigsRequestV0Fields {
  *     resource_name => STRING
  *     config_names => STRING
  *
- * `includeSynonyms` is not on the wire in this version and is ignored by the family factory.
+ * `includeSynonyms` and `includeDocumentation` are not on the wire in this version and are
+ * ignored by the family factory.
  */
 const resourceSchema = object([
   field('type', int8),

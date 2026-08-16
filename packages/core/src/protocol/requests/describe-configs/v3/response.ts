@@ -3,39 +3,11 @@ import { createErrorFromCode, failure } from '../../../error-codes';
 import { array, boolean, field, int16, int8, nullableString, object, string } from '../../../schema';
 import type { ResponseDefinition } from '../../../schema';
 import { CONFIG_SOURCE } from '../../../enums/config-source';
+import type { DescribeConfigsResponseV2Body } from '../v2/response';
 
-export interface DescribeConfigsSynonym {
-  configName: string;
-  configValue: string | null;
-  configSource: number;
-}
+export type { DescribeConfigsEntry, DescribeConfigsSynonym } from '../v1/response';
 
-export interface DescribeConfigsEntry {
-  configName: string;
-  configValue: string | null;
-  readOnly: boolean;
-  isDefault: boolean;
-  configSource: number;
-  isSensitive: boolean;
-  configSynonyms: DescribeConfigsSynonym[];
-  /** Present on DescribeConfigs v3+ (KIP-524). See `CONFIG_TYPE`. */
-  configType?: number;
-  /** Present on DescribeConfigs v3+ when `includeDocumentation` was requested. */
-  documentation?: string | null;
-}
-
-export interface DescribeConfigsResourceResult {
-  errorCode: number;
-  errorMessage: string | null;
-  resourceType: number;
-  resourceName: string;
-  configEntries: DescribeConfigsEntry[];
-}
-
-export interface DescribeConfigsResponseV1Body {
-  throttleTime: number;
-  resources: DescribeConfigsResourceResult[];
-}
+export type DescribeConfigsResponseV3Body = DescribeConfigsResponseV2Body;
 
 const synonymSchema = object([
   field('configName', string),
@@ -49,6 +21,8 @@ const rawConfigEntrySchema = object([
   field('configSource', int8),
   field('isSensitive', boolean),
   field('configSynonyms', array(synonymSchema)),
+  field('configType', int8),
+  field('documentation', nullableString),
 ]);
 const rawResourceSchema = object([
   field('errorCode', int16),
@@ -60,14 +34,14 @@ const rawResourceSchema = object([
 const resourcesSchema = array(rawResourceSchema);
 
 /**
- * DescribeConfigs Response (Version: 1) => throttle_time_ms [resources]
+ * DescribeConfigs Response (Version: 3) => throttle_time_ms [resources]
  *   throttle_time_ms => INT32
  *   resources => error_code error_message resource_type resource_name [config_entries]
  *     error_code => INT16
  *     error_message => NULLABLE_STRING
  *     resource_type => INT8
  *     resource_name => STRING
- *     config_entries => config_name config_value read_only config_source is_sensitive [config_synonyms]
+ *     config_entries => config_name config_value read_only config_source is_sensitive [config_synonyms] config_type documentation
  *       config_name => STRING
  *       config_value => NULLABLE_STRING
  *       read_only => BOOLEAN
@@ -77,12 +51,14 @@ const resourcesSchema = array(rawResourceSchema);
  *         config_name => STRING
  *         config_value => NULLABLE_STRING
  *         config_source => INT8
+ *       config_type => INT8
+ *       documentation => NULLABLE_STRING
  *
- * `isDefault` isn't on the wire in this version — it's derived from `configSource`, which is why
- * this is a hand-written `ResponseDefinition` rather than a plain `defineResponse`: the schema
- * gives back exactly the wire fields, and `isDefault` needs a mapping pass over each entry.
+ * KIP-524 adds `config_type` and `documentation` after synonyms. `isDefault` is still derived
+ * from `configSource` (same as v1), which is why this is a hand-written `ResponseDefinition`.
+ * Quota timing follows v2 (KIP-219): the decoded throttle is exposed as `clientSideThrottleTime`.
  */
-export const describeConfigsResponseV1: ResponseDefinition<DescribeConfigsResponseV1Body> = {
+export const describeConfigsResponseV3: ResponseDefinition<DescribeConfigsResponseV3Body> = {
   decode: async (rawData) => {
     const decoder = new Decoder(rawData);
     const throttleTime = decoder.readInt32();
@@ -94,7 +70,7 @@ export const describeConfigsResponseV1: ResponseDefinition<DescribeConfigsRespon
         isDefault: entry.configSource === CONFIG_SOURCE.DEFAULT_CONFIG,
       })),
     }));
-    return { throttleTime, resources };
+    return { throttleTime: 0, clientSideThrottleTime: throttleTime, resources };
   },
   parse: async (data) => {
     const resourceWithError = data.resources.find((resource) => failure(resource.errorCode));

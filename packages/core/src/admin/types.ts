@@ -194,6 +194,7 @@ export interface Admin {
   describeConfigs: (options: {
     resources: ResourceConfigQuery[];
     includeSynonyms?: boolean;
+    includeDocumentation?: boolean;
   }) => Promise<{ resources: DescribeConfigsResponseV2Body['resources'] }>;
   alterConfigs: (options: {
     resources: ResourceConfig[];

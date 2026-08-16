@@ -245,9 +245,10 @@ describe('admin', () => {
     await expect(
       admin.describeConfigs({
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders' }],
+        includeDocumentation: true,
       }),
     ).resolves.toEqual({ resources: [{ resourceName: 'orders' }] });
-    expect(broker.describeConfigs).toHaveBeenCalled();
+    expect(broker.describeConfigs).toHaveBeenCalledWith(expect.objectContaining({ includeDocumentation: true }));
   });
 
   it('routes broker config queries to the named broker', async () => {

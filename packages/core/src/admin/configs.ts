@@ -14,6 +14,7 @@ export interface ConfigsApi {
   describeConfigs: (options: {
     resources: ResourceConfigQuery[];
     includeSynonyms?: boolean;
+    includeDocumentation?: boolean;
   }) => Promise<{ resources: DescribeConfigsResponseV2Body['resources'] }>;
   alterConfigs: (options: {
     resources: ResourceConfig[];
@@ -32,9 +33,11 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
   const describeConfigs = async ({
     resources,
     includeSynonyms,
+    includeDocumentation,
   }: {
     resources: ResourceConfigQuery[];
     includeSynonyms?: boolean;
+    includeDocumentation?: boolean;
   }): Promise<{ resources: DescribeConfigsResponseV2Body['resources'] }> => {
     if (!resources || !Array.isArray(resources)) {
       throw new KafkaNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
@@ -77,6 +80,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
             return targetBroker.describeConfigs({
               resources: resourcesByBroker.get(targetBroker) ?? [],
               includeSynonyms,
+              includeDocumentation,
             });
           }),
         );

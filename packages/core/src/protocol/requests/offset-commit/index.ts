@@ -17,11 +17,18 @@ import { offsetCommitRequestV4 } from './v4/request';
 import { offsetCommitResponseV4 } from './v4/response';
 import { offsetCommitRequestV5 } from './v5/request';
 import { offsetCommitResponseV5 } from './v5/response';
+import { offsetCommitRequestV6 } from './v6/request';
+import { offsetCommitResponseV6 } from './v6/response';
+import { offsetCommitRequestV7 } from './v7/request';
+import { offsetCommitResponseV7 } from './v7/response';
+import { offsetCommitRequestV8 } from './v8/request';
+import { offsetCommitResponseV8 } from './v8/response';
 
 export interface OffsetCommitOptions {
   groupId: string;
   groupGenerationId: number;
   memberId: string;
+  groupInstanceId?: string | null;
   retentionTime?: bigint;
   topics: OffsetCommitTopicOptions[];
 }
@@ -73,6 +80,30 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetCommitOptions>>> =
   5: ({ groupId, groupGenerationId, memberId, topics }) => ({
     request: offsetCommitRequestV5({ groupId, groupGenerationId, memberId, topics: withDefaultMetadata(topics) }),
     response: offsetCommitResponseV5,
+  }),
+  6: ({ groupId, groupGenerationId, memberId, topics }) => ({
+    request: offsetCommitRequestV6({ groupId, groupGenerationId, memberId, topics: withDefaultMetadata(topics) }),
+    response: offsetCommitResponseV6,
+  }),
+  7: ({ groupId, groupGenerationId, memberId, groupInstanceId = null, topics }) => ({
+    request: offsetCommitRequestV7({
+      groupId,
+      groupGenerationId,
+      memberId,
+      groupInstanceId,
+      topics: withDefaultMetadata(topics),
+    }),
+    response: offsetCommitResponseV7,
+  }),
+  8: ({ groupId, groupGenerationId, memberId, groupInstanceId = null, topics }) => ({
+    request: offsetCommitRequestV8({
+      groupId,
+      groupGenerationId,
+      memberId,
+      groupInstanceId,
+      topics: withDefaultMetadata(topics),
+    }),
+    response: offsetCommitResponseV8,
   }),
 };
 

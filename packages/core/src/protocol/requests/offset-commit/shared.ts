@@ -8,6 +8,8 @@ export interface OffsetCommitPartitionOptions {
   offset: bigint;
   /** OffsetCommit v1 only; defaults to `Date.now()` when omitted. */
   timestamp?: bigint;
+  /** OffsetCommit v6+; defaults to `-1` (unknown) when omitted. */
+  leaderEpoch?: number;
   metadata?: string | null;
 }
 
@@ -16,13 +18,22 @@ export interface OffsetCommitTopicOptions {
   partitions: OffsetCommitPartitionOptions[];
 }
 
-/** Every version defaults a partition's `metadata` to null when omitted. */
-export function withDefaultMetadata(
-  topics: readonly OffsetCommitTopicOptions[],
-): { topic: string; partitions: { partition: number; offset: bigint; metadata: string | null }[] }[] {
+/**
+ * Every version defaults a partition's `metadata` to null when omitted.
+ * OffsetCommit v6+ also writes `leaderEpoch` (default `-1`); earlier versions ignore the extra field.
+ */
+export function withDefaultMetadata(topics: readonly OffsetCommitTopicOptions[]): {
+  topic: string;
+  partitions: { partition: number; offset: bigint; leaderEpoch: number; metadata: string | null }[];
+}[] {
   return topics.map(({ topic, partitions }) => ({
     topic,
-    partitions: partitions.map(({ partition, offset, metadata = null }) => ({ partition, offset, metadata })),
+    partitions: partitions.map(({ partition, offset, leaderEpoch = -1, metadata = null }) => ({
+      partition,
+      offset,
+      leaderEpoch,
+      metadata,
+    })),
   }));
 }
 

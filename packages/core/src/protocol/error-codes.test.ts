@@ -33,6 +33,42 @@ describe('protocol/error-codes', () => {
       expect(error.retriable).toBe(true);
     });
 
+    it('uses the Kafka 2.6+ name for code 6', () => {
+      const error = createErrorFromCode(6);
+      expect(error.type).toBe('NOT_LEADER_OR_FOLLOWER');
+      expect(error.retriable).toBe(true);
+    });
+
+    it('includes official error codes 90-133', () => {
+      for (let code = 90; code <= 133; code++) {
+        expect(ERROR_CODES.some((entry) => entry.code === code)).toBe(true);
+      }
+    });
+
+    it('treats UNKNOWN_TOPIC_ID as retriable', () => {
+      const error = createErrorFromCode(100);
+      expect(error.type).toBe('UNKNOWN_TOPIC_ID');
+      expect(error.retriable).toBe(true);
+    });
+
+    it('treats TRANSACTION_ABORTABLE as non-retriable', () => {
+      const error = createErrorFromCode(120);
+      expect(error.type).toBe('TRANSACTION_ABORTABLE');
+      expect(error.retriable).toBe(false);
+    });
+
+    it('maps REBOOTSTRAP_REQUIRED', () => {
+      const error = createErrorFromCode(129);
+      expect(error.type).toBe('REBOOTSTRAP_REQUIRED');
+      expect(error.retriable).toBe(false);
+    });
+
+    it('treats SHARE_SESSION_LIMIT_REACHED as retriable', () => {
+      const error = createErrorFromCode(133);
+      expect(error.type).toBe('SHARE_SESSION_LIMIT_REACHED');
+      expect(error.retriable).toBe(true);
+    });
+
     it('falls back to a KAFKA_UNKNOWN_ERROR_CODE placeholder for unknown codes', () => {
       const error = createErrorFromCode(9999);
       expect(error.type).toBe('KAFKA_UNKNOWN_ERROR_CODE');
@@ -54,10 +90,22 @@ describe('protocol/error-codes', () => {
   });
 
   describe('staleMetadata', () => {
-    it('is true for the three stale-metadata error types', () => {
+    it('is true for the classic stale-metadata error types', () => {
       expect(staleMetadata({ type: 'UNKNOWN_TOPIC_OR_PARTITION' })).toBe(true);
       expect(staleMetadata({ type: 'LEADER_NOT_AVAILABLE' })).toBe(true);
+      expect(staleMetadata({ type: 'NOT_LEADER_OR_FOLLOWER' })).toBe(true);
+    });
+
+    it('is true for the pre-2.6 NOT_LEADER_FOR_PARTITION alias', () => {
       expect(staleMetadata({ type: 'NOT_LEADER_FOR_PARTITION' })).toBe(true);
+    });
+
+    it('is true for topic-id, leader-epoch, and rebootstrap errors', () => {
+      expect(staleMetadata({ type: 'UNKNOWN_TOPIC_ID' })).toBe(true);
+      expect(staleMetadata({ type: 'INCONSISTENT_TOPIC_ID' })).toBe(true);
+      expect(staleMetadata({ type: 'FENCED_LEADER_EPOCH' })).toBe(true);
+      expect(staleMetadata({ type: 'UNKNOWN_LEADER_EPOCH' })).toBe(true);
+      expect(staleMetadata({ type: 'REBOOTSTRAP_REQUIRED' })).toBe(true);
     });
 
     it('is false for any other error type', () => {

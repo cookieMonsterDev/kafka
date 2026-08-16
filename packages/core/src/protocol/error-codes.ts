@@ -47,10 +47,11 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     message: 'There is no leader for this topic-partition as we are in the middle of a leadership election',
   },
   {
-    type: 'NOT_LEADER_FOR_PARTITION',
+    type: 'NOT_LEADER_OR_FOLLOWER',
     code: 6,
     retriable: true,
-    message: 'This server is not the leader for that topic-partition',
+    message:
+      'For requests intended only for the leader, this error indicates that the broker is not the current leader. For requests intended for any replica, this error indicates that the broker is not a replica of the topic partition',
   },
   {
     type: 'REQUEST_TIMED_OUT',
@@ -564,7 +565,279 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: true,
     message: 'The throttling quota has been exceeded',
   },
+  {
+    type: 'PRODUCER_FENCED',
+    code: 90,
+    retriable: false,
+    message: 'There is a newer producer with the same transactionalId which fences the current one',
+  },
+  {
+    type: 'RESOURCE_NOT_FOUND',
+    code: 91,
+    retriable: false,
+    message: 'A request illegally referred to a resource that does not exist',
+  },
+  {
+    type: 'DUPLICATE_RESOURCE',
+    code: 92,
+    retriable: false,
+    message: 'A request illegally referred to the same resource twice',
+  },
+  {
+    type: 'UNACCEPTABLE_CREDENTIAL',
+    code: 93,
+    retriable: false,
+    message: 'Requested credential would not meet criteria for acceptability',
+  },
+  {
+    type: 'INCONSISTENT_VOTER_SET',
+    code: 94,
+    retriable: false,
+    message:
+      'Indicates that the either the sender or recipient of a voter-only request is not one of the expected voters',
+  },
+  {
+    type: 'INVALID_UPDATE_VERSION',
+    code: 95,
+    retriable: false,
+    message: 'The given update version was invalid',
+  },
+  {
+    type: 'FEATURE_UPDATE_FAILED',
+    code: 96,
+    retriable: false,
+    message: 'Unable to update finalized features due to an unexpected server error',
+  },
+  {
+    type: 'PRINCIPAL_DESERIALIZATION_FAILURE',
+    code: 97,
+    retriable: false,
+    message:
+      'Request principal deserialization failed during forwarding. This indicates an internal error on the broker cluster security setup',
+  },
+  {
+    type: 'SNAPSHOT_NOT_FOUND',
+    code: 98,
+    retriable: false,
+    message: 'Requested snapshot was not found',
+  },
+  {
+    type: 'POSITION_OUT_OF_RANGE',
+    code: 99,
+    retriable: false,
+    message: 'Requested position is not greater than or equal to zero, and less than the size of the snapshot',
+  },
+  {
+    type: 'UNKNOWN_TOPIC_ID',
+    code: 100,
+    retriable: true,
+    message: 'This server does not host this topic ID',
+  },
+  {
+    type: 'DUPLICATE_BROKER_REGISTRATION',
+    code: 101,
+    retriable: false,
+    message: 'This broker ID is already in use',
+  },
+  {
+    type: 'BROKER_ID_NOT_REGISTERED',
+    code: 102,
+    retriable: false,
+    message: 'The given broker ID was not registered',
+  },
+  {
+    type: 'INCONSISTENT_TOPIC_ID',
+    code: 103,
+    retriable: true,
+    message: "The log's topic ID did not match the topic ID in the request",
+  },
+  {
+    type: 'INCONSISTENT_CLUSTER_ID',
+    code: 104,
+    retriable: false,
+    message: 'The clusterId in the request does not match that found on the server',
+  },
+  {
+    type: 'TRANSACTIONAL_ID_NOT_FOUND',
+    code: 105,
+    retriable: false,
+    message: 'The transactionalId could not be found',
+  },
+  {
+    type: 'FETCH_SESSION_TOPIC_ID_ERROR',
+    code: 106,
+    retriable: true,
+    message: 'The fetch session encountered inconsistent topic ID usage',
+  },
+  {
+    type: 'INELIGIBLE_REPLICA',
+    code: 107,
+    retriable: false,
+    message: 'The new ISR contains at least one ineligible replica',
+  },
+  {
+    type: 'NEW_LEADER_ELECTED',
+    code: 108,
+    retriable: false,
+    message: 'The AlterPartition request successfully updated the partition state but the leader has changed',
+  },
+  {
+    type: 'OFFSET_MOVED_TO_TIERED_STORAGE',
+    code: 109,
+    retriable: false,
+    message: 'The requested offset is moved to tiered storage',
+  },
+  {
+    type: 'FENCED_MEMBER_EPOCH',
+    code: 110,
+    retriable: false,
+    message:
+      'The member epoch is fenced by the group coordinator. The member must abandon all its partitions and rejoin',
+  },
+  {
+    type: 'UNRELEASED_INSTANCE_ID',
+    code: 111,
+    retriable: false,
+    message: 'The instance ID is still used by another member in the consumer group. That member must leave first',
+  },
+  {
+    type: 'UNSUPPORTED_ASSIGNOR',
+    code: 112,
+    retriable: false,
+    message: 'The assignor or its version range is not supported by the consumer group',
+  },
+  {
+    type: 'STALE_MEMBER_EPOCH',
+    code: 113,
+    retriable: false,
+    message:
+      'The member epoch is stale. The member must retry after receiving its updated member epoch via the ConsumerGroupHeartbeat API',
+  },
+  {
+    type: 'MISMATCHED_ENDPOINT_TYPE',
+    code: 114,
+    retriable: false,
+    message: 'The request was sent to an endpoint of the wrong type',
+  },
+  {
+    type: 'UNSUPPORTED_ENDPOINT_TYPE',
+    code: 115,
+    retriable: false,
+    message: 'This endpoint type is not supported yet',
+  },
+  {
+    type: 'UNKNOWN_CONTROLLER_ID',
+    code: 116,
+    retriable: false,
+    message: 'This controller ID is not known',
+  },
+  {
+    type: 'UNKNOWN_SUBSCRIPTION_ID',
+    code: 117,
+    retriable: false,
+    message: 'Client sent a push telemetry request with an invalid or outdated subscription ID',
+  },
+  {
+    type: 'TELEMETRY_TOO_LARGE',
+    code: 118,
+    retriable: false,
+    message: 'Client sent a push telemetry request larger than the maximum size the broker will accept',
+  },
+  {
+    type: 'INVALID_REGISTRATION',
+    code: 119,
+    retriable: false,
+    message: 'The controller has considered the broker registration to be invalid',
+  },
+  {
+    type: 'TRANSACTION_ABORTABLE',
+    code: 120,
+    retriable: false,
+    message:
+      'The server encountered an error with the transaction. The client can abort the transaction to continue using this transactional ID',
+  },
+  {
+    type: 'INVALID_RECORD_STATE',
+    code: 121,
+    retriable: false,
+    message: 'The record state is invalid. The acknowledgement of delivery could not be completed',
+  },
+  {
+    type: 'SHARE_SESSION_NOT_FOUND',
+    code: 122,
+    retriable: true,
+    message: 'The share session was not found',
+  },
+  {
+    type: 'INVALID_SHARE_SESSION_EPOCH',
+    code: 123,
+    retriable: true,
+    message: 'The share session epoch is invalid',
+  },
+  {
+    type: 'FENCED_STATE_EPOCH',
+    code: 124,
+    retriable: false,
+    message: 'The share coordinator rejected the request because the share-group state epoch did not match',
+  },
+  {
+    type: 'INVALID_VOTER_KEY',
+    code: 125,
+    retriable: false,
+    message: "The voter key doesn't match the receiving replica's key",
+  },
+  {
+    type: 'DUPLICATE_VOTER',
+    code: 126,
+    retriable: false,
+    message: 'The voter is already part of the set of voters',
+  },
+  {
+    type: 'VOTER_NOT_FOUND',
+    code: 127,
+    retriable: false,
+    message: 'The voter is not part of the set of voters',
+  },
+  {
+    type: 'INVALID_REGULAR_EXPRESSION',
+    code: 128,
+    retriable: false,
+    message: 'The regular expression is not valid',
+  },
+  {
+    type: 'REBOOTSTRAP_REQUIRED',
+    code: 129,
+    retriable: false,
+    message: 'Client metadata is stale. The client should rebootstrap to obtain new metadata',
+  },
+  {
+    type: 'STREAMS_INVALID_TOPOLOGY',
+    code: 130,
+    retriable: false,
+    message: 'The supplied topology is invalid',
+  },
+  {
+    type: 'STREAMS_INVALID_TOPOLOGY_EPOCH',
+    code: 131,
+    retriable: false,
+    message: 'The supplied topology epoch is invalid',
+  },
+  {
+    type: 'STREAMS_TOPOLOGY_FENCED',
+    code: 132,
+    retriable: false,
+    message: 'The supplied topology epoch is outdated',
+  },
+  {
+    type: 'SHARE_SESSION_LIMIT_REACHED',
+    code: 133,
+    retriable: true,
+    message: 'The limit of share sessions has been reached',
+  },
 ];
+
+/** Pre-2.6 name for error code 6. Prefer `NOT_LEADER_OR_FOLLOWER`. */
+export const NOT_LEADER_FOR_PARTITION = 'NOT_LEADER_OR_FOLLOWER';
 
 function unknownErrorCode(errorCode: number): ErrorCodeEntry {
   return {
@@ -596,10 +869,18 @@ export function failIfVersionNotSupported(code: number): void {
   }
 }
 
+const STALE_METADATA_TYPES = new Set([
+  'UNKNOWN_TOPIC_OR_PARTITION',
+  'LEADER_NOT_AVAILABLE',
+  'NOT_LEADER_FOR_PARTITION',
+  'NOT_LEADER_OR_FOLLOWER',
+  'UNKNOWN_TOPIC_ID',
+  'INCONSISTENT_TOPIC_ID',
+  'FENCED_LEADER_EPOCH',
+  'UNKNOWN_LEADER_EPOCH',
+  'REBOOTSTRAP_REQUIRED',
+]);
+
 export function staleMetadata(e: { type?: string }): boolean {
-  return (
-    e.type === 'UNKNOWN_TOPIC_OR_PARTITION' ||
-    e.type === 'LEADER_NOT_AVAILABLE' ||
-    e.type === 'NOT_LEADER_FOR_PARTITION'
-  );
+  return e.type != null && STALE_METADATA_TYPES.has(e.type);
 }

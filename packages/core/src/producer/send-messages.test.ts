@@ -123,7 +123,7 @@ describe('producer/sendMessages', () => {
     ]);
   });
 
-  const PRODUCE_ERRORS = ['UNKNOWN_TOPIC_OR_PARTITION', 'LEADER_NOT_AVAILABLE', 'NOT_LEADER_FOR_PARTITION'];
+  const PRODUCE_ERRORS = ['UNKNOWN_TOPIC_OR_PARTITION', 'LEADER_NOT_AVAILABLE', 'NOT_LEADER_OR_FOLLOWER'];
 
   for (const errorType of PRODUCE_ERRORS) {
     it(`refreshes stale metadata on ${errorType}`, async () => {
@@ -297,9 +297,9 @@ describe('producer/sendMessages', () => {
     expect(response).toEqual([]);
   });
 
-  it('does not keep a sibling broker error-0 ack after NOT_LEADER_FOR_PARTITION', async () => {
+  it('does not keep a sibling broker error-0 ack after NOT_LEADER_OR_FOLLOWER', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    const notLeader = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_FOR_PARTITION')!.code;
+    const notLeader = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
     brokers[2].produce
       .mockImplementationOnce(() => Promise.reject(createErrorFromCode(notLeader)))
       .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 1)));

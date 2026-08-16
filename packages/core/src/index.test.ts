@@ -34,6 +34,8 @@ describe('public surface', () => {
     expect(Partitioners.JavaCompatiblePartitioner).toBe(Partitioners.DefaultPartitioner);
     expect(PartitionAssigners.roundRobin).toBeTypeOf('function');
     expect(PartitionAssigners.range).toBeTypeOf('function');
+    expect(PartitionAssigners.sticky).toBeTypeOf('function');
+    expect(PartitionAssigners.cooperativeSticky).toBeTypeOf('function');
     expect(AssignerProtocol.MemberMetadata.encode).toBeTypeOf('function');
     expect(AssignerProtocol.MemberAssignment.decode).toBeTypeOf('function');
   });

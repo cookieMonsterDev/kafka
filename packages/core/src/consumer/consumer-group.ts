@@ -27,9 +27,13 @@ import type {
 const STALE_METADATA_ERRORS = Object.freeze([
   'LEADER_NOT_AVAILABLE',
   'NOT_LEADER_FOR_PARTITION',
+  'NOT_LEADER_OR_FOLLOWER',
   'FENCED_LEADER_EPOCH',
   'UNKNOWN_LEADER_EPOCH',
   'UNKNOWN_TOPIC_OR_PARTITION',
+  'UNKNOWN_TOPIC_ID',
+  'INCONSISTENT_TOPIC_ID',
+  'REBOOTSTRAP_REQUIRED',
 ]);
 
 const CONSUMER_REPLICA_ID = -1;
@@ -327,6 +331,18 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
+
+    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
+    selectedAssigner?.onAssignment?.(
+      currentMemberAssignment.reduce<MemberAssignmentMap>(
+        (partitionsByTopic, { topic, partitions }) => {
+          partitionsByTopic[topic] = partitions;
+          return partitionsByTopic;
+        },
+        Object.create(null) as MemberAssignmentMap,
+      ),
+    );
+
     this.offsetManager = new OffsetManager({
       cluster: this.cluster,
       topicConfigurations: this.topicConfigurations,

@@ -120,8 +120,12 @@ export interface GroupProtocol {
 export interface Assigner {
   name: string;
   version: number;
+  /** Classic eager (revoke all) vs incremental cooperative (KIP-429). */
+  readonly protocolType?: 'eager' | 'cooperative';
   assign: (group: { members: readonly GroupMember[]; topics: readonly string[] }) => Promise<GroupMemberAssignment[]>;
   protocol: (subscription: { topics: readonly string[] }) => GroupProtocol;
+  /** Persist this member's current assignment so the next JoinGroup metadata stays sticky. */
+  onAssignment?: (assignment: MemberAssignment) => void;
 }
 
 export type PartitionAssigner = (config: { cluster: Cluster; groupId: string; logger: Logger }) => Assigner;

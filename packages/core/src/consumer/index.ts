@@ -53,7 +53,7 @@ export type {
 
 export { events };
 export { MemberAssignment, MemberMetadata } from './assigner-protocol';
-export { range, roundRobin } from './assigners/index';
+export { cooperativeSticky, range, roundRobin, sticky } from './assigners/index';
 export { Batch } from './batch';
 
 /** Subscribe to several topics. @see https://kafka.apache.org/43/configuration/consumer-configs/ */

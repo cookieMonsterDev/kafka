@@ -29,7 +29,7 @@ export function protocolType(error: unknown): string | undefined {
 }
 
 export async function retryOnLeaderNotAvailable<T>(fn: () => Promise<T>, options: WaitForOptions = {}): Promise<T> {
-  return waitFor(async (): Promise<T | false> => {
+  return waitFor(async () => {
     try {
       return await fn();
     } catch (error) {
@@ -38,7 +38,7 @@ export async function retryOnLeaderNotAvailable<T>(fn: () => Promise<T>, options
       }
       return false;
     }
-  }, options) as Promise<T>;
+  }, options);
 }
 
 export async function findTopicPartitions(cluster: Cluster, topic: string): Promise<number[]> {

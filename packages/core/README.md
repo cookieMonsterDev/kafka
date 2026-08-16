@@ -9,7 +9,7 @@ From the repo root (after `pnpm install`):
 ```sh
 pnpm --filter @kafka/core dev        # tsc --watch, recompiles on save
 pnpm --filter @kafka/core build      # one-off compile to dist/
-pnpm --filter @kafka/core typecheck  # tsc --noEmit, no output written
+pnpm --filter @kafka/core typecheck  # src + test/suites, tsc --noEmit
 pnpm --filter @kafka/core clean      # remove dist/
 ```
 

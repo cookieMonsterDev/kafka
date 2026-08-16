@@ -3,6 +3,8 @@
   "compilerOptions": {
     "rootDir": "..",
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "types": ["node"]
   },
   "include": ["./**/*.ts", "../src/**/*.ts", "../vite.config.ts"]

@@ -11,6 +11,7 @@ import type { ClusterOptions } from '../../src/cluster/index.js';
 import { BrokerPool } from '../../src/cluster/broker-pool.js';
 import { connectionPoolBuilder, type ConnectionPoolBuilder } from '../../src/cluster/connection-pool-builder.js';
 import type { Consumer } from '../../src/consumer/index.js';
+import type { ConsumerEventName } from '../../src/consumer/instrumentation-events.js';
 import { Kafka } from '../../src/client.js';
 import { createLogger, LOG_LEVELS, type Logger } from '../../src/loggers/index.js';
 import { consoleLogCreator } from '../../src/loggers/console.js';
@@ -209,7 +210,11 @@ export function createConnectionBuilder(
   });
 }
 
-type CreateClusterOpts = Partial<ClusterOptions> & Partial<ConnectionOptions>;
+type CreateClusterOpts = Partial<Omit<ClusterOptions, 'instrumentationEmitter'>> &
+  Partial<Omit<ConnectionOptions, 'instrumentationEmitter'>> & {
+    instrumentationEmitter?:
+      ClusterOptions['instrumentationEmitter'] | ConnectionOptions['instrumentationEmitter'] | null;
+  };
 
 export function createCluster(opts: CreateClusterOpts = {}, brokers = plainTextBrokers()): Cluster {
   return new Cluster({
@@ -229,7 +234,7 @@ export function createCluster(opts: CreateClusterOpts = {}, brokers = plainTextB
     allowAutoTopicCreation: opts.allowAutoTopicCreation,
     maxInFlightRequests: opts.maxInFlightRequests,
     isolationLevel: opts.isolationLevel,
-    instrumentationEmitter: opts.instrumentationEmitter,
+    instrumentationEmitter: opts.instrumentationEmitter as ClusterOptions['instrumentationEmitter'],
     offsets: opts.offsets,
   });
 }
@@ -326,7 +331,7 @@ export async function retryProtocol<T>(errorType: string | readonly string[], fn
         return await fn();
       } catch (e) {
         if (!types.has((e as { type?: string }).type ?? '')) throw e;
-        return false as unknown as T;
+        return false;
       }
     },
     { ignoreTimeout: true },
@@ -342,7 +347,7 @@ export function waitForMessages<T>(
 
 export function waitForNextEvent(
   consumer: Consumer,
-  eventName: string,
+  eventName: ConsumerEventName,
   { maxWait = 10_000 }: { maxWait?: number } = {},
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -384,14 +389,27 @@ export function waitForConsumerToJoinGroup(
 }
 
 export const testWaitFor = async <T>(
-  fn: (elapsed: number) => T | Promise<T>,
+  fn: (elapsed: number) => T | false | Promise<T | false>,
   opts: Parameters<typeof waitFor>[1] = {},
-): Promise<T> => waitFor(fn, { ignoreTimeout: true, ...opts });
+): Promise<Exclude<T, false>> => waitFor(fn, { ignoreTimeout: true, ...opts });
 
 export { waitFor, waitFor as waitForPoll };
 
-export const describeIfOauthbearerEnabled = process.env.OAUTHBEARER_ENABLED === '1' ? describe : describe.skip;
-export const describeIfOauthbearerDisabled = process.env.OAUTHBEARER_ENABLED === '1' ? describe.skip : describe;
+type DescribeFn = (name: string, fn: () => void) => void;
+
+function runDescribe(run: DescribeFn, name: string, fn: () => void): void {
+  run(name, fn);
+}
+
+export function describeIfOauthbearerEnabled(name: string, fn: () => void): void {
+  const run: DescribeFn = process.env.OAUTHBEARER_ENABLED === '1' ? describe : describe.skip;
+  runDescribe(run, name, fn);
+}
+
+export function describeIfOauthbearerDisabled(name: string, fn: () => void): void {
+  const run: DescribeFn = process.env.OAUTHBEARER_ENABLED === '1' ? describe.skip : describe;
+  runDescribe(run, name, fn);
+}
 
 export function generateMessages({ prefix, number = 100 }: { prefix?: string; number?: number } = {}): {
   key: string;

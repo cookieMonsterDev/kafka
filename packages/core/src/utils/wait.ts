@@ -19,12 +19,16 @@ export interface WaitForOptions {
 
 /**
  * Polls `fn` every `delay` ms until it returns a truthy value, then resolves with it.
+ * `false` is the keep-polling sentinel and is never the resolved value.
  * Rejects with `KafkaJSTimeout` after `maxWait` ms, or with `signal`'s abort reason.
  */
-export function waitFor<T>(fn: (elapsed: number) => T | Promise<T>, options: WaitForOptions = {}): Promise<T> {
+export function waitFor<T>(
+  fn: (elapsed: number) => T | false | Promise<T | false>,
+  options: WaitForOptions = {},
+): Promise<Exclude<T, false>> {
   const { delay: interval = 50, maxWait = 10_000, timeoutMessage = 'Timeout', ignoreTimeout = false, signal } = options;
 
-  return new Promise<T>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     let settled = false;
     let timeoutId: NodeJS.Timeout | undefined;
     let elapsed = 0;
@@ -47,7 +51,7 @@ export function waitFor<T>(fn: (elapsed: number) => T | Promise<T>, options: Wai
 
           const result = await fn(elapsed);
           if (result) {
-            settle(() => resolve(result));
+            settle(() => resolve(result as Exclude<T, false>));
           } else {
             check();
           }

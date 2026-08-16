@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export const DEFAULT_KAFKA_VERSION = '4.0';
 
 /**
- * Integration matrix. Compose files other than 3.6/4.0 are added as older-broker coverage lands.
+ * Integration matrix. Compose files other than 2.4/3.6/4.0 are added as older-broker coverage lands.
  * @see ../assets/README.md
  */
 export const KAFKA_VERSION_COMPOSE_FILES: Readonly<Record<string, string>> = Object.freeze({
@@ -61,6 +61,11 @@ export function kafkaVersionAtMost(version: string, envVersion = getKafkaVersion
 /** KRaft production images in this matrix start at Kafka 3.0. */
 export function isKRaftKafkaVersion(version = getKafkaVersion()): boolean {
   return kafkaVersionAtLeast('3.0', version);
+}
+
+/** ZooKeeper compose files are named `docker-compose.zk-*.yml`. */
+export function isZooKeeperComposeFile(composeFile: string): boolean {
+  return path.basename(composeFile).includes('zk-');
 }
 
 function assetsDir(): string {

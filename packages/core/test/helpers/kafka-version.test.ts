@@ -5,6 +5,7 @@ import {
   DEFAULT_KAFKA_VERSION,
   getKafkaVersion,
   isKRaftKafkaVersion,
+  isZooKeeperComposeFile,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
   normalizeKafkaVersion,
@@ -57,8 +58,18 @@ describe('test/helpers/kafka-version', () => {
     expect(resolveComposeFile({ COMPOSE_FILE: '/tmp/custom.yml' })).toBe('/tmp/custom.yml');
   });
 
+  it('resolves the 2.4 ZooKeeper compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '2.4' });
+    expect(path.basename(composeFile)).toBe('docker-compose.zk-2-4.yml');
+    expect(isZooKeeperComposeFile(composeFile)).toBe(true);
+  });
+
+  it('does not treat KRaft compose files as ZooKeeper', () => {
+    expect(isZooKeeperComposeFile(resolveComposeFile({ KAFKA_VERSION: '4.0' }))).toBe(false);
+  });
+
   it('rejects versions whose compose file is not in test/assets yet', () => {
-    expect(() => resolveComposeFile({ KAFKA_VERSION: '2.4' })).toThrow(/not in test\/assets yet/);
+    expect(() => resolveComposeFile({ KAFKA_VERSION: '0.10' })).toThrow(/not in test\/assets yet/);
   });
 
   it('rejects unknown versions', () => {

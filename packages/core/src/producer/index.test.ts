@@ -4,6 +4,8 @@ import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { NETWORK_REQUEST } from '../network/instrumentation-events';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { createProducer } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -31,6 +33,7 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     markOffsetAsCommitted: vi.fn(),
+    brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 7 } } },
     ...overrides,
   };
 }
@@ -52,6 +55,25 @@ describe('producer', () => {
     const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(producer.send({ acks: 1, topic: 'topic', messages: [{ key: 'k' } as never] })).rejects.toThrow(
       'Invalid message without value for topic "topic"',
+    );
+  });
+
+  it('throws a non-retriable error when ZSTD is requested but Produce is below v7', async () => {
+    const cluster = fakeCluster({
+      brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 6 } } },
+    });
+    const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await producer.connect();
+
+    await expect(
+      producer.send({
+        acks: 1,
+        topic: 'topic',
+        compression: COMPRESSION_TYPES.ZSTD,
+        messages: [{ value: 'v' }],
+      }),
+    ).rejects.toEqual(
+      new KafkaNonRetriableError('ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)'),
     );
   });
 

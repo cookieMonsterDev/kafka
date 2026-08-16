@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Non-interactive TLS material for the KRaft test cluster.
+# Non-interactive TLS material for the integration clusters.
 # PKCS12 keystore/truststore (no keytool) plus a PEM CA for Node clients.
+# `*-java8.p12` is OpenSSL 3 `-legacy` (3DES) for Confluent 5.x / Java 8.
 
 set -euo pipefail
 
@@ -52,6 +53,23 @@ openssl pkcs12 -export \
   -in "${WORKDIR}/ca.crt" \
   -name CARoot \
   -out "${CERTS}/kafka.server.truststore.p12" \
+  -passout "pass:${PASSWORD}"
+
+# Confluent 5.x / Java 8 cannot parse OpenSSL 3's default PBES2 PKCS12
+# (`parseAlgParameters failed`). Emit a 3DES/legacy copy for ZooKeeper stacks.
+openssl pkcs12 -export -legacy \
+  -in "${WORKDIR}/kafka.crt" \
+  -inkey "${WORKDIR}/kafka.key" \
+  -certfile "${WORKDIR}/ca.crt" \
+  -name localhost \
+  -out "${CERTS}/kafka.server.keystore-java8.p12" \
+  -passout "pass:${PASSWORD}"
+
+openssl pkcs12 -export -legacy \
+  -nokeys \
+  -in "${WORKDIR}/ca.crt" \
+  -name CARoot \
+  -out "${CERTS}/kafka.server.truststore-java8.p12" \
   -passout "pass:${PASSWORD}"
 
 cp "${WORKDIR}/ca.crt" "${CERTS}/cert-signed"

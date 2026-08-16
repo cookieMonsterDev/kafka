@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index';
+import { createCluster, createTopic, newLogger, secureRandom, testIfKafkaAtLeast_2_4 } from '../../helpers/index';
 
 describe('admin.reassignments', () => {
   let topicName: string;
@@ -15,7 +15,7 @@ describe('admin.reassignments', () => {
     await admin?.disconnect();
   });
 
-  it('lists partition reassignments (none in progress)', async () => {
+  testIfKafkaAtLeast_2_4('lists partition reassignments (none in progress)', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
 
@@ -25,7 +25,7 @@ describe('admin.reassignments', () => {
     expect(listed.topics).toEqual(expect.any(Array));
   });
 
-  it('alters partition reassignments', async () => {
+  testIfKafkaAtLeast_2_4('alters partition reassignments', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
     const { brokers } = await admin.describeCluster();

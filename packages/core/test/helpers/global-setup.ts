@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { resolveComposeFile } from './kafka-version';
+import { isZooKeeperComposeFile, resolveComposeFile } from './kafka-version';
 
 const helpersDir = path.dirname(fileURLToPath(import.meta.url));
 const coreRoot = path.resolve(helpersDir, '../..');
@@ -20,6 +20,13 @@ export async function setup(): Promise<void> {
   }
 
   compose(['up', '--wait', '--wait-timeout', '180']);
+
+  if (isZooKeeperComposeFile(composeFile)) {
+    execFileSync('bash', [path.join(coreRoot, 'scripts/create-scram-credentials.sh')], {
+      cwd: coreRoot,
+      stdio: 'inherit',
+    });
+  }
 }
 
 export async function teardown(): Promise<void> {

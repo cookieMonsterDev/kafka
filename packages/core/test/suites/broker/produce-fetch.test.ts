@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index';
+import { API_KEYS } from '../../../src/protocol/requests/api-keys';
+import { lookup } from '../../../src/protocol/requests/index';
+import { Fetch } from '../../../src/protocol/requests/fetch/index';
+import { Produce } from '../../../src/protocol/requests/produce/index';
 import {
   advertisedAddress,
   createConnectionPool,
@@ -8,6 +12,7 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
+  testIfKafkaAtLeast_2_4,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
 
@@ -41,6 +46,41 @@ describe('broker.produceFetch', () => {
     await leader.connect();
     return leader;
   }
+
+  testIfKafkaAtLeast_2_4('on Kafka 2.4+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 8)', async () => {
+    const target = await connectToLeader();
+    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [],
+    }).request.apiVersion;
+    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+      replicaId: -1,
+      maxWaitTime: 100,
+      minBytes: 1,
+      maxBytes: 1_048_576,
+      topics: [],
+    }).request.apiVersion;
+    console.log(`produce/fetch smoke negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBeGreaterThanOrEqual(3);
+    expect(fetchVersion).toBeGreaterThanOrEqual(8);
+
+    const produced = await target.produce({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }] }],
+    });
+    expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
+
+    const fetched = await target.fetch({
+      replicaId: -1,
+      maxWaitTime: 1000,
+      minBytes: 1,
+      maxBytes: 10_485_760,
+      topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
+    });
+    expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('v');
+  });
 
   it('produces and fetches records', async () => {
     const target = await connectToLeader();

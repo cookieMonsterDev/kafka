@@ -1,7 +1,9 @@
+import { supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
 import { KafkaError, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
+import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import type { EosManager } from './eos-manager/index';
@@ -89,6 +91,15 @@ export function createMessageProducer({
     }
 
     validateConnectionStatus();
+
+    if (compression === COMPRESSION_TYPES.ZSTD) {
+      const versions = cluster.brokerPool.versions;
+      if (versions == null || !supportsZstd(versions)) {
+        throw new KafkaNonRetriableError(
+          'ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)',
+        );
+      }
+    }
 
     const mergedByTopic = new Map<string, Message[]>();
     for (const { topic, messages } of topicMessages) {

@@ -39,9 +39,31 @@ export function getHost(): string {
 
 /** Map compose-internal advertised listeners (kafkaN:29092) to host-published ports. */
 const INTERNAL_LISTENER_PORTS: Record<string, Record<number, number>> = {
-  kafka1: { 29092: 9092, 9092: 9092, 9093: 9093, 9094: 9094 },
-  kafka2: { 29092: 9095, 9092: 9095, 9093: 9096, 9094: 9097 },
-  kafka3: { 29092: 9098, 9092: 9098, 9093: 9099, 9094: 9100 },
+  kafka1: { 29092: 9092, 29093: 9093, 29094: 9094, 9092: 9092, 9093: 9093, 9094: 9094 },
+  kafka2: {
+    29092: 9095,
+    29095: 9095,
+    29096: 9096,
+    29097: 9097,
+    9092: 9095,
+    9093: 9096,
+    9094: 9097,
+    9095: 9095,
+    9096: 9096,
+    9097: 9097,
+  },
+  kafka3: {
+    29092: 9098,
+    29098: 9098,
+    29099: 9099,
+    29100: 9100,
+    9092: 9098,
+    9093: 9099,
+    9094: 9100,
+    9098: 9098,
+    9099: 9099,
+    9100: 9100,
+  },
 };
 
 export function advertisedAddress(host: string, port: number): { host: string; port: number } {
@@ -444,6 +466,7 @@ export {
   DEFAULT_KAFKA_VERSION,
   getKafkaVersion,
   isKRaftKafkaVersion,
+  isZooKeeperComposeFile,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
   resolveComposeFile,

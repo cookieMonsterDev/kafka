@@ -56,13 +56,7 @@ describe('broker.groups', () => {
     expect(join.memberId).toEqual(expect.any(String));
     expect(join.generationId).toEqual(expect.any(Number));
 
-    const heartbeat = await coordinator!.heartbeat({
-      groupId,
-      groupGenerationId: join.generationId,
-      memberId: join.memberId,
-    });
-    expect(heartbeat.errorCode).toBe(0);
-
+    // Heartbeat before SyncGroup is REBALANCE_IN_PROGRESS on Kafka 2.x (CompletingRebalance).
     const sync = await coordinator!.syncGroup({
       groupId,
       generationId: join.generationId,
@@ -70,6 +64,13 @@ describe('broker.groups', () => {
       groupAssignment: [{ memberId: join.memberId, memberAssignment: Buffer.alloc(0) }],
     });
     expect(sync.errorCode).toBe(0);
+
+    const heartbeat = await coordinator!.heartbeat({
+      groupId,
+      groupGenerationId: join.generationId,
+      memberId: join.memberId,
+    });
+    expect(heartbeat.errorCode).toBe(0);
 
     const leave = await coordinator!.leaveGroup({ groupId, memberId: join.memberId });
     expect(leave.errorCode).toBe(0);

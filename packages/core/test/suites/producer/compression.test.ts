@@ -9,6 +9,7 @@ import {
   createTopic,
   newLogger,
   secureRandom,
+  testIfKafkaAtLeast_2_1,
   waitForConsumerToJoinGroup,
   waitForMessages,
 } from '../../helpers/index';
@@ -34,10 +35,7 @@ describe('producer.compression', () => {
     await producer?.disconnect();
   });
 
-  it.each([
-    ['gzip', COMPRESSION_TYPES.GZIP],
-    ['zstd', COMPRESSION_TYPES.ZSTD],
-  ] as const)('round-trips %s-compressed messages', async (_name, compression) => {
+  async function roundTrip(compression: (typeof COMPRESSION_TYPES)[keyof typeof COMPRESSION_TYPES]): Promise<void> {
     consumer = createConsumer({
       cluster: createCluster(),
       groupId: `group-${secureRandom()}`,
@@ -63,6 +61,14 @@ describe('producer.compression', () => {
     });
     await waitForMessages(consumed, { number: 1 });
     expect(consumed[0]?.message.value?.toString()).toBe('compressed');
+  }
+
+  it('round-trips gzip-compressed messages', async () => {
+    await roundTrip(COMPRESSION_TYPES.GZIP);
+  });
+
+  testIfKafkaAtLeast_2_1('round-trips zstd-compressed messages', async () => {
+    await roundTrip(COMPRESSION_TYPES.ZSTD);
   });
 
   it('throws for unconfigured snappy and lz4', async () => {

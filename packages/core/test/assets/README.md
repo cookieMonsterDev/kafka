@@ -3,6 +3,7 @@
 Integration tests start a local Kafka cluster with Docker Compose. Select the stack with `KAFKA_VERSION` (semver, default `4.0`) and optionally `OAUTHBEARER_ENABLED=1`.
 
 ```bash
+KAFKA_VERSION=2.4 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=3.6 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 ```
@@ -16,9 +17,11 @@ KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 | `0.10`          | `docker-compose.zk-0-10.yml`   | ZK    | planned   |
 | `0.11`          | `docker-compose.zk-0-11.yml`   | ZK    | planned   |
 | `1.1`           | `docker-compose.zk-1-1.yml`    | ZK    | planned   |
-| `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | planned   |
+| `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | available |
 | `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | available |
 | `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
+
+`KAFKA_VERSION=2.4` uses `confluentinc/cp-kafka:5.4.2` (Kafka 2.4) plus ZooKeeper. The image is amd64-only; Compose sets `platform: linux/amd64`. SCRAM users are registered after boot by `scripts/create-scram-credentials.sh`. SSL uses `certs/kafka.server.*-java8.p12` (OpenSSL 3 `-legacy`) because Java 8 cannot load the KRaft PKCS12 files. The authorizer is `kafka.security.auth.SimpleAclAuthorizer`.
 
 `KAFKA_VERSION=3.6` uses `apache/kafka:3.9.1`. Official `apache/kafka` images start at 3.7.0; 3.7.2 omits SCRAM credentials from `kafka-storage.sh format` ([KAFKA-17636](https://issues.apache.org/jira/browse/KAFKA-17636)). Combined broker/controller mode matches the 4.0 stack (`apache/kafka:4.0.0`).
 

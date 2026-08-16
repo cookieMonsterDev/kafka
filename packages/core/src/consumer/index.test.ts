@@ -103,4 +103,17 @@ describe('consumer', () => {
     await consumer[Symbol.asyncDispose]();
     expect(disconnect).toHaveBeenCalled();
   });
+
+  it('matches regexp subscriptions without the global flag advancing lastIndex', async () => {
+    const metadata = vi.fn(async () => ({
+      topicMetadata: [{ topic: 'foo-one' }, { topic: 'foo-two' }, { topic: 'bar' }],
+    }));
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), metadata, addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+    await consumer.subscribe({ topics: [/foo.*/g] });
+
+    expect(addMultipleTargetTopics).toHaveBeenCalledWith(['foo-one', 'foo-two']);
+  });
 });

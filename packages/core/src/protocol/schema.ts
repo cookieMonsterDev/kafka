@@ -94,6 +94,21 @@ export const compactNullableBytes: FieldCodec<Buffer | null> = codec(
 );
 
 /**
+ * 16-byte Kafka UUID (KIP-516 topic IDs and later Fetch/Metadata versions).
+ */
+export const uuid: FieldCodec<Buffer> = codec(
+  (e, v) => {
+    if (v.length !== 16) throw new RangeError(`Expected a 16-byte UUID, got ${v.length} bytes`);
+    e.writeBuffer(v);
+  },
+  (d) => {
+    const value = d.readBytes(16);
+    if (value === null || value.length !== 16) throw new RangeError('Expected a 16-byte UUID');
+    return value;
+  },
+);
+
+/**
  * Empty tagged-fields buffer (`TAG_BUFFER`). Flexible structs always end with one; this codec
  * writes the empty form (`uvarint 0`) and skips whatever tagged fields the broker sent.
  *

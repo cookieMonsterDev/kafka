@@ -20,8 +20,8 @@ function fetchOptions(maxWaitTime: number): FetchRequestOptions {
 }
 
 describe('protocol/requests/fetch', () => {
-  it('implements versions 0 through 11 (MessageSet v0-v3, RecordBatch v4-v11)', () => {
-    expect(Fetch.versions).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  it('implements versions 0 through 12 (MessageSet v0-v3, RecordBatch v4-v12)', () => {
+    expect(Fetch.versions).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   for (const version of Fetch.versions) {

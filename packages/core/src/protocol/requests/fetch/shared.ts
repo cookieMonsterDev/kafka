@@ -16,6 +16,8 @@ export interface FetchPartitionRequest {
   /** v9+ only; earlier request versions ignore this field. */
   currentLeaderEpoch?: number;
   fetchOffset: bigint;
+  /** v12+ only (KIP-320 epoch validation); earlier request versions ignore this field. */
+  lastFetchedEpoch?: number;
   /** v5+ only; earlier request versions ignore this field. */
   logStartOffset?: bigint;
   maxBytes: number;
@@ -101,11 +103,24 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
 
   const messagesBuffer = decoder.readBytes(messagesSize);
   if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
+  return decodeRecordSetBuffer(messagesBuffer);
+}
+
+/**
+ * Fetch v12+ uses COMPACT_RECORDS (unsigned varint length `N+1`) instead of INT32-prefixed RECORDS.
+ */
+export async function decodeCompactRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
+  const messagesBuffer = decoder.readUVarIntBytes();
+  if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
+  return decodeRecordSetBuffer(messagesBuffer);
+}
+
+async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRecordBatch['records']> {
   const messagesDecoder = new Decoder(messagesBuffer);
   const magicByte = messagesBuffer.readInt8(MAGIC_OFFSET);
 
   if (magicByte !== RECORD_BATCH_MAGIC) {
-    return decodeMessageSet(messagesDecoder, messagesSize);
+    return decodeMessageSet(messagesDecoder, messagesBuffer.length);
   }
 
   const records: DecodedRecordBatch['records'] = [];

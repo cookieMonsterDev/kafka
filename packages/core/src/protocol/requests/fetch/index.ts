@@ -23,6 +23,8 @@ import { fetchRequestV10 } from './v10/request';
 import { fetchResponseV10 } from './v10/response';
 import { fetchRequestV11 } from './v11/request';
 import { fetchResponseV11 } from './v11/response';
+import { fetchRequestV12 } from './v12/request';
+import { fetchResponseV12 } from './v12/response';
 import type { FetchRequestOptions } from './shared';
 
 /**
@@ -60,6 +62,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> =
   9: (options) => fetchProtocol(fetchRequestV9(options), fetchResponseV9, options.maxWaitTime),
   10: (options) => fetchProtocol(fetchRequestV10(options), fetchResponseV10, options.maxWaitTime),
   11: (options) => fetchProtocol(fetchRequestV11(options), fetchResponseV11, options.maxWaitTime),
+  12: (options) => fetchProtocol(fetchRequestV12(options), fetchResponseV12, options.maxWaitTime),
 };
 
 /**

@@ -20,6 +20,7 @@ import {
   object,
   string,
   taggedFields,
+  uuid,
 } from './schema';
 
 describe('protocol/schema', () => {
@@ -162,5 +163,13 @@ describe('protocol/schema', () => {
     const expected = new Encoder().writeUVarIntString('topic').writeInt32(2).writeUVarInt(0);
     expect(encoder.buffer).toEqual(expected.buffer);
     expect(shape.read(new Decoder(encoder.buffer))).toEqual({ name: 'topic', count: 2 });
+  });
+
+  it('round-trips a 16-byte UUID', () => {
+    const id = Buffer.from('0123456789abcdef');
+    const encoded = new Encoder();
+    uuid.write(encoded, id);
+    expect(uuid.read(new Decoder(encoded.buffer))).toEqual(id);
+    expect(() => uuid.write(new Encoder(), Buffer.from([1, 2, 3]))).toThrow(RangeError);
   });
 });

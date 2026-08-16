@@ -3,8 +3,8 @@ import { KafkaNonRetriableError } from '../../../errors';
 import { CreateTopics } from './index';
 
 describe('protocol/requests/create-topics', () => {
-  it('implements versions 0 through 3', () => {
-    expect(CreateTopics.versions).toEqual([0, 1, 2, 3]);
+  it('implements versions 0 through 7', () => {
+    expect(CreateTopics.versions).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('throws when validateOnly is set on a v0 broker', () => {

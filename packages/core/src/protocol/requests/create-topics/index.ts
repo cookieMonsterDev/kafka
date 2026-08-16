@@ -9,6 +9,14 @@ import { createTopicsRequestV2, withTopicDefaults } from './v2/request';
 import { createTopicsResponseV2 } from './v2/response';
 import { createTopicsRequestV3 } from './v3/request';
 import { createTopicsResponseV3 } from './v3/response';
+import { createTopicsRequestV4 } from './v4/request';
+import { createTopicsResponseV4 } from './v4/response';
+import { createTopicsRequestV5 } from './v5/request';
+import { createTopicsResponseV5 } from './v5/response';
+import { createTopicsRequestV6 } from './v6/request';
+import { createTopicsResponseV6 } from './v6/response';
+import { createTopicsRequestV7 } from './v7/request';
+import { createTopicsResponseV7 } from './v7/response';
 
 export interface CreateTopicsOptions {
   topics: CreateTopicInput[];
@@ -54,6 +62,38 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateTopicsOptions>>> =
       validateOnly: options.validateOnly ?? false,
     }),
     response: createTopicsResponseV3,
+  }),
+  4: (options) => ({
+    request: createTopicsRequestV4({
+      topics: withTopicDefaults(options.topics),
+      timeout: options.timeout ?? 5000,
+      validateOnly: options.validateOnly ?? false,
+    }),
+    response: createTopicsResponseV4,
+  }),
+  5: (options) => ({
+    request: createTopicsRequestV5({
+      topics: withTopicDefaults(options.topics),
+      timeout: options.timeout ?? 5000,
+      validateOnly: options.validateOnly ?? false,
+    }),
+    response: createTopicsResponseV5,
+  }),
+  6: (options) => ({
+    request: createTopicsRequestV6({
+      topics: withTopicDefaults(options.topics),
+      timeout: options.timeout ?? 5000,
+      validateOnly: options.validateOnly ?? false,
+    }),
+    response: createTopicsResponseV6,
+  }),
+  7: (options) => ({
+    request: createTopicsRequestV7({
+      topics: withTopicDefaults(options.topics),
+      timeout: options.timeout ?? 5000,
+      validateOnly: options.validateOnly ?? false,
+    }),
+    response: createTopicsResponseV7,
   }),
 };
 

@@ -28,7 +28,7 @@ describe('protocol/requests/sasl-authenticate', () => {
       .writeUVarIntBytes(payload)
       .writeInt64(3600000n)
       .writeUVarInt(0).buffer;
-    const decoded = await response.decode(wire);
+    const decoded = (await response.decode(wire)) as { authBytes: Buffer };
     expect(decoded.authBytes).toEqual(new Encoder().writeBytes(payload).buffer);
   });
 });

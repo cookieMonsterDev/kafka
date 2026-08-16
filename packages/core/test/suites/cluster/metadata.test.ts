@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createCluster, createTopic, secureRandom } from '../../helpers/index';
+import { createCluster, createTopic, secureRandom, waitFor } from '../../helpers/index';
 
 describe('cluster.metadata', () => {
   let cluster: ReturnType<typeof createCluster> | undefined;
@@ -29,9 +29,14 @@ describe('cluster.metadata', () => {
   });
 
   it('returns metadata for all topics', async () => {
-    const response = await cluster!.metadata({ topics: [] });
-    expect(response?.topicMetadata.length).toBeGreaterThanOrEqual(3);
-    expect(response?.topicMetadata.map((t) => t.topic)).toEqual(expect.arrayContaining([topic1, topic2, topic3]));
+    const expected = [topic1, topic2, topic3];
+    const response = await waitFor(async () => {
+      const metadata = await cluster!.metadata({ topics: [] });
+      const names = metadata?.topicMetadata.map((t) => t.topic) ?? [];
+      return expected.every((topic) => names.includes(topic)) ? metadata : false;
+    });
+    expect(response.topicMetadata.length).toBeGreaterThanOrEqual(3);
+    expect(response.topicMetadata.map((t) => t.topic)).toEqual(expect.arrayContaining(expected));
   });
 
   it('adds target topics and finds partition metadata', async () => {

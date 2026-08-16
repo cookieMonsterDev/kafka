@@ -3,6 +3,7 @@
 Integration tests start a local Kafka cluster with Docker Compose. Select the stack with `KAFKA_VERSION` (semver, default `4.0`) and optionally `OAUTHBEARER_ENABLED=1`.
 
 ```bash
+KAFKA_VERSION=3.6 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 ```
 
@@ -16,8 +17,10 @@ KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 | `0.11`          | `docker-compose.zk-0-11.yml`   | ZK    | planned   |
 | `1.1`           | `docker-compose.zk-1-1.yml`    | ZK    | planned   |
 | `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | planned   |
-| `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | planned   |
+| `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | available |
 | `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
+
+`KAFKA_VERSION=3.6` uses `apache/kafka:3.9.1`. Official `apache/kafka` images start at 3.7.0; 3.7.2 omits SCRAM credentials from `kafka-storage.sh format` ([KAFKA-17636](https://issues.apache.org/jira/browse/KAFKA-17636)). Combined broker/controller mode matches the 4.0 stack (`apache/kafka:4.0.0`).
 
 OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
 
@@ -27,7 +30,7 @@ OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1
 
 Suites that need a minimum (or maximum) broker version should import the helpers from `test/helpers/index.ts`:
 
-- `testIfKafkaAtMost_0_10`
+- `testIfKafkaAtMost_0_10` / `_3_6`
 - `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0`
 - `describeIfKRaft` / `describeIfZooKeeper`
 

@@ -42,11 +42,11 @@ describe('admin.topics', () => {
     expect(cluster.brokers.map((b) => b.nodeId)).toContain(cluster.controller);
 
     await admin.deleteTopics({ topics: [topicName] });
-    await waitFor(async () => {
+    const remaining = await waitFor(async () => {
       const topics = await admin!.listTopics();
-      return topics.includes(topicName) ? false : true;
+      return topics.includes(topicName) ? false : topics;
     });
-    expect(await admin.listTopics()).not.toEqual(expect.arrayContaining([topicName]));
+    expect(remaining).not.toEqual(expect.arrayContaining([topicName]));
   });
 
   it('creates a topic with manual replica assignment', async () => {

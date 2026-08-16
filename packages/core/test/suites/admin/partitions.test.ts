@@ -24,15 +24,12 @@ describe('admin.partitions', () => {
 
     await admin.createPartitions({ topicPartitions: [{ topic: topicName, count: 3 }] });
 
-    await waitFor(async () => {
+    const topic = await waitFor(async () => {
       const metadata = await admin!.fetchTopicMetadata({ topics: [topicName] });
-      const topic = metadata.topics.find((t) => t.name === topicName);
-      return topic?.partitions.length === 3 ? topic : false;
+      const found = metadata.topics.find((t) => t.name === topicName);
+      return found?.partitions.length === 3 ? found : false;
     });
-
-    const metadata = await admin.fetchTopicMetadata({ topics: [topicName] });
-    const topic = metadata.topics.find((t) => t.name === topicName);
-    expect(topic?.partitions).toHaveLength(3);
+    expect(topic.partitions).toHaveLength(3);
   });
 
   it('rejects creating partitions for a missing topic', async () => {

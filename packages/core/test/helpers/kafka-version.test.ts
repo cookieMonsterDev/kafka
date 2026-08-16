@@ -43,6 +43,11 @@ describe('test/helpers/kafka-version', () => {
     expect(path.basename(composeFile)).toBe('docker-compose.kraft.yml');
   });
 
+  it('resolves the 3.6 KRaft compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '3.6' });
+    expect(path.basename(composeFile)).toBe('docker-compose.kraft-3-6.yml');
+  });
+
   it('resolves the oauthbearer compose file when enabled', () => {
     const composeFile = resolveComposeFile({ KAFKA_VERSION: '4.0', OAUTHBEARER_ENABLED: '1' });
     expect(path.basename(composeFile)).toBe('docker-compose.kraft-oauthbearer.yml');

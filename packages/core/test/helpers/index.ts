@@ -429,6 +429,7 @@ function testIfKafkaVersion(version: string, compare: (target: string) => boolea
 }
 
 export const testIfKafkaAtMost_0_10 = testIfKafkaVersion('0.10', kafkaVersionAtMost);
+export const testIfKafkaAtMost_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtMost);
 export const testIfKafkaAtLeast_0_11 = testIfKafkaVersion('0.11', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_0 = testIfKafkaVersion('1.0', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtLeast);

@@ -1,0 +1,115 @@
+# 3-broker Kafka 3.x KRaft cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
+# Official apache/kafka images start at 3.7.0; there is no 3.6.x tag.
+# 3.7.2 drops kafka-storage --add-scram records (KAFKA-17636); 3.9.1 is the
+# latest 3.x image that boots combined broker/controller and keeps SCRAM.
+# Same host ports as docker-compose.kraft.yml. Reuse format-and-start.sh:
+# 3.9 Formatter accepts --cluster-id/--add-scram like 4.0 (no --standalone).
+
+name: kafka-core-kraft-3-6
+
+x-broker-common: &broker-common
+  image: apache/kafka:3.9.1
+  restart: unless-stopped
+  entrypoint: ['/usr/local/bin/format-and-start.sh']
+  volumes:
+    - ../../scripts/format-and-start.sh:/usr/local/bin/format-and-start.sh:ro
+    - ./certs:/etc/kafka/secrets:ro
+    - ./kafka/server-jaas.conf:/opt/kafka/config/server-jaas.conf:ro
+  environment: &broker-env
+    CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+    KAFKA_PROCESS_ROLES: broker,controller
+    KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka1:29091,2@kafka2:29091,3@kafka3:29091
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    KAFKA_NUM_PARTITIONS: 2
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+    KAFKA_DELETE_TOPIC_ENABLE: 'true'
+    KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+    KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+    KAFKA_SSL_KEYSTORE_FILENAME: kafka.server.keystore.p12
+    KAFKA_SSL_KEYSTORE_TYPE: PKCS12
+    KAFKA_SSL_KEYSTORE_CREDENTIALS: keystore_creds
+    KAFKA_SSL_KEY_CREDENTIALS: sslkey_creds
+    KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.server.truststore.p12
+    KAFKA_SSL_TRUSTSTORE_TYPE: PKCS12
+    KAFKA_SSL_TRUSTSTORE_CREDENTIALS: truststore_creds
+    KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ''
+    KAFKA_SSL_CLIENT_AUTH: none
+    KAFKA_OPTS: -Djava.security.auth.login.config=/opt/kafka/config/server-jaas.conf
+    KAFKA_SASL_ENABLED_MECHANISMS: PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
+    KAFKA_LISTENER_NAME_SASL__SSL_SASL_ENABLED_MECHANISMS: PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
+    KAFKA_LISTENER_NAME_SASL__SSL_PLAIN_SASL_JAAS_CONFIG: >-
+      org.apache.kafka.common.security.plain.PlainLoginModule required
+      username="test" password="testtest"
+      user_test="testtest" user_bob="bobbob" user_alice="alicealice";
+    KAFKA_LISTENER_NAME_SASL__SSL_SCRAM___SHA___256_SASL_JAAS_CONFIG: >-
+      org.apache.kafka.common.security.scram.ScramLoginModule required;
+    KAFKA_LISTENER_NAME_SASL__SSL_SCRAM___SHA___512_SASL_JAAS_CONFIG: >-
+      org.apache.kafka.common.security.scram.ScramLoginModule required;
+    KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+    KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'true'
+    KAFKA_SUPER_USERS: User:ANONYMOUS;User:test;User:admin;User:testscram
+  healthcheck: &broker-healthcheck
+    test: ['CMD-SHELL', '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1']
+    interval: 5s
+    timeout: 10s
+    retries: 24
+    start_period: 40s
+
+services:
+  kafka1:
+    <<: *broker-common
+    hostname: kafka1
+    container_name: kafka-core-3-6-kafka1
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka1
+    ports:
+      - '9092:9092'
+      - '9093:9093'
+      - '9094:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: CONTROLLER://:29091,PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,SSL://:9093,SASL_SSL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29092,PLAINTEXT_HOST://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094
+
+  kafka2:
+    <<: *broker-common
+    hostname: kafka2
+    container_name: kafka-core-3-6-kafka2
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka2
+    ports:
+      - '9095:9092'
+      - '9096:9093'
+      - '9097:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: CONTROLLER://:29091,PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,SSL://:9093,SASL_SSL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:29092,PLAINTEXT_HOST://localhost:9095,SSL://localhost:9096,SASL_SSL://localhost:9097
+
+  kafka3:
+    <<: *broker-common
+    hostname: kafka3
+    container_name: kafka-core-3-6-kafka3
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka3
+    ports:
+      - '9098:9092'
+      - '9099:9093'
+      - '9100:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: CONTROLLER://:29091,PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,SSL://:9093,SASL_SSL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:29092,PLAINTEXT_HOST://localhost:9098,SSL://localhost:9099,SASL_SSL://localhost:9100

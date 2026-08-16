@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export const DEFAULT_KAFKA_VERSION = '4.0';
 
 /**
- * Planned integration matrix. Compose files other than 4.0 are added as older-broker coverage lands.
+ * Integration matrix. Compose files other than 3.6/4.0 are added as older-broker coverage lands.
  * @see ../assets/README.md
  */
 export const KAFKA_VERSION_COMPOSE_FILES: Readonly<Record<string, string>> = Object.freeze({

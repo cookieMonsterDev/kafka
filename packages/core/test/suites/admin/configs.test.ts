@@ -40,25 +40,17 @@ describe('admin.configs', () => {
       ],
     });
 
-    await waitFor(async () => {
+    const updated = await waitFor(async () => {
       const after = await admin!.describeConfigs({
         includeSynonyms: false,
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: topicName, configNames: ['cleanup.policy'] }],
       });
-      const updated = after.resources
+      const entry = after.resources
         .find((r) => r.resourceName === topicName)
         ?.configEntries.find((c) => c.configName === 'cleanup.policy');
-      return updated?.configValue === 'compact' ? updated : false;
+      return entry?.configValue === 'compact' ? entry : false;
     });
-
-    const after = await admin.describeConfigs({
-      includeSynonyms: false,
-      resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: topicName, configNames: ['cleanup.policy'] }],
-    });
-    const updated = after.resources
-      .find((r) => r.resourceName === topicName)
-      ?.configEntries.find((c) => c.configName === 'cleanup.policy');
-    expect(updated?.configValue).toBe('compact');
+    expect(updated.configValue).toBe('compact');
   });
 
   it('describes broker configs', async () => {

@@ -16,8 +16,8 @@ export interface CreateRequestOptions {
  * length prefix every request/response on the wire carries.
  *
  * Header v1 (non-flexible): api key, api version, correlation id, client id.
- * Header v2 (flexible versions except ApiVersions): the same fields plus an empty TAG_BUFFER
- * after client id (KIP-482). ApiVersions never uses header v2; see `usesFlexibleRequestHeader`.
+ * Header v2 (flexible versions, including ApiVersions v3+): the same fields plus an empty
+ * TAG_BUFFER after client id (KIP-482). ApiVersions *responses* still use header v0.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */

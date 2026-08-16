@@ -81,7 +81,7 @@ describe('protocol/createRequest', () => {
     expect(decoder.readInt32()).toBe(5000);
   });
 
-  it('does not use a flexible request header for ApiVersions even at v3+', async () => {
+  it('uses a flexible request header for ApiVersions v3+', async () => {
     const request = {
       apiKey: API_KEYS.ApiVersions,
       apiVersion: 3,
@@ -95,6 +95,7 @@ describe('protocol/createRequest', () => {
     decoder.readInt16(); // apiVersion
     decoder.readInt32(); // correlationId
     expect(decoder.readString()).toBe('');
+    expect(decoder.readUVarInt()).toBe(0); // header TAG_BUFFER
     expect(decoder.readInt8()).toBe(9);
   });
 });

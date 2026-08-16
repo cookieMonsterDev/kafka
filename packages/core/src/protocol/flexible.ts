@@ -4,8 +4,9 @@ import { API_KEYS } from './requests/api-keys';
  * First version at which each API uses compact types, tagged fields, request header v2, and
  * response header v1 (KIP-482). APIs omitted from this map never become flexible.
  *
- * ApiVersions is flexible from v3, but its *request* header stays v1 — see
- * `usesFlexibleRequestHeader`.
+ * ApiVersions is flexible from v3. The broker peeks at `apiKey`/`apiVersion` before parsing the
+ * rest of the header, so v3+ requests use header v2. The *response* header stays v0 — see
+ * `usesFlexibleResponseHeader` and KIP-511.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
@@ -68,19 +69,22 @@ export function isFlexibleVersion(apiKey: number, apiVersion: number): boolean {
 /**
  * Whether the request is framed with header v2 (nullable `clientId` plus a trailing `TAG_BUFFER`).
  *
- * ApiVersions never uses a flexible request header, even at v3+, because the broker must parse
- * the header before it knows which ApiVersions body version the client speaks (KIP-511 / KIP-482).
- * The ApiVersions v3 *body* is still flexible.
+ * Includes ApiVersions v3+: Kafka's generated `requestHeaderVersion` returns 2 for flexible
+ * versions. The broker reads `apiKey` and `apiVersion` first, then parses the remainder of the
+ * header, so there is no chicken-and-egg problem on the request path.
  */
 export function usesFlexibleRequestHeader(apiKey: number, apiVersion: number): boolean {
-  if (apiKey === API_KEYS.ApiVersions) return false;
   return isFlexibleVersion(apiKey, apiVersion);
 }
 
 /**
  * Whether the response is framed with header v1 (`correlationId` plus a trailing `TAG_BUFFER`).
- * ApiVersions v3+ does use a flexible response header.
+ *
+ * ApiVersions is the exception: the response always uses header v0 (correlation id only) so
+ * `error_code` stays at a fixed offset when the client does not yet know which versions the
+ * broker speaks (KIP-511). Kafka's `ApiMessageTypeGenerator` hardcodes this.
  */
 export function usesFlexibleResponseHeader(apiKey: number, apiVersion: number): boolean {
+  if (apiKey === API_KEYS.ApiVersions) return false;
   return isFlexibleVersion(apiKey, apiVersion);
 }

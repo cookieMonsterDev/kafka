@@ -206,11 +206,9 @@ describe('network/Connection', () => {
       });
     });
 
-    it('strips flexible response header tagged fields for ApiVersions v3+', async () => {
+    it('does not strip tagged fields from ApiVersions responses (header stays v0)', async () => {
       const { server, port } = await startFakeBroker((request, socket) => {
-        writeResponseFrame(socket, request.correlationId, new Encoder().writeString('hello'), {
-          flexibleHeader: true,
-        });
+        writeResponseFrame(socket, request.correlationId, new Encoder().writeString('hello'));
       });
       servers.push(server);
 

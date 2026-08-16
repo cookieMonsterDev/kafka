@@ -59,20 +59,21 @@ describe('protocol/flexible', () => {
     expect(isFlexibleVersion(API_KEYS.SaslHandshake, 1)).toBe(false);
   });
 
-  it('uses request header v2 for flexible APIs except ApiVersions', () => {
+  it('uses request header v2 for flexible APIs including ApiVersions v3+', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 0)).toBe(false);
-    expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 3)).toBe(false);
-    expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 4)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 3)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 4)).toBe(true);
   });
 
-  it('uses response header v1 for flexible APIs including ApiVersions v3+', () => {
+  it('uses response header v1 for flexible APIs except ApiVersions', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 2)).toBe(false);
-    expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 3)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 3)).toBe(false);
+    expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 4)).toBe(false);
   });
 });

@@ -4,7 +4,13 @@ import { listOffsetsResponseV2 } from '../v2/response';
 export interface ListOffsetsResponseV3Body {
   responses: {
     topic: string;
-    partitions: { partition: number; errorCode: number; timestamp: bigint; offset: bigint }[];
+    partitions: {
+      partition: number;
+      errorCode: number;
+      timestamp: bigint;
+      offset: bigint;
+      leaderEpoch?: number;
+    }[];
   }[];
   throttleTime: number;
   clientSideThrottleTime: number;

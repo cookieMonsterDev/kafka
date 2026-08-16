@@ -22,7 +22,7 @@ describe('protocol/sasl/oauth-bearer', () => {
     const request = await oauthBearerRequest({ authorizationIdentity: 'admin' }, { value: 'my-token' });
     const buffer = await request.encode();
     const decoder = new Decoder(buffer);
-    expect(readBytesOrThrow(decoder).toString()).toBe(`n,"a=admin,${SOH}auth=Bearer my-token${SOH}${SOH}`);
+    expect(readBytesOrThrow(decoder).toString()).toBe(`n,a=admin,${SOH}auth=Bearer my-token${SOH}${SOH}`);
   });
 
   it('formats extensions as key=value pairs separated by SOH', async () => {

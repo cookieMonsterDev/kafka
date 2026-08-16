@@ -52,7 +52,7 @@ export async function oauthBearerRequest(
   { authorizationIdentity = null }: OauthBearerSaslConfig,
   oauthBearerToken: OauthBearerToken,
 ): Promise<{ encode(): Promise<Buffer> }> {
-  const authzid = authorizationIdentity == null ? '' : `"a=${authorizationIdentity}`;
+  const authzid = authorizationIdentity == null ? '' : `a=${authorizationIdentity}`;
   let ext = formatExtensions(oauthBearerToken.extensions);
   if (ext.length > 0) {
     ext = `${SOH}${ext}`;

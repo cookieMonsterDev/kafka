@@ -1,6 +1,5 @@
 import { afterEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createProducer } from '../../../src/producer/index';
 import { ACL_OPERATION_TYPES } from '../../../src/protocol/enums/acl-operation-types';
 import { ACL_PERMISSION_TYPES } from '../../../src/protocol/enums/acl-permission-types';
 import { ACL_RESOURCE_TYPES } from '../../../src/protocol/enums/acl-resource-types';
@@ -15,25 +14,19 @@ import {
   waitFor,
 } from '../../helpers/index';
 
-function saslClients() {
-  const opts = { ...saslEntries[0]!.opts(), metadataMaxAge: 50 };
-  const admin = createAdmin({ cluster: createCluster(opts, saslBrokers()), logger: newLogger() });
-  const producer = createProducer({ cluster: createCluster(opts, saslBrokers()), logger: newLogger() });
-  return { admin, producer };
-}
-
 describe('admin.acls', () => {
   let admin: ReturnType<typeof createAdmin> | undefined;
-  let producer: ReturnType<typeof createProducer> | undefined;
 
   afterEach(async () => {
-    await producer?.disconnect();
     await admin?.disconnect();
   });
 
   testIfKafkaAtLeast_0_11('creates, describes, and deletes topic ACLs', async () => {
     const topicName = `test-topic-${secureRandom()}`;
-    ({ admin, producer } = saslClients());
+    admin = createAdmin({
+      cluster: createCluster(saslEntries[0]!.opts(), saslBrokers()),
+      logger: newLogger(),
+    });
     await admin.connect();
     await admin.createTopics({
       waitForLeaders: true,

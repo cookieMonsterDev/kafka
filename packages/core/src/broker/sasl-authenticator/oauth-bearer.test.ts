@@ -33,6 +33,7 @@ describe('broker/sasl-authenticator/oauth-bearer', () => {
     await oauthBearer.authenticate();
     expect(saslAuthenticate).toHaveBeenCalledOnce();
     const [args] = saslAuthenticate.mock.calls[0]!;
-    expect(args.response).toBeUndefined();
+    expect(args.request).toBeDefined();
+    expect(args.response).toBeDefined();
   });
 });

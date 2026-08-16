@@ -10,7 +10,7 @@
  */
 import { KafkaSASLAuthenticationError } from '../../errors';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection';
-import { oauthBearerRequest } from '../../protocol/sasl/oauth-bearer';
+import { oauthBearerRequest, oauthBearerResponse } from '../../protocol/sasl/oauth-bearer';
 import type { OauthBearerSaslConfig, OauthBearerToken } from '../../protocol/sasl/oauth-bearer';
 
 export interface OauthBearerConfig extends OauthBearerSaslConfig {
@@ -38,7 +38,10 @@ export function oauthBearerAuthenticatorProvider(
 
       try {
         logger.debug('Authenticate with SASL OAUTHBEARER', { broker });
-        await saslAuthenticate({ request: await oauthBearerRequest(sasl, oauthBearerToken) });
+        await saslAuthenticate({
+          request: await oauthBearerRequest(sasl, oauthBearerToken),
+          response: oauthBearerResponse,
+        });
         logger.debug('SASL OAUTHBEARER authentication successful', { broker });
       } catch (e) {
         const error = new KafkaSASLAuthenticationError(

@@ -22,6 +22,7 @@
  * permit the client to login as the authorization identity. If both steps succeed, the user is
  * logged in.
  */
+import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 
 const SOH = String.fromCharCode(1); // Start Of Header
@@ -64,3 +65,43 @@ export async function oauthBearerRequest(
     encode: async () => new Encoder().writeBytes(Buffer.from(oauthMsg)).buffer,
   };
 }
+
+/**
+ * RFC 7628: an empty server payload means success. A JSON object with `status` other than
+ * `ok` (typically `invalid_token`) is a failed exchange — Kafka may still return error_code 0
+ * and then close the connection on the next API request.
+ */
+function parseOauthBearerStatus(payload: Buffer): { status: string } {
+  const text = payload.toString('utf8').trim();
+  if (!text || text[0] !== '{') return { status: 'ok' };
+
+  try {
+    const parsed = JSON.parse(text) as { status?: unknown };
+    return { status: typeof parsed.status === 'string' ? parsed.status : 'ok' };
+  } catch {
+    return { status: 'ok' };
+  }
+}
+
+export const oauthBearerResponse = {
+  decode: async (rawData: Buffer): Promise<{ status: string }> => {
+    if (rawData.length === 0) return { status: 'ok' };
+    // Length-prefixed payloads start with an INT32, not `{`.
+    if (rawData[0] === 0x7b) return parseOauthBearerStatus(rawData);
+
+    try {
+      const bytes = new Decoder(rawData).readBytes();
+      if (bytes != null && bytes.length > 0) return parseOauthBearerStatus(bytes);
+    } catch {
+      return { status: 'ok' };
+    }
+
+    return { status: 'ok' };
+  },
+  parse: async (data: { status: string }): Promise<{ status: string }> => {
+    if (data.status !== 'ok') {
+      throw new Error(data.status);
+    }
+    return data;
+  },
+};

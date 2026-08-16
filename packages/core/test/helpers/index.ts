@@ -168,10 +168,17 @@ export function saslSCRAM512WrongConnectionOpts(): ConnectionOptions {
   });
 }
 
-/** `alg: none` JWT: two base64url JSON blobs and an empty signature. */
-export function createUnsignedJwt(payload: Record<string, unknown>): string {
-  const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64url');
-  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.`;
+/**
+ * Unsecured JWT (`alg: none`) for the OAUTHBEARER compose stack.
+ * Kafka's unsecured validator requires `exp` (seconds since epoch) and rejects a missing claim
+ * by aborting SASL, which surfaces as `KafkaConnectionClosedError` on the next request.
+ * Encoding is standard Base64 without padding: Kafka 4.0's `OAuthBearerUnsecuredJws` uses
+ * `Base64.getDecoder()`, not the URL-safe alphabet.
+ */
+export function createUnsignedJwt(payload: Record<string, unknown> = {}): string {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (value: unknown): string => Buffer.from(JSON.stringify(value)).toString('base64').replace(/=+$/, '');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ iat: now, exp: now + 3600, ...payload })}.`;
 }
 
 export function saslOAuthBearerConnectionOpts(): ConnectionOptions {

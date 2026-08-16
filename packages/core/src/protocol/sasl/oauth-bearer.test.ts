@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Decoder } from '../decoder';
-import { oauthBearerRequest } from './oauth-bearer';
+import { Encoder } from '../encoder';
+import { oauthBearerRequest, oauthBearerResponse } from './oauth-bearer';
 
 const SOH = String.fromCharCode(1);
 
@@ -30,5 +31,19 @@ describe('protocol/sasl/oauth-bearer', () => {
     const buffer = await request.encode();
     const decoder = new Decoder(buffer);
     expect(readBytesOrThrow(decoder).toString()).toBe(`n,,${SOH}auth=Bearer my-token${SOH}a=1${SOH}b=2${SOH}${SOH}`);
+  });
+
+  it('treats an empty server payload as success', async () => {
+    await expect(oauthBearerResponse.parse(await oauthBearerResponse.decode(Buffer.alloc(0)))).resolves.toEqual({
+      status: 'ok',
+    });
+  });
+
+  it('rejects an RFC 7628 invalid_token payload', async () => {
+    const payload = Buffer.from('{"status":"invalid_token"}');
+    await expect(oauthBearerResponse.parse(await oauthBearerResponse.decode(payload))).rejects.toThrow('invalid_token');
+
+    const wrapped = new Encoder().writeBytes(payload).buffer;
+    await expect(oauthBearerResponse.parse(await oauthBearerResponse.decode(wrapped))).rejects.toThrow('invalid_token');
   });
 });

@@ -12,6 +12,7 @@ import {
   compactString,
   field,
   flexibleObject,
+  float64,
   int16,
   int32,
   int64,
@@ -146,6 +147,15 @@ describe('protocol/schema', () => {
     const empty = new Encoder();
     compactNullableArray(int32).write(empty, []);
     expect(compactNullableArray(int32).read(new Decoder(empty.buffer))).toEqual([]);
+  });
+
+  it('round-trips float64 (IEEE 754 binary64)', () => {
+    for (const value of [0, -1, 1048576, 50.5]) {
+      const encoded = new Encoder();
+      float64.write(encoded, value);
+      expect(encoded.buffer).toEqual(new Encoder().writeDouble(value).buffer);
+      expect(float64.read(new Decoder(encoded.buffer))).toBe(value);
+    }
   });
 
   it('round-trips an empty tagged-fields buffer', () => {

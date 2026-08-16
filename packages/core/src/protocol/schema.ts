@@ -44,6 +44,16 @@ export const boolean: FieldCodec<boolean> = codec(
   (e, v) => void e.writeBoolean(v),
   (d) => d.readBoolean(),
 );
+
+/**
+ * IEEE 754 binary64 (`DOUBLE` on the wire). Client-quota APIs store quota values this way.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export const float64: FieldCodec<number> = codec(
+  (e, v) => void e.writeDouble(v),
+  (d) => d.readDouble(),
+);
 export const varint: FieldCodec<number> = codec(
   (e, v) => void e.writeVarInt(v),
   (d) => d.readVarInt(),

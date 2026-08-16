@@ -83,15 +83,15 @@ describe('producer/sendMessages', () => {
     };
   }
 
-  it('only retries the brokers that failed', async () => {
+  it('retries produce to every broker after a failed send so stale leader acks are not kept', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     brokers[1].produce
       .mockImplementationOnce(() => Promise.reject(createErrorFromCode(5)))
-      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
     brokers[3].produce
       .mockImplementationOnce(() => Promise.reject(createErrorFromCode(5)))
       .mockImplementationOnce(() => Promise.reject(createErrorFromCode(5)))
-      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 2)));
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 2)));
 
     const cluster = fakeCluster(brokers);
     const eosManager = fakeEosManager();
@@ -112,15 +112,12 @@ describe('producer/sendMessages', () => {
     expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled();
     expect(eosManager.addPartitionsToTransaction).not.toHaveBeenCalled();
 
-    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
-    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
+    expect(brokers[1].produce).toHaveBeenCalledTimes(3);
+    expect(brokers[2].produce).toHaveBeenCalledTimes(3);
     expect(brokers[3].produce).toHaveBeenCalledTimes(3);
-    // Order follows Map insertion order, not partition order: broker2 got its response in round 1
-    // and keeps its original slot; broker1 and broker3 get deleted-and-reinserted (moving to the
-    // end) each time they fail and are retried, so they land after broker2 once they finally succeed.
     expect(response).toEqual([
-      { topicName: topic, partition: 1, errorCode: 0, baseOffset: 1n, logAppendTime: -1n, logStartOffset: 0n },
       { topicName: topic, partition: 0, errorCode: 0, baseOffset: 0n, logAppendTime: -1n, logStartOffset: 0n },
+      { topicName: topic, partition: 1, errorCode: 0, baseOffset: 1n, logAppendTime: -1n, logStartOffset: 0n },
       { topicName: topic, partition: 2, errorCode: 0, baseOffset: 2n, logAppendTime: -1n, logStartOffset: 0n },
     ]);
   });
@@ -297,5 +294,28 @@ describe('producer/sendMessages', () => {
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
     expect(response).toEqual([]);
+  });
+
+  it('does not keep a sibling broker error-0 ack after NOT_LEADER_FOR_PARTITION', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const notLeader = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_FOR_PARTITION')!.code;
+    brokers[2].produce
+      .mockImplementationOnce(() => Promise.reject(createErrorFromCode(notLeader)))
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 1)));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+
+    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(brokers[1].produce.mock.calls.length).toBeGreaterThan(1);
+    expect(brokers[2].produce.mock.calls.length).toBeGreaterThan(1);
   });
 });

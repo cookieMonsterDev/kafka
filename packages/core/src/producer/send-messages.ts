@@ -34,9 +34,9 @@ interface TopicRequestMetadata {
 
 export function createSendMessages({ logger, cluster, partitioner, eosManager, retrier }: SendMessagesOptions) {
   return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
-    const responsePerBroker = new Map<Broker, RecordMetadata[] | null>();
-
-    async function createProducerRequests(): Promise<Promise<void>[]> {
+    async function createProducerRequests(
+      responsePerBroker: Map<Broker, RecordMetadata[] | null>,
+    ): Promise<Promise<void>[]> {
       const topicMetadata = new Map<string, TopicRequestMetadata>();
 
       await cluster.refreshMetadataIfNecessary();
@@ -122,11 +122,12 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
     }
 
     return retrier(async (bail, retryCount, retryTime) => {
+      const responsePerBroker = new Map<Broker, RecordMetadata[] | null>();
       const topics = topicMessages.map(({ topic }) => topic);
       await cluster.addMultipleTargetTopics(topics);
 
       try {
-        const requests = await createProducerRequests();
+        const requests = await createProducerRequests(responsePerBroker);
         await Promise.all(requests);
         return [...responsePerBroker.values()].flatMap((response) => response ?? []);
       } catch (e) {

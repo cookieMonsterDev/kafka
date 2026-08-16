@@ -3,11 +3,14 @@ import { LOG_LEVELS, type LogCreator, type LogEntry } from './index';
 export const consoleLogCreator: LogCreator = () => {
   return (entry: LogEntry) => {
     const prefix = entry.namespace ? `[${entry.namespace}] ` : '';
-    const message = JSON.stringify({
-      level: entry.label,
-      ...entry.log,
-      message: `${prefix}${entry.log.message}`,
-    });
+    const message = JSON.stringify(
+      {
+        level: entry.label,
+        ...entry.log,
+        message: `${prefix}${entry.log.message}`,
+      },
+      (_key: string, value: unknown) => (typeof value === 'bigint' ? value.toString() : value),
+    );
 
     switch (entry.level) {
       case LOG_LEVELS.INFO:

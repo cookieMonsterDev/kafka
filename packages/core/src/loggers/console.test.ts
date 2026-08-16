@@ -50,4 +50,17 @@ describe('loggers/console', () => {
     const [payload] = vi.mocked(console.info).mock.calls[0]!;
     expect(JSON.parse(payload as string).level).toBe('INFO');
   });
+
+  it('serializes bigint extras as strings so DEBUG logs do not throw', () => {
+    const log = consoleLogCreator(LOG_LEVELS.DEBUG);
+    log({
+      namespace: 'Admin',
+      level: LOG_LEVELS.DEBUG,
+      label: 'DEBUG',
+      log: { timestamp: '2024-01-01T00:00:00.000Z', logger: 'kafka', message: 'offsets', offset: 12n },
+    });
+
+    const [payload] = vi.mocked(console.log).mock.calls[0]!;
+    expect(JSON.parse(payload as string).offset).toBe('12');
+  });
 });

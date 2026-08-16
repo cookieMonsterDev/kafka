@@ -7,6 +7,7 @@ import type { Logger } from '../loggers/index.js';
 import { ISOLATION_LEVEL, type IsolationLevel } from '../protocol/enums/isolation-level.js';
 import { retrier } from '../retry/index.js';
 import { RETRY_DEFAULTS } from '../retry/defaults.js';
+import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort.js';
 import { sharedPromiseTo } from '../utils/shared-promise-to.js';
 import { roundRobin } from './assigners/index.js';
 import type { Batch } from './batch.js';
@@ -85,24 +86,25 @@ export interface ConsumerOptions {
 }
 
 export interface Consumer {
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>;
-  stop(): Promise<void>;
-  run(config?: ConsumerRunConfig): Promise<void>;
-  stream(config?: Omit<ConsumerRunConfig, 'eachBatch' | 'eachMessage'>): AsyncIterableIterator<Batch>;
-  commitOffsets(topicPartitions: readonly TopicPartitionOffsetAndMetadata[]): Promise<void>;
-  seek(topicPartitionOffset: { topic: string; partition: number; offset: bigint | number | string }): void;
-  describeGroup(): Promise<GroupDescription>;
-  pause(topics: readonly { topic: string; partitions?: number[] }[]): void;
-  paused(): TopicPartitions[];
-  resume(topics: readonly { topic: string; partitions?: number[] }[]): void;
-  on(
+  connect: (options?: ConnectOptions) => Promise<void>;
+  disconnect: (options?: ConnectOptions) => Promise<void>;
+  subscribe: (subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic) => Promise<void>;
+  stop: () => Promise<void>;
+  run: (config?: ConsumerRunConfig) => Promise<void>;
+  stream: (config?: Omit<ConsumerRunConfig, 'eachBatch' | 'eachMessage'>) => AsyncIterableIterator<Batch>;
+  commitOffsets: (topicPartitions: readonly TopicPartitionOffsetAndMetadata[]) => Promise<void>;
+  seek: (topicPartitionOffset: { topic: string; partition: number; offset: bigint | number | string }) => void;
+  describeGroup: () => Promise<GroupDescription>;
+  pause: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
+  paused: () => TopicPartitions[];
+  resume: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
+  on: (
     eventName: ConsumerEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
-  ): RemoveInstrumentationEventListener;
+  ) => RemoveInstrumentationEventListener;
   readonly events: typeof events;
-  logger(): Logger;
+  logger: () => Logger;
+  [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 const EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(events));
@@ -111,10 +113,6 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 const SPECIAL_OFFSETS = new Set([BigInt(EARLIEST_OFFSET), BigInt(LATEST_OFFSET)]);
-
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('Aborted', { cause: signal.reason as unknown });
-}
 
 /**
  * The user-facing consumer: group membership, fetch/process loop, pause/resume/seek, and
@@ -159,8 +157,9 @@ export function createConsumer({
     );
   }
 
-  const connect = async (): Promise<void> => {
-    await cluster.connect();
+  const connect = async ({ signal }: ConnectOptions = {}): Promise<void> => {
+    if (signal?.aborted) throw abortError(signal);
+    await rejectOnAbort(cluster.connect(), signal);
     instrumentationEmitter.emit(CONNECT, {});
   };
 
@@ -185,11 +184,12 @@ export function createConsumer({
     }
   });
 
-  const disconnect = async (): Promise<void> => {
+  const disconnect = async ({ signal }: ConnectOptions = {}): Promise<void> => {
+    if (signal?.aborted) throw abortError(signal);
     try {
-      await stop();
+      await rejectOnAbort(stop(), signal);
       logger.debug('consumer has stopped, disconnecting', { groupId });
-      await cluster.disconnect();
+      await rejectOnAbort(cluster.disconnect(), signal);
       instrumentationEmitter.emit(DISCONNECT, {});
     } catch (e) {
       const error = e as Error;
@@ -657,5 +657,6 @@ export function createConsumer({
     on,
     events,
     logger: () => logger,
+    [Symbol.asyncDispose]: disconnect,
   };
 }

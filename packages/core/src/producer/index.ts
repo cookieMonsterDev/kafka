@@ -5,6 +5,7 @@ import type { InstrumentationEvent } from '../instrumentation/event.js';
 import type { Logger } from '../loggers/index.js';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status.js';
 import { retrier, type RetryOptions } from '../retry/index.js';
+import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort.js';
 import { createEosManager, type EosManager } from './eos-manager/index.js';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events.js';
 import { createMessageProducer } from './message-producer.js';
@@ -32,18 +33,19 @@ export interface Transaction {
 }
 
 export interface Producer {
-  connect(): Promise<void>;
-  disconnect(): Promise<void>;
-  isIdempotent(): boolean;
+  connect: (options?: ConnectOptions) => Promise<void>;
+  disconnect: (options?: ConnectOptions) => Promise<void>;
+  isIdempotent: () => boolean;
   readonly events: typeof events;
-  on(
+  on: (
     eventName: ProducerEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
-  ): RemoveInstrumentationEventListener;
-  send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
-  sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
-  transaction(): Promise<Transaction>;
-  logger(): Logger;
+  ) => RemoveInstrumentationEventListener;
+  send: (record: ProducerRecord & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
+  sendBatch: (batch: ProducerBatch & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
+  transaction: () => Promise<Transaction>;
+  logger: () => Logger;
+  [Symbol.asyncDispose]: () => Promise<void>;
 }
 
 const EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(events));
@@ -195,22 +197,28 @@ export function createProducer({
     };
   }
 
-  return {
-    async connect(): Promise<void> {
-      await cluster.connect();
-      connectionStatus = CONNECTION_STATUS.CONNECTED;
-      instrumentationEmitter.emit(CONNECT, {});
+  async function connect({ signal }: ConnectOptions = {}): Promise<void> {
+    if (signal?.aborted) throw abortError(signal);
+    await rejectOnAbort(cluster.connect(), signal);
+    connectionStatus = CONNECTION_STATUS.CONNECTED;
+    instrumentationEmitter.emit(CONNECT, {});
 
-      if (idempotent && !idempotentEosManager.isInitialized()) {
-        await idempotentEosManager.initProducerId();
-      }
-    },
-    async disconnect(): Promise<void> {
-      connectionStatus = CONNECTION_STATUS.DISCONNECTING;
-      await cluster.disconnect();
-      connectionStatus = CONNECTION_STATUS.DISCONNECTED;
-      instrumentationEmitter.emit(DISCONNECT, {});
-    },
+    if (idempotent && !idempotentEosManager.isInitialized()) {
+      await rejectOnAbort(idempotentEosManager.initProducerId(), signal);
+    }
+  }
+
+  async function disconnect({ signal }: ConnectOptions = {}): Promise<void> {
+    if (signal?.aborted) throw abortError(signal);
+    connectionStatus = CONNECTION_STATUS.DISCONNECTING;
+    await rejectOnAbort(cluster.disconnect(), signal);
+    connectionStatus = CONNECTION_STATUS.DISCONNECTED;
+    instrumentationEmitter.emit(DISCONNECT, {});
+  }
+
+  return {
+    connect,
+    disconnect,
     isIdempotent: () => idempotent,
     events,
     on,
@@ -218,5 +226,6 @@ export function createProducer({
     sendBatch,
     transaction,
     logger: () => logger,
+    [Symbol.asyncDispose]: disconnect,
   };
 }

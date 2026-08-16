@@ -60,9 +60,7 @@ describe('consumer/runner', () => {
       connect: vi.fn(async () => undefined),
       joinAndSync: vi.fn(async () => undefined),
       leave: vi.fn(async () => undefined),
-      fetch: vi.fn(async () => [
-        new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [] }),
-      ]),
+      fetch: vi.fn(async () => [new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [] })]),
       resolveOffset: vi.fn(),
       commitOffsets: vi.fn(async () => undefined),
       commitOffsetsIfNecessary: vi.fn(async () => undefined),

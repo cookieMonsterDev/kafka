@@ -16,6 +16,7 @@ import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/r
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response.js';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response.js';
 import type { RetryOptions } from '../retry/index.js';
+import type { ConnectOptions } from '../utils/abort.js';
 import type { AdminEventName } from './instrumentation-events.js';
 import { events } from './instrumentation-events.js';
 
@@ -134,8 +135,8 @@ export interface AdminOptions {
 }
 
 export interface Admin {
-  connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
+  connect: (options?: ConnectOptions) => Promise<void>;
+  disconnect: (options?: ConnectOptions) => Promise<void>;
   listTopics: () => Promise<string[]>;
   createTopics: (options: {
     topics: TopicConfig[];
@@ -188,4 +189,5 @@ export interface Admin {
   ) => RemoveInstrumentationEventListener;
   logger: () => Logger;
   readonly events: typeof events;
+  [Symbol.asyncDispose]: () => Promise<void>;
 }

@@ -3,6 +3,7 @@ import { KafkaJSError, KafkaJSNonRetriableError } from '../errors.js';
 import type { Logger } from '../loggers/index.js';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status.js';
 import type { Retrier } from '../retry/index.js';
+import { rejectOnAbort } from '../utils/abort.js';
 import type { EosManager } from './eos-manager/index.js';
 import { createSendMessages } from './send-messages.js';
 import type {
@@ -31,27 +32,6 @@ export interface MessageProducer {
 
 const DEFAULT_ACKS = -1;
 const DEFAULT_TIMEOUT = 30_000;
-
-/**
- * Races `promise` against `signal` firing. Doesn't cancel the underlying send (the retrier has no
- * abort hook of its own), but the caller sees a rejection as soon as they abort instead of waiting
- * out the full retry budget - the same "abort just rejects the promise" contract most Node APIs
- * that accept a bare `AbortSignal` (rather than doing real cancellation) settle for.
- */
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('Aborted', { cause: signal.reason as unknown });
-}
-
-function rejectOnAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
-  if (!signal) return promise;
-  if (signal.aborted) return Promise.reject(abortError(signal));
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(abortError(signal));
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
-  });
-}
 
 export function createMessageProducer({
   logger,

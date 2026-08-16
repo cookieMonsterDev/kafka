@@ -87,6 +87,20 @@ describe('admin', () => {
     expect(cluster.disconnect).toHaveBeenCalled();
   });
 
+  it('rejects connect when the signal is already aborted', async () => {
+    const cluster = fakeCluster();
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.connect({ signal: AbortSignal.abort() })).rejects.toThrow(/aborted/i);
+    expect(cluster.connect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects through Symbol.asyncDispose', async () => {
+    const cluster = fakeCluster();
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await admin[Symbol.asyncDispose]();
+    expect(cluster.disconnect).toHaveBeenCalled();
+  });
+
   it('rejects an unknown event name', () => {
     const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     expect(() => admin.on('NON_EXISTENT_EVENT' as never, () => {})).toThrow(

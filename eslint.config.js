@@ -36,6 +36,7 @@ export default tseslint.config(
       'vitest/no-focused-tests': 'error',
       'vitest/no-disabled-tests': 'warn',
       'vitest/no-commented-out-tests': 'error',
+      'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectTypeOf'] }],
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',

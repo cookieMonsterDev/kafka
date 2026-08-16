@@ -33,7 +33,7 @@ function createGroup(): ConsumerGroup {
 }
 
 describe('consumer/consumer-group', () => {
-  it("delegates uncommittedOffsets to the offset manager", () => {
+  it('delegates uncommittedOffsets to the offset manager', () => {
     const consumerGroup = createGroup();
     const mockOffsets = { topics: [] };
     const uncommittedOffsets = vi.fn(() => mockOffsets);
@@ -43,7 +43,7 @@ describe('consumer/consumer-group', () => {
     expect(uncommittedOffsets).toHaveBeenCalled();
   });
 
-  it("delegates commitOffsets to the offset manager", async () => {
+  it('delegates commitOffsets to the offset manager', async () => {
     const consumerGroup = createGroup();
     const commitOffsets = vi.fn(async () => undefined);
     consumerGroup.offsetManager = { commitOffsets } as unknown as OffsetManager;

@@ -9,7 +9,6 @@ import {
 } from '../errors.js';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
 import type { Logger } from '../loggers/index.js';
-import type { NetworkEventMap } from '../network/instrumentation-events.js';
 import type { ConnectionOptions } from '../network/connection.js';
 import type { SocketFactory } from '../network/socket-factory.js';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types.js';
@@ -68,7 +67,7 @@ export interface ClusterOptions {
   allowAutoTopicCreation?: boolean;
   maxInFlightRequests?: number | null;
   isolationLevel?: IsolationLevel;
-  instrumentationEmitter?: InstrumentationEventEmitter<NetworkEventMap> | null;
+  instrumentationEmitter?: InstrumentationEventEmitter | null;
   offsets?: CommittedOffsetsByGroup;
 }
 

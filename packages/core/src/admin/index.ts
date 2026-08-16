@@ -1,6 +1,7 @@
 import { KafkaJSNonRetriableError } from '../errors.js';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter.js';
 import type { InstrumentationEvent } from '../instrumentation/event.js';
+import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort.js';
 import { createAclsApi } from './acls.js';
 import { createConfigsApi } from './configs.js';
 import { createGroupsApi } from './groups.js';
@@ -56,15 +57,21 @@ export function createAdmin({
     });
   };
 
+  async function connect({ signal }: ConnectOptions = {}): Promise<void> {
+    if (signal?.aborted) throw abortError(signal);
+    await rejectOnAbort(cluster.connect(), signal);
+    instrumentationEmitter.emit(CONNECT, {});
+  }
+
+  async function disconnect({ signal }: ConnectOptions = {}): Promise<void> {
+    if (signal?.aborted) throw abortError(signal);
+    await rejectOnAbort(cluster.disconnect(), signal);
+    instrumentationEmitter.emit(DISCONNECT, {});
+  }
+
   return {
-    async connect(): Promise<void> {
-      await cluster.connect();
-      instrumentationEmitter.emit(CONNECT, {});
-    },
-    async disconnect(): Promise<void> {
-      await cluster.disconnect();
-      instrumentationEmitter.emit(DISCONNECT, {});
-    },
+    connect,
+    disconnect,
     ...topics,
     ...offsets,
     ...configs,
@@ -74,5 +81,6 @@ export function createAdmin({
     on,
     logger: () => logger,
     events,
+    [Symbol.asyncDispose]: disconnect,
   };
 }

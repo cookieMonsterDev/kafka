@@ -52,7 +52,9 @@ describe('consumer', () => {
 
   it('rejects an unknown event name', () => {
     const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
-    expect(() => consumer.on('NON_EXISTENT_EVENT' as never, () => {})).toThrow(/Event name should be one of consumer\.events\./);
+    expect(() => consumer.on('NON_EXISTENT_EVENT' as never, () => {})).toThrow(
+      /Event name should be one of consumer\.events\./,
+    );
   });
 
   it('exposes the public events map', () => {
@@ -76,11 +78,29 @@ describe('consumer', () => {
 
   it('rejects a negative seek offset that is not earliest/latest', () => {
     const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
-    expect(() => consumer.seek({ topic: 't', partition: 0, offset: -5n })).toThrow('Offset must not be a negative number');
+    expect(() => consumer.seek({ topic: 't', partition: 0, offset: -5n })).toThrow(
+      'Offset must not be a negative number',
+    );
   });
 
   it('paused() returns an empty list before run()', () => {
     const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
     expect(consumer.paused()).toEqual([]);
+  });
+
+  it('rejects connect when the signal is already aborted', async () => {
+    const connect = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), connect } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+    await expect(consumer.connect({ signal: AbortSignal.abort() })).rejects.toThrow(/aborted/i);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects through Symbol.asyncDispose', async () => {
+    const disconnect = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), disconnect } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+    await consumer[Symbol.asyncDispose]();
+    expect(disconnect).toHaveBeenCalled();
   });
 });

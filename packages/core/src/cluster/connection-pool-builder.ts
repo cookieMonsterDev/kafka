@@ -19,7 +19,7 @@ export interface ConnectionPoolBuilderOptions {
   connectionTimeout: number;
   maxInFlightRequests?: number | null;
   logger: Logger;
-  instrumentationEmitter?: InstrumentationEventEmitter<NetworkEventMap> | null;
+  instrumentationEmitter?: InstrumentationEventEmitter | null;
   reauthenticationThreshold?: number;
 }
 
@@ -118,7 +118,8 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
         requestTimeout,
         enforceRequestTimeout,
         maxInFlightRequests,
-        instrumentationEmitter,
+        instrumentationEmitter: instrumentationEmitter as
+          InstrumentationEventEmitter<NetworkEventMap> | null | undefined,
         logger,
         reauthenticationThreshold,
         createSaslAuthenticator,

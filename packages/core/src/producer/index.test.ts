@@ -160,6 +160,20 @@ describe('producer', () => {
     expect(producer.logger()).toBeDefined();
   });
 
+  it('rejects connect when the signal is already aborted', async () => {
+    const cluster = fakeCluster();
+    const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(producer.connect({ signal: AbortSignal.abort() })).rejects.toThrow(/aborted/i);
+    expect(cluster.connect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects through Symbol.asyncDispose', async () => {
+    const cluster = fakeCluster();
+    const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await producer[Symbol.asyncDispose]();
+    expect(cluster.disconnect).toHaveBeenCalled();
+  });
+
   describe('transaction', () => {
     it('requires a transactionalId', async () => {
       const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });

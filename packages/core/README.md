@@ -38,7 +38,13 @@ runnable by Node's native type stripping). Override per-package settings in
 Consumers import from the package name, not a relative path:
 
 ```ts
-import { greet } from '@kafka/core';
+import { Kafka, CompressionTypes, logLevel } from '@kafka/core';
+
+const kafka = new Kafka({
+  clientId: 'my-app',
+  brokers: ['localhost:9092'],
+  logLevel: logLevel.INFO,
+});
 ```
 
 The `exports` field points at `dist/`, so **`dist/` must exist** before a

@@ -1,6 +1,5 @@
 ---
 import { getCollection } from 'astro:content'
-import { greet } from '@kafka/core'
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import { buttonVariants } from '@/components/ui/button'
 import {
@@ -16,9 +15,11 @@ const entries = (await getCollection('docs')).sort(
 )
 ---
 
-<BaseLayout title="Kafka docs" description="Documentation for the kafka monorepo">
-  <h1 class="text-3xl font-semibold tracking-tight">Kafka docs</h1>
-  <p class="text-muted-foreground mt-2">{greet('docs')}</p>
+<BaseLayout title="Kafka docs" description="Documentation for @kafka/core">
+  <h1 class="text-3xl font-semibold tracking-tight">@kafka/core</h1>
+  <p class="text-muted-foreground mt-2">
+    TypeScript Kafka client — Kafka 3.x/4.x, bigint offsets, generated types.
+  </p>
 
   <div class="mt-8 grid gap-4">
     {

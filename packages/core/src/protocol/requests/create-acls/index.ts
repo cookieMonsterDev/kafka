@@ -4,6 +4,10 @@ import { createAclsRequestV0 } from './v0/request';
 import { createAclsResponseV0 } from './v0/response';
 import { createAclsRequestV1 } from './v1/request';
 import { createAclsResponseV1 } from './v1/response';
+import { createAclsRequestV2 } from './v2/request';
+import { createAclsResponseV2 } from './v2/response';
+import { createAclsRequestV3 } from './v3/request';
+import { createAclsResponseV3 } from './v3/response';
 
 export interface CreateAclsOptions {
   creations: {
@@ -39,6 +43,8 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateAclsOptions>>> = {
     };
   },
   1: (values) => ({ request: createAclsRequestV1(values), response: createAclsResponseV1 }),
+  2: (values) => ({ request: createAclsRequestV2(values), response: createAclsResponseV2 }),
+  3: (values) => ({ request: createAclsRequestV3(values), response: createAclsResponseV3 }),
 };
 
 export const CreateAcls: RequestFamily<CreateAclsOptions> = Object.freeze({

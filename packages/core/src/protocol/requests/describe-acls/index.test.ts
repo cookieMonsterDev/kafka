@@ -14,8 +14,8 @@ const literalFilter = {
 };
 
 describe('protocol/requests/describe-acls', () => {
-  it('implements versions 0 through 1', () => {
-    expect(DescribeAcls.versions).toEqual([0, 1]);
+  it('implements versions 0 through 3', () => {
+    expect(DescribeAcls.versions).toEqual([0, 1, 2, 3]);
   });
 
   it('rejects PREFIXED filters on v0', () => {

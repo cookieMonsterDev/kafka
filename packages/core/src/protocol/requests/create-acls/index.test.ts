@@ -14,8 +14,8 @@ const literalCreation = {
 };
 
 describe('protocol/requests/create-acls', () => {
-  it('implements versions 0 through 1', () => {
-    expect(CreateAcls.versions).toEqual([0, 1]);
+  it('implements versions 0 through 3', () => {
+    expect(CreateAcls.versions).toEqual([0, 1, 2, 3]);
   });
 
   it('rejects PREFIXED creations on v0', () => {

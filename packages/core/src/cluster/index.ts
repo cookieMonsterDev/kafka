@@ -451,4 +451,4 @@ export class Cluster {
   }
 }
 
-export type { MetadataBroker };
+export type { MetadataBroker, PartitionMetadata };

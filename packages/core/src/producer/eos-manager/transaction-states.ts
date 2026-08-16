@@ -1,0 +1,9 @@
+export const TRANSACTION_STATES = Object.freeze({
+  UNINITIALIZED: 'UNINITIALIZED',
+  READY: 'READY',
+  TRANSACTING: 'TRANSACTING',
+  COMMITTING: 'COMMITTING',
+  ABORTING: 'ABORTING',
+});
+
+export type TransactionState = (typeof TRANSACTION_STATES)[keyof typeof TRANSACTION_STATES];

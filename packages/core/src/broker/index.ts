@@ -92,7 +92,8 @@ import { OffsetFetch } from '../protocol/requests/offset-fetch/index.js';
 import type { OffsetFetchOptions } from '../protocol/requests/offset-fetch/index.js';
 import type { OffsetFetchResponseV4Body } from '../protocol/requests/offset-fetch/v4/response.js';
 import { Produce } from '../protocol/requests/produce/index.js';
-import type { ProduceRequestOptions, ProduceResponseV3Body } from '../protocol/requests/produce/shared.js';
+import type { ProduceRequestOptions } from '../protocol/requests/produce/shared.js';
+import type { ProduceResponseV6Body } from '../protocol/requests/produce/v6/response.js';
 import { SaslAuthenticate } from '../protocol/requests/sasl-authenticate/index.js';
 import { SyncGroup } from '../protocol/requests/sync-group/index.js';
 import type { SyncGroupOptions } from '../protocol/requests/sync-group/index.js';
@@ -242,9 +243,9 @@ export class Broker {
   }
 
   /** Resolves `undefined` only for `acks: 0`, where the broker never writes a response to the wire. */
-  async produce(options: ProduceRequestOptions): Promise<ProduceResponseV3Body | undefined> {
+  async produce(options: ProduceRequestOptions): Promise<ProduceResponseV6Body | undefined> {
     const produce = this.lookupRequest<ProduceRequestOptions>(API_KEYS.Produce, Produce);
-    return this.#sendRequest<ProduceResponseV3Body>(
+    return this.#sendRequest<ProduceResponseV6Body>(
       produce({ ...options, compression: options.compression ?? COMPRESSION_TYPES.None }),
     );
   }

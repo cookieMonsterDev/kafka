@@ -1,0 +1,83 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createAdmin } from '../../src/admin/index.js';
+import { EARLIEST_OFFSET } from '../../src/constants.js';
+import { createConsumer } from '../../src/consumer/index.js';
+import { createProducer } from '../../src/producer/index.js';
+import {
+  createCluster,
+  createModPartitioner,
+  createTopic,
+  generateMessages,
+  newLogger,
+  secureRandom,
+  waitForConsumerToJoinGroup,
+  waitForMessages,
+} from '../helpers/index.js';
+
+describe('admin.offsets', () => {
+  let topicName: string;
+  let groupId: string;
+  let admin: ReturnType<typeof createAdmin> | undefined;
+  let producer: ReturnType<typeof createProducer> | undefined;
+  let consumer: ReturnType<typeof createConsumer> | undefined;
+
+  beforeEach(async () => {
+    topicName = `test-topic-${secureRandom()}`;
+    groupId = `test-group-${secureRandom()}`;
+    await createTopic({ topic: topicName, partitions: 1 });
+  });
+
+  afterEach(async () => {
+    await consumer?.disconnect();
+    await producer?.disconnect();
+    await admin?.disconnect();
+  });
+
+  it('fetches topic offsets and group offsets', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, createPartitioner: createModPartitioner, logger: newLogger() });
+
+    await admin.connect();
+    await producer.connect();
+
+    const messages = generateMessages({ number: 10 });
+    await producer.send({ acks: 1, topic: topicName, messages });
+
+    const topicOffsets = await admin.fetchTopicOffsets(topicName);
+    expect(topicOffsets).toEqual([{ partition: 0, offset: 10n, low: 0n, high: 10n }]);
+
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      logger: newLogger(),
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: unknown[] = [];
+    const join = waitForConsumerToJoinGroup(consumer);
+    await consumer.run({ eachMessage: async (event) => consumed.push(event) });
+    await join;
+    await waitForMessages(consumed, { number: 10 });
+    await consumer.disconnect();
+    consumer = undefined;
+
+    const groupOffsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
+    const partition = groupOffsets.find((t) => t.topic === topicName)?.partitions[0];
+    expect(partition?.offset).toBe(10n);
+  });
+
+  it('resets offsets to earliest', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    await admin.resetOffsets({ groupId, topic: topicName, earliest: true });
+    const offsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
+    expect(offsets[0]?.partitions[0]?.offset).toBe(BigInt(EARLIEST_OFFSET));
+  });
+});

@@ -14,6 +14,7 @@ import type { SocketFactory } from '../network/socket-factory.js';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types.js';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types.js';
 import type { IsolationLevel } from '../protocol/enums/isolation-level.js';
+import { staleMetadata } from '../protocol/error-codes.js';
 import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response.js';
 import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
 import type { RetryOptions } from '../retry/index.js';
@@ -208,7 +209,7 @@ export class Cluster {
         return await this.brokerPool.withBroker(async ({ broker }) => broker.metadata([...topics]));
       } catch (e) {
         const error = e as Error & { type?: string };
-        if (error.type === 'LEADER_NOT_AVAILABLE') {
+        if (staleMetadata(error)) {
           throw error;
         }
         bail(error);

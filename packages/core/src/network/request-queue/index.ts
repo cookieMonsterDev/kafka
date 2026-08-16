@@ -253,15 +253,24 @@ export class RequestQueue extends EventEmitter {
    * an in-flight request already triggers an immediate check, so this is just a safety net.
    */
   scheduleCheckPendingRequests(): void {
-    let scheduleAt = this.throttledUntil - Date.now();
-    if (!this.throttleCheckTimeoutId) {
-      if (this.pending.length > 0) {
-        scheduleAt = scheduleAt > 0 ? scheduleAt : CHECK_PENDING_REQUESTS_INTERVAL;
-      }
+    if (this.throttleCheckTimeoutId) {
+      return;
+    }
+
+    const throttleDelay = this.throttledUntil - Date.now();
+    if (throttleDelay > 0) {
       this.throttleCheckTimeoutId = setTimeout(() => {
         this.throttleCheckTimeoutId = null;
         this.checkPendingRequests();
-      }, scheduleAt);
+      }, throttleDelay);
+      return;
+    }
+
+    if (this.pending.length > 0) {
+      this.throttleCheckTimeoutId = setTimeout(() => {
+        this.throttleCheckTimeoutId = null;
+        this.checkPendingRequests();
+      }, CHECK_PENDING_REQUESTS_INTERVAL);
     }
   }
 }

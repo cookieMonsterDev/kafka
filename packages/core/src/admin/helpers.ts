@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index.js';
 import { KafkaJSMetadataNotLoaded } from '../errors.js';
 import type { Logger } from '../loggers/index.js';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types.js';
+import { staleMetadata } from '../protocol/error-codes.js';
 import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
 import type { RetryOptions } from '../retry/index.js';
 import { groupBy } from '../utils/group-by.js';
@@ -32,7 +33,7 @@ export async function retryOnLeaderNotAvailable<T>(fn: () => Promise<T>, options
     try {
       return await fn();
     } catch (error) {
-      if (protocolType(error) !== 'LEADER_NOT_AVAILABLE') {
+      if (!staleMetadata({ type: protocolType(error) })) {
         throw error;
       }
       return false;

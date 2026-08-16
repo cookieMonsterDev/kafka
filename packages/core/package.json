@@ -25,6 +25,9 @@
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest --project unit",
     "coverage": "vitest run --coverage",
+    "test:cluster:up": "bash scripts/compose-up.sh",
+    "test:cluster:down": "bash scripts/compose-down.sh",
+    "certs": "bash scripts/generate-certificates.sh",
     "clean": "rm -rf dist"
   },
   "devDependencies": {

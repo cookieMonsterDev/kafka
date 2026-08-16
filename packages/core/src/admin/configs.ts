@@ -1,5 +1,6 @@
 import { KafkaJSNonRetriableError } from '../errors.js';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types.js';
+import { staleMetadata } from '../protocol/error-codes.js';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response.js';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response.js';
 import { retrier } from '../retry/index.js';
@@ -75,7 +76,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
 
         return { resources: responses.flatMap((response) => response.resources) };
       } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
+        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
           logger.warn('Could not describe configs', {
             error: error instanceof Error ? error.message : String(error),
             retryCount,
@@ -149,7 +150,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
 
         return { resources: responses.flatMap((response) => response.resources) };
       } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
+        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
           logger.warn('Could not alter configs', {
             error: error instanceof Error ? error.message : String(error),
             retryCount,

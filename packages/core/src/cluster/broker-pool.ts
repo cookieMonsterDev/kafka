@@ -1,6 +1,7 @@
 import { Broker } from '../broker/index.js';
 import { KafkaJSBrokerNotFound, KafkaJSProtocolError } from '../errors.js';
 import type { Logger } from '../loggers/index.js';
+import { staleMetadata } from '../protocol/error-codes.js';
 import type { BrokerVersions } from '../protocol/requests/index.js';
 import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
 import { arrayDiff } from '../utils/array-diff.js';
@@ -195,7 +196,7 @@ export class BrokerPool {
         this.brokers = nextBrokers;
       } catch (e) {
         const error = e as Error & { type?: string };
-        if (error.type === 'LEADER_NOT_AVAILABLE') {
+        if (staleMetadata(error)) {
           throw error;
         }
         bail(error);

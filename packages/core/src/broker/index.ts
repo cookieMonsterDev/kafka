@@ -8,6 +8,8 @@ import type { Logger } from '../loggers/index.js';
 import type { ConnectionPool } from '../network/connection-pool.js';
 import { asTypedSend } from '../network/connection.js';
 import { COMPRESSION_TYPES } from '../protocol/compression/index.js';
+import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types.js';
+import { failure } from '../protocol/error-codes.js';
 import { API_KEYS } from '../protocol/requests/api-keys.js';
 import { lookup } from '../protocol/requests/index.js';
 import type {
@@ -249,7 +251,30 @@ export class Broker {
   async metadata(topics: string[] = []): Promise<MetadataResponseV6Body> {
     const metadata = this.lookupRequest<MetadataOptions>(API_KEYS.Metadata, Metadata);
     const shuffledTopics = shuffle(topics);
-    return this.#send(metadata({ topics: shuffledTopics, allowAutoTopicCreation: this.allowAutoTopicCreation }));
+    const protocol = metadata({ topics: shuffledTopics, allowAutoTopicCreation: this.allowAutoTopicCreation });
+
+    if (shuffledTopics.length > 0) {
+      return this.#send(protocol);
+    }
+
+    // An empty topic list means "all topics". Parallel tests (and deletes in flight) can
+    // put individual topics into UNKNOWN_TOPIC_OR_PARTITION; skip those rather than
+    // failing the whole broker list.
+    return this.#send({
+      request: protocol.request,
+      response: {
+        decode: (rawData: Buffer) => protocol.response.decode(rawData),
+        parse: async (data: unknown) => {
+          const body = data as MetadataResponseV6Body;
+          const topicMetadata = body.topicMetadata.filter(
+            (topic) =>
+              !failure(topic.topicErrorCode) &&
+              !topic.partitionMetadata.some((partition) => failure(partition.partitionErrorCode)),
+          );
+          return { ...body, topicMetadata };
+        },
+      },
+    });
   }
 
   /** Resolves `undefined` only for `acks: 0`, where the broker never writes a response to the wire. */
@@ -293,7 +318,13 @@ export class Broker {
 
   async findGroupCoordinator(options: FindCoordinatorOptions): Promise<FindCoordinatorResponseV2Body> {
     const findCoordinator = this.lookupRequest<FindCoordinatorOptions>(API_KEYS.GroupCoordinator, FindCoordinator);
-    return this.#send(findCoordinator(options));
+    return this.#send(
+      findCoordinator({
+        ...options,
+        coordinatorKey: options.coordinatorKey ?? options.groupId,
+        coordinatorType: options.coordinatorType ?? COORDINATOR_TYPES.GROUP,
+      }),
+    );
   }
 
   async joinGroup(options: JoinGroupOptions): Promise<JoinGroupResponseV5Body> {

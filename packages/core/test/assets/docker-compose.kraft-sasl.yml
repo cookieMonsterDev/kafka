@@ -1,0 +1,6 @@
+# PLAIN + SCRAM-SHA-256 + SCRAM-SHA-512 with the StandardAuthorizer enabled.
+# Same listener map as docker-compose.kraft.yml; kept as a named entry so scripts
+# can select the SASL-oriented stack explicitly.
+
+include:
+  - path: docker-compose.kraft.yml

@@ -11,7 +11,8 @@ are the exceptions.
 
 `RecordMetadata.baseOffset`, `message.offset`, `admin.fetchTopicOffsets()`,
 `consumer.seek({ offset })`, commit APIs, and the rest of the offset surface
-use `bigint`.
+use `bigint`. That includes MessageSet records on Kafka 0.10 — the decoder
+converts wire offsets at the boundary, so callers never see string offsets.
 
 ```ts
 console.log(message.offset); // 42n
@@ -21,21 +22,40 @@ await consumer.seek({ topic, partition, offset: 42n });
 `seek` / `commitOffsets` / admin offset inputs still accept `number` and
 `string` at runtime; prefer `bigint` in new code.
 
-## 2. Brokers older than Kafka 3.0 are unsupported
+## 2. Brokers from Kafka 0.10 onward
 
-The client talks KRaft-era protocol versions only. There is no ZooKeeper
-support. See [KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/).
+The client matches KafkaJS's support floor: **Kafka 0.10+**. Protocol versions
+are negotiated from `ApiVersions`; the client does not parse a broker version
+string in production.
 
-## 3. Message-set v0/v1 is gone
+| Range | What works                                                                 |
+| ----- | -------------------------------------------------------------------------- |
+| 0.10  | Produce/fetch via MessageSet. No headers, no transactions, no ACLs         |
+| 0.11+ | RecordBatch, headers, exactly-once / idempotent producers, ACLs            |
+| 2.1+  | `CompressionTypes.ZSTD`                                                    |
+| 4.0+  | Brokers are KRaft-only. The client still speaks older APIs when advertised |
 
-RecordBatch v2 is the only record format. A cluster that still produces
-legacy message-sets is outside the supported range (see 2).
+ZooKeeper is how some test clusters and older brokers store metadata. It is
+not a client feature. See
+[KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/).
+
+A broker that does not advertise a used API throws
+`KafkaServerDoesNotSupportApiKey`, not an invariant error.
+
+## 3. MessageSet and RecordBatch
+
+Kafka 0.10 produce/fetch uses MessageSet (magic 0/1). Kafka 0.11+ uses
+RecordBatch (magic 2). Fetch v4+ probes the magic byte so a cluster upgrading
+from 0.10 to 0.11 can return mixed formats; the decoder stops at the first
+unsupported magic in a MessageSet and finishes the rest on the next fetch.
+
 See [Messages](https://kafka.apache.org/43/implementation/messages/).
 
 ## 4. ZSTD is built in
 
 `CompressionTypes.ZSTD` uses Node 24's native `zlib.zstdCompress` /
-`zstdDecompress`. Snappy and LZ4 stay pluggable:
+`zstdDecompress`. The producer rejects ZSTD when the broker negotiated
+Produce < 7 (Kafka < 2.1). Snappy and LZ4 stay pluggable:
 
 ```ts
 import { CompressionCodecs, CompressionTypes } from '@kafka/core';

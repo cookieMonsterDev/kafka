@@ -56,3 +56,24 @@ and [SASL authentication](https://kafka.apache.org/43/security/authentication-us
 - `consumer.stream()` — async iteration over batches
 - `Symbol.asyncDispose` on producer, consumer, and admin (`await using`)
 - Built-in ZSTD (`CompressionTypes.ZSTD`)
+
+## Capability errors
+
+The client checks broker `ApiVersions` rather than a version string. Missing
+or too-old APIs fail fast with a non-retriable error.
+
+| Situation                                         | Error                                                                                            |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Headers on a MessageSet broker (Kafka 0.10)       | `Message headers require Produce API version 3 or higher (Kafka 0.11+)`                          |
+| `idempotent: true` or `transactionalId` on 0.10   | `Idempotent and transactional producers require InitProducerId (Kafka 0.11+)`                    |
+| `CompressionTypes.ZSTD` before Produce v7         | `ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)`                         |
+| `ResourcePatternTypes.PREFIXED` on ACL APIs v0    | `Prefixed ACL resource patterns require ACL APIs v1 (Kafka 2.0+); this broker negotiated v0`     |
+| `createTopics({ validateOnly: true })` on v0      | `CreateTopics v0 does not support validateOnly; this broker needs Kafka 0.11+ (CreateTopics v1)` |
+| Broker never advertised a used API, or no overlap | `KafkaServerDoesNotSupportApiKey`                                                                |
+
+`describeConfigs({ includeSynonyms: true })` is ignored on DescribeConfigs v0
+(Kafka 0.11); decoded entries have an empty `configSynonyms` array.
+
+ZooKeeper vs KRaft is a broker deployment choice. The client does not embed a
+ZooKeeper client. See
+[KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/).

@@ -1,6 +1,7 @@
 # @kafka/core
 
-TypeScript library package. Compiles `src/` to `dist/` with type declarations.
+TypeScript Kafka client for **Kafka 0.10+**. Compiles `src/` to `dist/` with
+type declarations.
 
 ## Local development
 
@@ -66,3 +67,23 @@ pnpm --filter @kafka/core add -D <pkg>
 
 For a version shared with other packages, add it to the `catalog:` in the root
 `pnpm-workspace.yaml` and reference it as `"<pkg>": "catalog:"`.
+
+## Tests
+
+Unit tests are protocol fixtures and do not start Docker:
+
+```sh
+pnpm --filter @kafka/core test
+```
+
+Integration tests select a compose file from `KAFKA_VERSION` (default `4.0`).
+You do not edit compose paths:
+
+```sh
+KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+```
+
+`KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster
+running after the suite. Mapping, feature gates, and CI matrix:
+[`test/assets/README.md`](test/assets/README.md).

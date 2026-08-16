@@ -1,5 +1,5 @@
 /**
- * TypeScript Kafka client for Kafka 3.x/4.x (KRaft).
+ * TypeScript Kafka client for Kafka 0.10+.
  *
  * @see https://kafka.apache.org/43/getting-started/introduction/
  * @see https://kafka.apache.org/43/design/design/

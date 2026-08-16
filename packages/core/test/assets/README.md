@@ -11,7 +11,7 @@ KAFKA_VERSION=3.6 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 ```
 
-`global-setup.ts`, `scripts/compose-up.sh`, and `scripts/compose-down.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
+`global-setup.ts`, `scripts/compose-up.sh`, `scripts/compose-down.sh`, and `scripts/compose-pull.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
 
 ## Version → compose file
 
@@ -57,3 +57,13 @@ These read `KAFKA_VERSION` (default `4.0`) and skip when the running cluster is 
 | `DO_NOT_STOP=1`    | Leave the cluster running after tests            |
 | `TEST_RETRIES`     | Vitest retry count for the integration project   |
 | `COMPOSE_FILE`     | Absolute or relative path; skips version mapping |
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs:
+
+- Unit job: format check, `tsc --noEmit` on `src/`, `pnpm --filter @kafka/core test` (no Docker)
+- Integration jobs: one per matrix version, with `TEST_RETRIES=2`
+- OAUTHBEARER as a separate 4.0 job (`OAUTHBEARER_ENABLED=1`)
+
+PRs cover `0.10`, `2.4`, `3.6`, and `4.0` (MessageSet end, last ZK line, KRaft LTS, current default). Pushes to the default branch run the full table above. Docker images are cached per `KAFKA_VERSION`.

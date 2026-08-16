@@ -1,4 +1,6 @@
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   compareKafkaVersions,
@@ -6,12 +8,30 @@ import {
   getKafkaVersion,
   isKRaftKafkaVersion,
   isZooKeeperComposeFile,
+  KAFKA_VERSION_COMPOSE_FILES,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
   kafkaVersionEquals,
   normalizeKafkaVersion,
   resolveComposeFile,
 } from './kafka-version';
+
+const resolveComposeFileScript = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../scripts/resolve-compose-file.sh',
+);
+
+function resolveComposeFileFromBash(env: NodeJS.ProcessEnv): string {
+  const merged: NodeJS.ProcessEnv = { ...process.env };
+  delete merged.COMPOSE_FILE;
+  delete merged.OAUTHBEARER_ENABLED;
+  delete merged.KAFKA_VERSION;
+  Object.assign(merged, env);
+  return execFileSync('bash', [resolveComposeFileScript], {
+    env: merged,
+    encoding: 'utf8',
+  }).trim();
+}
 
 describe('test/helpers/kafka-version', () => {
   it('defaults KAFKA_VERSION to 4.0', () => {
@@ -92,5 +112,17 @@ describe('test/helpers/kafka-version', () => {
 
   it('rejects unknown versions', () => {
     expect(() => resolveComposeFile({ KAFKA_VERSION: '9.9' })).toThrow(/Unsupported KAFKA_VERSION=9.9/);
+  });
+
+  it('keeps scripts/resolve-compose-file.sh in sync with the TypeScript mapping', () => {
+    for (const version of Object.keys(KAFKA_VERSION_COMPOSE_FILES)) {
+      expect(resolveComposeFileFromBash({ KAFKA_VERSION: version })).toBe(
+        resolveComposeFile({ KAFKA_VERSION: version }),
+      );
+    }
+
+    expect(resolveComposeFileFromBash({ OAUTHBEARER_ENABLED: '1' })).toBe(
+      resolveComposeFile({ OAUTHBEARER_ENABLED: '1' }),
+    );
   });
 });

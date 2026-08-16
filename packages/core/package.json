@@ -27,6 +27,7 @@
     "coverage": "vitest run --coverage",
     "test:cluster:up": "bash scripts/compose-up.sh",
     "test:cluster:down": "bash scripts/compose-down.sh",
+    "test:cluster:pull": "bash scripts/compose-pull.sh",
     "certs": "bash scripts/generate-certificates.sh",
     "clean": "rm -rf dist"
   },

@@ -14,7 +14,10 @@ pnpm --filter @kafka/core build
 ```
 
 See the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/)
-for cluster concepts (topics, partitions, consumer groups).
+for cluster concepts (topics, partitions, consumer groups). Brokers from
+**Kafka 0.10** onward work; ZooKeeper vs KRaft is a broker deployment detail,
+not something the client configures. See
+[KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/).
 
 ## Create a client
 

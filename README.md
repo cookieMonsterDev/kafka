@@ -4,7 +4,7 @@ A pnpm workspace containing:
 
 | Package       | Path            | What it is                                      |
 | ------------- | --------------- | ----------------------------------------------- |
-| `@kafka/core` | `packages/core` | TypeScript library                              |
+| `@kafka/core` | `packages/core` | TypeScript Kafka client (Kafka 0.10+)           |
 | `@kafka/docs` | `packages/docs` | Astro documentation site (Tailwind + shadcn/ui) |
 
 ## Requirements
@@ -67,6 +67,17 @@ pnpm --filter @kafka/docs... build   # builds @kafka/core first, then the docs
 
 Each package's README covers its own workflow: [`@kafka/core`](packages/core/README.md),
 [`@kafka/docs`](packages/docs/README.md).
+
+## Tests
+
+```sh
+pnpm --filter @kafka/core test
+KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+```
+
+`KAFKA_VERSION` picks the Docker Compose stack. Unit tests never start Docker.
+See [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## Shared dependency versions
 

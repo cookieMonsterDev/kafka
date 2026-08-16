@@ -1,0 +1,116 @@
+# Unit tests never start Docker. Integration jobs select a compose file via
+# KAFKA_VERSION (see packages/core/test/assets/README.md).
+#
+# PRs run the expensive ends plus one middle ZooKeeper and one middle KRaft
+# stack (0.10, 2.4, 3.6, 4.0). Pushes to the default branch, and manual
+# workflow_dispatch runs, cover the full matrix.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  TEST_RETRIES: '2'
+
+jobs:
+  unit:
+    name: Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm format:check
+      - run: pnpm --filter @kafka/core exec tsc -p tsconfig.json --noEmit
+      - run: pnpm --filter @kafka/core test
+
+  integration-matrix:
+    name: Integration matrix
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.set.outputs.versions }}
+    steps:
+      - id: set
+        env:
+          FULL_MATRIX: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+        run: |
+          if [[ "${FULL_MATRIX}" == "true" ]]; then
+            echo 'versions=["0.10","0.11","1.1","2.4","3.6","4.0"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'versions=["0.10","2.4","3.6","4.0"]' >> "$GITHUB_OUTPUT"
+          fi
+
+  integration:
+    name: Integration (Kafka ${{ matrix.kafka-version }})
+    needs: [unit, integration-matrix]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        kafka-version: ${{ fromJSON(needs.integration-matrix.outputs.versions) }}
+    env:
+      KAFKA_VERSION: ${{ matrix.kafka-version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Restore Kafka Docker images
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kafka-docker-images.tar
+          key: kafka-docker-${{ matrix.kafka-version }}-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
+          restore-keys: |
+            kafka-docker-${{ matrix.kafka-version }}-
+      - name: Load cached Docker images
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/kafka-docker-images.tar
+      - name: Pull Docker images
+        run: bash packages/core/scripts/compose-pull.sh
+      - name: Save Docker images
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
+          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - run: pnpm --filter @kafka/core test:integration
+
+  oauthbearer:
+    name: Integration (OAUTHBEARER / 4.0)
+    needs: [unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      KAFKA_VERSION: '4.0'
+      OAUTHBEARER_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Restore Kafka Docker images
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/kafka-docker-images.tar
+          key: kafka-docker-oauthbearer-4.0-${{ hashFiles('packages/core/test/assets/docker-compose.kraft-oauthbearer.yml', 'packages/core/scripts/format-and-start.sh') }}
+          restore-keys: |
+            kafka-docker-oauthbearer-4.0-
+      - name: Load cached Docker images
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/kafka-docker-images.tar
+      - name: Pull Docker images
+        run: bash packages/core/scripts/compose-pull.sh
+      - name: Save Docker images
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
+          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - run: pnpm --filter @kafka/core test:integration

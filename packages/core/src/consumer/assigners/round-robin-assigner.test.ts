@@ -81,4 +81,22 @@ describe('consumer/assigners/round-robin-assigner', () => {
       metadata: MemberMetadata.encode({ version: assigner.version, topics }),
     });
   });
+
+  it('assigns a partition only to members whose metadata lists that topic', async () => {
+    metadata['topic-A'] = [{ partitionId: 0 }, { partitionId: 1 }];
+    metadata['topic-B'] = [{ partitionId: 0 }, { partitionId: 1 }];
+
+    const members = [
+      { memberId: 'member-1', memberMetadata: MemberMetadata.encode({ version: 0, topics: ['topic-A'] }) },
+      { memberId: 'member-2', memberMetadata: MemberMetadata.encode({ version: 0, topics: ['topic-B'] }) },
+    ];
+
+    const assignment = await assigner.assign({ members, topics: ['topic-A', 'topic-B'] });
+    const decoded = Object.fromEntries(
+      assignment.map(({ memberId, memberAssignment }) => [memberId, MemberAssignment.decode(memberAssignment)]),
+    );
+
+    expect(decoded['member-1']?.assignment).toEqual({ 'topic-A': [0, 1] });
+    expect(decoded['member-2']?.assignment).toEqual({ 'topic-B': [0, 1] });
+  });
 });

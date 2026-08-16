@@ -8,8 +8,12 @@ import { API_KEYS } from '../../api-keys';
  *   producer_id => INT64
  *   producer_epoch => INT16
  *
- * KIP-360: producer_id + producer_epoch let the broker bump the epoch after UNKNOWN_PRODUCER_ID
- * instead of failing permanently. `-1` / `-1n` means "allocate a new producer id".
+ * KIP-360 (Kafka 2.5+): producer_id + producer_epoch let the broker bump the epoch after
+ * UNKNOWN_PRODUCER_ID instead of failing permanently. `-1` / `-1n` means "allocate a new
+ * producer id".
+ *
+ * Do not negotiate this version against a live broker. Kafka 2.4's v2 was flexible and lacked
+ * these fields; see `InitProducerId.versions`.
  */
 const requestSchema = object([
   field('transactionalId', nullableString),

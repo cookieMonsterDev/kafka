@@ -43,8 +43,17 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<InitProducerIdOptions>>>
   }),
 };
 
+/**
+ * Kafka 2.4 advertised InitProducerId maxVersion=2 where v2 was the first flexible version
+ * (KIP-482) and had no producer_id / producer_epoch. Kafka 2.5 redefined v2 as non-flexible
+ * with those KIP-360 fields and moved flexible encoding to v3. Sending the 2.5+ v2 body to a
+ * 2.4 broker fails to parse and the broker closes the connection.
+ *
+ * Skip v2: Kafka 2.4 (max 2) negotiates v1; Kafka 2.5+ (max 3+) negotiates v3 or v4.
+ * The v2 factory stays so encoder tests can still exercise the 2.5+ layout.
+ */
 export const InitProducerId: RequestFamily<InitProducerIdOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
+  versions: Object.freeze([0, 1, 3, 4]),
   protocol({ version }: { version: number }) {
     const factory = VERSIONS[version];
     if (!factory) throw new Error(`Invariant violated: no InitProducerId protocol for version ${version}`);

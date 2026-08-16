@@ -160,7 +160,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
         }
 
         // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this PID after
-        // retention. KIP-360 lets a v2+ InitProducerId bump the epoch so produce can continue.
+        // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue.
         if (error.type === 'UNKNOWN_PRODUCER_ID' && eosManager.isInitialized()) {
           logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
             retryCount,

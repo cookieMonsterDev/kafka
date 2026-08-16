@@ -3,6 +3,7 @@ import { Broker } from '../../../src/broker/index';
 import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { lookup } from '../../../src/protocol/requests/index';
 import { Fetch } from '../../../src/protocol/requests/fetch/index';
+import { InitProducerId } from '../../../src/protocol/requests/init-producer-id/index';
 import { Produce } from '../../../src/protocol/requests/produce/index';
 import {
   connectionOpts,
@@ -13,9 +14,11 @@ import {
   testIfKafkaAtLeast_1_0,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_3_6,
   testIfKafkaAtLeast_4_0,
   testIfKafkaEquals_0_11,
   testIfKafkaEquals_1_1,
+  testIfKafkaEquals_2_4,
   testIfKafkaEquals_3_6,
 } from '../../helpers/index';
 
@@ -27,6 +30,7 @@ const emptyFetch = {
   maxBytes: 1_048_576,
   topics: [],
 };
+const emptyInitProducerId = { transactionalId: null, transactionTimeout: 30_000 };
 
 describe('broker.apiVersions', () => {
   let broker: Broker | undefined;
@@ -127,6 +131,15 @@ describe('broker.apiVersions', () => {
     expect(fetchVersion).toBeGreaterThanOrEqual(8);
   });
 
+  testIfKafkaEquals_2_4('Kafka 2.4 advertises InitProducerId v2 but the client negotiates v1', () => {
+    const versions = broker!.versions!;
+    const initVersion = lookup(versions)(API_KEYS.InitProducerId, InitProducerId)(emptyInitProducerId).request
+      .apiVersion;
+
+    expect(versions[API_KEYS.InitProducerId]?.maxVersion).toBe(2);
+    expect(initVersion).toBe(1);
+  });
+
   testIfKafkaEquals_3_6('Kafka 3.x advertises Produce minVersion 0; the client still uses RecordBatch v3+', () => {
     const produce = broker!.versions![API_KEYS.Produce];
     expect(produce?.minVersion).toBe(0);
@@ -134,6 +147,12 @@ describe('broker.apiVersions', () => {
 
     const negotiated = lookup(broker!.versions!)(API_KEYS.Produce, Produce)(emptyProduce).request.apiVersion;
     expect(negotiated).toBeGreaterThanOrEqual(3);
+  });
+
+  testIfKafkaAtLeast_3_6('Kafka 3.6+ negotiates InitProducerId v3+ (KIP-360)', () => {
+    const initVersion = lookup(broker!.versions!)(API_KEYS.InitProducerId, InitProducerId)(emptyInitProducerId).request
+      .apiVersion;
+    expect(initVersion).toBeGreaterThanOrEqual(3);
   });
 
   testIfKafkaAtLeast_4_0(

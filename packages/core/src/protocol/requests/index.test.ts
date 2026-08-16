@@ -16,6 +16,7 @@ import { DeleteTopics } from './delete-topics/index';
 import { DescribeAcls } from './describe-acls/index';
 import { DescribeConfigs } from './describe-configs/index';
 import { Fetch } from './fetch/index';
+import { InitProducerId } from './init-producer-id/index';
 import { ListOffsets } from './list-offsets/index';
 import { OffsetCommit } from './offset-commit/index';
 import { Produce } from './produce/index';
@@ -154,6 +155,36 @@ describe('protocol/requests', () => {
     expect(negotiatedVersion({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 3 } }, API_KEYS.Produce, gapped)).toBe(
       1,
     );
+  });
+
+  it('skips InitProducerId v2 so a Kafka 2.4 broker (max 2) gets v1', () => {
+    expect(
+      negotiatedVersion(
+        { [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 2 } },
+        API_KEYS.InitProducerId,
+        InitProducerId,
+        { transactionalId: null, transactionTimeout: 30_000 },
+      ),
+    ).toBe(1);
+  });
+
+  it('selects InitProducerId v3+ on Kafka 2.5+ brokers that advertise KIP-360', () => {
+    expect(
+      negotiatedVersion(
+        { [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 3 } },
+        API_KEYS.InitProducerId,
+        InitProducerId,
+        { transactionalId: null, transactionTimeout: 30_000 },
+      ),
+    ).toBe(3);
+    expect(
+      negotiatedVersion(
+        { [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 4 } },
+        API_KEYS.InitProducerId,
+        InitProducerId,
+        { transactionalId: null, transactionTimeout: 30_000 },
+      ),
+    ).toBe(4);
   });
 
   it('the not-implemented marker always throws KafkaNotImplemented', () => {

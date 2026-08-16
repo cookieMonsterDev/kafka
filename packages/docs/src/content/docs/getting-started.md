@@ -114,5 +114,6 @@ await admin.disconnect();
 ```
 
 Offset fields from `fetchTopicOffsets`, `fetchOffsets`, and friends are `bigint`.
-`alterConfigs` exists; IncrementalAlterConfigs and ElectLeaders are not
-implemented yet. See [Compatibility](/docs/compatibility/).
+`alterConfigs` remains for older brokers; prefer `incrementalAlterConfigs`.
+`electLeaders` and `deleteGroupOffsets` are implemented. See
+[Compatibility](/docs/compatibility/).

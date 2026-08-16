@@ -58,13 +58,11 @@ boolean (earliest vs latest). Cooperative rebalance still uses eager join/sync
 on this client (the assignor withholds moving partitions; the runtime does not
 yet do incremental revoke).
 
-**Admin.** `admin.alterConfigs` maps to AlterConfigs. Java 2.3+ prefers
-IncrementalAlterConfigs; that method is not implemented yet. Protocol key 43
-is ElectLeaders in the [protocol guide](https://kafka.apache.org/43/design/protocol/);
-the constant in `api-keys.ts` is still named `ElectPreferredLeaders`, and there
-is no public `electLeaders` method. Also missing: OffsetDelete, SCRAM
-credential admin, client quotas, DescribeLogDirs, and describeProducers /
-transaction describe APIs.
+**Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
+`admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
+(historically ElectPreferredLeaders). `admin.deleteGroupOffsets` is OffsetDelete
+(key 47). Still missing: SCRAM credential admin, client quotas, DescribeLogDirs,
+and describeProducers / transaction describe APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

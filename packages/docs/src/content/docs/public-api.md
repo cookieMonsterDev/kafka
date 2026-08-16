@@ -62,11 +62,10 @@ and [Compatibility](/docs/compatibility/).
 
 ## Admin
 
-`admin.alterConfigs` maps to AlterConfigs. Java 2.3+ prefers
-IncrementalAlterConfigs; that method is not implemented yet. Protocol key 43
-is ElectLeaders in the [protocol guide](https://kafka.apache.org/43/design/protocol/);
-the constant in `api-keys.ts` is still named `ElectPreferredLeaders`, and there
-is no public `electLeaders` method.
+`admin.alterConfigs` maps to AlterConfigs (kept for older brokers).
+`admin.incrementalAlterConfigs` is the Java 2.3+ preferred API. Protocol key 43
+is ElectLeaders (`admin.electLeaders`; historically ElectPreferredLeaders).
+`admin.deleteGroupOffsets` maps to OffsetDelete.
 
 ## Extra APIs
 

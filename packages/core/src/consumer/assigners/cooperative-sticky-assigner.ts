@@ -12,5 +12,5 @@ import { createStickyAssigner } from './sticky-assigner';
  *
  * @see https://kafka.apache.org/43/design/design/
  */
-export const cooperativeSticky: PartitionAssigner = ({ cluster }: { cluster: Cluster }): Assigner =>
+export const cooperativeSticky: PartitionAssigner = ({ cluster }: { cluster: Cluster }) =>
   createStickyAssigner({ cluster, name: 'cooperative-sticky', protocolType: 'cooperative', cooperative: true });

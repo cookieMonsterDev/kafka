@@ -319,4 +319,60 @@ describe('consumer/runner', () => {
     await waitFor(() => onCrash.mock.calls.length > 0);
     expect(onCrash).toHaveBeenCalledWith(expect.any(KafkaNumberOfRetriesExceeded));
   });
+
+  it('stops while joinAndSync is still in progress', async () => {
+    let releaseJoin: () => void = () => {};
+    const joinGate = new Promise<void>((resolve) => {
+      releaseJoin = resolve;
+    });
+    const consumerGroup = fakeConsumerGroup({
+      joinAndSync: vi.fn(async () => joinGate),
+    });
+    const onCrash = vi.fn();
+    runner = new Runner({
+      consumerGroup,
+      onCrash,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+
+    const startPromise = runner.start();
+    await runner.stop();
+    expect(runner.shuttingDown).toBe(true);
+    expect(runner.running).toBe(false);
+
+    releaseJoin();
+    await startPromise;
+
+    expect(runner.scheduleFetchManager).not.toHaveBeenCalled();
+    expect(consumerGroup.leave).toHaveBeenCalled();
+    expect(onCrash).not.toHaveBeenCalled();
+  });
+
+  it('does not deadlock when stop is called from eachBatch', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    const onCrash = vi.fn();
+    runner = new Runner({
+      consumerGroup,
+      onCrash,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: async () => {
+        await runner!.stop();
+      },
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+
+    const batch = new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [kafkaMessage(4n)] });
+    await expect(runner.handleBatch(batch)).resolves.toBeUndefined();
+    expect(runner.running).toBe(false);
+    expect(consumerGroup.leave).toHaveBeenCalled();
+  });
 });

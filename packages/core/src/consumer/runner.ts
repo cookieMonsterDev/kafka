@@ -39,7 +39,10 @@ export class Runner extends EventEmitter {
   autoCommit: boolean;
   fetchManager: FetchManager<Batch>;
   running = false;
+  shuttingDown = false;
   #consuming = false;
+  #starting = false;
+  #inHandler = false;
 
   constructor({
     logger,
@@ -86,14 +89,22 @@ export class Runner extends EventEmitter {
   }
 
   async start(): Promise<void> {
-    if (this.running) return;
+    if (this.running || this.shuttingDown) return;
 
+    this.#starting = true;
     try {
       await this.consumerGroup.connect();
+      if (this.shuttingDown) return;
       await this.consumerGroup.joinAndSync();
+      if (this.shuttingDown) {
+        await this.consumerGroup.leave();
+        return;
+      }
     } catch (e) {
       await this.onCrash(e as Error);
       return;
+    } finally {
+      this.#starting = false;
     }
 
     this.running = true;
@@ -101,7 +112,7 @@ export class Runner extends EventEmitter {
   }
 
   scheduleFetchManager = (): void => {
-    if (!this.running) {
+    if (!this.running || this.shuttingDown) {
       this.consuming = false;
       this.logger.info('consumer not running, exiting', {
         groupId: this.consumerGroup.groupId,
@@ -113,7 +124,7 @@ export class Runner extends EventEmitter {
     this.consuming = true;
 
     this.retrier(async (bail, retryCount, retryTime) => {
-      if (!this.running) return;
+      if (!this.running || this.shuttingDown) return;
 
       try {
         await this.fetchManager.start();
@@ -121,6 +132,8 @@ export class Runner extends EventEmitter {
         const error = e as Error & { type?: string };
 
         if (isRebalancing(error)) {
+          if (!this.running || this.shuttingDown) return;
+
           this.logger.warn('The group is rebalancing, re-joining', {
             groupId: this.consumerGroup.groupId,
             memberId: this.consumerGroup.memberId,
@@ -137,6 +150,8 @@ export class Runner extends EventEmitter {
         }
 
         if (error.type === 'UNKNOWN_MEMBER_ID') {
+          if (!this.running || this.shuttingDown) return;
+
           this.logger.error('The coordinator is not aware of this member, re-joining the group', {
             groupId: this.consumerGroup.groupId,
             memberId: this.consumerGroup.memberId,
@@ -176,16 +191,25 @@ export class Runner extends EventEmitter {
   };
 
   async stop(): Promise<void> {
-    if (!this.running) return;
+    this.shuttingDown = true;
+    this.consumerGroup.shuttingDown = true;
+
+    const shouldCleanup = this.running || this.#starting || this.#consuming;
+    this.running = false;
+
+    if (!shouldCleanup && !this.#inHandler) return;
 
     this.logger.debug('stop consumer group', {
       groupId: this.consumerGroup.groupId,
       memberId: this.consumerGroup.memberId,
     });
 
-    this.running = false;
-
     try {
+      if (this.#inHandler) {
+        await this.consumerGroup.leave();
+        return;
+      }
+
       await this.fetchManager.stop();
       await this.waitForConsumer();
       await this.consumerGroup.leave();
@@ -232,7 +256,7 @@ export class Runner extends EventEmitter {
     };
 
     for (const message of batch.messages) {
-      if (!this.running || this.consumerGroup.hasSeekOffset({ topic, partition })) {
+      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
         break;
       }
 
@@ -305,7 +329,7 @@ export class Runner extends EventEmitter {
           return offsets ? this.consumerGroup.commitOffsets(offsets) : this.consumerGroup.commitOffsetsIfNecessary();
         },
         uncommittedOffsets: () => this.consumerGroup.uncommittedOffsets(),
-        isRunning: () => this.running,
+        isRunning: () => this.running && !this.shuttingDown,
         isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
       });
     } catch (e) {
@@ -329,7 +353,7 @@ export class Runner extends EventEmitter {
   }
 
   async fetch(nodeId: string): Promise<Batch[]> {
-    if (!this.running) {
+    if (!this.running || this.shuttingDown) {
       this.logger.debug('consumer not running, exiting', {
         groupId: this.consumerGroup.groupId,
         memberId: this.consumerGroup.memberId,
@@ -358,7 +382,7 @@ export class Runner extends EventEmitter {
   }
 
   async handleBatch(batch: Batch): Promise<void> {
-    if (!this.running) {
+    if (!this.running || this.shuttingDown) {
       this.logger.debug('consumer not running, exiting', {
         groupId: this.consumerGroup.groupId,
         memberId: this.consumerGroup.memberId,
@@ -366,54 +390,59 @@ export class Runner extends EventEmitter {
       return;
     }
 
-    const startBatchProcess = Date.now();
-    const payload = {
-      topic: batch.topic,
-      partition: batch.partition,
-      highWatermark: batch.highWatermark,
-      offsetLag: batch.offsetLag(),
-      offsetLagLow: batch.offsetLagLow(),
-      batchSize: batch.messages.length,
-      firstOffset: batch.firstOffset(),
-      lastOffset: batch.lastOffset(),
-    };
-
-    if (batch.isEmptyDueToFiltering()) {
-      this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
-      this.consumerGroup.resolveOffset({
+    this.#inHandler = true;
+    try {
+      const startBatchProcess = Date.now();
+      const payload = {
         topic: batch.topic,
         partition: batch.partition,
-        offset: batch.lastOffset(),
-      });
-      await this.autoCommitOffsetsIfNecessary();
+        highWatermark: batch.highWatermark,
+        offsetLag: batch.offsetLag(),
+        offsetLagLow: batch.offsetLagLow(),
+        batchSize: batch.messages.length,
+        firstOffset: batch.firstOffset(),
+        lastOffset: batch.lastOffset(),
+      };
+
+      if (batch.isEmptyDueToFiltering()) {
+        this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
+        this.consumerGroup.resolveOffset({
+          topic: batch.topic,
+          partition: batch.partition,
+          offset: batch.lastOffset(),
+        });
+        await this.autoCommitOffsetsIfNecessary();
+        this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
+          ...payload,
+          duration: Date.now() - startBatchProcess,
+        });
+        await this.heartbeat();
+        return;
+      }
+
+      if (batch.isEmpty()) {
+        await this.heartbeat();
+        return;
+      }
+
+      this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
+
+      if (this.eachMessage) {
+        await this.processEachMessage(batch);
+      } else if (this.eachBatch) {
+        await this.processEachBatch(batch);
+      }
+
       this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
         ...payload,
         duration: Date.now() - startBatchProcess,
       });
+
+      await this.autoCommitOffsets();
       await this.heartbeat();
-      return;
+    } finally {
+      this.#inHandler = false;
     }
-
-    if (batch.isEmpty()) {
-      await this.heartbeat();
-      return;
-    }
-
-    this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
-
-    if (this.eachMessage) {
-      await this.processEachMessage(batch);
-    } else if (this.eachBatch) {
-      await this.processEachBatch(batch);
-    }
-
-    this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
-      ...payload,
-      duration: Date.now() - startBatchProcess,
-    });
-
-    await this.autoCommitOffsets();
-    await this.heartbeat();
   }
 
   autoCommitOffsets(): Promise<void> | undefined {
@@ -431,7 +460,7 @@ export class Runner extends EventEmitter {
   }
 
   commitOffsets(offsets: Offsets): Promise<void> | undefined {
-    if (!this.running) {
+    if (!this.running || this.shuttingDown) {
       this.logger.debug('consumer not running, exiting', {
         groupId: this.consumerGroup.groupId,
         memberId: this.consumerGroup.memberId,
@@ -446,7 +475,7 @@ export class Runner extends EventEmitter {
       } catch (e) {
         const error = e as Error;
 
-        if (!this.running) {
+        if (!this.running || this.shuttingDown) {
           this.logger.debug('consumer not running, exiting', {
             error: error.message,
             groupId: this.consumerGroup.groupId,

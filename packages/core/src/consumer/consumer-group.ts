@@ -67,6 +67,7 @@ export interface ConsumerGroupOptions {
 export interface ConsumerGroupHandle {
   groupId: string;
   memberId: string | null;
+  shuttingDown?: boolean;
   connect: () => Promise<void>;
   joinAndSync: () => Promise<void>;
   leave: () => Promise<void>;
@@ -106,6 +107,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   rackId: string;
   metadataMaxAge: number;
   groupInstanceId: string | null;
+  shuttingDown = false;
 
   seekOffset = new SeekOffsets();
   coordinator: Broker | null = null;
@@ -349,8 +351,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   joinAndSync(): Promise<void> {
     const startJoin = Date.now();
     return this.retrier(async (bail) => {
+      if (this.shuttingDown) return;
+
       try {
         await this.#join();
+        if (this.shuttingDown) return;
         await this.#sync();
 
         const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {

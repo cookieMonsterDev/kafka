@@ -109,8 +109,8 @@ import { buttonVariants } from '@/components/ui/button'
 
 ### Theming
 
-Design tokens live as CSS variables in `src/styles/global.css` (base color `neutral`,
-`radix-nova` preset). Dark mode is driven by the `dark` class on `<html>`.
+Design tokens live as CSS variables in `src/styles/global.css` (base color `olive`,
+`radix-nova` preset `b6TpS6SrnE`). Dark mode is driven by the `dark` class on `<html>`.
 `@tailwindcss/typography` is enabled there too — rendered Markdown uses `prose`, since
 Tailwind's preflight would otherwise reset it to unstyled HTML.
 

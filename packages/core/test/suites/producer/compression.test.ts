@@ -64,10 +64,12 @@ describe('producer.compression', () => {
   }
 
   it('round-trips gzip-compressed messages', async () => {
+    expect.assertions(1);
     await roundTrip(COMPRESSION_TYPES.GZIP);
   });
 
   testIfKafkaAtLeast_2_1('round-trips zstd-compressed messages', async () => {
+    expect.assertions(1);
     await roundTrip(COMPRESSION_TYPES.ZSTD);
   });
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { createCluster, newLogger, secureRandom, testIfKafkaAtLeast_1_0, waitFor } from '../../helpers/index';
 

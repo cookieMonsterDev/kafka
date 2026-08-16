@@ -88,7 +88,11 @@ export function createFetcher<T extends FetchBatch>({
     if (!isRunning) return;
     isRunning = false;
     await new Promise<void>((resolve) => {
-      emitter.once('end', () => resolve());
+      const timeoutId = setTimeout(resolve, 10_000);
+      emitter.once('end', () => {
+        clearTimeout(timeoutId);
+        resolve();
+      });
     });
   };
 

@@ -362,7 +362,7 @@ describe('consumer/runner', () => {
       instrumentationEmitter: new InstrumentationEventEmitter(),
       logger: silentLogger,
       eachBatch: async () => {
-        await runner!.stop();
+        void runner!.stop();
       },
       concurrency: 1,
       heartbeatInterval: 3000,
@@ -372,6 +372,7 @@ describe('consumer/runner', () => {
 
     const batch = new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [kafkaMessage(4n)] });
     await expect(runner.handleBatch(batch)).resolves.toBeUndefined();
+    await runner.stop();
     expect(runner.running).toBe(false);
     expect(consumerGroup.leave).toHaveBeenCalled();
   });

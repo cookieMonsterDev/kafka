@@ -42,7 +42,7 @@ export class Runner extends EventEmitter {
   shuttingDown = false;
   #consuming = false;
   #starting = false;
-  #inHandler = false;
+  #stopPromise: Promise<void> | null = null;
 
   constructor({
     logger,
@@ -191,13 +191,18 @@ export class Runner extends EventEmitter {
   };
 
   async stop(): Promise<void> {
+    this.#stopPromise ??= this.#performStop();
+    return this.#stopPromise;
+  }
+
+  async #performStop(): Promise<void> {
     this.shuttingDown = true;
     this.consumerGroup.shuttingDown = true;
 
     const shouldCleanup = this.running || this.#starting || this.#consuming;
     this.running = false;
 
-    if (!shouldCleanup && !this.#inHandler) return;
+    if (!shouldCleanup) return;
 
     this.logger.debug('stop consumer group', {
       groupId: this.consumerGroup.groupId,
@@ -205,11 +210,6 @@ export class Runner extends EventEmitter {
     });
 
     try {
-      if (this.#inHandler) {
-        await this.consumerGroup.leave();
-        return;
-      }
-
       await this.fetchManager.stop();
       await this.waitForConsumer();
       await this.consumerGroup.leave();
@@ -230,7 +230,11 @@ export class Runner extends EventEmitter {
         memberId: this.consumerGroup.memberId,
       });
 
-      this.once(CONSUMING_STOP, () => resolve());
+      const timeoutId = setTimeout(resolve, 10_000);
+      this.once(CONSUMING_STOP, () => {
+        clearTimeout(timeoutId);
+        resolve();
+      });
     });
   }
 
@@ -390,59 +394,54 @@ export class Runner extends EventEmitter {
       return;
     }
 
-    this.#inHandler = true;
-    try {
-      const startBatchProcess = Date.now();
-      const payload = {
+    const startBatchProcess = Date.now();
+    const payload = {
+      topic: batch.topic,
+      partition: batch.partition,
+      highWatermark: batch.highWatermark,
+      offsetLag: batch.offsetLag(),
+      offsetLagLow: batch.offsetLagLow(),
+      batchSize: batch.messages.length,
+      firstOffset: batch.firstOffset(),
+      lastOffset: batch.lastOffset(),
+    };
+
+    if (batch.isEmptyDueToFiltering()) {
+      this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
+      this.consumerGroup.resolveOffset({
         topic: batch.topic,
         partition: batch.partition,
-        highWatermark: batch.highWatermark,
-        offsetLag: batch.offsetLag(),
-        offsetLagLow: batch.offsetLagLow(),
-        batchSize: batch.messages.length,
-        firstOffset: batch.firstOffset(),
-        lastOffset: batch.lastOffset(),
-      };
-
-      if (batch.isEmptyDueToFiltering()) {
-        this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
-        this.consumerGroup.resolveOffset({
-          topic: batch.topic,
-          partition: batch.partition,
-          offset: batch.lastOffset(),
-        });
-        await this.autoCommitOffsetsIfNecessary();
-        this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
-          ...payload,
-          duration: Date.now() - startBatchProcess,
-        });
-        await this.heartbeat();
-        return;
-      }
-
-      if (batch.isEmpty()) {
-        await this.heartbeat();
-        return;
-      }
-
-      this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
-
-      if (this.eachMessage) {
-        await this.processEachMessage(batch);
-      } else if (this.eachBatch) {
-        await this.processEachBatch(batch);
-      }
-
+        offset: batch.lastOffset(),
+      });
+      await this.autoCommitOffsetsIfNecessary();
       this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
         ...payload,
         duration: Date.now() - startBatchProcess,
       });
-
-      await this.autoCommitOffsets();
       await this.heartbeat();
-    } finally {
-      this.#inHandler = false;
+      return;
     }
+
+    if (batch.isEmpty()) {
+      await this.heartbeat();
+      return;
+    }
+
+    this.instrumentationEmitter.emit(START_BATCH_PROCESS, payload);
+
+    if (this.eachMessage) {
+      await this.processEachMessage(batch);
+    } else if (this.eachBatch) {
+      await this.processEachBatch(batch);
+    }
+
+    this.instrumentationEmitter.emit(END_BATCH_PROCESS, {
+      ...payload,
+      duration: Date.now() - startBatchProcess,
+    });
+
+    await this.autoCommitOffsets();
+    await this.heartbeat();
   }
 
   autoCommitOffsets(): Promise<void> | undefined {

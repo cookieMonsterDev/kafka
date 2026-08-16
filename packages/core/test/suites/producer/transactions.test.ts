@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
 import {

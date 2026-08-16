@@ -24,6 +24,7 @@ export default tseslint.config(
   },
   {
     files: ['packages/core/src/protocol/**/*.ts'],
+    ignores: ['**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'error',
     },
@@ -37,6 +38,29 @@ export default tseslint.config(
       'vitest/no-disabled-tests': 'warn',
       'vitest/no-commented-out-tests': 'error',
       'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'expectTypeOf'] }],
+      'vitest/no-standalone-expect': [
+        'error',
+        {
+          additionalTestBlockFunctions: [
+            'testIfKafkaAtMost_0_10',
+            'testIfKafkaAtMost_0_11',
+            'testIfKafkaAtMost_1_1',
+            'testIfKafkaAtMost_3_6',
+            'testIfKafkaAtLeast_0_11',
+            'testIfKafkaAtLeast_1_0',
+            'testIfKafkaAtLeast_1_1',
+            'testIfKafkaEquals_0_10',
+            'testIfKafkaEquals_0_11',
+            'testIfKafkaEquals_1_1',
+            'testIfKafkaAtLeast_2_1',
+            'testIfKafkaAtLeast_2_2',
+            'testIfKafkaAtLeast_2_4',
+            'testIfKafkaAtLeast_3_0',
+            'testIfKafkaAtLeast_3_6',
+            'testIfKafkaAtLeast_4_0',
+          ],
+        },
+      ],
       '@typescript-eslint/no-unsafe-return': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',

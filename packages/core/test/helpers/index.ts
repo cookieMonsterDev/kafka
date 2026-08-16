@@ -338,7 +338,7 @@ export async function addPartitions({ topic, partitions }: { topic: string; part
         await cluster.refreshMetadata();
         return cluster.findTopicPartitionMetadata(topic).length === partitions;
       },
-      { ignoreTimeout: true },
+      { maxWait: 15_000, timeoutMessage: `Timeout waiting for ${partitions} partition(s) on ${topic}` },
     );
   } finally {
     await cluster.disconnect();
@@ -357,15 +357,19 @@ export async function retryProtocol<T>(errorType: string | readonly string[], fn
         return false;
       }
     },
-    { ignoreTimeout: true },
+    { maxWait: 15_000, timeoutMessage: `Timeout retrying protocol error ${[...types].join(', ')}` },
   );
 }
 
 export function waitForMessages<T>(
   buffer: T[],
-  { number = 1, delay = 50 }: { number?: number; delay?: number } = {},
+  { number = 1, delay = 50, maxWait = 15_000 }: { number?: number; delay?: number; maxWait?: number } = {},
 ): Promise<T[]> {
-  return waitFor(() => (buffer.length >= number ? buffer : false), { delay, ignoreTimeout: true });
+  return waitFor(() => (buffer.length >= number ? buffer : false), {
+    delay,
+    maxWait,
+    timeoutMessage: `Timeout waiting for ${number} message(s)`,
+  });
 }
 
 export function waitForNextEvent(
@@ -394,9 +398,8 @@ export function waitForConsumerToJoinGroup(
 ): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      void consumer.disconnect().then(() => {
-        reject(new Error(`Timeout ${label}`.trim()));
-      });
+      reject(new Error(`Timeout ${label}`.trim()));
+      void consumer.disconnect();
     }, maxWait);
     consumer.on(consumer.events.GROUP_JOIN, (event) => {
       clearTimeout(timeoutId);
@@ -404,9 +407,8 @@ export function waitForConsumerToJoinGroup(
     });
     consumer.on(consumer.events.CRASH, (event) => {
       clearTimeout(timeoutId);
-      void consumer.disconnect().then(() => {
-        reject((event.payload as { error: Error }).error);
-      });
+      reject((event.payload as { error: Error }).error);
+      void consumer.disconnect();
     });
   });
 }

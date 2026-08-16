@@ -20,6 +20,16 @@ import { ListOffsets } from './list-offsets/index';
 import { OffsetCommit } from './offset-commit/index';
 import { Produce } from './produce/index';
 
+function expectUnsupportedApiKey(fn: () => void): KafkaServerDoesNotSupportApiKey {
+  try {
+    fn();
+  } catch (error) {
+    if (error instanceof KafkaServerDoesNotSupportApiKey) return error;
+    throw error;
+  }
+  throw new Error('expected lookup to throw');
+}
+
 function fakeFamily(versions: readonly number[]): RequestFamily<Record<string, never>> {
   return {
     versions,
@@ -99,20 +109,16 @@ describe('protocol/requests', () => {
 
   it('includes api name, broker range, and implemented range when there is no overlap', () => {
     const recordBatchOnly = fakeFamily([3, 4, 5, 6, 7]);
-    try {
-      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, recordBatchOnly);
-      throw new Error('expected lookup to throw');
-    } catch (error) {
-      expect(error).toBeInstanceOf(KafkaServerDoesNotSupportApiKey);
-      const unsupported = error as KafkaServerDoesNotSupportApiKey;
-      expect(unsupported.apiKey).toBe(API_KEYS.Produce);
-      expect(unsupported.apiName).toBe('Produce');
-      expect(unsupported.brokerMinVersion).toBe(0);
-      expect(unsupported.brokerMaxVersion).toBe(2);
-      expect(unsupported.implementedVersions).toEqual([3, 4, 5, 6, 7]);
-      expect(unsupported.message).toContain('Broker advertised 0-2');
-      expect(unsupported.message).toContain('client implements 3-7');
-    }
+    const unsupported = expectUnsupportedApiKey(() =>
+      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, recordBatchOnly),
+    );
+    expect(unsupported.apiKey).toBe(API_KEYS.Produce);
+    expect(unsupported.apiName).toBe('Produce');
+    expect(unsupported.brokerMinVersion).toBe(0);
+    expect(unsupported.brokerMaxVersion).toBe(2);
+    expect(unsupported.implementedVersions).toEqual([3, 4, 5, 6, 7]);
+    expect(unsupported.message).toContain('Broker advertised 0-2');
+    expect(unsupported.message).toContain('client implements 3-7');
   });
 
   it('never throws Invariant violated for a Produce maxVersion 2 broker', () => {

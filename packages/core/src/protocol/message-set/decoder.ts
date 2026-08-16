@@ -79,9 +79,11 @@ function decodeEntries(decoder: Decoder, compressedMessage: DecodedMessageSetRec
     messages.push(toDecodedRecord(decodeEntry(decoder)));
   }
 
-  if (compressedMessage.magicByte > 0 && compressedMessage.offset >= 0n && messages.length > 0) {
-    const lastMessageOffset = messages[messages.length - 1]!.offset;
-    const baseOffset = compressedMessage.offset - lastMessageOffset;
+  if (compressedMessage.magicByte > 0 && compressedMessage.offset >= 0n) {
+    const lastMessage = messages.at(-1);
+    if (lastMessage == null) return messages;
+
+    const baseOffset = compressedMessage.offset - lastMessage.offset;
 
     for (const message of messages) {
       const offset = message.offset + baseOffset;

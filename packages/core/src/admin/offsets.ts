@@ -1,7 +1,7 @@
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import { createConsumer } from '../consumer/index';
 import { parseOffset } from '../consumer/types';
-import { KafkaNonRetriableError } from '../errors';
+import { KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import { LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
@@ -129,6 +129,7 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
       logger: rootLogger.namespace('Admin', LOG_LEVELS.NOTHING),
       cluster,
       groupId,
+      maxWaitTimeInMs: 100,
     });
 
     await consumer.subscribe({ topic, fromBeginning: true });
@@ -141,8 +142,25 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     }
 
     return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        void consumer.stop().finally(() => {
+          reject(new KafkaTimeout('Timeout while setting offsets'));
+        });
+      }, 30_000);
+
+      const finish = (action: () => void): void => {
+        clearTimeout(timeoutId);
+        action();
+      };
+
       consumer.on(consumer.events.FETCH, () => {
-        void consumer.stop().then(resolve).catch(reject);
+        finish(() => {
+          void consumer.stop().then(resolve).catch(reject);
+        });
+      });
+
+      consumer.on(consumer.events.CRASH, (event) => {
+        finish(() => reject((event.payload as { error: Error }).error));
       });
 
       void consumer
@@ -150,12 +168,17 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
           eachBatchAutoResolve: false,
           eachBatch: async () => undefined,
         })
-        .catch(reject);
+        .catch((error: unknown) => {
+          finish(() => reject(error instanceof Error ? error : new Error(String(error))));
+        });
 
-      consumer.pause([{ topic }]);
-
-      for (const { partition, offset } of partitions) {
-        consumer.seek({ topic, partition, offset });
+      try {
+        consumer.pause([{ topic }]);
+        for (const { partition, offset } of partitions) {
+          consumer.seek({ topic, partition, offset });
+        }
+      } catch (error) {
+        finish(() => reject(error instanceof Error ? error : new Error(String(error))));
       }
     });
   };

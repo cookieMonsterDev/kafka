@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
 import {

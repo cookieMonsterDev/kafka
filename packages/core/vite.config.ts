@@ -33,6 +33,7 @@ export default defineConfig({
           globalSetup: ['./test/helpers/global-setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 60_000,
+          maxWorkers: 4,
           fileParallelism: true,
           retry: Number(process.env.TEST_RETRIES ?? 0),
         },

@@ -8,13 +8,14 @@ import { Cluster } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-function createCluster(): Cluster {
+function createCluster(overrides: Partial<ConstructorParameters<typeof Cluster>[0]> = {}): Cluster {
   return new Cluster({
     logger: silentLogger,
     socketFactory: createDefaultSocketFactory(),
     brokers: ['broker-1:9092'],
     clientId: 'test-client',
     connectionTimeout: 1000,
+    ...overrides,
   });
 }
 
@@ -156,6 +157,25 @@ describe('cluster/Cluster', () => {
 
       await expect(cluster.addMultipleTargetTopics(['topic-a'])).rejects.toThrow('connection lost');
       expect(cluster.targetTopics).toEqual(new Set(['topic-a']));
+    });
+
+    it('drops only the named topic when metadata refresh reports it unknown', async () => {
+      const cluster = createCluster({ allowAutoTopicCreation: false });
+      cluster.targetTopics = new Set(['keep', 'gone']);
+      const refreshMetadata = vi
+        .spyOn(cluster.brokerPool, 'refreshMetadata')
+        .mockRejectedValueOnce(
+          Object.assign(new Error('This server does not host this topic-partition'), {
+            type: 'UNKNOWN_TOPIC_OR_PARTITION',
+            topic: 'gone',
+          }),
+        )
+        .mockResolvedValueOnce(undefined);
+
+      await cluster.refreshMetadata();
+
+      expect(cluster.targetTopics).toEqual(new Set(['keep']));
+      expect(refreshMetadata).toHaveBeenCalledTimes(2);
     });
   });
 

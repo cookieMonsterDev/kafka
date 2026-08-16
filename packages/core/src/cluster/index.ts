@@ -85,6 +85,7 @@ export class Cluster {
   readonly brokerPool: BrokerPool;
   readonly isolationLevel: IsolationLevel | undefined;
   readonly committedOffsetsByGroup: CommittedOffsetsByGroup;
+  readonly allowAutoTopicCreation: boolean;
 
   targetTopics = new Set<string>();
   readonly mutatingTargetTopics: Lock;
@@ -136,6 +137,7 @@ export class Cluster {
     this.targetTopics = new Set();
     this.mutatingTargetTopics = new Lock({ description: 'updating target topics', timeout: requestTimeout });
     this.isolationLevel = isolationLevel;
+    this.allowAutoTopicCreation = allowAutoTopicCreation !== false;
     this.brokerPool = new BrokerPool({
       connectionPoolBuilder: builder,
       logger: this.rootLogger,
@@ -151,7 +153,24 @@ export class Cluster {
     });
 
     this.#refreshMetadata = sharedPromiseTo(async () => {
-      await this.brokerPool.refreshMetadata([...this.targetTopics]);
+      while (true) {
+        try {
+          await this.brokerPool.refreshMetadata([...this.targetTopics]);
+          return;
+        } catch (e) {
+          const error = e as Error & { type?: string; topic?: string };
+          if (
+            error.topic &&
+            this.targetTopics.has(error.topic) &&
+            (error.type === 'UNKNOWN_TOPIC_OR_PARTITION' || error.type === 'INVALID_TOPIC_EXCEPTION') &&
+            !this.allowAutoTopicCreation
+          ) {
+            this.targetTopics.delete(error.topic);
+            continue;
+          }
+          throw e;
+        }
+      }
     });
 
     this.#refreshMetadataIfNecessary = sharedPromiseTo(async () => {
@@ -238,13 +257,17 @@ export class Cluster {
         try {
           await this.refreshMetadata();
         } catch (e) {
-          const error = e as Error & { type?: string };
+          const error = e as Error & { type?: string; topic?: string };
           if (
             error.type === 'INVALID_TOPIC_EXCEPTION' ||
             error.type === 'UNKNOWN_TOPIC_OR_PARTITION' ||
             error.type === 'TOPIC_AUTHORIZATION_FAILED'
           ) {
-            this.targetTopics = previousTopics;
+            if (error.topic && previousTopics.has(error.topic) === false) {
+              this.targetTopics.delete(error.topic);
+            } else {
+              this.targetTopics = previousTopics;
+            }
           }
 
           throw error;

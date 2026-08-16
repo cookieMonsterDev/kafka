@@ -66,6 +66,10 @@ and [Compatibility](/docs/compatibility/).
 `admin.incrementalAlterConfigs` is the Java 2.3+ preferred API. Protocol key 43
 is ElectLeaders (`admin.electLeaders`; historically ElectPreferredLeaders).
 `admin.deleteGroupOffsets` maps to OffsetDelete.
+`admin.describeClientQuotas` / `admin.alterClientQuotas`,
+`admin.describeLogDirs` / `admin.alterReplicaLogDirs`, and
+`admin.describeCluster` (DescribeCluster when advertised) are also on the
+admin client.
 
 ## Extra APIs
 

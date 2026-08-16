@@ -33,7 +33,7 @@ string in production.
 | 0.10  | Produce/fetch via MessageSet. No headers, no transactions, no ACLs |
 | 0.11+ | RecordBatch, headers, exactly-once / idempotent producers, ACLs    |
 | 2.1+  | `CompressionTypes.ZSTD`                                            |
-| 4.0   | KRaft-only brokers. Talks via overlap (Produce 3–7, Fetch 4–11)    |
+| 4.0   | KRaft-only brokers. Talks via overlap (Produce 3–10, Fetch 4–12)   |
 
 ZooKeeper is how some test clusters and older brokers store metadata. It is
 not a client feature. See

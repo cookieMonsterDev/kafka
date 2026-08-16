@@ -6,6 +6,7 @@ import { ConnectionPool } from '../network/connection-pool';
 import type { ConnectionOptions } from '../network/connection';
 import type { NetworkEventMap } from '../network/instrumentation-events';
 import type { SocketFactory } from '../network/socket-factory';
+import { parseBrokerAddress } from './parse-broker-address';
 
 export interface ConnectionPoolBuilderOptions {
   /** Socket factory; the public `Kafka` client supplies the built-in default. */
@@ -101,13 +102,13 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
       if (!host) {
         const list = await getBrokers();
         const randomBroker = list[index++ % list.length]!;
-        const [brokerHost, brokerPort] = randomBroker.split(':');
-        host = brokerHost;
-        port = Number(brokerPort);
+        const parsed = parseBrokerAddress(randomBroker);
+        host = parsed.host;
+        port = parsed.port;
       }
 
       return new ConnectionPool({
-        host: host!,
+        host: host,
         port: port!,
         rack,
         sasl,

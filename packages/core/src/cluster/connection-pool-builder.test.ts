@@ -45,6 +45,20 @@ describe('cluster/connectionPoolBuilder', () => {
     await Promise.all([first.destroy(), second.destroy(), third.destroy()]);
   });
 
+  it('parses bracketed IPv6 bootstrap addresses', async () => {
+    const builder = connectionPoolBuilder({ ...baseOptions, brokers: ['[::1]:9092'] });
+    const pool = await builder.build();
+
+    expect(pool.host).toBe('::1');
+    expect(pool.port).toBe(9092);
+    await pool.destroy();
+  });
+
+  it('throws a clear error for a broker string with no port', async () => {
+    const builder = connectionPoolBuilder({ ...baseOptions, brokers: ['localhost'] });
+    await expect(builder.build()).rejects.toThrow('missing a port');
+  });
+
   it('resolves a function-based broker list', async () => {
     const brokers = vi.fn().mockResolvedValue(['dynamic-broker:9092']);
     const builder = connectionPoolBuilder({ ...baseOptions, brokers });

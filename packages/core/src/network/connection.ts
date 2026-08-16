@@ -7,7 +7,7 @@ import type { Logger } from '../loggers/index';
 import { createRequest } from '../protocol/request';
 import { Decoder } from '../protocol/decoder';
 import { API_KEYS } from '../protocol/requests/api-keys';
-import type { AnyRequestDefinition, AnyResponseDefinition, BrokerVersions } from '../protocol/requests/index';
+import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../protocol/requests/index';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status';
 import type { ConnectionStatus } from './connection-status';
@@ -137,12 +137,7 @@ export interface SendOptions<T> {
  * recover that type for `Connection#send`/`ConnectionPool#send`, in one clearly-labeled place
  * rather than casting ad hoc at every call site.
  */
-export function asTypedSend<T>(protocolResult: {
-  request: AnyRequestDefinition;
-  response: AnyResponseDefinition;
-  logResponseError?: boolean;
-  requestTimeout?: number | null;
-}): SendOptions<T> {
+export function asTypedSend<T>(protocolResult: ProtocolResult): SendOptions<T> {
   return {
     request: protocolResult.request,
     response: protocolResult.response as ConnectionResponseDefinition<T>,

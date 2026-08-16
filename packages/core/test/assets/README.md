@@ -1,0 +1,43 @@
+# Integration cluster assets
+
+Integration tests start a local Kafka cluster with Docker Compose. Select the stack with `KAFKA_VERSION` (semver, default `4.0`) and optionally `OAUTHBEARER_ENABLED=1`.
+
+```bash
+KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+```
+
+`global-setup.ts`, `scripts/compose-up.sh`, and `scripts/compose-down.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
+
+## Version → compose file
+
+| `KAFKA_VERSION` | Compose file                   | Mode  | Status    |
+| --------------- | ------------------------------ | ----- | --------- |
+| `0.10`          | `docker-compose.zk-0-10.yml`   | ZK    | planned   |
+| `0.11`          | `docker-compose.zk-0-11.yml`   | ZK    | planned   |
+| `1.1`           | `docker-compose.zk-1-1.yml`    | ZK    | planned   |
+| `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | planned   |
+| `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | planned   |
+| `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
+
+OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
+
+`docker-compose.kraft-sasl.yml` is included by the KRaft files for SASL listeners; do not pass it as `KAFKA_VERSION`.
+
+## Feature gates
+
+Suites that need a minimum (or maximum) broker version should import the helpers from `test/helpers/index.ts`:
+
+- `testIfKafkaAtMost_0_10`
+- `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0`
+- `describeIfKRaft` / `describeIfZooKeeper`
+
+These read `KAFKA_VERSION` (default `4.0`) and skip when the running cluster is outside the range. Prefer them over parsing the env var in individual tests.
+
+## Other env vars
+
+| Variable           | Effect                                           |
+| ------------------ | ------------------------------------------------ |
+| `KAFKA_EXTERNAL=1` | Skip compose up/down (cluster already running)   |
+| `DO_NOT_STOP=1`    | Leave the cluster running after tests            |
+| `TEST_RETRIES`     | Vitest retry count for the integration project   |
+| `COMPOSE_FILE`     | Absolute or relative path; skips version mapping |

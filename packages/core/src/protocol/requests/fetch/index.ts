@@ -1,4 +1,4 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import type { ProtocolFactory, ProtocolResult, RequestFamily } from '../index';
 import { fetchRequestV4 } from './v4/request';
 import { fetchResponseV4 } from './v4/response';
 import { fetchRequestV5 } from './v5/request';
@@ -17,15 +17,37 @@ import { fetchRequestV11 } from './v11/request';
 import { fetchResponseV11 } from './v11/response';
 import type { FetchRequestOptions } from './shared';
 
+/**
+ * Fetch can block up to `maxWaitTime`, which may exceed the connection `requestTimeout`.
+ * Add a small network delay so the socket wait covers the broker-side wait.
+ */
+const NETWORK_DELAY = 100;
+
+function fetchRequestTimeout(maxWaitTime: number): number {
+  return Number.isSafeInteger(maxWaitTime + NETWORK_DELAY) ? maxWaitTime + NETWORK_DELAY : maxWaitTime;
+}
+
+function fetchProtocol(
+  request: ProtocolResult['request'],
+  response: ProtocolResult['response'],
+  maxWaitTime: number,
+): ProtocolResult {
+  return {
+    request,
+    response,
+    requestTimeout: fetchRequestTimeout(maxWaitTime),
+  };
+}
+
 const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> = {
-  4: (options) => ({ request: fetchRequestV4(options), response: fetchResponseV4 }),
-  5: (options) => ({ request: fetchRequestV5(options), response: fetchResponseV5 }),
-  6: (options) => ({ request: fetchRequestV6(options), response: fetchResponseV6 }),
-  7: (options) => ({ request: fetchRequestV7(options), response: fetchResponseV7 }),
-  8: (options) => ({ request: fetchRequestV8(options), response: fetchResponseV8 }),
-  9: (options) => ({ request: fetchRequestV9(options), response: fetchResponseV9 }),
-  10: (options) => ({ request: fetchRequestV10(options), response: fetchResponseV10 }),
-  11: (options) => ({ request: fetchRequestV11(options), response: fetchResponseV11 }),
+  4: (options) => fetchProtocol(fetchRequestV4(options), fetchResponseV4, options.maxWaitTime),
+  5: (options) => fetchProtocol(fetchRequestV5(options), fetchResponseV5, options.maxWaitTime),
+  6: (options) => fetchProtocol(fetchRequestV6(options), fetchResponseV6, options.maxWaitTime),
+  7: (options) => fetchProtocol(fetchRequestV7(options), fetchResponseV7, options.maxWaitTime),
+  8: (options) => fetchProtocol(fetchRequestV8(options), fetchResponseV8, options.maxWaitTime),
+  9: (options) => fetchProtocol(fetchRequestV9(options), fetchResponseV9, options.maxWaitTime),
+  10: (options) => fetchProtocol(fetchRequestV10(options), fetchResponseV10, options.maxWaitTime),
+  11: (options) => fetchProtocol(fetchRequestV11(options), fetchResponseV11, options.maxWaitTime),
 };
 
 /**

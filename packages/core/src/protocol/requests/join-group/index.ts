@@ -22,10 +22,33 @@ export interface JoinGroupOptions {
   groupProtocols: GroupProtocol[];
 }
 
+/**
+ * JoinGroup can block up to `sessionTimeout` (or `rebalanceTimeout` from v1). Override the
+ * connection timeout so a long rebalance is not killed as a request timeout.
+ * @see https://github.com/apache/kafka/pull/5203
+ */
+const NETWORK_DELAY = 5000;
+
+function joinGroupRequestTimeout({
+  rebalanceTimeout,
+  sessionTimeout,
+}: {
+  rebalanceTimeout?: number;
+  sessionTimeout: number;
+}): number {
+  const timeout = rebalanceTimeout || sessionTimeout;
+  return Number.isSafeInteger(timeout + NETWORK_DELAY) ? timeout + NETWORK_DELAY : timeout;
+}
+
+function joinGroupLogResponseError(memberId: string | undefined): boolean {
+  return memberId != null && memberId !== '';
+}
+
 const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
   0: (options) => ({
     request: joinGroupRequestV0({ ...options, groupProtocols: withDefaultMetadata(options.groupProtocols) }),
     response: joinGroupResponseV0,
+    requestTimeout: joinGroupRequestTimeout({ sessionTimeout: options.sessionTimeout }),
   }),
   1: (options) => ({
     request: joinGroupRequestV1({
@@ -34,6 +57,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV1,
+    requestTimeout: joinGroupRequestTimeout(options),
   }),
   2: (options) => ({
     request: joinGroupRequestV2({
@@ -42,6 +66,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV2,
+    requestTimeout: joinGroupRequestTimeout(options),
   }),
   3: (options) => ({
     request: joinGroupRequestV3({
@@ -50,6 +75,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV3,
+    requestTimeout: joinGroupRequestTimeout(options),
   }),
   4: (options) => ({
     request: joinGroupRequestV4({
@@ -58,6 +84,8 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV4,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
   }),
   5: (options) => ({
     request: joinGroupRequestV5({
@@ -67,6 +95,8 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV5,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
   }),
 };
 

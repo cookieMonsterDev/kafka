@@ -12,12 +12,7 @@ import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import { failure } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { lookup } from '../protocol/requests/index';
-import type {
-  AnyRequestDefinition,
-  AnyResponseDefinition,
-  BrokerVersions,
-  ProtocolFactory,
-} from '../protocol/requests/index';
+import type { BrokerVersions, ProtocolFactory, ProtocolResult } from '../protocol/requests/index';
 import { Lock } from '../utils/lock';
 import { shuffle } from '../utils/shuffle';
 
@@ -481,11 +476,7 @@ export class Broker {
   }
 
   /** Every family but `Produce` (with `acks: 0`) always gets a response - asserts that invariant so callers don't have to. */
-  async #send<T>(protocolResult: {
-    request: AnyRequestDefinition;
-    response: AnyResponseDefinition;
-    logResponseError?: boolean;
-  }): Promise<T> {
+  async #send<T>(protocolResult: ProtocolResult): Promise<T> {
     const result = await this.#sendRequest<T>(protocolResult);
     if (result === undefined) {
       throw new KafkaInvariantViolation('Broker request unexpectedly returned no response');
@@ -493,12 +484,7 @@ export class Broker {
     return result;
   }
 
-  async #sendRequest<T>(protocolResult: {
-    request: AnyRequestDefinition;
-    response: AnyResponseDefinition;
-    logResponseError?: boolean;
-    requestTimeout?: number;
-  }): Promise<T | undefined> {
+  async #sendRequest<T>(protocolResult: ProtocolResult): Promise<T | undefined> {
     try {
       return await this.connectionPool.send<T>(asTypedSend<T>(protocolResult));
     } catch (e) {

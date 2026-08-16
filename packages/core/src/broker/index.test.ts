@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaConnectionClosedError, KafkaMemberIdRequired, KafkaProtocolError } from '../errors';
+import {
+  KafkaConnectionClosedError,
+  KafkaMemberIdRequired,
+  KafkaProtocolError,
+  KafkaServerDoesNotSupportApiKey,
+} from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { API_KEYS } from '../protocol/requests/api-keys';
@@ -216,6 +221,26 @@ describe('broker/Broker', () => {
         KafkaConnectionClosedError,
       );
       expect(pool.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('throws KafkaServerDoesNotSupportApiKey when Produce maxVersion is below the client floor', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } },
+      });
+
+      await broker.connect();
+
+      await expect(
+        broker.produce({
+          acks: 1,
+          timeout: 1000,
+          topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+        }),
+      ).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
+      expect(pool.send).not.toHaveBeenCalled();
     });
 
     it('listGroups sends an empty options object', async () => {

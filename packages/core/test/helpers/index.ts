@@ -2,7 +2,12 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe } from 'vitest';
+import { describe, it } from 'vitest';
+import {
+  isKRaftKafkaVersion,
+  kafkaVersionAtLeast,
+  kafkaVersionAtMost,
+} from './kafka-version';
 import { createAdmin } from '../../src/admin/index';
 import { Broker } from '../../src/broker/index';
 import { createSaslAuthenticator } from '../../src/broker/sasl-authenticator/index';
@@ -410,6 +415,38 @@ export function describeIfOauthbearerDisabled(name: string, fn: () => void): voi
   const run: DescribeFn = process.env.OAUTHBEARER_ENABLED === '1' ? describe.skip : describe;
   runDescribe(run, name, fn);
 }
+
+export function describeIfKRaft(name: string, fn: () => void): void {
+  runDescribe(isKRaftKafkaVersion() ? describe : describe.skip, name, fn);
+}
+
+export function describeIfZooKeeper(name: string, fn: () => void): void {
+  runDescribe(isKRaftKafkaVersion() ? describe.skip : describe, name, fn);
+}
+
+function testIfKafkaVersion(version: string, compare: (target: string) => boolean) {
+  return compare(version) ? it : it.skip;
+}
+
+export const testIfKafkaAtMost_0_10 = testIfKafkaVersion('0.10', kafkaVersionAtMost);
+export const testIfKafkaAtLeast_0_11 = testIfKafkaVersion('0.11', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_1_0 = testIfKafkaVersion('1.0', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_2_1 = testIfKafkaVersion('2.1', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_2_2 = testIfKafkaVersion('2.2', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_2_4 = testIfKafkaVersion('2.4', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_3_0 = testIfKafkaVersion('3.0', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_4_0 = testIfKafkaVersion('4.0', kafkaVersionAtLeast);
+
+export {
+  DEFAULT_KAFKA_VERSION,
+  getKafkaVersion,
+  isKRaftKafkaVersion,
+  kafkaVersionAtLeast,
+  kafkaVersionAtMost,
+  resolveComposeFile,
+} from './kafka-version';
 
 export function generateMessages({ prefix, number = 100 }: { prefix?: string; number?: number } = {}): {
   key: string;

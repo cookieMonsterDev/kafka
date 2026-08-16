@@ -1,14 +1,11 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { resolveComposeFile } from './kafka-version';
 
 const helpersDir = path.dirname(fileURLToPath(import.meta.url));
 const coreRoot = path.resolve(helpersDir, '../..');
-const composeFile = path.join(
-  coreRoot,
-  'test/assets',
-  process.env.OAUTHBEARER_ENABLED === '1' ? 'docker-compose.kraft-oauthbearer.yml' : 'docker-compose.kraft.yml',
-);
+const composeFile = resolveComposeFile();
 
 function compose(args: string[]): void {
   execFileSync('docker', ['compose', '-f', composeFile, ...args], {

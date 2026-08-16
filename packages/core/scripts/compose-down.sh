@@ -2,10 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-COMPOSE_FILE="${COMPOSE_FILE:-${ROOT}/test/assets/docker-compose.kraft.yml}"
-
-if [[ "${OAUTHBEARER_ENABLED:-}" == "1" ]]; then
-  COMPOSE_FILE="${ROOT}/test/assets/docker-compose.kraft-oauthbearer.yml"
-fi
+COMPOSE_FILE="$("${ROOT}/scripts/resolve-compose-file.sh")"
 
 docker compose -f "${COMPOSE_FILE}" down --remove-orphans

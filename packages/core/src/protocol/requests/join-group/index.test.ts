@@ -33,4 +33,71 @@ describe('protocol/requests/join-group', () => {
     });
     expect(request.apiVersion).toBe(5);
   });
+
+  describe('requestTimeout', () => {
+    it('uses sessionTimeout plus network delay on v0', () => {
+      const sessionTimeout = 30_000;
+      const protocol = JoinGroup.protocol({ version: 0 })({
+        groupId: 'test-group',
+        sessionTimeout,
+        memberId: '',
+        protocolType: 'consumer',
+        groupProtocols: [{ name: 'default' }],
+      });
+      expect(protocol.requestTimeout).toBe(sessionTimeout + 5000);
+    });
+
+    it('does not overflow MAX_SAFE_INTEGER when adding the network delay', () => {
+      const protocol = JoinGroup.protocol({ version: 0 })({
+        groupId: 'test-group',
+        sessionTimeout: Number.MAX_SAFE_INTEGER,
+        memberId: '',
+        protocolType: 'consumer',
+        groupProtocols: [{ name: 'default' }],
+      });
+      expect(protocol.requestTimeout).toBe(Number.MAX_SAFE_INTEGER);
+    });
+
+    it('uses rebalanceTimeout plus network delay on v1+', () => {
+      const parameters = {
+        groupId: 'test-group',
+        sessionTimeout: 1,
+        rebalanceTimeout: 30_000,
+        memberId: '',
+        protocolType: 'consumer',
+        groupProtocols: [{ name: 'default' }],
+      };
+
+      for (const version of [1, 2, 3, 4, 5] as const) {
+        const protocol = JoinGroup.protocol({ version })(parameters);
+        expect(protocol.requestTimeout).toBe(35_000);
+      }
+    });
+  });
+
+  describe('logResponseError (v4+)', () => {
+    it('does not log error responses when memberId is empty', () => {
+      const protocol = JoinGroup.protocol({ version: 4 })({
+        groupId: 'test-group',
+        sessionTimeout: 1,
+        rebalanceTimeout: 30_000,
+        memberId: '',
+        protocolType: 'consumer',
+        groupProtocols: [{ name: 'default' }],
+      });
+      expect(protocol.logResponseError).toBe(false);
+    });
+
+    it('logs error responses when memberId is set', () => {
+      const protocol = JoinGroup.protocol({ version: 5 })({
+        groupId: 'test-group',
+        sessionTimeout: 1,
+        rebalanceTimeout: 30_000,
+        memberId: 'member-id',
+        protocolType: 'consumer',
+        groupProtocols: [{ name: 'default' }],
+      });
+      expect(protocol.logResponseError).toBe(true);
+    });
+  });
 });

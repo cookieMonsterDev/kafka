@@ -235,15 +235,29 @@ export class KafkaDeleteGroupsError extends KafkaError {
   }
 }
 
+export interface KafkaServerDoesNotSupportApiKeyOptions {
+  apiKey?: number;
+  apiName?: string;
+  brokerMinVersion?: number;
+  brokerMaxVersion?: number;
+  implementedVersions?: readonly number[];
+}
+
 export class KafkaServerDoesNotSupportApiKey extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaServerDoesNotSupportApiKey';
   readonly apiKey: number | undefined;
   readonly apiName: string | undefined;
+  readonly brokerMinVersion: number | undefined;
+  readonly brokerMaxVersion: number | undefined;
+  readonly implementedVersions: readonly number[] | undefined;
 
-  constructor(e: string | ErrorLike, { apiKey, apiName }: { apiKey?: number; apiName?: string } = {}) {
+  constructor(e: string | ErrorLike, options: KafkaServerDoesNotSupportApiKeyOptions = {}) {
     super(e);
-    this.apiKey = apiKey;
-    this.apiName = apiName;
+    this.apiKey = options.apiKey;
+    this.apiName = options.apiName;
+    this.brokerMinVersion = options.brokerMinVersion;
+    this.brokerMaxVersion = options.brokerMaxVersion;
+    this.implementedVersions = options.implementedVersions;
   }
 }
 

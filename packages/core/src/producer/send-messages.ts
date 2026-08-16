@@ -151,6 +151,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           error.name === 'KafkaMetadataNotLoaded' ||
           error.name === 'KafkaConnectionError' ||
           error.name === 'KafkaConnectionClosedError' ||
+          error.name === 'KafkaRequestTimeoutError' ||
           (error.name === 'KafkaProtocolError' && error.retriable)
         ) {
           logger.error(`Failed to send messages: ${error.message}`, { retryCount, retryTime });

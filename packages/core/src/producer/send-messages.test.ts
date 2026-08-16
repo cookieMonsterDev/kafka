@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster, PartitionMetadata } from '../cluster/index';
+import { KafkaRequestTimeoutError } from '../errors';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
@@ -317,5 +318,27 @@ describe('producer/sendMessages', () => {
     expect(cluster.refreshMetadata).toHaveBeenCalled();
     expect(brokers[1].produce.mock.calls.length).toBeGreaterThan(1);
     expect(brokers[2].produce.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('refreshes metadata when a produce request times out', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce
+      .mockImplementationOnce(() =>
+        Promise.reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' })),
+      )
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+
+    expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
 });

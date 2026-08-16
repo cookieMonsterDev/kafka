@@ -11,6 +11,7 @@ import {
   secureRandom,
   sslBrokers,
   sslConnectionOpts,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('producer.send', () => {
@@ -64,6 +65,68 @@ describe('producer.send', () => {
           errorCode: 0,
           baseOffset: expect.any(BigInt),
         }),
+      ]),
+    );
+  });
+
+  testIfKafkaAtLeast_0_11('sends messages without a key', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      logger: newLogger(),
+    });
+    await producer.connect();
+    await expect(
+      producer.send({
+        acks: 1,
+        topic: topicName,
+        messages: [{ value: 'test-value' }],
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          topicName,
+          partition: expect.any(Number),
+          errorCode: 0,
+          baseOffset: 0n,
+        }),
+      ]),
+    );
+  });
+
+  testIfKafkaAtLeast_0_11('sends messages with headers', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      logger: newLogger(),
+    });
+    await producer.connect();
+
+    const sendMessages = () =>
+      producer!.send({
+        acks: 1,
+        topic: topicName,
+        messages: Array.from({ length: 10 }, (_, i) => ({
+          key: `key-${i}`,
+          value: `value-${i}`,
+          headers: {
+            [`header-a${i}`]: `header-value-a${i}`,
+            [`header-b${i}`]: `header-value-b${i}`,
+            [`header-c${i}`]: `header-value-c${i}`,
+          },
+        })),
+      });
+
+    await expect(sendMessages()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 0n }),
+      ]),
+    );
+    await expect(sendMessages()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 10n }),
       ]),
     );
   });

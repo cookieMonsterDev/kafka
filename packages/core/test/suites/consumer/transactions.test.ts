@@ -9,6 +9,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('consumer.transactions', () => {
@@ -26,7 +27,7 @@ describe('consumer.transactions', () => {
     await producer?.disconnect();
   });
 
-  it('does not deliver aborted transactional messages under read-committed', async () => {
+  testIfKafkaAtLeast_0_11('does not deliver aborted transactional messages under read-committed', async () => {
     producer = createProducer({
       cluster: createCluster(),
       logger: newLogger(),

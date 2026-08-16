@@ -12,6 +12,8 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
+  testIfKafkaAtLeast_0_11,
+  testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
@@ -46,6 +48,90 @@ describe('broker.produceFetch', () => {
     await leader.connect();
     return leader;
   }
+
+  testIfKafkaAtLeast_0_11('on Kafka 0.11+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 4)', async () => {
+    const target = await connectToLeader();
+    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [],
+    }).request.apiVersion;
+    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+      replicaId: -1,
+      maxWaitTime: 100,
+      minBytes: 1,
+      maxBytes: 1_048_576,
+      topics: [],
+    }).request.apiVersion;
+    console.log(`0.11+ produce/fetch smoke negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBeGreaterThanOrEqual(3);
+    expect(fetchVersion).toBeGreaterThanOrEqual(4);
+
+    const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [
+          {
+            topic: topicName,
+            partitions: [
+              {
+                partition: 0,
+                messages: [{ key: 'k', value: 'v', timestamp, headers: { h: '1' } }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
+
+    const fetched = await target.fetch({
+      replicaId: -1,
+      maxWaitTime: 1000,
+      minBytes: 1,
+      maxBytes: 10_485_760,
+      topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
+    });
+    const record = fetched.responses[0]?.partitions[0]?.messages[0];
+    expect(record?.value?.toString()).toBe('v');
+    const header = record?.headers?.h;
+    const headerValue = Array.isArray(header) ? header[0] : header;
+    expect(headerValue?.toString()).toBe('1');
+  });
+
+  testIfKafkaAtLeast_1_1('on Kafka 1.1+ Fetch incremental sessions (v7+) accept a session id', async () => {
+    const target = await connectToLeader();
+    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+      replicaId: -1,
+      maxWaitTime: 100,
+      minBytes: 1,
+      maxBytes: 1_048_576,
+      topics: [],
+    }).request.apiVersion;
+    expect(fetchVersion).toBeGreaterThanOrEqual(7);
+
+    await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [
+          { topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'session', timestamp }] }] },
+        ],
+      }),
+    );
+    const fetched = await target.fetch({
+      replicaId: -1,
+      maxWaitTime: 1000,
+      minBytes: 1,
+      maxBytes: 10_485_760,
+      sessionId: 0,
+      sessionEpoch: -1,
+      topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
+    });
+    expect(fetched.sessionId).toEqual(expect.any(Number));
+    expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('session');
+  });
 
   testIfKafkaAtLeast_2_4('on Kafka 2.4+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 8)', async () => {
     const target = await connectToLeader();
@@ -89,11 +175,13 @@ describe('broker.produceFetch', () => {
       { key: `key-${secureRandom()}`, value: `value-${secureRandom()}`, timestamp },
     ];
 
-    const produced = await target.produce({
-      acks: 1,
-      timeout: 30_000,
-      topicData: [{ topic: topicName, partitions: [{ partition: 0, messages }] }],
-    });
+    const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [{ topic: topicName, partitions: [{ partition: 0, messages }] }],
+      }),
+    );
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
     expect(produced?.topics[0]?.partitions[0]?.baseOffset).toBe(0n);
 
@@ -113,17 +201,19 @@ describe('broker.produceFetch', () => {
 
   it('produces gzip-compressed records', async () => {
     const target = await connectToLeader();
-    await target.produce({
-      acks: 1,
-      timeout: 30_000,
-      compression: COMPRESSION_TYPES.GZIP,
-      topicData: [
-        {
-          topic: topicName,
-          partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }],
-        },
-      ],
-    });
+    await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        compression: COMPRESSION_TYPES.GZIP,
+        topicData: [
+          {
+            topic: topicName,
+            partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }],
+          },
+        ],
+      }),
+    );
     const fetched = await target.fetch({
       replicaId: -1,
       maxWaitTime: 1000,

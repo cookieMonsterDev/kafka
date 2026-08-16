@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 export const DEFAULT_KAFKA_VERSION = '4.0';
 
 /**
- * Integration matrix. Compose files other than 2.4/3.6/4.0 are added as older-broker coverage lands.
+ * Integration matrix. Compose files other than 0.11/1.1/2.4/3.6/4.0 are added as older-broker coverage lands.
  * @see ../assets/README.md
  */
 export const KAFKA_VERSION_COMPOSE_FILES: Readonly<Record<string, string>> = Object.freeze({
@@ -56,6 +56,10 @@ export function kafkaVersionAtLeast(version: string, envVersion = getKafkaVersio
 
 export function kafkaVersionAtMost(version: string, envVersion = getKafkaVersion()): boolean {
   return compareKafkaVersions(normalizeKafkaVersion(envVersion), normalizeKafkaVersion(version)) <= 0;
+}
+
+export function kafkaVersionEquals(version: string, envVersion = getKafkaVersion()): boolean {
+  return compareKafkaVersions(normalizeKafkaVersion(envVersion), normalizeKafkaVersion(version)) === 0;
 }
 
 /** KRaft production images in this matrix start at Kafka 3.0. */

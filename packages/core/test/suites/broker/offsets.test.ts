@@ -43,11 +43,13 @@ describe('broker.offsets', () => {
     });
     await leader.connect();
 
-    await leader.produce({
-      acks: 1,
-      timeout: 30_000,
-      topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v' }] }] }],
-    });
+    await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      leader.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v' }] }] }],
+      }),
+    );
 
     const listed = await leader.listOffsets({
       topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: -1n }] }],

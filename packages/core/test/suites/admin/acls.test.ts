@@ -34,7 +34,10 @@ describe('admin.acls', () => {
     const topicName = `test-topic-${secureRandom()}`;
     ({ admin, producer } = saslClients());
     await admin.connect();
-    await admin.createTopics({ waitForLeaders: true, topics: [{ topic: topicName }] });
+    await admin.createTopics({
+      waitForLeaders: true,
+      topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+    });
 
     const acl = {
       resourceType: ACL_RESOURCE_TYPES.TOPIC,

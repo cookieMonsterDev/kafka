@@ -21,8 +21,18 @@ describe('admin.topics', () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
 
-    await expect(admin.createTopics({ waitForLeaders: true, topics: [{ topic: topicName }] })).resolves.toBe(true);
-    await expect(admin.createTopics({ waitForLeaders: true, topics: [{ topic: topicName }] })).resolves.toBe(false);
+    await expect(
+      admin.createTopics({
+        waitForLeaders: true,
+        topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+      }),
+    ).resolves.toBe(true);
+    await expect(
+      admin.createTopics({
+        waitForLeaders: true,
+        topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+      }),
+    ).resolves.toBe(false);
 
     expect(await admin.listTopics()).toEqual(expect.arrayContaining([topicName]));
 

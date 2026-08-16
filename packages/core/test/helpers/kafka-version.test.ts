@@ -8,6 +8,7 @@ import {
   isZooKeeperComposeFile,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
+  kafkaVersionEquals,
   normalizeKafkaVersion,
   resolveComposeFile,
 } from './kafka-version';
@@ -31,6 +32,9 @@ describe('test/helpers/kafka-version', () => {
     expect(kafkaVersionAtLeast('0.11', '4.0')).toBe(true);
     expect(kafkaVersionAtMost('0.10', '0.10.2')).toBe(true); // patch is ignored for feature gates
     expect(kafkaVersionAtMost('0.10', '0.11')).toBe(false);
+    expect(kafkaVersionEquals('0.11', '0.11.0')).toBe(true);
+    expect(kafkaVersionEquals('1.1', '1.1.0')).toBe(true);
+    expect(kafkaVersionEquals('0.11', '1.1')).toBe(false);
   });
 
   it('treats 3.0+ as KRaft in this matrix', () => {
@@ -56,6 +60,18 @@ describe('test/helpers/kafka-version', () => {
 
   it('honors an explicit COMPOSE_FILE override', () => {
     expect(resolveComposeFile({ COMPOSE_FILE: '/tmp/custom.yml' })).toBe('/tmp/custom.yml');
+  });
+
+  it('resolves the 0.11 ZooKeeper compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '0.11' });
+    expect(path.basename(composeFile)).toBe('docker-compose.zk-0-11.yml');
+    expect(isZooKeeperComposeFile(composeFile)).toBe(true);
+  });
+
+  it('resolves the 1.1 ZooKeeper compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '1.1' });
+    expect(path.basename(composeFile)).toBe('docker-compose.zk-1-1.yml');
+    expect(isZooKeeperComposeFile(composeFile)).toBe(true);
   });
 
   it('resolves the 2.4 ZooKeeper compose file', () => {

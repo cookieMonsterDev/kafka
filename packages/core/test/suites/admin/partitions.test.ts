@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, newLogger, secureRandom, waitFor } from '../../helpers/index';
+import { createCluster, newLogger, secureRandom, testIfKafkaAtLeast_1_0, waitFor } from '../../helpers/index';
 
 describe('admin.partitions', () => {
   let topicName: string;
@@ -17,10 +17,13 @@ describe('admin.partitions', () => {
     }
   });
 
-  it('adds partitions to an existing topic', async () => {
+  testIfKafkaAtLeast_1_0('adds partitions to an existing topic', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
-    await admin.createTopics({ waitForLeaders: true, topics: [{ topic: topicName, numPartitions: 1 }] });
+    await admin.createTopics({
+      waitForLeaders: true,
+      topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+    });
 
     await admin.createPartitions({ topicPartitions: [{ topic: topicName, count: 3 }] });
 
@@ -32,7 +35,7 @@ describe('admin.partitions', () => {
     expect(topic.partitions).toHaveLength(3);
   });
 
-  it('rejects creating partitions for a missing topic', async () => {
+  testIfKafkaAtLeast_1_0('rejects creating partitions for a missing topic', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
     await expect(

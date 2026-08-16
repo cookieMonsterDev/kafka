@@ -8,9 +8,14 @@ import {
   connectionOpts,
   createConnectionPool,
   newLogger,
+  testIfKafkaAtLeast_0_11,
+  testIfKafkaAtLeast_1_0,
+  testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
   testIfKafkaAtLeast_4_0,
   testIfKafkaAtMost_3_6,
+  testIfKafkaEquals_0_11,
+  testIfKafkaEquals_1_1,
 } from '../../helpers/index';
 
 const emptyProduce = { acks: 1, timeout: 30_000, topicData: [] };
@@ -53,6 +58,50 @@ describe('broker.apiVersions', () => {
 
     expect(produceVersion).toBeGreaterThanOrEqual(3);
     expect(fetchVersion).toBeGreaterThanOrEqual(4);
+  });
+
+  testIfKafkaAtLeast_0_11('Kafka 0.11+ advertises InitProducerId (transactions and headers)', () => {
+    expect(broker!.versions![API_KEYS.InitProducerId]).toEqual(
+      expect.objectContaining({ maxVersion: expect.any(Number) }),
+    );
+  });
+
+  testIfKafkaEquals_0_11('Kafka 0.11 negotiates Produce v3 and Fetch v5', () => {
+    const versions = broker!.versions!;
+    const produceVersion = lookup(versions)(API_KEYS.Produce, Produce)(emptyProduce).request.apiVersion;
+    const fetchVersion = lookup(versions)(API_KEYS.Fetch, Fetch)(emptyFetch).request.apiVersion;
+
+    console.log(`Kafka 0.11 negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBe(3);
+    expect(fetchVersion).toBe(5);
+    expect(versions[API_KEYS.SaslAuthenticate]).toBeUndefined();
+    expect(versions[API_KEYS.CreatePartitions]).toBeUndefined();
+    expect(versions[API_KEYS.DeleteGroups]).toBeUndefined();
+  });
+
+  testIfKafkaAtLeast_1_0('Kafka 1.0+ advertises SaslAuthenticate and CreatePartitions', () => {
+    const versions = broker!.versions!;
+    expect(versions[API_KEYS.SaslAuthenticate]).toEqual(expect.objectContaining({ maxVersion: expect.any(Number) }));
+    expect(versions[API_KEYS.CreatePartitions]).toEqual(expect.objectContaining({ maxVersion: expect.any(Number) }));
+  });
+
+  testIfKafkaEquals_1_1('Kafka 1.1 negotiates Produce v5 and Fetch v7', () => {
+    const versions = broker!.versions!;
+    const produceVersion = lookup(versions)(API_KEYS.Produce, Produce)(emptyProduce).request.apiVersion;
+    const fetchVersion = lookup(versions)(API_KEYS.Fetch, Fetch)(emptyFetch).request.apiVersion;
+
+    console.log(`Kafka 1.1 negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBe(5);
+    expect(fetchVersion).toBe(7);
+  });
+
+  testIfKafkaAtLeast_1_1('Kafka 1.1+ advertises DeleteGroups and Fetch incremental sessions (v7+)', () => {
+    const versions = broker!.versions!;
+    const fetchVersion = lookup(versions)(API_KEYS.Fetch, Fetch)(emptyFetch).request.apiVersion;
+
+    expect(versions[API_KEYS.DeleteGroups]).toEqual(expect.objectContaining({ maxVersion: expect.any(Number) }));
+    expect(fetchVersion).toBeGreaterThanOrEqual(7);
+    expect(versions[API_KEYS.DescribeConfigs]?.maxVersion).toBeGreaterThanOrEqual(1);
   });
 
   testIfKafkaAtLeast_2_4('Kafka 2.4+ negotiates Produce >= 3 and Fetch >= 8', () => {

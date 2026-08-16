@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types';
-import { createCluster, createTopic, newLogger, secureRandom, waitFor } from '../../helpers/index';
+import { createCluster, createTopic, newLogger, secureRandom, testIfKafkaAtLeast_1_1, waitFor } from '../../helpers/index';
 
 describe('admin.configs', () => {
   let topicName: string;
@@ -64,5 +64,25 @@ describe('admin.configs', () => {
       resources: [{ type: CONFIG_RESOURCE_TYPES.BROKER, name: brokerId }],
     });
     expect(described.resources[0]?.configEntries.length).toBeGreaterThan(0);
+  });
+
+  testIfKafkaAtLeast_1_1('returns config synonyms when requested', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const described = await admin.describeConfigs({
+      includeSynonyms: true,
+      resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: topicName, configNames: ['cleanup.policy'] }],
+    });
+    const cleanup = described.resources
+      .find((r) => r.resourceName === topicName)
+      ?.configEntries.find((c) => c.configName === 'cleanup.policy');
+    expect(cleanup?.configSynonyms.length).toBeGreaterThan(0);
+    expect(cleanup?.configSynonyms[0]).toEqual(
+      expect.objectContaining({
+        configName: expect.any(String),
+        configSource: expect.any(Number),
+      }),
+    );
   });
 });

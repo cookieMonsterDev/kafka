@@ -30,7 +30,7 @@ describe('security.ssl', () => {
 
     try {
       await admin.connect();
-      await admin.createTopics({ waitForLeaders: true, topics: [{ topic }] });
+      await admin.createTopics({ waitForLeaders: true, topics: [{ topic, numPartitions: 1, replicationFactor: 1 }] });
       await producer.connect();
       await consumer.connect();
       await consumer.subscribe({ topic, fromBeginning: true });

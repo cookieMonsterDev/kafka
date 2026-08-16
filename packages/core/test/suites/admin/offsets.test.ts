@@ -80,6 +80,11 @@ describe('admin.offsets', () => {
     await producer.connect();
     await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
 
+    await admin.setOffsets({
+      groupId,
+      topic: topicName,
+      partitions: [{ partition: 0, offset: 3n }],
+    });
     await admin.resetOffsets({ groupId, topic: topicName, earliest: true });
     const offsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
     expect(offsets[0]?.partitions[0]?.offset).toBe(BigInt(EARLIEST_OFFSET));

@@ -70,6 +70,11 @@ export const createTopicsRequestV2 = defineRequest({
   schema: requestSchema,
 });
 
+/**
+ * `-1` means "broker default" or "using replica_assignment". Kafka 0.11–2.3 reject
+ * `numPartitions: -1` without an assignment (`INVALID_PARTITIONS`); callers targeting
+ * those brokers must pass a positive partition count.
+ */
 export function withTopicDefaults(topics: readonly CreateTopicInput[]): CreateTopicWireFields[] {
   return topics.map(
     ({ topic, numPartitions = -1, replicationFactor = -1, replicaAssignment = [], configEntries = [] }) => ({

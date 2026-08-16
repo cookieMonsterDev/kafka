@@ -8,6 +8,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('producer.idempotent', () => {
@@ -35,7 +36,7 @@ describe('producer.idempotent', () => {
     await producer?.disconnect();
   });
 
-  it('writes sequential messages once and in order', async () => {
+  testIfKafkaAtLeast_0_11('writes sequential messages once and in order', async () => {
     expect(producer!.isIdempotent()).toBe(true);
     const messages = Array.from({ length: 4 }, (_, i) => ({ key: `k-${i}`, value: `${i}` }));
     for (const message of messages) {

@@ -8,6 +8,7 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('broker.transactions', () => {
@@ -41,7 +42,7 @@ describe('broker.transactions', () => {
     await seedBroker?.disconnect();
   });
 
-  it('allocates a producer id and runs a transaction', async () => {
+  testIfKafkaAtLeast_0_11('allocates a producer id and runs a transaction', async () => {
     const init = await retryProtocol(['GROUP_LOAD_IN_PROGRESS', 'NOT_COORDINATOR_FOR_GROUP'], () =>
       coordinator!.initProducerId({ transactionalId, transactionTimeout: 30_000 }),
     );
@@ -66,7 +67,7 @@ describe('broker.transactions', () => {
     expect(ended.errorCode).toBe(0);
   });
 
-  it('allocates a producer id without a transactional id', async () => {
+  testIfKafkaAtLeast_0_11('allocates a producer id without a transactional id', async () => {
     const init = await retryProtocol(['GROUP_LOAD_IN_PROGRESS', 'NOT_COORDINATOR_FOR_GROUP'], () =>
       coordinator!.initProducerId({ transactionalId: null, transactionTimeout: 30_000 }),
     );

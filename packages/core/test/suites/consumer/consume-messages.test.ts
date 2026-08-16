@@ -9,6 +9,7 @@ import {
   generateMessages,
   newLogger,
   secureRandom,
+  testIfKafkaAtLeast_0_11,
   waitForConsumerToJoinGroup,
   waitForMessages,
 } from '../../helpers/index';
@@ -78,5 +79,41 @@ describe('consumer.consumeMessages', () => {
     await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
     await waitForMessages(consumed, { number: 5 });
     expect(consumed.map((m) => m.offset)).toEqual([0n, 1n, 2n, 3n, 4n]);
+  });
+
+  testIfKafkaAtLeast_0_11('consumes RecordBatch messages with headers', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        {
+          key: 'key-0',
+          value: 'value-0',
+          headers: { 'header-a': 'header-value-a', 'header-b': 'header-value-b' },
+        },
+      ],
+    });
+    await waitForMessages(consumed, { number: 1 });
+
+    const headers = consumed[0]?.message.headers ?? {};
+    const headerValue = (value: (typeof headers)[string] | undefined) => {
+      const first = Array.isArray(value) ? value[0] : value;
+      return first?.toString();
+    };
+    expect(consumed[0]?.message.value?.toString()).toBe('value-0');
+    expect(headerValue(headers['header-a'])).toBe('header-value-a');
+    expect(headerValue(headers['header-b'])).toBe('header-value-b');
   });
 });

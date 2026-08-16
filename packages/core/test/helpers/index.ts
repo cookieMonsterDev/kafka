@@ -7,6 +7,7 @@ import {
   isKRaftKafkaVersion,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
+  kafkaVersionEquals,
 } from './kafka-version';
 import { createAdmin } from '../../src/admin/index';
 import { Broker } from '../../src/broker/index';
@@ -451,10 +452,14 @@ function testIfKafkaVersion(version: string, compare: (target: string) => boolea
 }
 
 export const testIfKafkaAtMost_0_10 = testIfKafkaVersion('0.10', kafkaVersionAtMost);
+export const testIfKafkaAtMost_0_11 = testIfKafkaVersion('0.11', kafkaVersionAtMost);
+export const testIfKafkaAtMost_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtMost);
 export const testIfKafkaAtMost_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtMost);
 export const testIfKafkaAtLeast_0_11 = testIfKafkaVersion('0.11', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_0 = testIfKafkaVersion('1.0', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtLeast);
+export const testIfKafkaEquals_0_11 = testIfKafkaVersion('0.11', kafkaVersionEquals);
+export const testIfKafkaEquals_1_1 = testIfKafkaVersion('1.1', kafkaVersionEquals);
 export const testIfKafkaAtLeast_2_1 = testIfKafkaVersion('2.1', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_2 = testIfKafkaVersion('2.2', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_4 = testIfKafkaVersion('2.4', kafkaVersionAtLeast);
@@ -469,6 +474,7 @@ export {
   isZooKeeperComposeFile,
   kafkaVersionAtLeast,
   kafkaVersionAtMost,
+  kafkaVersionEquals,
   resolveComposeFile,
 } from './kafka-version';
 

@@ -1,0 +1,133 @@
+# 3-broker Kafka 0.11 ZooKeeper cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
+# Image is Confluent 3.3.3 (Kafka 0.11). Host ports match the KRaft stacks: 9092/9095/9098
+# PLAINTEXT, 9093/9096/9099 SSL, 9094/9097/9100 SASL_SSL.
+# Confluent 3.3.3 is amd64-only; Apple Silicon needs qemu via platform: linux/amd64.
+# RecordBatch + transactions + headers. No SaslAuthenticate API (handshake + raw SASL bytes).
+# SCRAM users are created after start by scripts/create-scram-credentials.sh.
+
+name: kafka-core-zk-0-11
+
+x-broker-common: &broker-common
+  image: confluentinc/cp-kafka:3.3.3
+  platform: linux/amd64
+  restart: unless-stopped
+  depends_on:
+    zookeeper:
+      condition: service_healthy
+  volumes:
+    - ./certs:/etc/kafka/secrets:ro
+    - ./kafka/server-jaas-zk.conf:/etc/kafka/server-jaas.conf:ro
+  environment: &broker-env
+    KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL
+    KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+    KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+    KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+    KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    KAFKA_NUM_PARTITIONS: 2
+    KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+    KAFKA_DELETE_TOPIC_ENABLE: 'true'
+    KAFKA_LOG4J_LOGGERS: kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO
+    CONFLUENT_SUPPORT_METRICS_ENABLE: 'false'
+    KAFKA_SSL_KEYSTORE_FILENAME: kafka.server.keystore-java8.p12
+    KAFKA_SSL_KEYSTORE_TYPE: PKCS12
+    KAFKA_SSL_KEYSTORE_CREDENTIALS: keystore_creds
+    KAFKA_SSL_KEY_CREDENTIALS: sslkey_creds
+    KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.server.truststore-java8.p12
+    KAFKA_SSL_TRUSTSTORE_TYPE: PKCS12
+    KAFKA_SSL_TRUSTSTORE_CREDENTIALS: truststore_creds
+    KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ''
+    KAFKA_SSL_CLIENT_AUTH: none
+    KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/server-jaas.conf
+    KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+    KAFKA_SASL_ENABLED_MECHANISMS: PLAIN,SCRAM-SHA-256,SCRAM-SHA-512
+    KAFKA_AUTHORIZER_CLASS_NAME: kafka.security.auth.SimpleAclAuthorizer
+    KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'true'
+    KAFKA_SUPER_USERS: User:ANONYMOUS;User:test;User:admin;User:testscram
+  healthcheck: &broker-healthcheck
+    # kafka-broker-api-versions in this image execs kafka-run-class.sh, which is not shipped
+    # (only kafka-run-class). kafka-topics --zookeeper is the reliable liveness check.
+    test: ['CMD-SHELL', 'kafka-topics --zookeeper zookeeper:2181 --list >/dev/null 2>&1']
+    interval: 5s
+    timeout: 10s
+    retries: 48
+    start_period: 90s
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:3.3.3
+    platform: linux/amd64
+    hostname: zookeeper
+    container_name: kafka-core-zk-0-11-zookeeper
+    labels:
+      custom.project: kafka-core
+      custom.service: zookeeper
+    ports:
+      - '2181:2181'
+    environment:
+      ZOOKEEPER_CLIENT_PORT: '2181'
+      ZOOKEEPER_TICK_TIME: '2000'
+      KAFKA_OPTS: >-
+        -Djava.security.auth.login.config=/etc/kafka/server-jaas.conf
+        -Dzookeeper.authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+    volumes:
+      - ./kafka/server-jaas-zk.conf:/etc/kafka/server-jaas.conf:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'echo ruok | nc 127.0.0.1 2181 | grep imok']
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 30s
+
+  kafka1:
+    <<: *broker-common
+    hostname: kafka1
+    container_name: kafka-core-zk-0-11-kafka1
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka1
+    ports:
+      - '9092:9092'
+      - '9093:9093'
+      - '9094:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_BROKER_ID: 0
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,SSL://0.0.0.0:9093,SASL_SSL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29092,PLAINTEXT_HOST://localhost:9092,SSL://localhost:9093,SASL_SSL://localhost:9094
+
+  kafka2:
+    <<: *broker-common
+    hostname: kafka2
+    container_name: kafka-core-zk-0-11-kafka2
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka2
+    ports:
+      - '9095:9092'
+      - '9096:9093'
+      - '9097:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_BROKER_ID: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,SSL://0.0.0.0:9093,SASL_SSL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:29092,PLAINTEXT_HOST://localhost:9095,SSL://localhost:9096,SASL_SSL://localhost:9097
+
+  kafka3:
+    <<: *broker-common
+    hostname: kafka3
+    container_name: kafka-core-zk-0-11-kafka3
+    labels:
+      custom.project: kafka-core
+      custom.service: kafka3
+    ports:
+      - '9098:9092'
+      - '9099:9093'
+      - '9100:9094'
+    environment:
+      <<: *broker-env
+      KAFKA_BROKER_ID: 2
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092,SSL://0.0.0.0:9093,SASL_SSL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:29092,PLAINTEXT_HOST://localhost:9098,SSL://localhost:9099,SASL_SSL://localhost:9100

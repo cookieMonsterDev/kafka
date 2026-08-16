@@ -8,6 +8,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('producer.transactions', () => {
@@ -27,7 +28,7 @@ describe('producer.transactions', () => {
     await producer?.disconnect();
   });
 
-  it('commits a transaction so the consumer sees the messages', async () => {
+  testIfKafkaAtLeast_0_11('commits a transaction so the consumer sees the messages', async () => {
     producer = createProducer({
       cluster: createCluster(),
       logger: newLogger(),
@@ -59,7 +60,7 @@ describe('producer.transactions', () => {
     expect(consumed[0]?.message.value?.toString()).toBe('committed');
   });
 
-  it('aborts a transaction so the consumer sees nothing', async () => {
+  testIfKafkaAtLeast_0_11('aborts a transaction so the consumer sees nothing', async () => {
     producer = createProducer({
       cluster: createCluster(),
       logger: newLogger(),
@@ -91,7 +92,7 @@ describe('producer.transactions', () => {
     expect(consumed).toHaveLength(0);
   });
 
-  it('cancels an in-flight transaction when a second producer uses the same id', async () => {
+  testIfKafkaAtLeast_0_11('cancels an in-flight transaction when a second producer uses the same id', async () => {
     const first = createProducer({
       cluster: createCluster(),
       logger: newLogger(),

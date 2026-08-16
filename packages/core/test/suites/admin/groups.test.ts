@@ -6,6 +6,8 @@ import {
   createTopic,
   newLogger,
   secureRandom,
+  testIfKafkaAtLeast_1_1,
+  waitFor,
   waitForConsumerToJoinGroup,
 } from '../../helpers/index';
 
@@ -26,7 +28,7 @@ describe('admin.groups', () => {
     await admin?.disconnect();
   });
 
-  it('lists, describes, and deletes consumer groups', async () => {
+  it('lists and describes consumer groups', async () => {
     const cluster = createCluster();
     admin = createAdmin({ cluster, logger: newLogger() });
     consumer = createConsumer({
@@ -49,9 +51,32 @@ describe('admin.groups', () => {
     const described = await admin.describeGroups([groupId]);
     expect(described.groups[0]?.groupId).toBe(groupId);
     expect(described.groups[0]?.members.length).toBeGreaterThan(0);
+  });
 
+  testIfKafkaAtLeast_1_1('deletes consumer groups', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      logger: newLogger(),
+    });
+
+    await admin.connect();
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer);
+    await consumer.run({ eachMessage: async () => undefined });
+    await join;
     await consumer.disconnect();
     consumer = undefined;
+
+    await waitFor(async () => {
+      const described = await admin.describeGroups([groupId]);
+      const state = described.groups[0]?.state;
+      return state === 'Empty' || state === 'Dead' ? state : false;
+    });
 
     const deleted = await admin.deleteGroups([groupId]);
     expect(deleted[0]?.groupId).toBe(groupId);

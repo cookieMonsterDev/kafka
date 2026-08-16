@@ -9,6 +9,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
+  testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
 
 describe('e2e.exactlyOnce', () => {
@@ -28,7 +29,7 @@ describe('e2e.exactlyOnce', () => {
     await producer?.disconnect();
   });
 
-  it('commits consumer offsets inside a producer transaction', async () => {
+  testIfKafkaAtLeast_0_11('commits consumer offsets inside a producer transaction', async () => {
     producer = createProducer({
       cluster: createCluster(),
       logger: newLogger(),

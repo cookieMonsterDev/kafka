@@ -9,14 +9,14 @@ import {
   createCluster,
   newLogger,
   saslBrokers,
-  saslConnectionOpts,
+  saslEntries,
   secureRandom,
   testIfKafkaAtLeast_0_11,
   waitFor,
 } from '../../helpers/index';
 
 function saslClients() {
-  const opts = { ...saslConnectionOpts(), metadataMaxAge: 50 };
+  const opts = { ...saslEntries[0]!.opts(), metadataMaxAge: 50 };
   const admin = createAdmin({ cluster: createCluster(opts, saslBrokers()), logger: newLogger() });
   const producer = createProducer({ cluster: createCluster(opts, saslBrokers()), logger: newLogger() });
   return { admin, producer };

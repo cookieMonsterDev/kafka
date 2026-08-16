@@ -436,6 +436,9 @@ export function describeIfOauthbearerDisabled(name: string, fn: () => void): voi
   runDescribe(run, name, fn);
 }
 
+/** SCRAM/PLAIN-only cases: the OAUTHBEARER compose file does not enable those mechanisms. */
+export const testIfOauthbearerDisabled = process.env.OAUTHBEARER_ENABLED === '1' ? it.skip : it;
+
 export function describeIfKRaft(name: string, fn: () => void): void {
   runDescribe(isKRaftKafkaVersion() ? describe : describe.skip, name, fn);
 }
@@ -458,6 +461,7 @@ export const testIfKafkaAtLeast_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtLe
 export const testIfKafkaEquals_0_10 = testIfKafkaVersion('0.10', kafkaVersionEquals);
 export const testIfKafkaEquals_0_11 = testIfKafkaVersion('0.11', kafkaVersionEquals);
 export const testIfKafkaEquals_1_1 = testIfKafkaVersion('1.1', kafkaVersionEquals);
+export const testIfKafkaEquals_3_6 = testIfKafkaVersion('3.6', kafkaVersionEquals);
 export const testIfKafkaAtLeast_2_1 = testIfKafkaVersion('2.1', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_2 = testIfKafkaVersion('2.2', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_4 = testIfKafkaVersion('2.4', kafkaVersionAtLeast);

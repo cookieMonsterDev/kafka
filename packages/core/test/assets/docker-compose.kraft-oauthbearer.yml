@@ -46,7 +46,8 @@ x-broker-common: &broker-common
     KAFKA_CONNECTIONS_MAX_REAUTH_MS: 15000
     KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
     KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: 'true'
-    KAFKA_SUPER_USERS: User:ANONYMOUS;User:admin
+    # User:test matches the unsecured JWT `sub` used by oauthbearer tests.
+    KAFKA_SUPER_USERS: User:ANONYMOUS;User:test;User:admin
   healthcheck: &broker-healthcheck
     test: ['CMD-SHELL', '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1']
     interval: 5s

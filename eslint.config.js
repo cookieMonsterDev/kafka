@@ -52,6 +52,8 @@ export default tseslint.config(
             'testIfKafkaEquals_0_10',
             'testIfKafkaEquals_0_11',
             'testIfKafkaEquals_1_1',
+            'testIfKafkaEquals_3_6',
+            'testIfOauthbearerDisabled',
             'testIfKafkaAtLeast_2_1',
             'testIfKafkaAtLeast_2_2',
             'testIfKafkaAtLeast_2_4',

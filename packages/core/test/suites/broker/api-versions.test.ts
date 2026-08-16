@@ -14,9 +14,9 @@ import {
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
   testIfKafkaAtLeast_4_0,
-  testIfKafkaAtMost_3_6,
   testIfKafkaEquals_0_11,
   testIfKafkaEquals_1_1,
+  testIfKafkaEquals_3_6,
 } from '../../helpers/index';
 
 const emptyProduce = { acks: 1, timeout: 30_000, topicData: [] };
@@ -127,7 +127,7 @@ describe('broker.apiVersions', () => {
     expect(fetchVersion).toBeGreaterThanOrEqual(8);
   });
 
-  testIfKafkaAtMost_3_6('Kafka 3.x advertises Produce minVersion 0; the client still uses RecordBatch v3+', () => {
+  testIfKafkaEquals_3_6('Kafka 3.x advertises Produce minVersion 0; the client still uses RecordBatch v3+', () => {
     const produce = broker!.versions![API_KEYS.Produce];
     expect(produce?.minVersion).toBe(0);
     expect(produce?.maxVersion).toBeGreaterThanOrEqual(3);

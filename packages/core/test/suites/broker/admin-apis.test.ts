@@ -7,6 +7,7 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
+  testIfKafkaAtLeast_0_11,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
 
@@ -53,7 +54,7 @@ describe('broker.adminApis', () => {
     expect(deleted.topicErrors[0]?.errorCode).toBe(0);
   });
 
-  it('describes topic configs', async () => {
+  testIfKafkaAtLeast_0_11('describes topic configs', async () => {
     const controller = await connectToController();
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
       controller.createTopics({ topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }] }),

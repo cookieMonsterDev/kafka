@@ -7,6 +7,7 @@ import {
   saslEntries,
   saslSCRAM256ConnectionOpts,
   sslConnectionOpts,
+  testIfOauthbearerDisabled,
 } from '../../helpers/index';
 
 describe('broker.connection', () => {
@@ -52,7 +53,7 @@ describe('broker.connection', () => {
     expect(broker.isConnected()).toBe(true);
   });
 
-  it('handles parallel SCRAM connect calls', async () => {
+  testIfOauthbearerDisabled('handles parallel SCRAM connect calls', async () => {
     broker = new Broker({
       connectionPool: createConnectionPool(saslSCRAM256ConnectionOpts()),
       logger: newLogger(),

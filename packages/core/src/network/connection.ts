@@ -7,7 +7,7 @@ import type { Logger } from '../loggers/index.js';
 import { createRequest } from '../protocol/request.js';
 import { Decoder } from '../protocol/decoder.js';
 import { API_KEYS } from '../protocol/requests/api-keys.js';
-import type { AnyRequestDefinition, BrokerVersions } from '../protocol/requests/index.js';
+import type { AnyRequestDefinition, AnyResponseDefinition, BrokerVersions } from '../protocol/requests/index.js';
 import { sharedPromiseTo } from '../utils/shared-promise-to.js';
 import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status.js';
 import type { ConnectionStatus } from './connection-status.js';
@@ -51,10 +51,16 @@ export interface AuthenticationProviderArgs {
   host: string;
   port: number;
   logger: Logger;
-  saslAuthenticate<ParseResult>(args: {
+  /**
+   * `Decoded` and `ParseResult` are independent type parameters (not one type reused for both)
+   * because a mechanism's `decode` and `parse` steps can genuinely differ - SCRAM's `decode`
+   * yields a raw `Buffer` that `parse` only then turns into `{r, s, i, ...}`, while PLAIN's both
+   * steps just resolve `true` without ever looking at the bytes.
+   */
+  saslAuthenticate: <Decoded, ParseResult = Decoded>(args: {
     request: { encode(): Buffer | Promise<Buffer> };
-    response?: { decode(rawResponse: Buffer): Buffer | Promise<Buffer>; parse(data: Buffer): ParseResult };
-  }): Promise<ParseResult | void>;
+    response?: { decode(rawResponse: Buffer): Promise<Decoded>; parse(data: Decoded): Promise<ParseResult> };
+  }) => Promise<ParseResult | undefined>;
 }
 
 export interface SaslAuthenticationProvider {
@@ -121,6 +127,28 @@ export interface SendOptions<T> {
   response: ConnectionResponseDefinition<T>;
   requestTimeout?: number | null;
   logResponseError?: boolean;
+}
+
+/**
+ * A version-dispatched family's `protocol({version})(values)` result (`ProtocolResult` from
+ * `protocol/requests/index.ts`) has an untyped `response` by design - the version picked is a
+ * runtime decision, so its shape can't be known at the dispatch layer. Callers that know which
+ * concrete response type a family resolves to (broker methods, the SASL authenticator) use this to
+ * recover that type for `Connection#send`/`ConnectionPool#send`, in one clearly-labeled place
+ * rather than casting ad hoc at every call site.
+ */
+export function asTypedSend<T>(protocolResult: {
+  request: AnyRequestDefinition;
+  response: AnyResponseDefinition;
+  logResponseError?: boolean;
+  requestTimeout?: number | null;
+}): SendOptions<T> {
+  return {
+    request: protocolResult.request,
+    response: protocolResult.response as ConnectionResponseDefinition<T>,
+    logResponseError: protocolResult.logResponseError,
+    requestTimeout: protocolResult.requestTimeout,
+  };
 }
 
 /**
@@ -392,20 +420,32 @@ export class Connection {
     await this.#authenticate();
   }
 
-  sendAuthRequest<T>({
+  /**
+   * The pre-KIP-152 raw SASL exchange path: writes a mechanism's raw bytes directly to the socket
+   * with no Kafka request framing, and (optionally) decodes the broker's raw reply the same way.
+   * `response` is omitted for exchange steps that don't care about the reply's content — only that
+   * one arrives — since every broker in scope for this port speaks `SaslAuthenticate` (KIP-152) and
+   * never actually exercises this path; it exists for parity with the public `Authenticator` shape.
+   */
+  sendAuthRequest<Decoded, ParseResult = Decoded>({
     request,
     response,
   }: {
-    request: Pick<AnyRequestDefinition, 'encode'>;
-    response: { decode(rawData: Buffer): Promise<T>; parse(data: T): Promise<T> };
-  }): Promise<T> {
-    this.#authExpectResponse = true;
+    request: { encode(): Buffer | Promise<Buffer> };
+    response?: { decode(rawData: Buffer): Promise<Decoded>; parse(data: Decoded): Promise<ParseResult> };
+  }): Promise<ParseResult | undefined> {
+    this.#authExpectResponse = !!response;
 
     return new Promise((resolve, reject) => {
       this.#authHandlers = {
         onSuccess: (rawData) => {
           this.#authHandlers = null;
           this.#authExpectResponse = false;
+
+          if (!response) {
+            resolve(undefined);
+            return;
+          }
 
           response
             .decode(rawData)
@@ -430,7 +470,7 @@ export class Connection {
         try {
           const requestPayload = await request.encode();
           this.#failIfNotConnected();
-          this.#socket!.write(requestPayload.buffer, 'binary');
+          this.#socket!.write(requestPayload, 'binary');
         } catch (e) {
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the encode/write failure as-is
           reject(e);

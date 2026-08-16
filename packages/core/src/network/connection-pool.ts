@@ -11,11 +11,28 @@ const FETCH_CONNECTION_INDEX = 1;
  * A small fixed-size pool of `Connection`s to one broker. Every non-`Fetch` request shares
  * connection 0; `Fetch` always uses connection 1, so a long-poll fetch never blocks other
  * requests to the same broker on the same socket.
+ *
+ * Mirrors the constructor options as public fields (`host`/`port`/`rack`/`sasl`/`connectionTimeout`)
+ * because the cluster/broker layer above reads (and, for `rack`, writes back) them directly - e.g.
+ * comparing a cached broker's address against fresh metadata, or recording a broker's rack once
+ * metadata reveals it.
  */
 export class ConnectionPool {
+  readonly host: string;
+  readonly port: number;
+  rack: string | null;
+  readonly sasl: ConnectionOptions['sasl'];
+  readonly connectionTimeout: number;
+  readonly clientId: string;
   readonly pool: readonly Connection[];
 
   constructor(options: ConnectionOptions) {
+    this.host = options.host;
+    this.port = options.port;
+    this.rack = options.rack ?? null;
+    this.sasl = options.sasl ?? null;
+    this.connectionTimeout = options.connectionTimeout;
+    this.clientId = options.clientId ?? 'kafkajs';
     this.pool = Array.from({ length: POOL_SIZE }, () => new Connection(options));
   }
 

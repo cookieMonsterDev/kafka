@@ -2,7 +2,7 @@ import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import { staleMetadata } from '../protocol/error-codes';
 import type { CompressionType } from '../protocol/compression/index';
-import { KafkaMetadataNotLoaded } from '../errors';
+import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier } from '../retry/index';
 import { createTopicData } from './create-topic-data';
@@ -157,6 +157,17 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           logger.error(`Failed to send messages: ${error.message}`, { retryCount, retryTime });
           await cluster.refreshMetadata();
           throw error;
+        }
+
+        // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this PID after
+        // retention. KIP-360 lets a v2+ InitProducerId bump the epoch so produce can continue.
+        if (error.type === 'UNKNOWN_PRODUCER_ID' && eosManager.isInitialized()) {
+          logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
+            retryCount,
+            retryTime,
+          });
+          await eosManager.initProducerId();
+          throw new KafkaProtocolError(error, { retriable: true });
         }
 
         logger.error(`${error.message}`, { retryCount, retryTime });

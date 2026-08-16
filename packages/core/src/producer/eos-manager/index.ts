@@ -151,6 +151,8 @@ export function createEosManager({
         const result = await broker.initProducerId({
           transactionalId: transactional ? transactionalId! : null,
           transactionTimeout,
+          producerId: producerId === NO_PRODUCER_ID ? -1n : producerId,
+          producerEpoch: producerId === NO_PRODUCER_ID ? -1 : producerEpoch,
         });
 
         stateMachine.transitionTo(TRANSACTION_STATES.READY);

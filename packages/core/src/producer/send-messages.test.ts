@@ -49,6 +49,8 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
     getTransactionalId: vi.fn().mockReturnValue(undefined),
     updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
+    isInitialized: vi.fn().mockReturnValue(false),
+    initProducerId: vi.fn().mockResolvedValue(undefined),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
     acquireBrokerLock: vi.fn().mockResolvedValue(undefined),
     releaseBrokerLock: vi.fn().mockResolvedValue(undefined),
@@ -340,5 +342,53 @@ describe('producer/sendMessages', () => {
     await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
+  });
+
+  it('reallocates the producer id and retries produce on UNKNOWN_PRODUCER_ID', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
+    brokers[1].produce
+      .mockImplementationOnce(() => Promise.reject(createErrorFromCode(code)))
+      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager({
+      isInitialized: vi.fn().mockReturnValue(true),
+      initProducerId: vi.fn().mockResolvedValue(undefined),
+    });
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+
+    expect(eosManager.initProducerId).toHaveBeenCalledTimes(1);
+    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
+    brokers[1].produce.mockImplementationOnce(() => Promise.reject(createErrorFromCode(code)));
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager();
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
+
+    expect(eosManager.initProducerId).not.toHaveBeenCalled();
   });
 });

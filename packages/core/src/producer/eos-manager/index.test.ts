@@ -54,7 +54,12 @@ describe('producer/eosManager', () => {
     await eosManager.initProducerId();
 
     expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled();
-    expect(broker.initProducerId).toHaveBeenCalledWith({ transactionalId: null, transactionTimeout: 30_000 });
+    expect(broker.initProducerId).toHaveBeenCalledWith({
+      transactionalId: null,
+      transactionTimeout: 30_000,
+      producerId: -1n,
+      producerEpoch: -1,
+    });
 
     expect(eosManager.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
     expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
@@ -89,6 +94,32 @@ describe('producer/eosManager', () => {
     expect(eosManager.getSequence(topic, 1)).toBe(0); // Sequences reset by initProducerId.
   });
 
+  it('passes the current producer id and epoch on later InitProducerId calls', async () => {
+    const broker = fakeBroker();
+    const cluster = fakeCluster(broker);
+    const eosManager = createEosManager({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      transactionTimeout: 30_000,
+    });
+
+    await eosManager.initProducerId();
+    expect(broker.initProducerId).toHaveBeenLastCalledWith({
+      transactionalId: null,
+      transactionTimeout: 30_000,
+      producerId: -1n,
+      producerEpoch: -1,
+    });
+
+    await eosManager.initProducerId();
+    expect(broker.initProducerId).toHaveBeenLastCalledWith({
+      transactionalId: null,
+      transactionTimeout: 30_000,
+      producerId: mockInitProducerIdResponse.producerId,
+      producerEpoch: mockInitProducerIdResponse.producerEpoch,
+    });
+  });
+
   describe('when transactional', () => {
     const transactionalId = 'transactional-id';
 
@@ -109,7 +140,12 @@ describe('producer/eosManager', () => {
         groupId: transactionalId,
         coordinatorType: COORDINATOR_TYPES.TRANSACTION,
       });
-      expect(broker.initProducerId).toHaveBeenCalledWith({ transactionalId, transactionTimeout: 30_000 });
+      expect(broker.initProducerId).toHaveBeenCalledWith({
+        transactionalId,
+        transactionTimeout: 30_000,
+        producerId: -1n,
+        producerEpoch: -1,
+      });
       expect(eosManager.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
     });
 

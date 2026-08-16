@@ -53,10 +53,10 @@ and [consumer configs](https://kafka.apache.org/43/configuration/consumer-config
 (`PartitionAssigners`). The default assigner is still round-robin. Groups use
 the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
-`auto.offset.reset=none` is not a first-class config; `fromBeginning` is a
-boolean (earliest vs latest). Cooperative rebalance still uses eager join/sync
-on this client (the assignor withholds moving partitions; the runtime does not
-yet do incremental revoke).
+`fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
+is supported and throws if there is no committed offset. Cooperative rebalance
+still uses eager join/sync on this client (the assignor withholds moving
+partitions; the runtime does not yet do incremental revoke).
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43

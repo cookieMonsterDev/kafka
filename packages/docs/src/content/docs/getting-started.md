@@ -95,7 +95,8 @@ await consumer.run({
 is an async iterator over batches with backpressure; it cannot run alongside
 `run()`. Isolation defaults to `read_committed` (`readUncommitted: false`);
 Java default `isolation.level` is `read_uncommitted`. `fromBeginning` is
-boolean (earliest vs latest); there is no `auto.offset.reset=none`.
+boolean (earliest vs latest). Pass `autoOffsetReset: 'none'` to throw if the
+group has no committed offset.
 
 Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`); the default is round-robin. Groups use the classic

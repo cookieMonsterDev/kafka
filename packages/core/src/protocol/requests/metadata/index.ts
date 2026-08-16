@@ -13,10 +13,18 @@ import { metadataRequestV5 } from './v5/request';
 import { metadataResponseV5 } from './v5/response';
 import { metadataRequestV6 } from './v6/request';
 import { metadataResponseV6 } from './v6/response';
+import { metadataRequestV7 } from './v7/request';
+import { metadataResponseV7 } from './v7/response';
+import { metadataRequestV8 } from './v8/request';
+import { metadataResponseV8 } from './v8/response';
+import { metadataRequestV9 } from './v9/request';
+import { metadataResponseV9 } from './v9/response';
 
 export interface MetadataOptions {
   topics?: string[];
   allowAutoTopicCreation?: boolean;
+  includeClusterAuthorizedOperations?: boolean;
+  includeTopicAuthorizedOperations?: boolean;
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
@@ -35,6 +43,38 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
   6: ({ topics = [], allowAutoTopicCreation = true }) => ({
     request: metadataRequestV6({ topics, allowAutoTopicCreation }),
     response: metadataResponseV6,
+  }),
+  7: ({ topics = [], allowAutoTopicCreation = true }) => ({
+    request: metadataRequestV7({ topics, allowAutoTopicCreation }),
+    response: metadataResponseV7,
+  }),
+  8: ({
+    topics = [],
+    allowAutoTopicCreation = true,
+    includeClusterAuthorizedOperations = false,
+    includeTopicAuthorizedOperations = false,
+  }) => ({
+    request: metadataRequestV8({
+      topics,
+      allowAutoTopicCreation,
+      includeClusterAuthorizedOperations,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV8,
+  }),
+  9: ({
+    topics = [],
+    allowAutoTopicCreation = true,
+    includeClusterAuthorizedOperations = false,
+    includeTopicAuthorizedOperations = false,
+  }) => ({
+    request: metadataRequestV9({
+      topics,
+      allowAutoTopicCreation,
+      includeClusterAuthorizedOperations,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV9,
   }),
 };
 

@@ -1,6 +1,12 @@
 import { createErrorFromCode, failure } from '../../error-codes';
 
 /**
+ * Java `Integer.MIN_VALUE`. Brokers send this for `cluster_authorized_operations` /
+ * `topic_authorized_operations` when those bitmasks were not computed (include flags false).
+ */
+export const AUTHORIZED_OPERATIONS_OMITTED = -2147483648;
+
+/**
  * Shared Metadata error check: topic-level error first, then each partition's.
  * Each response version keeps its own body type and calls this helper.
  */

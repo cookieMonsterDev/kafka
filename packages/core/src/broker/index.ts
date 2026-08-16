@@ -97,7 +97,7 @@ import type { ListPartitionReassignmentsRequestV0Options } from '../protocol/req
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import { Metadata } from '../protocol/requests/metadata/index';
 import type { MetadataOptions } from '../protocol/requests/metadata/index';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
 import { OffsetCommit } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response';
@@ -255,7 +255,7 @@ export class Broker {
     return versions;
   }
 
-  async metadata(topics: string[] = []): Promise<MetadataResponseV6Body> {
+  async metadata(topics: string[] = []): Promise<MetadataResponseV9Body> {
     const metadata = this.lookupRequest<MetadataOptions>(API_KEYS.Metadata, Metadata);
     const shuffledTopics = shuffle(topics);
     const protocol = metadata({ topics: shuffledTopics, allowAutoTopicCreation: this.allowAutoTopicCreation });
@@ -272,7 +272,7 @@ export class Broker {
       response: {
         decode: (rawData: Buffer) => protocol.response.decode(rawData),
         parse: async (data: unknown) => {
-          const body = data as MetadataResponseV6Body;
+          const body = data as MetadataResponseV9Body;
           const topicMetadata = body.topicMetadata.filter(
             (topic) =>
               !failure(topic.topicErrorCode) &&

@@ -3,7 +3,7 @@ import { Broker } from '../broker/index';
 import { KafkaTopicMetadataNotLoaded } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
 import { Cluster } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -19,7 +19,7 @@ function createCluster(overrides: Partial<ConstructorParameters<typeof Cluster>[
   });
 }
 
-function fakeMetadata(overrides: Partial<MetadataResponseV6Body> = {}): MetadataResponseV6Body {
+function fakeMetadata(overrides: Partial<MetadataResponseV9Body> = {}): MetadataResponseV9Body {
   return {
     brokers: [],
     topicMetadata: [],
@@ -27,6 +27,7 @@ function fakeMetadata(overrides: Partial<MetadataResponseV6Body> = {}): Metadata
     clusterId: null,
     controllerId: 0,
     clientSideThrottleTime: 0,
+    clusterAuthorizedOperations: -2147483648,
     ...overrides,
   };
 }

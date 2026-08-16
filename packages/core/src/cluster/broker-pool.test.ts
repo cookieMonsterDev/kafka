@@ -86,6 +86,7 @@ describe('cluster/BrokerPool', () => {
       clusterId: null,
       controllerId: 0,
       clientSideThrottleTime: 0,
+      clusterAuthorizedOperations: -2147483648,
     };
 
     await brokerPool.disconnect();
@@ -162,6 +163,7 @@ describe('cluster/BrokerPool', () => {
           clusterId: null,
           controllerId: 1,
           clientSideThrottleTime: 0,
+          clusterAuthorizedOperations: -2147483648,
         }); // Metadata response inside refreshMetadata
 
       const otherPool = fakeConnectionPool({ host: 'other-host', port: 9093 });
@@ -191,6 +193,7 @@ describe('cluster/BrokerPool', () => {
         clusterId: null,
         controllerId: 1,
         clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
       });
 
       seedPool.send = vi

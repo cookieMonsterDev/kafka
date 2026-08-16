@@ -1,14 +1,4 @@
-import {
-  array,
-  boolean,
-  defineResponse,
-  field,
-  int16,
-  int32,
-  nullableString,
-  object,
-  string,
-} from '../../../schema';
+import { array, boolean, defineResponse, field, int16, int32, nullableString, object, string } from '../../../schema';
 import { checkTopicMetadataErrors } from '../shared';
 
 /**

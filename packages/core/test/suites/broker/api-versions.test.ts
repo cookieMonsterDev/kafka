@@ -9,6 +9,7 @@ import {
   createConnectionPool,
   newLogger,
   testIfKafkaAtLeast_0_11,
+  testIfKafkaAtMost_0_10,
   testIfKafkaAtLeast_1_0,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
@@ -51,7 +52,19 @@ describe('broker.apiVersions', () => {
     expect(versions[API_KEYS.ApiVersions]?.maxVersion).toBeGreaterThanOrEqual(0);
   });
 
-  it('selects Produce >= 3 and Fetch >= 4 even when the broker advertises older floors', () => {
+  testIfKafkaAtMost_0_10('Kafka 0.10 negotiates Produce v2 and Fetch v3 (MessageSet)', () => {
+    const versions = broker!.versions!;
+    const produceVersion = lookup(versions)(API_KEYS.Produce, Produce)(emptyProduce).request.apiVersion;
+    const fetchVersion = lookup(versions)(API_KEYS.Fetch, Fetch)(emptyFetch).request.apiVersion;
+
+    console.log(`Kafka 0.10 negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBe(2);
+    expect(fetchVersion).toBe(3);
+    expect(versions[API_KEYS.InitProducerId]).toBeUndefined();
+    expect(versions[API_KEYS.DescribeConfigs]).toBeUndefined();
+  });
+
+  testIfKafkaAtLeast_0_11('selects Produce >= 3 and Fetch >= 4 even when the broker advertises older floors', () => {
     const versions = broker!.versions!;
     const produceVersion = lookup(versions)(API_KEYS.Produce, Produce)(emptyProduce).request.apiVersion;
     const fetchVersion = lookup(versions)(API_KEYS.Fetch, Fetch)(emptyFetch).request.apiVersion;

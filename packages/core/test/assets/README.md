@@ -3,6 +3,7 @@
 Integration tests start a local Kafka cluster with Docker Compose. Select the stack with `KAFKA_VERSION` (semver, default `4.0`) and optionally `OAUTHBEARER_ENABLED=1`.
 
 ```bash
+KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=0.11 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=1.1 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=2.4 pnpm --filter @kafka/core test:integration
@@ -16,12 +17,14 @@ KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 
 | `KAFKA_VERSION` | Compose file                   | Mode  | Status    |
 | --------------- | ------------------------------ | ----- | --------- |
-| `0.10`          | `docker-compose.zk-0-10.yml`   | ZK    | planned   |
+| `0.10`          | `docker-compose.zk-0-10.yml`   | ZK    | available |
 | `0.11`          | `docker-compose.zk-0-11.yml`   | ZK    | available |
 | `1.1`           | `docker-compose.zk-1-1.yml`    | ZK    | available |
 | `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | available |
 | `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | available |
 | `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
+
+`KAFKA_VERSION=0.10` uses `confluentinc/cp-kafka:3.2.4` (Kafka 0.10.2) plus ZooKeeper. Produce negotiates v2 and Fetch v3 (MessageSet magic 1). Headers, transactions, DescribeConfigs, and ACLs are absent. CreateTopics / DeleteTopics are available (0.10.1+). SASL uses handshake + raw bytes.
 
 `KAFKA_VERSION=0.11` uses `confluentinc/cp-kafka:3.3.3` (Kafka 0.11) plus ZooKeeper. Produce negotiates v3 and Fetch v5 (RecordBatch, headers, transactions). There is no `SaslAuthenticate` API — SASL uses handshake + raw bytes. CreatePartitions, DeleteGroups, and DescribeConfigs synonyms are absent. CreateTopics without an explicit `numPartitions` sends `-1` (broker default), which this broker rejects; tests pass a positive partition count.
 

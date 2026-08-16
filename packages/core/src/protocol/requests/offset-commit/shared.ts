@@ -27,9 +27,10 @@ export function withDefaultMetadata(
 }
 
 /** OffsetCommit v1 also writes a per-partition timestamp (defaults to now). */
-export function withDefaultMetadataAndTimestamp(
-  topics: readonly OffsetCommitTopicOptions[],
-): { topic: string; partitions: { partition: number; offset: bigint; timestamp: bigint; metadata: string | null }[] }[] {
+export function withDefaultMetadataAndTimestamp(topics: readonly OffsetCommitTopicOptions[]): {
+  topic: string;
+  partitions: { partition: number; offset: bigint; timestamp: bigint; metadata: string | null }[];
+}[] {
   const now = BigInt(Date.now());
   return topics.map(({ topic, partitions }) => ({
     topic,

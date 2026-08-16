@@ -12,7 +12,7 @@ import { createProduceRequest, type ProduceRequestOptions } from '../shared';
  *       partition => INT32
  *       record_set => RECORDS
  *
- * The first version RecordBatch v2 (KIP-98) became mandatory - versions 0-2 sent the legacy
- * message-set format instead and are not implemented here.
+ * The first version RecordBatch v2 (KIP-98) became mandatory. Versions 0-2 send the legacy
+ * MessageSet format (see `produce/v0`–`v2`).
  */
 export const produceRequestV3 = (options: ProduceRequestOptions): RequestDefinition => createProduceRequest(3, options);

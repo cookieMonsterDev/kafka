@@ -33,7 +33,12 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     markOffsetAsCommitted: vi.fn(),
-    brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 7 } } },
+    brokerPool: {
+      versions: {
+        [API_KEYS.Produce]: { minVersion: 0, maxVersion: 7 },
+        [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 0 },
+      },
+    },
     ...overrides,
   };
 }
@@ -55,6 +60,54 @@ describe('producer', () => {
     const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(producer.send({ acks: 1, topic: 'topic', messages: [{ key: 'k' } as never] })).rejects.toThrow(
       'Invalid message without value for topic "topic"',
+    );
+  });
+
+  it('throws a non-retriable error when headers are sent to a MessageSet broker', async () => {
+    const cluster = fakeCluster({
+      brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } } },
+    });
+    const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await producer.connect();
+
+    await expect(
+      producer.send({
+        acks: 1,
+        topic: 'topic',
+        messages: [{ value: 'v', headers: { h: '1' } }],
+      }),
+    ).rejects.toEqual(
+      new KafkaNonRetriableError('Message headers require Produce API version 3 or higher (Kafka 0.11+)'),
+    );
+  });
+
+  it('throws a non-retriable error when an idempotent producer connects to a 0.10 broker', async () => {
+    const cluster = fakeCluster({
+      brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } } },
+    });
+    const producer = createProducer({
+      cluster: cluster as unknown as Cluster,
+      logger: silentLogger,
+      idempotent: true,
+    });
+
+    await expect(producer.connect()).rejects.toEqual(
+      new KafkaNonRetriableError('Idempotent and transactional producers require InitProducerId (Kafka 0.11+)'),
+    );
+  });
+
+  it('throws a non-retriable error when a transactional producer connects to a 0.10 broker', async () => {
+    const cluster = fakeCluster({
+      brokerPool: { versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } } },
+    });
+    const producer = createProducer({
+      cluster: cluster as unknown as Cluster,
+      logger: silentLogger,
+      transactionalId: 'txn-id',
+    });
+
+    await expect(producer.connect()).rejects.toEqual(
+      new KafkaNonRetriableError('Idempotent and transactional producers require InitProducerId (Kafka 0.11+)'),
     );
   });
 
@@ -161,9 +214,7 @@ describe('producer', () => {
         idempotent: true,
         retry: { retries: 0 },
       }),
-    ).toThrow(
-      new KafkaNonRetriableError('Idempotent producer must allow retries to protect against transient errors'),
-    );
+    ).toThrow(new KafkaNonRetriableError('Idempotent producer must allow retries to protect against transient errors'));
   });
 
   it('only initializes the producer id once for an idempotent producer', async () => {

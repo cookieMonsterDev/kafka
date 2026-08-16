@@ -120,14 +120,10 @@ describe('producer.send', () => {
       });
 
     await expect(sendMessages()).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 0n }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 0n })]),
     );
     await expect(sendMessages()).resolves.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 10n }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 10n })]),
     );
   });
 

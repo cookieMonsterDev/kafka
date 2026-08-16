@@ -68,20 +68,39 @@ describe('protocol/requests', () => {
   });
 
   it('picks the highest overlapping version when the broker is older than the client max', () => {
+    expect(negotiatedVersion({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 5 } }, API_KEYS.Produce, Produce)).toBe(
+      5,
+    );
+  });
+
+  it('selects Produce v2 and Fetch v3 on a Kafka 0.10 ApiVersions map', () => {
+    const kafka010: BrokerVersions = {
+      [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 },
+      [API_KEYS.Fetch]: { minVersion: 0, maxVersion: 3 },
+    };
+
+    expect(negotiatedVersion(kafka010, API_KEYS.Produce, Produce)).toBe(2);
     expect(
-      negotiatedVersion({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 5 } }, API_KEYS.Produce, Produce),
-    ).toBe(5);
+      negotiatedVersion(kafka010, API_KEYS.Fetch, Fetch, {
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [],
+      }),
+    ).toBe(3);
   });
 
   it('throws KafkaServerDoesNotSupportApiKey when the broker is too old for implemented versions', () => {
     expect(() =>
-      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, Produce),
+      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, fakeFamily([8, 9])),
     ).toThrow(KafkaServerDoesNotSupportApiKey);
   });
 
   it('includes api name, broker range, and implemented range when there is no overlap', () => {
+    const recordBatchOnly = fakeFamily([3, 4, 5, 6, 7]);
     try {
-      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, Produce);
+      lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 2 } })(API_KEYS.Produce, recordBatchOnly);
       throw new Error('expected lookup to throw');
     } catch (error) {
       expect(error).toBeInstanceOf(KafkaServerDoesNotSupportApiKey);
@@ -96,16 +115,17 @@ describe('protocol/requests', () => {
     }
   });
 
-  it('never throws Invariant violated for a Produce maxVersion 2 gap', () => {
-    expect(() =>
-      lookup({ [API_KEYS.Produce]: { maxVersion: 2 } })(API_KEYS.Produce, Produce),
-    ).not.toThrow(/Invariant violated/);
+  it('never throws Invariant violated for a Produce maxVersion 2 broker', () => {
+    expect(() => lookup({ [API_KEYS.Produce]: { maxVersion: 2 } })(API_KEYS.Produce, Produce)).not.toThrow(
+      /Invariant violated/,
+    );
+    expect(negotiatedVersion({ [API_KEYS.Produce]: { maxVersion: 2 } }, API_KEYS.Produce, Produce)).toBe(2);
   });
 
   it('respects broker minVersion so Kafka 4.0 floors still pick the highest client version', () => {
-    expect(
-      negotiatedVersion({ [API_KEYS.Produce]: { minVersion: 3, maxVersion: 7 } }, API_KEYS.Produce, Produce),
-    ).toBe(7);
+    expect(negotiatedVersion({ [API_KEYS.Produce]: { minVersion: 3, maxVersion: 7 } }, API_KEYS.Produce, Produce)).toBe(
+      7,
+    );
 
     const clientWithLegacyProduce = fakeFamily([0, 1, 2, 3, 4, 5, 6, 7]);
     expect(
@@ -118,9 +138,9 @@ describe('protocol/requests', () => {
   });
 
   it('throws when the broker minVersion is above every implemented version', () => {
-    expect(() =>
-      lookup({ [API_KEYS.Produce]: { minVersion: 8, maxVersion: 9 } })(API_KEYS.Produce, Produce),
-    ).toThrow(KafkaServerDoesNotSupportApiKey);
+    expect(() => lookup({ [API_KEYS.Produce]: { minVersion: 8, maxVersion: 9 } })(API_KEYS.Produce, Produce)).toThrow(
+      KafkaServerDoesNotSupportApiKey,
+    );
   });
 
   it('skips gaps in family.versions instead of calling protocol() with a missing version', () => {

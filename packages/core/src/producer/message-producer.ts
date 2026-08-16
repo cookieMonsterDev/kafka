@@ -1,4 +1,4 @@
-import { supportsZstd } from '../broker/capabilities';
+import { supportsHeaders, supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
 import { KafkaError, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
@@ -8,14 +8,7 @@ import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import type { EosManager } from './eos-manager/index';
 import { createSendMessages } from './send-messages';
-import type {
-  CustomPartitioner,
-  Message,
-  ProducerBatch,
-  ProducerRecord,
-  RecordMetadata,
-  TopicMessages,
-} from './types';
+import type { CustomPartitioner, Message, ProducerBatch, ProducerRecord, RecordMetadata, TopicMessages } from './types';
 
 export interface MessageProducerOptions {
   logger: Logger;
@@ -92,12 +85,17 @@ export function createMessageProducer({
 
     validateConnectionStatus();
 
+    const versions = cluster.brokerPool.versions;
+    const hasHeaders = topicMessages.some(({ messages }) =>
+      messages.some((message) => message.headers != null && Object.keys(message.headers).length > 0),
+    );
+    if (hasHeaders && (versions == null || !supportsHeaders(versions))) {
+      throw new KafkaNonRetriableError('Message headers require Produce API version 3 or higher (Kafka 0.11+)');
+    }
+
     if (compression === COMPRESSION_TYPES.ZSTD) {
-      const versions = cluster.brokerPool.versions;
       if (versions == null || !supportsZstd(versions)) {
-        throw new KafkaNonRetriableError(
-          'ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)',
-        );
+        throw new KafkaNonRetriableError('ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)');
       }
     }
 

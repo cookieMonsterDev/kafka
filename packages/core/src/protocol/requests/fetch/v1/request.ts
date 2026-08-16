@@ -1,0 +1,12 @@
+import type { RequestDefinition } from '../../../schema';
+import type { FetchRequestOptions } from '../shared';
+import { createFetchRequestV0Style } from '../v0/request';
+
+/**
+ * Fetch Request (Version: 1) => replica_id max_wait_time min_bytes [topics]
+ *
+ * Wire shape identical to v0. The bump indicates the client can parse quota throttle time
+ * in the Fetch response.
+ */
+export const fetchRequestV1 = (options: FetchRequestOptions): RequestDefinition =>
+  createFetchRequestV0Style(1)(options);

@@ -17,11 +17,7 @@ export interface ListOffsetsResponseV0Body {
  *       error_code => INT16
  *       offsets => INT64
  */
-const partitionSchema = object([
-  field('partition', int32),
-  field('errorCode', int16),
-  field('offsets', array(int64)),
-]);
+const partitionSchema = object([field('partition', int32), field('errorCode', int16), field('offsets', array(int64))]);
 const responseSchema = object([field('topic', string), field('partitions', array(partitionSchema))]);
 const bodySchema = object([field('responses', array(responseSchema))]);
 

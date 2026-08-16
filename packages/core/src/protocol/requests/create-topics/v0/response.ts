@@ -19,9 +19,7 @@ const bodySchema = object([field('topicErrors', array(topicErrorSchema))]);
 
 const topicNameComparator = (a: { topic: string }, b: { topic: string }): number => a.topic.localeCompare(b.topic);
 
-export function parseCreateTopicsErrors<T extends { topicErrors: { topic: string; errorCode: number }[] }>(
-  data: T,
-): T {
+export function parseCreateTopicsErrors<T extends { topicErrors: { topic: string; errorCode: number }[] }>(data: T): T {
   const topicsWithError = data.topicErrors.filter(({ errorCode }) => failure(errorCode));
   if (topicsWithError.length > 0) {
     throw new KafkaAggregateError(

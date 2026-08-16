@@ -1,7 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types';
-import { createCluster, createTopic, newLogger, secureRandom, testIfKafkaAtLeast_1_1, waitFor } from '../../helpers/index';
+import {
+  createCluster,
+  createTopic,
+  newLogger,
+  secureRandom,
+  testIfKafkaAtLeast_0_11,
+  testIfKafkaAtLeast_1_1,
+  waitFor,
+} from '../../helpers/index';
 
 describe('admin.configs', () => {
   let topicName: string;
@@ -16,7 +24,7 @@ describe('admin.configs', () => {
     await admin?.disconnect();
   });
 
-  it('describes and alters topic configs', async () => {
+  testIfKafkaAtLeast_0_11('describes and alters topic configs', async () => {
     const cluster = createCluster();
     admin = createAdmin({ cluster, logger: newLogger() });
     await admin.connect();
@@ -53,7 +61,7 @@ describe('admin.configs', () => {
     expect(updated.configValue).toBe('compact');
   });
 
-  it('describes broker configs', async () => {
+  testIfKafkaAtLeast_0_11('describes broker configs', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     await admin.connect();
     const { brokers } = await admin.describeCluster();

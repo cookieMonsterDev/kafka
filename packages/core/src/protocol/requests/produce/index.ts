@@ -1,4 +1,10 @@
 import type { ProtocolFactory, RequestFamily } from '../index';
+import { produceRequestV0 } from './v0/request';
+import { produceResponseV0 } from './v0/response';
+import { produceRequestV1 } from './v1/request';
+import { produceResponseV1 } from './v1/response';
+import { produceRequestV2 } from './v2/request';
+import { produceResponseV2 } from './v2/response';
 import { produceRequestV3 } from './v3/request';
 import { produceResponseV3 } from './v3/response';
 import { produceRequestV4 } from './v4/request';
@@ -12,6 +18,9 @@ import { produceResponseV7 } from './v7/response';
 import type { ProduceRequestOptions } from './shared';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>> = {
+  0: (options) => ({ request: produceRequestV0(options), response: produceResponseV0 }),
+  1: (options) => ({ request: produceRequestV1(options), response: produceResponseV1 }),
+  2: (options) => ({ request: produceRequestV2(options), response: produceResponseV2 }),
   3: (options) => ({ request: produceRequestV3(options), response: produceResponseV3 }),
   4: (options) => ({ request: produceRequestV4(options), response: produceResponseV4 }),
   5: (options) => ({ request: produceRequestV5(options), response: produceResponseV5 }),
@@ -20,9 +29,9 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>>
 };
 
 /**
- * Versions 0-2 are not implemented. Kafka 4.0+ requires Produce v3+ (RecordBatch v2 / KIP-98).
- * Brokers may still advertise `minVersion: 0` as a compatibility shim (`KAFKA-18659`); those
- * older versions are not decodable here.
+ * v0–v2 send MessageSet (magic 0/1, Kafka 0.10). v3+ send RecordBatch v2 (KIP-98).
+ * Lookup picks the highest overlapping version, so Kafka 4.0 brokers that still advertise
+ * `minVersion: 0` (`KAFKA-18659`) negotiate v7, not v2.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/

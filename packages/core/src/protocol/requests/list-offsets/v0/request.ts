@@ -11,11 +11,7 @@ import { API_KEYS } from '../../api-keys';
  *       timestamp => INT64
  *       max_num_offsets => INT32
  */
-const partitionSchema = object([
-  field('partition', int32),
-  field('timestamp', int64),
-  field('maxNumOffsets', int32),
-]);
+const partitionSchema = object([field('partition', int32), field('timestamp', int64), field('maxNumOffsets', int32)]);
 const topicSchema = object([field('topic', string), field('partitions', array(partitionSchema))]);
 const requestSchema = object([field('replicaId', int32), field('topics', array(topicSchema))]);
 

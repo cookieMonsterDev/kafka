@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { createProducer } from '../../../src/producer/index';
 import { ACL_OPERATION_TYPES } from '../../../src/protocol/enums/acl-operation-types';
@@ -11,6 +11,7 @@ import {
   saslBrokers,
   saslConnectionOpts,
   secureRandom,
+  testIfKafkaAtLeast_0_11,
   waitFor,
 } from '../../helpers/index';
 
@@ -30,7 +31,7 @@ describe('admin.acls', () => {
     await admin?.disconnect();
   });
 
-  it('creates, describes, and deletes topic ACLs', async () => {
+  testIfKafkaAtLeast_0_11('creates, describes, and deletes topic ACLs', async () => {
     const topicName = `test-topic-${secureRandom()}`;
     ({ admin, producer } = saslClients());
     await admin.connect();

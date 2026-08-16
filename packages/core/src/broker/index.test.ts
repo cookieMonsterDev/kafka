@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  KafkaConnectionClosedError,
-  KafkaMemberIdRequired,
-  KafkaProtocolError,
-  KafkaServerDoesNotSupportApiKey,
-} from '../errors';
+import { KafkaConnectionClosedError, KafkaMemberIdRequired, KafkaProtocolError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { API_KEYS } from '../protocol/requests/api-keys';
@@ -223,7 +218,7 @@ describe('broker/Broker', () => {
       expect(pool.destroy).toHaveBeenCalledOnce();
     });
 
-    it('throws KafkaServerDoesNotSupportApiKey when Produce maxVersion is below the client floor', async () => {
+    it('selects Produce v2 when the broker only advertises MessageSet versions', async () => {
       const pool = createFakeConnectionPool();
       const broker = new Broker({
         connectionPool: asConnectionPool(pool),
@@ -232,15 +227,14 @@ describe('broker/Broker', () => {
       });
 
       await broker.connect();
+      pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
 
-      await expect(
-        broker.produce({
-          acks: 1,
-          timeout: 1000,
-          topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
-        }),
-      ).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
-      expect(pool.send).not.toHaveBeenCalled();
+      await broker.produce({
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+      });
+      expect(pool.send).toHaveBeenCalledOnce();
     });
 
     it('listGroups sends an empty options object', async () => {

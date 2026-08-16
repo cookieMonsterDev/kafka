@@ -24,16 +24,14 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteAclsOptions>>> = {
     }
     return {
       request: deleteAclsRequestV0({
-        filters: values.filters.map(
-          ({ resourceType, resourceName, principal, host, operation, permissionType }) => ({
-            resourceType,
-            resourceName,
-            principal,
-            host,
-            operation,
-            permissionType,
-          }),
-        ),
+        filters: values.filters.map(({ resourceType, resourceName, principal, host, operation, permissionType }) => ({
+          resourceType,
+          resourceName,
+          principal,
+          host,
+          operation,
+          permissionType,
+        })),
       }),
       response: deleteAclsResponseV0,
     };

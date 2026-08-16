@@ -20,8 +20,8 @@ function fetchOptions(maxWaitTime: number): FetchRequestOptions {
 }
 
 describe('protocol/requests/fetch', () => {
-  it('implements versions 4 through 11 (v0-v3 removed in Kafka 4.0)', () => {
-    expect(Fetch.versions).toEqual([4, 5, 6, 7, 8, 9, 10, 11]);
+  it('implements versions 0 through 11 (MessageSet v0-v3, RecordBatch v4-v11)', () => {
+    expect(Fetch.versions).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
   });
 
   for (const version of Fetch.versions) {

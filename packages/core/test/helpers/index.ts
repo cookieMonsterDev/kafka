@@ -3,12 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'vitest';
-import {
-  isKRaftKafkaVersion,
-  kafkaVersionAtLeast,
-  kafkaVersionAtMost,
-  kafkaVersionEquals,
-} from './kafka-version';
+import { isKRaftKafkaVersion, kafkaVersionAtLeast, kafkaVersionAtMost, kafkaVersionEquals } from './kafka-version';
 import { createAdmin } from '../../src/admin/index';
 import { Broker } from '../../src/broker/index';
 import { createSaslAuthenticator } from '../../src/broker/sasl-authenticator/index';
@@ -458,6 +453,7 @@ export const testIfKafkaAtMost_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtMos
 export const testIfKafkaAtLeast_0_11 = testIfKafkaVersion('0.11', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_0 = testIfKafkaVersion('1.0', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_1_1 = testIfKafkaVersion('1.1', kafkaVersionAtLeast);
+export const testIfKafkaEquals_0_10 = testIfKafkaVersion('0.10', kafkaVersionEquals);
 export const testIfKafkaEquals_0_11 = testIfKafkaVersion('0.11', kafkaVersionEquals);
 export const testIfKafkaEquals_1_1 = testIfKafkaVersion('1.1', kafkaVersionEquals);
 export const testIfKafkaAtLeast_2_1 = testIfKafkaVersion('2.1', kafkaVersionAtLeast);

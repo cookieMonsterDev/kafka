@@ -1,4 +1,12 @@
 import type { ProtocolFactory, ProtocolResult, RequestFamily } from '../index';
+import { fetchRequestV0 } from './v0/request';
+import { fetchResponseV0 } from './v0/response';
+import { fetchRequestV1 } from './v1/request';
+import { fetchResponseV1 } from './v1/response';
+import { fetchRequestV2 } from './v2/request';
+import { fetchResponseV2 } from './v2/response';
+import { fetchRequestV3 } from './v3/request';
+import { fetchResponseV3 } from './v3/response';
 import { fetchRequestV4 } from './v4/request';
 import { fetchResponseV4 } from './v4/response';
 import { fetchRequestV5 } from './v5/request';
@@ -40,6 +48,10 @@ function fetchProtocol(
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> = {
+  0: (options) => fetchProtocol(fetchRequestV0(options), fetchResponseV0, options.maxWaitTime),
+  1: (options) => fetchProtocol(fetchRequestV1(options), fetchResponseV1, options.maxWaitTime),
+  2: (options) => fetchProtocol(fetchRequestV2(options), fetchResponseV2, options.maxWaitTime),
+  3: (options) => fetchProtocol(fetchRequestV3(options), fetchResponseV3, options.maxWaitTime),
   4: (options) => fetchProtocol(fetchRequestV4(options), fetchResponseV4, options.maxWaitTime),
   5: (options) => fetchProtocol(fetchRequestV5(options), fetchResponseV5, options.maxWaitTime),
   6: (options) => fetchProtocol(fetchRequestV6(options), fetchResponseV6, options.maxWaitTime),
@@ -51,7 +63,9 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> =
 };
 
 /**
- * Versions 0-3 are not implemented. Kafka 4.0+ requires Fetch v4+ (RecordBatch v2 / KIP-98).
+ * v0–v3 decode MessageSet only. v4+ probes the magic byte and dispatches to MessageSet
+ * (magic 0/1) or RecordBatch (magic 2), including mixed-format responses during a cluster
+ * upgrade from 0.10 to 0.11.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/

@@ -1,13 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import {
-  createCluster,
-  newLogger,
-  saslBrokers,
-  saslEntries,
-  sslBrokers,
-  sslConnectionOpts,
-} from '../../helpers/index';
+import { createCluster, newLogger, saslBrokers, saslEntries, sslBrokers, sslConnectionOpts } from '../../helpers/index';
 
 describe('admin.connection', () => {
   let admin: ReturnType<typeof createAdmin> | undefined;

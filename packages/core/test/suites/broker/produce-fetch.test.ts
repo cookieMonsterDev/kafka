@@ -13,6 +13,7 @@ import {
   retryProtocol,
   secureRandom,
   testIfKafkaAtLeast_0_11,
+  testIfKafkaAtMost_0_10,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
   TRANSIENT_METADATA_ERRORS,
@@ -48,6 +49,53 @@ describe('broker.produceFetch', () => {
     await leader.connect();
     return leader;
   }
+
+  testIfKafkaAtMost_0_10('on Kafka 0.10 produce/fetch uses MessageSet (Produce v2, Fetch v3)', async () => {
+    const target = await connectToLeader();
+    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [],
+    }).request.apiVersion;
+    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+      replicaId: -1,
+      maxWaitTime: 100,
+      minBytes: 1,
+      maxBytes: 1_048_576,
+      topics: [],
+    }).request.apiVersion;
+    console.log(`0.10 produce/fetch smoke negotiated Produce v${produceVersion}, Fetch v${fetchVersion}`);
+    expect(produceVersion).toBe(2);
+    expect(fetchVersion).toBe(3);
+
+    const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [
+          {
+            topic: topicName,
+            partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }],
+          },
+        ],
+      }),
+    );
+    expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
+    expect(produced?.topics[0]?.partitions[0]?.baseOffset).toBe(0n);
+
+    const fetched = await target.fetch({
+      replicaId: -1,
+      maxWaitTime: 1000,
+      minBytes: 1,
+      maxBytes: 10_485_760,
+      topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
+    });
+    const record = fetched.responses[0]?.partitions[0]?.messages[0];
+    expect(record?.magicByte).toBe(1);
+    expect(record?.value?.toString()).toBe('v');
+    expect(record?.headers).toEqual({});
+    expect(record?.offset).toBe(0n);
+  });
 
   testIfKafkaAtLeast_0_11('on Kafka 0.11+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 4)', async () => {
     const target = await connectToLeader();
@@ -154,7 +202,9 @@ describe('broker.produceFetch', () => {
     const produced = await target.produce({
       acks: 1,
       timeout: 30_000,
-      topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }] }],
+      topicData: [
+        { topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v', timestamp }] }] },
+      ],
     });
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
 

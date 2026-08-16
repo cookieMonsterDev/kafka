@@ -32,6 +32,8 @@ describe('consumer.subscribe', () => {
   });
 
   it('subscribes with a regex', async () => {
-    await expect(consumer!.subscribe({ topic: new RegExp(`^${topicName}$`), fromBeginning: true })).resolves.toBeUndefined();
+    await expect(
+      consumer!.subscribe({ topic: new RegExp(`^${topicName}$`), fromBeginning: true }),
+    ).resolves.toBeUndefined();
   });
 });

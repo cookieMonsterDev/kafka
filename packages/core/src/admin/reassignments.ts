@@ -103,9 +103,7 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
 
       for (const { topic, partitions } of topics) {
         if (!partitions || !Array.isArray(partitions)) {
-          throw new KafkaNonRetriableError(
-            `Invalid partition array: ${formatUnknown(partitions)} for topic: ${topic}`,
-          );
+          throw new KafkaNonRetriableError(`Invalid partition array: ${formatUnknown(partitions)} for topic: ${topic}`);
         }
 
         if (partitions.filter((partition) => typeof partition !== 'number' || partition < 0).length >= 1) {

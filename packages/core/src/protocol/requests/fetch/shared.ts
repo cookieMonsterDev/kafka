@@ -1,5 +1,6 @@
 import { KafkaOffsetOutOfRange, KafkaPartialMessageError } from '../../../errors';
 import { createErrorFromCode, ERROR_CODES, failure } from '../../error-codes';
+import { decodeMessageSet } from '../../message-set/decoder';
 import { decodeRecordBatch, type DecodedRecordBatch } from '../../records/batch';
 import { Decoder } from '../../decoder';
 
@@ -76,9 +77,19 @@ export async function parseFetchResponse<
 }
 
 /**
- * Decode a Fetch `record_set`: a length-prefixed blob that may hold several RecordBatches.
- * The broker fills it up to `max_bytes` and may cut the last batch short; a trailing partial
- * batch is ignored and the rest are flattened into one record array.
+ * The magic byte sits at the same offset in MessageSet entries and RecordBatches: after
+ * offset/firstOffset (8) + size/length (4) + crc/partitionLeaderEpoch (4).
+ */
+const MAGIC_OFFSET = 16;
+const RECORD_BATCH_MAGIC = 2;
+
+/**
+ * Decode a Fetch `record_set`: a length-prefixed blob that may hold MessageSet entries
+ * (magic 0/1) or RecordBatches (magic 2). The broker fills it up to `max_bytes` and may cut
+ * the last batch short; a trailing partial batch is ignored.
+ *
+ * Mixed 0.10 + 0.11 formats in one response (cluster upgrading the message format) stop on
+ * `KafkaUnsupportedMagicByteInMessageSet` so the next fetch can finish the RecordBatch.
  *
  * @see https://kafka.apache.org/43/implementation/messages/
  */
@@ -89,8 +100,13 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
   }
 
   const messagesBuffer = decoder.readBytes(messagesSize);
-  if (!messagesBuffer) return [];
+  if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
   const messagesDecoder = new Decoder(messagesBuffer);
+  const magicByte = messagesBuffer.readInt8(MAGIC_OFFSET);
+
+  if (magicByte !== RECORD_BATCH_MAGIC) {
+    return decodeMessageSet(messagesDecoder, messagesSize);
+  }
 
   const records: DecodedRecordBatch['records'] = [];
   // The fixed-size portion of a v2 RecordBatch header (everything up to, but not including, the

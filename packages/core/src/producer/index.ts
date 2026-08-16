@@ -1,3 +1,4 @@
+import { supportsTransactions } from '../broker/capabilities';
 import type { Cluster, TopicOffsets } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
@@ -136,6 +137,8 @@ export function createProducer({
       throw new KafkaNonRetriableError('Must provide transactional id for transactional producer');
     }
 
+    assertBrokerSupportsTransactions();
+
     let transactionDidEnd = false;
     transactionalEosManager ??= createEosManager({
       logger,
@@ -208,11 +211,22 @@ export function createProducer({
     };
   }
 
+  function assertBrokerSupportsTransactions(): void {
+    const versions = cluster.brokerPool.versions;
+    if (versions == null || !supportsTransactions(versions)) {
+      throw new KafkaNonRetriableError('Idempotent and transactional producers require InitProducerId (Kafka 0.11+)');
+    }
+  }
+
   async function connect({ signal }: ConnectOptions = {}): Promise<void> {
     if (signal?.aborted) throw abortError(signal);
     await rejectOnAbort(cluster.connect(), signal);
     connectionStatus = CONNECTION_STATUS.CONNECTED;
     instrumentationEmitter.emit(CONNECT, {});
+
+    if (idempotent || transactionalId) {
+      assertBrokerSupportsTransactions();
+    }
 
     if (idempotent && !idempotentEosManager.isInitialized()) {
       await rejectOnAbort(idempotentEosManager.initProducerId(), signal);

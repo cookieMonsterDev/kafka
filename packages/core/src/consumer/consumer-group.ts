@@ -1,11 +1,6 @@
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
-import {
-  KafkaError,
-  KafkaNonRetriableError,
-  KafkaStaleTopicMetadataAssignment,
-  isRebalancing,
-} from '../errors';
+import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';

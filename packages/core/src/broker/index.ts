@@ -88,6 +88,7 @@ import { LeaveGroup } from '../protocol/requests/leave-group/index';
 import type { LeaveGroupOptions } from '../protocol/requests/leave-group/index';
 import type { LeaveGroupResponseV3Body } from '../protocol/requests/leave-group/v3/response';
 import { ListGroups } from '../protocol/requests/list-groups/index';
+import type { ListGroupsOptions } from '../protocol/requests/list-groups/index';
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import { ListOffsets } from '../protocol/requests/list-offsets/index';
 import type { ListOffsetsOptions } from '../protocol/requests/list-offsets/index';
@@ -126,6 +127,21 @@ import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/reques
 import { DescribeUserScramCredentials } from '../protocol/requests/describe-user-scram-credentials/index';
 import type { DescribeUserScramCredentialsOptions } from '../protocol/requests/describe-user-scram-credentials/index';
 import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
+import { DescribeClientQuotas } from '../protocol/requests/describe-client-quotas/index';
+import type { DescribeClientQuotasOptions } from '../protocol/requests/describe-client-quotas/index';
+import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/describe-client-quotas/v1/response';
+import { AlterClientQuotas } from '../protocol/requests/alter-client-quotas/index';
+import type { AlterClientQuotasOptions } from '../protocol/requests/alter-client-quotas/index';
+import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
+import { DescribeLogDirs } from '../protocol/requests/describe-log-dirs/index';
+import type { DescribeLogDirsOptions } from '../protocol/requests/describe-log-dirs/index';
+import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
+import { AlterReplicaLogDirs } from '../protocol/requests/alter-replica-log-dirs/index';
+import type { AlterReplicaLogDirsOptions } from '../protocol/requests/alter-replica-log-dirs/index';
+import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
+import { DescribeCluster } from '../protocol/requests/describe-cluster/index';
+import type { DescribeClusterOptions } from '../protocol/requests/describe-cluster/index';
+import type { DescribeClusterResponseV2Body } from '../protocol/requests/describe-cluster/v2/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -483,6 +499,40 @@ export class Broker {
     return this.#send(alterUserScramCredentials(options));
   }
 
+  async describeClientQuotas(options: DescribeClientQuotasOptions): Promise<DescribeClientQuotasResponseV1Body> {
+    const describeClientQuotas = this.lookupRequest<DescribeClientQuotasOptions>(
+      API_KEYS.DescribeClientQuotas,
+      DescribeClientQuotas,
+    );
+    return this.#send(describeClientQuotas(options));
+  }
+
+  async alterClientQuotas(options: AlterClientQuotasOptions): Promise<AlterClientQuotasResponseV1Body> {
+    const alterClientQuotas = this.lookupRequest<AlterClientQuotasOptions>(
+      API_KEYS.AlterClientQuotas,
+      AlterClientQuotas,
+    );
+    return this.#send(alterClientQuotas(options));
+  }
+
+  async describeLogDirs(options: DescribeLogDirsOptions = {}): Promise<DescribeLogDirsResponseV2Body> {
+    const describeLogDirs = this.lookupRequest<DescribeLogDirsOptions>(API_KEYS.DescribeLogDirs, DescribeLogDirs);
+    return this.#send(describeLogDirs(options));
+  }
+
+  async alterReplicaLogDirs(options: AlterReplicaLogDirsOptions): Promise<AlterReplicaLogDirsResponseV2Body> {
+    const alterReplicaLogDirs = this.lookupRequest<AlterReplicaLogDirsOptions>(
+      API_KEYS.AlterReplicaLogDirs,
+      AlterReplicaLogDirs,
+    );
+    return this.#send(alterReplicaLogDirs(options));
+  }
+
+  async describeCluster(options: DescribeClusterOptions = {}): Promise<DescribeClusterResponseV2Body> {
+    const describeCluster = this.lookupRequest<DescribeClusterOptions>(API_KEYS.DescribeCluster, DescribeCluster);
+    return this.#send(describeCluster(options));
+  }
+
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */
   async initProducerId(options: InitProducerIdOptions): Promise<InitProducerIdResponseV1Body> {
     const initProducerId = this.lookupRequest<InitProducerIdOptions>(API_KEYS.InitProducerId, InitProducerId);
@@ -516,9 +566,9 @@ export class Broker {
     return this.#send(endTxn(options));
   }
 
-  async listGroups(): Promise<ListGroupsResponseV2Body> {
-    const listGroups = this.lookupRequest<Record<string, never>>(API_KEYS.ListGroups, ListGroups);
-    return this.#send(listGroups({}));
+  async listGroups(options: ListGroupsOptions = {}): Promise<ListGroupsResponseV2Body> {
+    const listGroups = this.lookupRequest<ListGroupsOptions>(API_KEYS.ListGroups, ListGroups);
+    return this.#send(listGroups(options));
   }
 
   async deleteGroups(options: DeleteGroupsOptions): Promise<DeleteGroupsResponseV1Body> {

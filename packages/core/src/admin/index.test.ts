@@ -38,6 +38,8 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     electLeaders: vi.fn().mockResolvedValue({ results: [] }),
     describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
     alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
+    describeClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
+    alterClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
     ...overrides,
   };
 }
@@ -442,6 +444,23 @@ describe('admin', () => {
   it('rejects empty SCRAM alterations', async () => {
     const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(admin.alterUserScramCredentials({})).rejects.toThrow(KafkaNonRetriableError);
+  });
+
+  it('describes client quotas through the controller', async () => {
+    const broker = fakeBroker({
+      describeClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], values: [] }] }),
+    });
+    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.describeClientQuotas({ components: [], strict: true })).resolves.toEqual({
+      entries: [{ entity: [], values: [] }],
+    });
+    expect(broker.describeClientQuotas).toHaveBeenCalledWith({ components: [], strict: true });
+  });
+
+  it('rejects an empty alterClientQuotas entries array', async () => {
+    const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    await expect(admin.alterClientQuotas({ entries: [] })).rejects.toThrow('Entries array cannot be empty');
   });
 
   it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {

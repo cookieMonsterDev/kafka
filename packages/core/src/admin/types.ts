@@ -7,8 +7,10 @@ import type { AclPermissionType } from '../protocol/enums/acl-permission-types';
 import type { AclResourceType } from '../protocol/enums/acl-resource-types';
 import type { ConfigResourceType } from '../protocol/enums/config-resource-types';
 import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
+import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
 import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
+import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/describe-client-quotas/v1/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
@@ -238,6 +240,17 @@ export interface Admin {
       | { name: string; mechanism: number; iterations: number; salt: Buffer; saltedPassword: Buffer }
     )[];
   }) => Promise<{ results: AlterUserScramCredentialsResponseV0Body['results'] }>;
+  describeClientQuotas: (options?: {
+    components?: { entityType: string; matchType: number; match: string | null }[];
+    strict?: boolean;
+  }) => Promise<{ entries: DescribeClientQuotasResponseV1Body['entries'] }>;
+  alterClientQuotas: (options: {
+    entries: {
+      entity: { entityType: string; entityName: string | null }[];
+      ops: { key: string; value: number; remove: boolean }[];
+    }[];
+    validateOnly?: boolean;
+  }) => Promise<{ entries: AlterClientQuotasResponseV1Body['entries'] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

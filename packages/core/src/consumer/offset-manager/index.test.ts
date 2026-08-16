@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
-import { KafkaProtocolError } from '../../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { createErrorFromCode } from '../../protocol/error-codes';
 import { sleep } from '../../utils/wait';
@@ -13,11 +13,16 @@ function createOffsetManager(
   overrides: {
     memberAssignment?: Record<string, number[]>;
     cluster?: Partial<Cluster>;
-    coordinator?: Partial<Broker>;
+    coordinator?: {
+      isConnected?: () => boolean;
+      offsetCommit?: (...args: never[]) => unknown;
+      offsetFetch?: (...args: never[]) => unknown;
+    };
     autoCommit?: boolean;
     autoCommitInterval?: number | null;
     autoCommitThreshold?: number | null;
     groupId?: string;
+    topicConfigurations?: OffsetManager['topicConfigurations'];
   } = {},
 ): OffsetManager {
   const memberAssignment = overrides.memberAssignment ?? { topic1: [0, 1, 2, 3], topic2: [0, 1, 2, 3, 4, 5] };
@@ -42,7 +47,7 @@ function createOffsetManager(
     autoCommit: overrides.autoCommit ?? true,
     autoCommitInterval: overrides.autoCommitInterval ?? null,
     autoCommitThreshold: overrides.autoCommitThreshold ?? null,
-    topicConfigurations: {},
+    topicConfigurations: overrides.topicConfigurations ?? {},
     instrumentationEmitter: new InstrumentationEventEmitter(),
     groupId: overrides.groupId ?? 'groupId',
     generationId: 1,
@@ -257,6 +262,80 @@ describe('consumer/offset-manager', () => {
       await offsetManager.commitOffsetsIfNecessary();
 
       expect(commitOffsets).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('resolveOffsets', () => {
+    it('skips ListOffsets and throws when reset is none and there is no committed offset', async () => {
+      const fetchTopicsOffset = vi.fn();
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
+      }));
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'none' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetFetch },
+      });
+
+      await expect(offsetManager.resolveOffsets()).rejects.toThrow(
+        new KafkaNonRetriableError('Offset reset policy is none; no committed offset for topic events partition 0'),
+      );
+      expect(fetchTopicsOffset).not.toHaveBeenCalled();
+    });
+
+    it('skips ListOffsets and keeps a valid committed offset when reset is none', async () => {
+      const fetchTopicsOffset = vi.fn();
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 'events', partitions: [{ partition: 0, offset: 14n }] }],
+      }));
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'none' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetFetch },
+      });
+
+      await offsetManager.resolveOffsets();
+
+      expect(fetchTopicsOffset).not.toHaveBeenCalled();
+      expect(offsetManager.committedOffsets()['events']![0]).toBe(14n);
+    });
+
+    it('fetches earliest offsets when autoOffsetReset is earliest', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 5n }] }]);
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
+      }));
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'earliest' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetFetch },
+      });
+
+      await offsetManager.resolveOffsets();
+
+      expect(fetchTopicsOffset).toHaveBeenCalledWith([
+        { topic: 'events', partitions: [{ partition: 0 }], fromBeginning: true },
+      ]);
+      expect(offsetManager.committedOffsets()['events']![0]).toBe(5n);
+    });
+  });
+
+  describe('setDefaultOffset', () => {
+    it('throws when reset is none', async () => {
+      const offsetCommit = vi.fn();
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'none' } },
+        coordinator: { offsetCommit },
+      });
+
+      await expect(offsetManager.setDefaultOffset({ topic: 'events', partition: 0 })).rejects.toThrow(
+        new KafkaNonRetriableError('Offset reset policy is none; no committed offset for topic events partition 0'),
+      );
+      expect(offsetCommit).not.toHaveBeenCalled();
     });
   });
 });

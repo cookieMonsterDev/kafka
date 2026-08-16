@@ -12,6 +12,7 @@ import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
 import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
 import { OffsetManager } from './offset-manager/index';
+import type { TopicOffsetConfiguration } from './offset-reset';
 import { SeekOffsets } from './seek-offsets';
 import { SubscriptionState } from './subscription-state';
 import type {
@@ -48,7 +49,7 @@ export interface ConsumerGroupOptions {
   cluster: Cluster;
   groupId: string;
   topics: readonly string[];
-  topicConfigurations: Record<string, { fromBeginning?: boolean }>;
+  topicConfigurations: Record<string, TopicOffsetConfiguration>;
   logger: Logger;
   instrumentationEmitter: InstrumentationEventEmitter;
   assigners: readonly Assigner[];
@@ -93,7 +94,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupId: string;
   topics: string[];
   topicsSubscribed: string[];
-  topicConfigurations: Record<string, { fromBeginning?: boolean }>;
+  topicConfigurations: Record<string, TopicOffsetConfiguration>;
   logger: Logger;
   instrumentationEmitter: InstrumentationEventEmitter;
   retrier: ReturnType<typeof retrier>;

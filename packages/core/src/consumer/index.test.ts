@@ -116,4 +116,14 @@ describe('consumer', () => {
 
     expect(addMultipleTargetTopics).toHaveBeenCalledWith(['foo-one', 'foo-two']);
   });
+
+  it('stores autoOffsetReset from subscribe options', async () => {
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+    await consumer.subscribe({ topics: ['events'], autoOffsetReset: 'none' });
+
+    expect(addMultipleTargetTopics).toHaveBeenCalledWith(['events']);
+  });
 });

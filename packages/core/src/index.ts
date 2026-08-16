@@ -70,6 +70,8 @@ export type {
   AdminConfig,
   Assigner,
   AuthenticationProviderArgs,
+  AutoOffsetReset,
+  AutoOffsetReset,
   Batch,
   BrokersFunction,
   CompressionType,

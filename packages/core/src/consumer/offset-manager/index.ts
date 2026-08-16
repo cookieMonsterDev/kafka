@@ -1,7 +1,9 @@
 import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
+import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { COMMIT_OFFSETS } from '../instrumentation-events';
+import { resolveAutoOffsetReset, type AutoOffsetReset, type TopicOffsetConfiguration } from '../offset-reset';
 import type {
   MemberAssignment,
   Offsets,
@@ -26,7 +28,7 @@ export interface OffsetManagerOptions {
   autoCommit: boolean;
   autoCommitInterval: number | null;
   autoCommitThreshold: number | null;
-  topicConfigurations: Record<string, { fromBeginning?: boolean }>;
+  topicConfigurations: Record<string, TopicOffsetConfiguration>;
   instrumentationEmitter: InstrumentationEventEmitter;
   groupId: string;
   generationId: number;
@@ -41,7 +43,7 @@ export class OffsetManager {
   cluster: Cluster;
   coordinator: Broker;
   memberAssignment: MemberAssignment;
-  topicConfigurations: Record<string, { fromBeginning?: boolean }>;
+  topicConfigurations: Record<string, TopicOffsetConfiguration>;
   instrumentationEmitter: InstrumentationEventEmitter;
   groupId: string;
   generationId: number;
@@ -137,7 +139,14 @@ export class OffsetManager {
   }
 
   async setDefaultOffset({ topic, partition }: TopicPartition): Promise<void> {
-    const defaultOffset = this.cluster.defaultOffset(this.topicConfigurations[topic] ?? {});
+    const reset = resolveAutoOffsetReset(this.topicConfigurations[topic]);
+    if (reset === 'none') {
+      throw new KafkaNonRetriableError(
+        `Offset reset policy is none; no committed offset for topic ${topic} partition ${partition}`,
+      );
+    }
+
+    const defaultOffset = this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
     const coordinator = await this.getCoordinator();
 
     await coordinator.offsetCommit({
@@ -270,7 +279,6 @@ export class OffsetManager {
     const unresolvedPartitions = consumerOffsets.map(({ topic, partitions }) => ({
       topic,
       partitions: partitions.filter(({ offset }) => isInvalidOffset(offset)).map(({ partition }) => ({ partition })),
-      ...(this.topicConfigurations[topic] ?? {}),
     }));
 
     const hasUnresolvedPartitions = unresolvedPartitions.some((t) => t.partitions.length > 0);
@@ -283,8 +291,21 @@ export class OffsetManager {
     );
 
     if (hasUnresolvedPartitions) {
-      const topicOffsets = await this.cluster.fetchTopicsOffset(unresolvedPartitions);
-      offsets = initializeConsumerOffsets(consumerOffsets, topicOffsets);
+      const resetByTopic: Record<string, AutoOffsetReset> = Object.fromEntries(
+        unresolvedPartitions.map(({ topic }) => [topic, resolveAutoOffsetReset(this.topicConfigurations[topic])]),
+      );
+
+      const topicsForListOffsets = unresolvedPartitions
+        .filter((t) => t.partitions.length > 0 && resetByTopic[t.topic] !== 'none')
+        .map((t) => ({
+          topic: t.topic,
+          partitions: t.partitions,
+          fromBeginning: resetByTopic[t.topic] === 'earliest',
+        }));
+
+      const topicOffsets =
+        topicsForListOffsets.length > 0 ? await this.cluster.fetchTopicsOffset(topicsForListOffsets) : [];
+      offsets = initializeConsumerOffsets(consumerOffsets, topicOffsets, resetByTopic);
     }
 
     for (const { topic, partitions } of offsets) {

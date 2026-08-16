@@ -1,7 +1,13 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import type { Admin } from '../admin/types';
 import type { PartitionMetadata } from '../cluster/index';
-import type { Batch, Consumer, ConsumerSubscribeTopic, ConsumerSubscribeTopics } from '../consumer/index';
+import type {
+  AutoOffsetReset,
+  Batch,
+  Consumer,
+  ConsumerSubscribeTopic,
+  ConsumerSubscribeTopics,
+} from '../consumer/index';
 import type {
   Assigner,
   ConsumerRetryOptions,
@@ -232,6 +238,12 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id
    */
   groupInstanceId?: string;
+  /**
+   * Default offset reset policy when a subscription omits `autoOffsetReset`.
+   * Per-subscription `subscribe({ autoOffsetReset })` overrides this.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   */
+  autoOffsetReset?: AutoOffsetReset;
 }
 
 /**
@@ -246,6 +258,7 @@ export type {
   Admin,
   Assigner,
   AuthenticationProviderArgs,
+  AutoOffsetReset,
   Batch,
   CompressionType,
   Consumer,

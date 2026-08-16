@@ -22,6 +22,11 @@ import {
   wrap,
   type ConsumerEventName,
 } from './instrumentation-events';
+import {
+  topicOffsetConfigurationFromSubscribe,
+  type AutoOffsetReset,
+  type TopicOffsetConfiguration,
+} from './offset-reset';
 import { Runner } from './runner';
 import type {
   Assigner,
@@ -35,6 +40,7 @@ import type {
 } from './types';
 import { parseOffset } from './types';
 
+export type { AutoOffsetReset, TopicOffsetConfiguration } from './offset-reset';
 export type {
   Assigner,
   ConsumerRetryOptions,
@@ -61,11 +67,23 @@ export interface ConsumerSubscribeTopics {
   topics: readonly (string | RegExp)[];
   /** When true, start from the earliest offset if the group has no committed position. */
   fromBeginning?: boolean;
+  /**
+   * Offset reset policy when there is no committed offset (Java `auto.offset.reset`).
+   * Wins over `fromBeginning` when set. `none` throws instead of resetting.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   */
+  autoOffsetReset?: AutoOffsetReset;
 }
 
 export interface ConsumerSubscribeTopic {
   topic: string | RegExp;
   fromBeginning?: boolean;
+  /**
+   * Offset reset policy when there is no committed offset (Java `auto.offset.reset`).
+   * Wins over `fromBeginning` when set. `none` throws instead of resetting.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   */
+  autoOffsetReset?: AutoOffsetReset;
 }
 
 export interface ConsumerOptions {
@@ -86,6 +104,11 @@ export interface ConsumerOptions {
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   metadataMaxAge?: number;
   groupInstanceId?: string;
+  /**
+   * Default offset reset policy for subscriptions that omit `autoOffsetReset`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   */
+  autoOffsetReset?: AutoOffsetReset;
 }
 
 /**
@@ -145,6 +168,7 @@ export function createConsumer({
   instrumentationEmitter: rootInstrumentationEmitter,
   metadataMaxAge = 300_000,
   groupInstanceId,
+  autoOffsetReset,
 }: ConsumerOptions): Consumer {
   if (!groupId) {
     throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
@@ -156,7 +180,7 @@ export function createConsumer({
     createAssigner({ groupId, logger, cluster }),
   );
 
-  const topics: Record<string, { fromBeginning?: boolean }> = {};
+  const topics: Record<string, TopicOffsetConfiguration> = {};
   let runner: Runner | null = null;
   let consumerGroup: ConsumerGroup | null = null;
   let restartTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -216,7 +240,7 @@ export function createConsumer({
       throw new KafkaNonRetriableError('Cannot subscribe to topic while consumer is running');
     }
 
-    const fromBeginning = subscription.fromBeginning ?? false;
+    const topicConfiguration = topicOffsetConfigurationFromSubscribe(subscription, autoOffsetReset);
     const isTopicName = (entry: unknown): entry is string | RegExp =>
       typeof entry === 'string' || entry instanceof RegExp;
     const isTopicNameList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
@@ -274,7 +298,7 @@ export function createConsumer({
     }
 
     for (const name of topicsToSubscribe) {
-      topics[name] = { fromBeginning };
+      topics[name] = topicConfiguration;
     }
 
     await cluster.addMultipleTargetTopics(topicsToSubscribe);

@@ -165,6 +165,7 @@ export class Kafka {
     readUncommitted = false,
     rackId = '',
     groupInstanceId,
+    autoOffsetReset,
   }: ConsumerConfig): Consumer {
     const isolationLevel = readUncommitted ? ISOLATION_LEVEL.READ_UNCOMMITTED : ISOLATION_LEVEL.READ_COMMITTED;
     const instrumentationEmitter = new InstrumentationEventEmitter();
@@ -194,6 +195,7 @@ export class Kafka {
       rackId,
       metadataMaxAge,
       groupInstanceId,
+      autoOffsetReset,
     });
   }
 

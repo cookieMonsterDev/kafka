@@ -1,7 +1,7 @@
 ---
 title: Public API
 description: What @kafka/core exports
-order: 3
+order: 4
 ---
 
 The public barrel is `src/index.ts`. Types are generated from the TypeScript
@@ -14,7 +14,7 @@ source (`tsc --emitDeclarationOnly`); there is no hand-maintained
 | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `Kafka`                                                                               | Client class: `producer()`, `consumer()`, `admin()`, `logger()`        |
 | `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner` |
-| `PartitionAssigners`                                                                  | `{ roundRobin }`                                                       |
+| `PartitionAssigners`                                                                  | `{ roundRobin, range, sticky, cooperativeSticky }`                     |
 | `AssignerProtocol`                                                                    | `{ MemberMetadata, MemberAssignment }` encode/decode                   |
 | `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                            |
 | `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                |
@@ -24,6 +24,7 @@ source (`tsc --emitDeclarationOnly`); there is no hand-maintained
 | `Kafka*` error classes                                                                | `KafkaError`, `KafkaNonRetriableError`, `KafkaProtocolError`, …        |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
+Snappy and LZ4 are pluggable stubs, not built in.
 
 ## Client config
 
@@ -43,12 +44,29 @@ new Kafka({
 });
 ```
 
-SASL mechanisms: `plain`, `scram-sha-256`, `scram-sha-512`, `aws`,
-`oauthbearer`, or a custom `{ mechanism, authenticationProvider }`.
+SASL mechanisms: `plain`, `scram-sha-256`, `scram-sha-512`, `oauthbearer`,
+or a custom `{ mechanism, authenticationProvider }`. GSSAPI / Kerberos is not
+implemented. `aws` is an extra (non-Apache) helper.
+
+Producer `idempotent` defaults to `false` (Java 3.0+ is `true`). Consumer
+`readUncommitted` defaults to `false` (`read_committed`; Java is
+`read_uncommitted`). The default partitioner is murmur2, not the 4.x
+sticky-until-batch-size partitioner. Range, RoundRobin, Sticky, and
+CooperativeSticky are built in; the default assigner is round-robin.
+Producer `lingerMs` defaults to 0 (Java 4.0+ is 5 ms).
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/),
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/),
-and [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
+[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/),
+and [Compatibility](/docs/compatibility/).
+
+## Admin
+
+`admin.alterConfigs` maps to AlterConfigs. Java 2.3+ prefers
+IncrementalAlterConfigs; that method is not implemented yet. Protocol key 43
+is ElectLeaders in the [protocol guide](https://kafka.apache.org/43/design/protocol/);
+the constant in `api-keys.ts` is still named `ElectPreferredLeaders`, and there
+is no public `electLeaders` method.
 
 ## Extra APIs
 

@@ -1,7 +1,7 @@
 ---
 title: Breaking changes
 description: Deliberate breaking changes in @kafka/core
-order: 4
+order: 5
 ---
 
 The public shape is `new Kafka({…}).producer() / consumer() / admin()`. These
@@ -28,12 +28,12 @@ The client matches KafkaJS's support floor: **Kafka 0.10+**. Protocol versions
 are negotiated from `ApiVersions`; the client does not parse a broker version
 string in production.
 
-| Range | What works                                                                 |
-| ----- | -------------------------------------------------------------------------- |
-| 0.10  | Produce/fetch via MessageSet. No headers, no transactions, no ACLs         |
-| 0.11+ | RecordBatch, headers, exactly-once / idempotent producers, ACLs            |
-| 2.1+  | `CompressionTypes.ZSTD`                                                    |
-| 4.0+  | Brokers are KRaft-only. The client still speaks older APIs when advertised |
+| Range | What works                                                         |
+| ----- | ------------------------------------------------------------------ |
+| 0.10  | Produce/fetch via MessageSet. No headers, no transactions, no ACLs |
+| 0.11+ | RecordBatch, headers, exactly-once / idempotent producers, ACLs    |
+| 2.1+  | `CompressionTypes.ZSTD`                                            |
+| 4.0   | KRaft-only brokers. Talks via overlap (Produce 3–7, Fetch 4–11)    |
 
 ZooKeeper is how some test clusters and older brokers store metadata. It is
 not a client feature. See
@@ -55,7 +55,7 @@ See [Messages](https://kafka.apache.org/43/implementation/messages/).
 
 `CompressionTypes.ZSTD` uses Node 24's native `zlib.zstdCompress` /
 `zstdDecompress`. The producer rejects ZSTD when the broker negotiated
-Produce < 7 (Kafka < 2.1). Snappy and LZ4 stay pluggable:
+Produce < 7 (Kafka < 2.1). Snappy and LZ4 are pluggable stubs, not built in:
 
 ```ts
 import { CompressionCodecs, CompressionTypes } from '@kafka/core';
@@ -68,6 +68,12 @@ CompressionCodecs[CompressionTypes.Snappy] = () => mySnappyCodec;
 Declaration files come from the TypeScript source, so type shapes match the
 implementation. Some type names use the unprefixed form (`CustomPartitioner`,
 `TopicConfig`) rather than an `I` prefix.
+
+## Java client defaults
+
+This library does not match Java 4.3 producer/consumer defaults
+(`enable.idempotence`, `isolation.level`, `linger.ms`, partitioner). See
+[Compatibility](/docs/compatibility/).
 
 ## Environment variables
 

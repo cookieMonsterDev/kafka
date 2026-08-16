@@ -111,6 +111,10 @@ export class Kafka {
     transactionalId,
     transactionTimeout,
     maxInFlightRequests,
+    acks,
+    compression,
+    lingerMs,
+    batchSize,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({
@@ -133,6 +137,10 @@ export class Kafka {
       transactionalId,
       transactionTimeout,
       instrumentationEmitter,
+      acks,
+      compression,
+      lingerMs,
+      batchSize,
     });
   }
 

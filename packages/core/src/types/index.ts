@@ -126,6 +126,7 @@ export interface ProducerConfig {
   allowAutoTopicCreation?: boolean;
   /**
    * Assign producer ids and sequence numbers so the broker can deduplicate retries.
+   * Defaults to false. Java 3.0+ defaults `enable.idempotence` to true.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#enable.idempotence
    */
   idempotent?: boolean;
@@ -140,6 +141,29 @@ export interface ProducerConfig {
    */
   transactionTimeout?: number;
   maxInFlightRequests?: number;
+  /**
+   * Default acks for send/sendBatch when the call omits acks. `-1` = all ISR.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   */
+  acks?: number;
+  /**
+   * Default compression for send/sendBatch when the call omits compression.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.type
+   */
+  compression?: CompressionType;
+  /**
+   * Delay in ms to wait for more records before sending a Produce request.
+   * Default 0 (send immediately). Java 4.0+ defaults to 5.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
+   */
+  lingerMs?: number;
+  /**
+   * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
+   * Ignored when lingerMs is 0. Unset or 0 means do not batch by size.
+   * Java default is 16384.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
+   */
+  batchSize?: number;
 }
 
 /**

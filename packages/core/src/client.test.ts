@@ -22,6 +22,7 @@ describe('Kafka', () => {
     const producer = createClient().producer();
     expect(typeof producer.send).toBe('function');
     expect(typeof producer.sendBatch).toBe('function');
+    expect(typeof producer.flush).toBe('function');
     expect(typeof producer.connect).toBe('function');
     expect(typeof producer.disconnect).toBe('function');
     expect(typeof producer[Symbol.asyncDispose]).toBe('function');

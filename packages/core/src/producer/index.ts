@@ -5,6 +5,7 @@ import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } 
 import type { InstrumentationEvent } from '../instrumentation/event';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
+import type { CompressionType } from '../protocol/compression/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createEosManager, type EosManager } from './eos-manager/index';
@@ -22,6 +23,10 @@ export interface ProducerOptions {
   transactionalId?: string;
   transactionTimeout?: number;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
+  acks?: number;
+  compression?: CompressionType;
+  lingerMs?: number;
+  batchSize?: number;
 }
 
 /**
@@ -53,6 +58,8 @@ export interface Producer {
   ) => RemoveInstrumentationEventListener;
   send: (record: ProducerRecord & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
   sendBatch: (batch: ProducerBatch & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
+  /** Send any linger-buffered records immediately. No-op when lingerMs is 0. */
+  flush: () => Promise<void>;
   /** Begin a transaction. Requires `transactionalId` on the producer. */
   transaction: () => Promise<Transaction>;
   logger: () => Logger;
@@ -78,6 +85,10 @@ export function createProducer({
   transactionalId,
   transactionTimeout,
   instrumentationEmitter: rootInstrumentationEmitter,
+  acks,
+  compression,
+  lingerMs = 0,
+  batchSize,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -103,17 +114,26 @@ export function createProducer({
     transactionalId,
   });
 
-  const { send, sendBatch } = createMessageProducer({
+  const messageProducerOptions = {
     logger,
     cluster,
     partitioner,
-    eosManager: idempotentEosManager,
-    idempotent,
     retrier: producerRetrier,
     getConnectionStatus: () => connectionStatus,
+    defaultAcks: acks,
+    defaultCompression: compression,
+    lingerMs,
+    batchSize,
+  };
+
+  const { send, sendBatch, flush } = createMessageProducer({
+    ...messageProducerOptions,
+    eosManager: idempotentEosManager,
+    idempotent,
   });
 
   let transactionalEosManager: EosManager | undefined;
+  let transactionalFlush: (() => Promise<void>) | undefined;
 
   function on(
     eventName: ProducerEventName,
@@ -161,15 +181,16 @@ export function createProducer({
     }
     activeEosManager.beginTransaction();
 
-    const { send: sendTxn, sendBatch: sendBatchTxn } = createMessageProducer({
-      logger,
-      cluster,
-      partitioner,
-      retrier: producerRetrier,
+    const {
+      send: sendTxn,
+      sendBatch: sendBatchTxn,
+      flush: flushTxn,
+    } = createMessageProducer({
+      ...messageProducerOptions,
       eosManager: activeEosManager,
       idempotent: true,
-      getConnectionStatus: () => connectionStatus,
     });
+    transactionalFlush = flushTxn;
 
     const isActive = (): boolean => activeEosManager.isInTransaction() && !transactionDidEnd;
 
@@ -189,10 +210,12 @@ export function createProducer({
       sendBatch: transactionGuard(sendBatchTxn),
       send: transactionGuard(sendTxn),
       abort: transactionGuard(async () => {
+        await flushTxn();
         await activeEosManager.abort();
         transactionDidEnd = true;
       }),
       commit: transactionGuard(async () => {
+        await flushTxn();
         await activeEosManager.commit();
         transactionDidEnd = true;
       }),
@@ -233,12 +256,21 @@ export function createProducer({
     }
   }
 
+  async function flushAll(): Promise<void> {
+    await flush();
+    if (transactionalFlush) await transactionalFlush();
+  }
+
   async function disconnect({ signal }: ConnectOptions = {}): Promise<void> {
     if (signal?.aborted) throw abortError(signal);
-    connectionStatus = CONNECTION_STATUS.DISCONNECTING;
-    await rejectOnAbort(cluster.disconnect(), signal);
-    connectionStatus = CONNECTION_STATUS.DISCONNECTED;
-    instrumentationEmitter.emit(DISCONNECT, {});
+    try {
+      await rejectOnAbort(flushAll(), signal);
+    } finally {
+      connectionStatus = CONNECTION_STATUS.DISCONNECTING;
+      await rejectOnAbort(cluster.disconnect(), signal);
+      connectionStatus = CONNECTION_STATUS.DISCONNECTED;
+      instrumentationEmitter.emit(DISCONNECT, {});
+    }
   }
 
   return {
@@ -249,6 +281,7 @@ export function createProducer({
     on,
     send,
     sendBatch,
+    flush: flushAll,
     transaction,
     logger: () => logger,
     [Symbol.asyncDispose]: disconnect,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
@@ -44,6 +44,10 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe('producer', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('throws when the topic is missing', async () => {
     const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(producer.send({ acks: 1, topic: '', messages: [] })).rejects.toThrow('Invalid topic');
@@ -206,6 +210,16 @@ describe('producer', () => {
     expect(producer.isIdempotent()).toBe(true);
   });
 
+  it('is not idempotent by default', () => {
+    const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    expect(producer.isIdempotent()).toBe(false);
+  });
+
+  it('exposes flush', () => {
+    const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    expect(typeof producer.flush).toBe('function');
+  });
+
   it('throws when an idempotent producer disallows retries', () => {
     expect(() =>
       createProducer({
@@ -245,6 +259,51 @@ describe('producer', () => {
     const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await producer[Symbol.asyncDispose]();
     expect(cluster.disconnect).toHaveBeenCalled();
+  });
+
+  it('flushes linger-buffered records before disconnect', async () => {
+    vi.useFakeTimers();
+    const produce = vi.fn().mockResolvedValue({
+      throttleTime: 0,
+      clientSideThrottleTime: 0,
+      topics: [
+        {
+          topicName: 'topic',
+          partitions: [{ partition: 0, errorCode: 0, baseOffset: 0n, logAppendTime: -1n, logStartOffset: 0n }],
+        },
+      ],
+    });
+    const broker = { nodeId: 1, produce };
+    const cluster = fakeCluster({
+      addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
+      refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      findTopicPartitionMetadata: vi
+        .fn()
+        .mockReturnValue([
+          { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+        ]),
+      findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
+      findBroker: vi.fn().mockResolvedValue(broker),
+      removeBroker: vi.fn(),
+      targetTopics: new Set<string>(),
+      isConnected: vi.fn().mockReturnValue(true),
+    });
+    const producer = createProducer({
+      cluster: cluster as unknown as Cluster,
+      logger: silentLogger,
+      lingerMs: 10_000,
+      createPartitioner: () => () => 0,
+    });
+
+    await producer.connect();
+    const sendPromise = producer.send({ topic: 'topic', messages: [{ value: 'a' }] });
+    await Promise.resolve();
+    expect(produce).not.toHaveBeenCalled();
+
+    await producer.disconnect();
+    await sendPromise;
+    expect(produce).toHaveBeenCalledTimes(1);
   });
 
   describe('transaction', () => {

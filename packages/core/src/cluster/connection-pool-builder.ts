@@ -6,6 +6,7 @@ import { ConnectionPool } from '../network/connection-pool';
 import type { ConnectionOptions } from '../network/connection';
 import type { NetworkEventMap } from '../network/instrumentation-events';
 import type { SocketFactory } from '../network/socket-factory';
+import { shuffle } from '../utils/shuffle';
 import { parseBrokerAddress } from './parse-broker-address';
 
 export interface ConnectionPoolBuilderOptions {
@@ -72,6 +73,7 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
   } = options;
 
   let index = 0;
+  let shuffledStaticBrokers: string[] | null = null;
 
   const getBrokers = async (): Promise<readonly string[]> => {
     let list: readonly string[];
@@ -86,12 +88,16 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
         wrappedError.stack = `${wrappedError.name}\n  Caused by: ${(e as Error).stack}`;
         throw wrappedError;
       }
-    } else {
-      list = brokers;
+      validateBrokers(list);
+      return shuffle([...list]);
     }
 
-    validateBrokers(list);
-    return list;
+    if (!shuffledStaticBrokers) {
+      validateBrokers(brokers);
+      shuffledStaticBrokers = shuffle([...brokers]);
+    }
+
+    return shuffledStaticBrokers;
   };
 
   return {

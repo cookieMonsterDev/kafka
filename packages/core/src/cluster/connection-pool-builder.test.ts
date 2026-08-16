@@ -41,7 +41,9 @@ describe('cluster/connectionPoolBuilder', () => {
     const second = await builder.build();
     const third = await builder.build();
 
-    expect([first.host, second.host, third.host]).toEqual(['broker-1', 'broker-2', 'broker-1']);
+    expect(new Set([first.host, second.host])).toEqual(new Set(['broker-1', 'broker-2']));
+    expect(first.host).not.toBe(second.host);
+    expect(third.host).toBe(first.host);
     await Promise.all([first.destroy(), second.destroy(), third.destroy()]);
   });
 

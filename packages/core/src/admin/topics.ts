@@ -5,6 +5,7 @@ import {
   KafkaNonRetriableError,
 } from '../errors';
 import { staleMetadata } from '../protocol/error-codes';
+import { API_KEYS } from '../protocol/requests/api-keys';
 import { retrier } from '../retry/index';
 import { parseOffset } from '../consumer/types';
 import type { AdminContext } from './helpers';
@@ -250,6 +251,19 @@ export function createTopicsApi(
   };
 
   const describeCluster = async () => {
+    await cluster.refreshMetadata();
+    const versions = cluster.brokerPool.versions;
+    if (versions?.[API_KEYS.DescribeCluster]) {
+      const broker = await cluster.findControllerBroker();
+      const body = await broker.describeCluster({});
+      const controller = body.controllerId == null || body.controllerId === NO_CONTROLLER_ID ? null : body.controllerId;
+      return {
+        brokers: body.brokers.map(({ nodeId, host, port }) => ({ nodeId, host, port })),
+        controller,
+        clusterId: body.clusterId,
+      };
+    }
+
     const { brokers: nodes, clusterId, controllerId } = await requireMetadata(cluster, { topics: [] });
     const brokers = nodes.map(({ nodeId, host, port }) => ({ nodeId, host, port }));
     const controller = controllerId == null || controllerId === NO_CONTROLLER_ID ? null : controllerId;

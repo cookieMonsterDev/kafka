@@ -42,6 +42,7 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     alterClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
     describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [] }),
     alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [] }),
+    describeCluster: vi.fn().mockResolvedValue({ brokers: [], clusterId: 'c', controllerId: 1 }),
     ...overrides,
   };
 }
@@ -211,6 +212,27 @@ describe('admin', () => {
       controller: null,
       clusterId: 'cid',
     });
+  });
+
+  it('describes the cluster via DescribeCluster when advertised', async () => {
+    const broker = fakeBroker({
+      describeCluster: vi.fn().mockResolvedValue({
+        brokers: [{ nodeId: 1, host: 'localhost', port: 9092, rack: null }],
+        clusterId: 'cid',
+        controllerId: -1,
+      }),
+    });
+    const cluster = fakeCluster({
+      findControllerBroker: vi.fn().mockResolvedValue(broker),
+      brokerPool: { brokers: { '1': broker }, versions: { 60: { minVersion: 0, maxVersion: 2 } } },
+    });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.describeCluster()).resolves.toEqual({
+      brokers: [{ nodeId: 1, host: 'localhost', port: 9092 }],
+      controller: null,
+      clusterId: 'cid',
+    });
+    expect(broker.describeCluster).toHaveBeenCalledWith({});
   });
 
   it('fetches topic offsets as bigint high/low watermarks', async () => {

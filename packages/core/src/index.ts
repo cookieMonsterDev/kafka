@@ -8,10 +8,10 @@
 export { Kafka } from './client';
 
 import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
-import { roundRobin } from './consumer/assigners/index';
+import { range, roundRobin } from './consumer/assigners/index';
 import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './producer/partitioners/index';
 
-export const PartitionAssigners = Object.freeze({ roundRobin });
+export const PartitionAssigners = Object.freeze({ roundRobin, range });
 export const AssignerProtocol = Object.freeze({ MemberMetadata, MemberAssignment });
 export const Partitioners = Object.freeze({
   DefaultPartitioner,

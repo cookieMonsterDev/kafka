@@ -44,7 +44,7 @@ describe('broker.offsets', () => {
     await leader.connect();
 
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      leader.produce({
+      leader!.produce({
         acks: 1,
         timeout: 30_000,
         topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v' }] }] }],

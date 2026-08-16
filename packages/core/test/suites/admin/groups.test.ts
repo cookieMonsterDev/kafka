@@ -73,7 +73,7 @@ describe('admin.groups', () => {
     consumer = undefined;
 
     await waitFor(async () => {
-      const described = await admin.describeGroups([groupId]);
+      const described = await admin!.describeGroups([groupId]);
       const state = described.groups[0]?.state;
       return state === 'Empty' || state === 'Dead' ? state : false;
     });

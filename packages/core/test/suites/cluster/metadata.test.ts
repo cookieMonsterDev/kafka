@@ -32,7 +32,8 @@ describe('cluster.metadata', () => {
     const expected = [topic1, topic2, topic3];
     const response = await waitFor(async () => {
       const metadata = await cluster!.metadata({ topics: [] });
-      const names = metadata?.topicMetadata.map((t) => t.topic) ?? [];
+      if (metadata == null) return false;
+      const names = metadata.topicMetadata.map((t) => t.topic);
       return expected.every((topic) => names.includes(topic)) ? metadata : false;
     });
     expect(response.topicMetadata.length).toBeGreaterThanOrEqual(3);

@@ -16,7 +16,10 @@ const entries = (await getCollection('docs')).sort(
 ---
 
 <BaseLayout title="Kafka docs" description="Documentation for @kafka/core">
-  <h1 class="text-3xl font-semibold tracking-tight">@kafka/core</h1>
+  <div class="flex items-center gap-3">
+    <img src="/logo-icon.svg" alt="" width="48" height="48" class="size-12" />
+    <h1 class="text-3xl font-semibold tracking-tight">@kafka/core</h1>
+  </div>
   <p class="text-muted-foreground mt-2">
     TypeScript Kafka client — Kafka 0.10+, bigint offsets, generated types.
   </p>

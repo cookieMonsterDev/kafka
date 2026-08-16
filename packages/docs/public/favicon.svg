@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="90 90 844 844" role="img" aria-label="kafka">
+  <defs>
+    <radialGradient id="disc" cx="50%" cy="46%" r="54%">
+      <stop offset="0%" stop-color="#0c4448"/>
+      <stop offset="45%" stop-color="#062b2e"/>
+      <stop offset="100%" stop-color="#021314"/>
+    </radialGradient>
+    <linearGradient id="k-stroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#c8f7f2"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <circle cx="512" cy="509" r="415" fill="url(#disc)"/>
+  <circle cx="512" cy="509" r="414" fill="none" stroke="#1a5c5c" stroke-width="2" opacity="0.7"/>
+
+  <g transform="translate(512 509) scale(1.08) translate(-466.5 -509)" filter="url(#glow)">
+    <g fill="none" stroke="url(#k-stroke)" stroke-width="36" stroke-linecap="round">
+      <line x1="367" y1="283" x2="363" y2="735"/>
+      <line x1="363" y1="515" x2="568" y2="396"/>
+      <line x1="363" y1="515" x2="570" y2="626"/>
+    </g>
+    <g fill="#062b2e" stroke="url(#k-stroke)" stroke-width="24">
+      <circle cx="367" cy="283" r="51"/>
+      <circle cx="363" cy="515" r="51"/>
+      <circle cx="363" cy="735" r="51"/>
+      <circle cx="568" cy="396" r="51"/>
+      <circle cx="570" cy="626" r="51"/>
+    </g>
+  </g>
+</svg>

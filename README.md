@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand/logo-256.png" width="160" height="160" alt="kafka">
+</p>
+
 # kafka
 
 A pnpm workspace containing:

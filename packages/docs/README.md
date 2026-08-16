@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo-icon.svg" width="72" height="72" alt="@kafka/docs">
+</p>
+
 # @kafka/docs
 
 Astro documentation site. Every Markdown file under `src/content/docs/` becomes
@@ -119,6 +123,7 @@ Tailwind's preflight would otherwise reset it to unstyled HTML.
 ```
 astro.config.mjs               Astro config (React, Tailwind, Shiki, site URL)
 components.json                shadcn/ui config (style, aliases, base color)
+public/                        favicon, apple-touch-icon, and logo assets
 src/content.config.ts          collection schema + glob loader
 src/content/docs/*.md          the content
 src/pages/index.astro          auto-generated index, uses Card + buttonVariants

@@ -17,11 +17,17 @@ const { title, description } = Astro.props
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body class="bg-background text-foreground min-h-screen font-sans antialiased">
     <header class="border-border border-b">
       <nav class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
-        <a href="/" class="font-semibold tracking-tight">Kafka docs</a>
+        <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
+          <img src="/logo-icon.svg" alt="" width="28" height="28" class="size-7" />
+          Kafka docs
+        </a>
         {/* client:load hydrates this island; the rest of the page stays static HTML */}
         <ThemeToggle client:load />
       </nav>

@@ -3,7 +3,7 @@ import { ApiVersions } from './index';
 
 describe('protocol/requests/api-versions', () => {
   it('implements versions 0 through 3', () => {
-    expect(ApiVersions.versions).toEqual([0, 1, 2, 3]);
+    expect(ApiVersions.versions).toEqual([0, 1, 2, 3, 4]);
   });
 
   it('logs response errors on v0 only', () => {
@@ -11,6 +11,7 @@ describe('protocol/requests/api-versions', () => {
     expect(ApiVersions.protocol({ version: 1 })({}).logResponseError).toBe(false);
     expect(ApiVersions.protocol({ version: 2 })({}).logResponseError).toBe(false);
     expect(ApiVersions.protocol({ version: 3 })({}).logResponseError).toBe(false);
+    expect(ApiVersions.protocol({ version: 4 })({}).logResponseError).toBe(false);
   });
 
   it('throws for an unimplemented version', () => {

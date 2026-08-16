@@ -7,6 +7,8 @@ import { apiVersionsRequestV2 } from './v2/request';
 import { apiVersionsResponseV2 } from './v2/response';
 import { apiVersionsRequestV3, type ApiVersionsRequestOptions } from './v3/request';
 import { apiVersionsResponseV3 } from './v3/response';
+import { apiVersionsRequestV4 } from './v4/request';
+import { apiVersionsResponseV4 } from './v4/response';
 
 export type { ApiVersionsRequestOptions };
 
@@ -17,6 +19,11 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ApiVersionsRequestOption
   3: (options) => ({
     request: apiVersionsRequestV3(options),
     response: apiVersionsResponseV3,
+    logResponseError: false,
+  }),
+  4: (options) => ({
+    request: apiVersionsRequestV4(options),
+    response: apiVersionsResponseV4,
     logResponseError: false,
   }),
 };

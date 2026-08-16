@@ -20,6 +20,10 @@ saveWorkspaceProtocol: rolling
 disallowWorkspaceCycles: true
 # Enforce the `engines` field in package.json instead of only warning.
 engineStrict: true
+# Skip versions published less than a day ago (minutes). Setting this
+# explicitly also turns on minimumReleaseAgeStrict, so install fails
+# instead of falling back to a too-new release.
+minimumReleaseAge: 1440
 # esbuild ships a platform-specific binary and needs its install script to run.
 allowBuilds:
   esbuild: true

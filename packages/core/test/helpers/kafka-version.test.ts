@@ -61,6 +61,7 @@ describe('test/helpers/kafka-version', () => {
     expect(isKRaftKafkaVersion('2.4')).toBe(false);
     expect(isKRaftKafkaVersion('3.6')).toBe(true);
     expect(isKRaftKafkaVersion('4.0')).toBe(true);
+    expect(isKRaftKafkaVersion('4.3')).toBe(true);
   });
 
   it('resolves the 4.0 KRaft compose file by default', () => {
@@ -71,6 +72,21 @@ describe('test/helpers/kafka-version', () => {
   it('resolves the 3.6 KRaft compose file', () => {
     const composeFile = resolveComposeFile({ KAFKA_VERSION: '3.6' });
     expect(path.basename(composeFile)).toBe('docker-compose.kraft-3-6.yml');
+  });
+
+  it('resolves the 4.1 KRaft compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '4.1' });
+    expect(path.basename(composeFile)).toBe('docker-compose.kraft-4-1.yml');
+  });
+
+  it('resolves the 4.2 KRaft compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '4.2' });
+    expect(path.basename(composeFile)).toBe('docker-compose.kraft-4-2.yml');
+  });
+
+  it('resolves the 4.3 KRaft compose file', () => {
+    const composeFile = resolveComposeFile({ KAFKA_VERSION: '4.3' });
+    expect(path.basename(composeFile)).toBe('docker-compose.kraft-4-3.yml');
   });
 
   it('resolves the oauthbearer compose file when enabled', () => {

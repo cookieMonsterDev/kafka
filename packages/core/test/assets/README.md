@@ -9,6 +9,9 @@ KAFKA_VERSION=1.1 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=2.4 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=3.6 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.1 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.2 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
 ```
 
 `global-setup.ts`, `scripts/compose-up.sh`, `scripts/compose-down.sh`, and `scripts/compose-pull.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
@@ -23,6 +26,9 @@ KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 | `2.4`           | `docker-compose.zk-2-4.yml`    | ZK    | available |
 | `3.6`           | `docker-compose.kraft-3-6.yml` | KRaft | available |
 | `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
+| `4.1`           | `docker-compose.kraft-4-1.yml` | KRaft | available |
+| `4.2`           | `docker-compose.kraft-4-2.yml` | KRaft | available |
+| `4.3`           | `docker-compose.kraft-4-3.yml` | KRaft | available |
 
 `KAFKA_VERSION=0.10` uses `confluentinc/cp-kafka:3.2.4` (Kafka 0.10.2) plus ZooKeeper. Produce negotiates v2 and Fetch v3 (MessageSet magic 1). Headers, transactions, DescribeConfigs, and ACLs are absent. CreateTopics / DeleteTopics are available (0.10.1+). SASL uses handshake + raw bytes.
 
@@ -34,6 +40,12 @@ KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 
 `KAFKA_VERSION=3.6` uses `apache/kafka:3.9.1`. Official `apache/kafka` images start at 3.7.0; 3.7.2 omits SCRAM credentials from `kafka-storage.sh format` ([KAFKA-17636](https://issues.apache.org/jira/browse/KAFKA-17636)). Combined broker/controller mode matches the 4.0 stack (`apache/kafka:4.0.0`).
 
+`KAFKA_VERSION=4.1` uses `apache/kafka:4.1.2` (KRaft combined broker/controller). Same 3-broker layout, ports, certs, JAAS, and `format-and-start.sh` as the 4.0 stack.
+
+`KAFKA_VERSION=4.2` uses `apache/kafka:4.2.1` (KRaft). Same layout as 4.0.
+
+`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.1` (KRaft). Same layout as 4.0. This is the current docs line; PRs include it in the integration matrix.
+
 OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
 
 `docker-compose.kraft-sasl.yml` is included by the KRaft files for SASL listeners; do not pass it as `KAFKA_VERSION`.
@@ -43,7 +55,7 @@ OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1
 Suites that need a minimum (or maximum) broker version should import the helpers from `test/helpers/index.ts`:
 
 - `testIfKafkaAtMost_0_10` / `_0_11` / `_1_1` / `_3_6`
-- `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0`
+- `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0` / `_4_1` / `_4_2` / `_4_3`
 - `testIfKafkaEquals_0_11` / `_1_1`
 - `describeIfKRaft` / `describeIfZooKeeper`
 
@@ -66,4 +78,4 @@ GitHub Actions (`.github/workflows/ci.yml`) runs:
 - Integration jobs: one per matrix version, with `TEST_RETRIES=2`
 - OAUTHBEARER as a separate 4.0 job (`OAUTHBEARER_ENABLED=1`)
 
-PRs cover `0.10`, `2.4`, `3.6`, and `4.0` (MessageSet end, last ZK line, KRaft LTS, current default). Pushes to the default branch run the full table above. Docker images are cached per `KAFKA_VERSION`.
+PRs cover `0.10`, `2.4`, `3.6`, `4.0`, and `4.3` (MessageSet end, last ZK line, KRaft LTS, current default, current docs line). Pushes to the default branch run the full table above, including `4.1`, `4.2`, and `4.3`. Docker images are cached per `KAFKA_VERSION`.

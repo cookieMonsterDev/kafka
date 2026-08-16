@@ -35,8 +35,11 @@ case "${NORMALIZED}" in
   2.4) FILE="docker-compose.zk-2-4.yml" ;;
   3.6) FILE="docker-compose.kraft-3-6.yml" ;;
   4.0) FILE="docker-compose.kraft.yml" ;;
+  4.1) FILE="docker-compose.kraft-4-1.yml" ;;
+  4.2) FILE="docker-compose.kraft-4-2.yml" ;;
+  4.3) FILE="docker-compose.kraft-4-3.yml" ;;
   *)
-    echo "Unsupported KAFKA_VERSION=${NORMALIZED}. Known versions: 0.10, 0.11, 1.1, 2.4, 3.6, 4.0" >&2
+    echo "Unsupported KAFKA_VERSION=${NORMALIZED}. Known versions: 0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, 4.3" >&2
     exit 1
     ;;
 esac

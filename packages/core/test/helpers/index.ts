@@ -74,6 +74,7 @@ export const TRANSIENT_METADATA_ERRORS = [
   'LEADER_NOT_AVAILABLE',
   'UNKNOWN_TOPIC_OR_PARTITION',
   'NOT_LEADER_FOR_PARTITION',
+  'NOT_LEADER_OR_FOLLOWER',
 ] as const;
 
 export function secureRandom(length = 10): string {
@@ -468,6 +469,9 @@ export const testIfKafkaAtLeast_2_4 = testIfKafkaVersion('2.4', kafkaVersionAtLe
 export const testIfKafkaAtLeast_3_0 = testIfKafkaVersion('3.0', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_4_0 = testIfKafkaVersion('4.0', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_4_1 = testIfKafkaVersion('4.1', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_4_2 = testIfKafkaVersion('4.2', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_4_3 = testIfKafkaVersion('4.3', kafkaVersionAtLeast);
 
 export {
   DEFAULT_KAFKA_VERSION,

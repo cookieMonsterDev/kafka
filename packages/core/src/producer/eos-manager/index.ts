@@ -206,8 +206,8 @@ export function createEosManager({
     const previous = getSequence(topic, partition);
     let sequence = previous + increment;
 
-    // Sequence is defined as Int32 in the record batch, so theoretically we should rotate here.
-    if (sequence >= INT_32_MAX_VALUE) {
+    // Sequence is an Int32; rotate only after the last legal value (`2^31-1`) has been used.
+    if (sequence > INT_32_MAX_VALUE) {
       logger.debug(`Sequence for ${topic} ${partition} exceeds max value (${sequence}). Rotating to 0.`);
       sequence = 0;
     }

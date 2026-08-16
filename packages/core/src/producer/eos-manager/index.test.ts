@@ -80,10 +80,10 @@ describe('producer/eosManager', () => {
     expect(eosManager.getSequence(topic, 2)).toBe(0); // Different partition.
     expect(eosManager.getSequence('foobar', 1)).toBe(0); // Different topic.
 
-    eosManager.updateSequence(topic, 3, 2 ** 31 - 100);
-    expect(eosManager.getSequence(topic, 3)).toBe(2 ** 31 - 100);
-    eosManager.updateSequence(topic, 3, 100);
-    expect(eosManager.getSequence(topic, 3)).toBe(0); // Rotated once it reached the int32 max.
+    eosManager.updateSequence(topic, 3, 2 ** 31 - 1);
+    expect(eosManager.getSequence(topic, 3)).toBe(2 ** 31 - 1); // Int32 max is a valid sequence.
+    eosManager.updateSequence(topic, 3, 1);
+    expect(eosManager.getSequence(topic, 3)).toBe(0); // Rotated only after exceeding int32 max.
 
     await eosManager.initProducerId();
     expect(eosManager.getSequence(topic, 1)).toBe(0); // Sequences reset by initProducerId.

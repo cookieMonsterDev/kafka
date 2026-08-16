@@ -40,6 +40,8 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
     describeClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
     alterClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
+    describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [] }),
+    alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [] }),
     ...overrides,
   };
 }
@@ -461,6 +463,27 @@ describe('admin', () => {
   it('rejects an empty alterClientQuotas entries array', async () => {
     const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(admin.alterClientQuotas({ entries: [] })).rejects.toThrow('Entries array cannot be empty');
+  });
+
+  it('describes log dirs on every broker in the pool', async () => {
+    const brokerA = fakeBroker({
+      describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/a', topics: [] }] }),
+    });
+    const brokerB = fakeBroker({
+      nodeId: 2,
+      describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/b', topics: [] }] }),
+    });
+    const cluster = fakeCluster({
+      brokerPool: { brokers: { '1': brokerA, '2': brokerB } },
+      findBroker: vi.fn(async ({ nodeId }: { nodeId: string }) => (nodeId === '1' ? brokerA : brokerB)),
+    });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.describeLogDirs()).resolves.toEqual({
+      brokers: [
+        { brokerId: 1, logDirs: [{ errorCode: 0, logDir: '/tmp/a', topics: [] }] },
+        { brokerId: 2, logDirs: [{ errorCode: 0, logDir: '/tmp/b', topics: [] }] },
+      ],
+    });
   });
 
   it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {

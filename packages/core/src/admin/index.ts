@@ -6,6 +6,7 @@ import { createAclsApi } from './acls';
 import { createConfigsApi } from './configs';
 import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
+import { createLogDirsApi } from './log-dirs';
 import { createOffsetsApi } from './offsets';
 import { createQuotasApi } from './quotas';
 import { createReassignmentsApi } from './reassignments';
@@ -22,7 +23,7 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 /**
- * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, and quotas.
+ * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, and log dirs.
  *
  * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
  */
@@ -44,6 +45,7 @@ export function createAdmin({
   const reassignments = createReassignmentsApi(context);
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
+  const logDirs = createLogDirsApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -85,6 +87,7 @@ export function createAdmin({
     ...reassignments,
     ...scram,
     ...quotas,
+    ...logDirs,
     on,
     logger: () => logger,
     events,

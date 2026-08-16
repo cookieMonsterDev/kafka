@@ -9,8 +9,10 @@ import type { ConfigResourceType } from '../protocol/enums/config-resource-types
 import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
 import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
+import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
 import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
 import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/describe-client-quotas/v1/response';
+import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
@@ -251,6 +253,14 @@ export interface Admin {
     }[];
     validateOnly?: boolean;
   }) => Promise<{ entries: AlterClientQuotasResponseV1Body['entries'] }>;
+  describeLogDirs: (options?: {
+    topics?: { topic: string; partitions: number[] }[] | null;
+    brokerIds?: Array<string | number>;
+  }) => Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }>;
+  alterReplicaLogDirs: (options: {
+    dirs: { path: string; topics: { topic: string; partitions: number[] }[] }[];
+    brokerId: string | number;
+  }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

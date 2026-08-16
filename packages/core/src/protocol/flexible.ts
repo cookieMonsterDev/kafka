@@ -39,6 +39,8 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.DeleteAcls]: 2,
   [API_KEYS.DescribeConfigs]: 4,
   [API_KEYS.AlterConfigs]: 2,
+  [API_KEYS.AlterReplicaLogDirs]: 2,
+  [API_KEYS.DescribeLogDirs]: 2,
   [API_KEYS.SaslAuthenticate]: 2,
   [API_KEYS.CreatePartitions]: 2,
   [API_KEYS.DeleteGroups]: 2,
@@ -51,6 +53,7 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.AlterClientQuotas]: 1,
   [API_KEYS.DescribeUserScramCredentials]: 0,
   [API_KEYS.AlterUserScramCredentials]: 0,
+  [API_KEYS.DescribeCluster]: 0,
 });
 
 /**

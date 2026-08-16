@@ -13,6 +13,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.OffsetDelete).toBe(47);
     expect(API_KEYS.DescribeUserScramCredentials).toBe(50);
     expect(API_KEYS.AlterUserScramCredentials).toBe(51);
+    expect(API_KEYS.DescribeCluster).toBe(60);
   });
 
   it('is frozen', () => {

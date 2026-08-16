@@ -7,6 +7,10 @@ import { syncGroupRequestV2 } from './v2/request';
 import { syncGroupResponseV2 } from './v2/response';
 import { syncGroupRequestV3 } from './v3/request';
 import { syncGroupResponseV3 } from './v3/response';
+import { syncGroupRequestV4 } from './v4/request';
+import { syncGroupResponseV4 } from './v4/response';
+import { syncGroupRequestV5 } from './v5/request';
+import { syncGroupResponseV5 } from './v5/response';
 
 export interface SyncGroupAssignment {
   memberId: string;
@@ -18,6 +22,8 @@ export interface SyncGroupOptions {
   generationId: number;
   memberId: string;
   groupInstanceId?: string | null;
+  protocolType?: string | null;
+  protocolName?: string | null;
   groupAssignment: SyncGroupAssignment[];
 }
 
@@ -28,6 +34,19 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<SyncGroupOptions>>> = {
   3: (options) => ({
     request: syncGroupRequestV3({ ...options, groupInstanceId: options.groupInstanceId ?? null }),
     response: syncGroupResponseV3,
+  }),
+  4: (options) => ({
+    request: syncGroupRequestV4({ ...options, groupInstanceId: options.groupInstanceId ?? null }),
+    response: syncGroupResponseV4,
+  }),
+  5: (options) => ({
+    request: syncGroupRequestV5({
+      ...options,
+      groupInstanceId: options.groupInstanceId ?? null,
+      protocolType: options.protocolType ?? null,
+      protocolName: options.protocolName ?? null,
+    }),
+    response: syncGroupResponseV5,
   }),
 };
 

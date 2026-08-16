@@ -11,6 +11,14 @@ import { joinGroupRequestV4 } from './v4/request';
 import { joinGroupResponseV4 } from './v4/response';
 import { joinGroupRequestV5 } from './v5/request';
 import { joinGroupResponseV5 } from './v5/response';
+import { joinGroupRequestV6 } from './v6/request';
+import { joinGroupResponseV6 } from './v6/response';
+import { joinGroupRequestV7 } from './v7/request';
+import { joinGroupResponseV7 } from './v7/response';
+import { joinGroupRequestV8 } from './v8/request';
+import { joinGroupResponseV8 } from './v8/response';
+import { joinGroupRequestV9 } from './v9/request';
+import { joinGroupResponseV9 } from './v9/response';
 
 export interface JoinGroupOptions {
   groupId: string;
@@ -20,6 +28,7 @@ export interface JoinGroupOptions {
   groupInstanceId?: string | null;
   protocolType: string;
   groupProtocols: GroupProtocol[];
+  reason?: string | null;
 }
 
 /**
@@ -95,6 +104,52 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
       groupProtocols: withDefaultMetadata(options.groupProtocols),
     }),
     response: joinGroupResponseV5,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
+  }),
+  6: (options) => ({
+    request: joinGroupRequestV6({
+      ...options,
+      rebalanceTimeout: options.rebalanceTimeout ?? options.sessionTimeout,
+      groupInstanceId: options.groupInstanceId ?? null,
+      groupProtocols: withDefaultMetadata(options.groupProtocols),
+    }),
+    response: joinGroupResponseV6,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
+  }),
+  7: (options) => ({
+    request: joinGroupRequestV7({
+      ...options,
+      rebalanceTimeout: options.rebalanceTimeout ?? options.sessionTimeout,
+      groupInstanceId: options.groupInstanceId ?? null,
+      groupProtocols: withDefaultMetadata(options.groupProtocols),
+    }),
+    response: joinGroupResponseV7,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
+  }),
+  8: (options) => ({
+    request: joinGroupRequestV8({
+      ...options,
+      rebalanceTimeout: options.rebalanceTimeout ?? options.sessionTimeout,
+      groupInstanceId: options.groupInstanceId ?? null,
+      groupProtocols: withDefaultMetadata(options.groupProtocols),
+      reason: options.reason ?? null,
+    }),
+    response: joinGroupResponseV8,
+    requestTimeout: joinGroupRequestTimeout(options),
+    logResponseError: joinGroupLogResponseError(options.memberId),
+  }),
+  9: (options) => ({
+    request: joinGroupRequestV9({
+      ...options,
+      rebalanceTimeout: options.rebalanceTimeout ?? options.sessionTimeout,
+      groupInstanceId: options.groupInstanceId ?? null,
+      groupProtocols: withDefaultMetadata(options.groupProtocols),
+      reason: options.reason ?? null,
+    }),
+    response: joinGroupResponseV9,
     requestTimeout: joinGroupRequestTimeout(options),
     logResponseError: joinGroupLogResponseError(options.memberId),
   }),

@@ -7,6 +7,8 @@ import { heartbeatRequestV2 } from './v2/request';
 import { heartbeatResponseV2 } from './v2/response';
 import { heartbeatRequestV3 } from './v3/request';
 import { heartbeatResponseV3 } from './v3/response';
+import { heartbeatRequestV4 } from './v4/request';
+import { heartbeatResponseV4 } from './v4/response';
 
 export interface HeartbeatOptions {
   groupId: string;
@@ -22,6 +24,10 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<HeartbeatOptions>>> = {
   3: (options) => ({
     request: heartbeatRequestV3({ ...options, groupInstanceId: options.groupInstanceId ?? null }),
     response: heartbeatResponseV3,
+  }),
+  4: (options) => ({
+    request: heartbeatRequestV4({ ...options, groupInstanceId: options.groupInstanceId ?? null }),
+    response: heartbeatResponseV4,
   }),
 };
 

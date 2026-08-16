@@ -3,8 +3,8 @@ import { Decoder } from '../../decoder';
 import { JoinGroup } from './index';
 
 describe('protocol/requests/join-group', () => {
-  it('implements versions 0 through 5', () => {
-    expect(JoinGroup.versions).toEqual([0, 1, 2, 3, 4, 5]);
+  it('implements versions 0 through 9', () => {
+    expect(JoinGroup.versions).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
   it('defaults rebalanceTimeout to sessionTimeout on v1+', async () => {
@@ -32,6 +32,20 @@ describe('protocol/requests/join-group', () => {
       groupProtocols: [{ name: 'p' }],
     });
     expect(request.apiVersion).toBe(5);
+  });
+
+  it('defaults reason to null on v8+', async () => {
+    const { request } = JoinGroup.protocol({ version: 8 })({
+      groupId: 'g',
+      sessionTimeout: 1,
+      rebalanceTimeout: 1,
+      memberId: '',
+      protocolType: 'consumer',
+      groupProtocols: [{ name: 'p' }],
+    });
+    const encoder = await request.encode();
+    expect(request.apiVersion).toBe(8);
+    expect(encoder.buffer.subarray(-2)).toEqual(Buffer.from([0, 0]));
   });
 
   describe('requestTimeout', () => {
@@ -68,7 +82,7 @@ describe('protocol/requests/join-group', () => {
         groupProtocols: [{ name: 'default' }],
       };
 
-      for (const version of [1, 2, 3, 4, 5] as const) {
+      for (const version of [1, 2, 3, 4, 5, 6, 7, 8, 9] as const) {
         const protocol = JoinGroup.protocol({ version })(parameters);
         expect(protocol.requestTimeout).toBe(35_000);
       }

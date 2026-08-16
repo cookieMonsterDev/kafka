@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { KafkaNonRetriableError } from '../../errors';
 import { Encoder } from '../encoder';
-import { zstdCodec } from './zstd';
+import { decompressZstd, zstdCodec } from './zstd';
 
 describe('protocol/compression/zstd', () => {
   it('round-trips arbitrary bytes', async () => {
@@ -15,5 +16,11 @@ describe('protocol/compression/zstd', () => {
     const compressed = await zstdCodec.compress(encoder);
     // https://datatracker.ietf.org/doc/html/rfc8878#section-3.1.1 — magic number 0xFD2FB528 (little-endian bytes)
     expect(compressed.subarray(0, 4)).toEqual(Buffer.from([0x28, 0xb5, 0x2f, 0xfd]));
+  });
+
+  it('rejects decompressed output that exceeds the size cap', async () => {
+    const encoder = new Encoder().writeBuffer(Buffer.alloc(64, 'a'));
+    const compressed = await zstdCodec.compress(encoder);
+    await expect(decompressZstd(compressed, 1)).rejects.toBeInstanceOf(KafkaNonRetriableError);
   });
 });

@@ -184,10 +184,16 @@ const responseBodySchema = object([
  * scanning topics in wire order.
  */
 export async function parseProduceResponse<
-  T extends { topics: readonly { partitions: readonly { errorCode: number }[] }[] },
+  T extends {
+    topics: readonly { topicName?: string; partitions: readonly { errorCode: number; partition?: number }[] }[];
+  },
 >(data: T): Promise<T> {
-  const [firstError] = data.topics.flatMap((topic) => topic.partitions.filter((p) => failure(p.errorCode)));
-  if (firstError) throw createErrorFromCode(firstError.errorCode);
+  for (const topic of data.topics) {
+    const firstError = topic.partitions.find((p) => failure(p.errorCode));
+    if (firstError) {
+      throw createErrorFromCode(firstError.errorCode, { topic: topic.topicName, partition: firstError.partition });
+    }
+  }
   return data;
 }
 

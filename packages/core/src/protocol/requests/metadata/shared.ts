@@ -6,15 +6,23 @@ import { createErrorFromCode, failure } from '../../error-codes';
  */
 export interface TopicMetadataErrorShape {
   topicErrorCode: number;
-  partitionMetadata: readonly { partitionErrorCode: number }[];
+  topic?: string | null;
+  partitionMetadata: readonly { partitionErrorCode: number; partitionId?: number }[];
 }
 
 export function checkTopicMetadataErrors(topicMetadata: readonly TopicMetadataErrorShape[]): void {
   const topicWithError = topicMetadata.find((topic) => failure(topic.topicErrorCode));
-  if (topicWithError) throw createErrorFromCode(topicWithError.topicErrorCode);
+  if (topicWithError) {
+    throw createErrorFromCode(topicWithError.topicErrorCode, { topic: topicWithError.topic ?? undefined });
+  }
 
   for (const topic of topicMetadata) {
     const partitionWithError = topic.partitionMetadata.find((partition) => failure(partition.partitionErrorCode));
-    if (partitionWithError) throw createErrorFromCode(partitionWithError.partitionErrorCode);
+    if (partitionWithError) {
+      throw createErrorFromCode(partitionWithError.partitionErrorCode, {
+        topic: topic.topic ?? undefined,
+        partition: partitionWithError.partitionId,
+      });
+    }
   }
 }

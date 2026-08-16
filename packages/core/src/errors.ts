@@ -74,6 +74,8 @@ export class KafkaNonRetriableError extends KafkaError {
 
 export interface KafkaProtocolErrorOptions {
   retriable?: boolean;
+  topic?: string;
+  partition?: number;
 }
 
 /**
@@ -84,21 +86,32 @@ export class KafkaProtocolError extends KafkaError {
   override readonly name: KafkaErrorName = 'KafkaProtocolError';
   readonly type: string | undefined;
   readonly code: number | undefined;
+  readonly topic: string | undefined;
+  readonly partition: number | undefined;
 
   constructor(
     e: ErrorLike & { retriable?: boolean; type?: string; code?: number },
     options: KafkaProtocolErrorOptions = {},
   ) {
-    super(e, { retriable: options.retriable ?? e.retriable });
+    const topic = options.topic;
+    const partition = options.partition;
+    const details = [
+      topic != null ? `topic: ${topic}` : null,
+      partition != null ? `partition: ${partition}` : null,
+    ].filter((part): part is string => part != null);
+    const message = details.length > 0 ? `${e.message} (${details.join(', ')})` : e.message;
+    super({ ...e, message }, { retriable: options.retriable ?? e.retriable });
     this.type = e.type;
     this.code = e.code;
+    this.topic = topic;
+    this.partition = partition;
   }
 }
 
 export class KafkaOffsetOutOfRange extends KafkaProtocolError {
   override readonly name: KafkaErrorName = 'KafkaOffsetOutOfRange';
-  readonly topic: string | undefined;
-  readonly partition: number | undefined;
+  override readonly topic: string | undefined;
+  override readonly partition: number | undefined;
 
   constructor(
     e: ConstructorParameters<typeof KafkaProtocolError>[0],
@@ -332,7 +345,7 @@ export class KafkaInvalidLongError extends KafkaNonRetriableError {
 
 export class KafkaCreateTopicError extends KafkaProtocolError {
   override readonly name: KafkaErrorName = 'KafkaCreateTopicError';
-  readonly topic: string;
+  override readonly topic: string;
 
   constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], topicName: string) {
     super(e);
@@ -342,8 +355,8 @@ export class KafkaCreateTopicError extends KafkaProtocolError {
 
 export class KafkaAlterPartitionReassignmentsError extends KafkaProtocolError {
   override readonly name: KafkaErrorName = 'KafkaAlterPartitionReassignmentsError';
-  readonly topic: string;
-  readonly partition: number;
+  override readonly topic: string;
+  override readonly partition: number;
 
   constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], topicName: string, partition: number) {
     super(e);

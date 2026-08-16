@@ -70,7 +70,7 @@ export async function parseFetchResponse<
     if (errorCode === OFFSET_OUT_OF_RANGE_ERROR_CODE) {
       throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), { topic, partition });
     }
-    throw createErrorFromCode(errorCode);
+    throw createErrorFromCode(errorCode, { topic, partition });
   }
 
   return data;

@@ -39,7 +39,11 @@ describe('protocol/requests/metadata/v0/response', () => {
 
   it('throws on a topic-level error', async () => {
     const data = await metadataResponseV0.decode(buildResponse({ topicErrorCode: 3 }));
-    await expect(metadataResponseV0.parse(data)).rejects.toThrow();
+    await expect(metadataResponseV0.parse(data)).rejects.toMatchObject({
+      type: 'UNKNOWN_TOPIC_OR_PARTITION',
+      topic: 'my-topic',
+      message: expect.stringContaining('topic: my-topic'),
+    });
   });
 
   it('throws on a partition-level error', async () => {

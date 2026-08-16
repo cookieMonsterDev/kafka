@@ -582,9 +582,12 @@ export function failure(code: number): boolean {
   return code !== SUCCESS_CODE;
 }
 
-export function createErrorFromCode(code: number): KafkaProtocolError {
+export function createErrorFromCode(
+  code: number,
+  extras: { topic?: string; partition?: number } = {},
+): KafkaProtocolError {
   const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code);
-  return new KafkaProtocolError(entry);
+  return new KafkaProtocolError(entry, extras);
 }
 
 export function failIfVersionNotSupported(code: number): void {

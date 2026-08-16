@@ -349,7 +349,35 @@ export class Broker {
 
   async listOffsets(options: ListOffsetsOptions): Promise<ListOffsetsResponseV3Body> {
     const listOffsets = this.lookupRequest<ListOffsetsOptions>(API_KEYS.ListOffsets, ListOffsets);
-    return this.#send(listOffsets(options));
+    const result = (await this.#send(listOffsets(options))) as {
+      responses: {
+        topic: string;
+        partitions: {
+          partition: number;
+          errorCode: number;
+          timestamp?: bigint;
+          offset?: bigint;
+          offsets?: bigint[];
+        }[];
+      }[];
+      throttleTime?: number;
+      clientSideThrottleTime?: number;
+    };
+
+    // ListOffsets v0 returns `offsets[]`; v1+ returns a single `offset`. Normalize to `offset`.
+    return {
+      throttleTime: result.throttleTime ?? 0,
+      clientSideThrottleTime: result.clientSideThrottleTime ?? 0,
+      responses: result.responses.map((response) => ({
+        topic: response.topic,
+        partitions: response.partitions.map((partition) => ({
+          partition: partition.partition,
+          errorCode: partition.errorCode,
+          timestamp: partition.timestamp ?? -1n,
+          offset: partition.offsets != null ? (partition.offsets.at(-1) ?? -1n) : (partition.offset ?? -1n),
+        })),
+      })),
+    };
   }
 
   async offsetCommit(options: OffsetCommitOptions): Promise<OffsetCommitResponseV4Body> {

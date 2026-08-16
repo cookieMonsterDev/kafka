@@ -1,4 +1,7 @@
+import { assertNoPrefixedAclOnV0 } from '../acl-v0';
 import type { ProtocolFactory, RequestFamily } from '../index';
+import { deleteAclsRequestV0 } from './v0/request';
+import { deleteAclsResponseV0 } from './v0/response';
 import { deleteAclsRequestV1 } from './v1/request';
 import { deleteAclsResponseV1 } from './v1/response';
 
@@ -15,6 +18,26 @@ export interface DeleteAclsOptions {
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteAclsOptions>>> = {
+  0: (values) => {
+    for (const filter of values.filters) {
+      assertNoPrefixedAclOnV0(filter.resourcePatternType);
+    }
+    return {
+      request: deleteAclsRequestV0({
+        filters: values.filters.map(
+          ({ resourceType, resourceName, principal, host, operation, permissionType }) => ({
+            resourceType,
+            resourceName,
+            principal,
+            host,
+            operation,
+            permissionType,
+          }),
+        ),
+      }),
+      response: deleteAclsResponseV0,
+    };
+  },
   1: (values) => ({ request: deleteAclsRequestV1(values), response: deleteAclsResponseV1 }),
 };
 

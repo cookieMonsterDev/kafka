@@ -11,7 +11,7 @@ export interface DeleteTopicsRequestV1Fields {
  *   topics => STRING
  *   timeout => INT32
  */
-const requestSchema = object([field('topics', array(string)), field('timeout', int32)]);
+export const requestSchema = object([field('topics', array(string)), field('timeout', int32)]);
 
 export const deleteTopicsRequestV1 = defineRequest({
   apiKey: API_KEYS.DeleteTopics,

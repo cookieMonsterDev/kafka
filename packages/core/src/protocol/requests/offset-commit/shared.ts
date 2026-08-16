@@ -6,6 +6,8 @@ export const RETENTION_TIME = -1n;
 export interface OffsetCommitPartitionOptions {
   partition: number;
   offset: bigint;
+  /** OffsetCommit v1 only; defaults to `Date.now()` when omitted. */
+  timestamp?: bigint;
   metadata?: string | null;
 }
 
@@ -21,6 +23,22 @@ export function withDefaultMetadata(
   return topics.map(({ topic, partitions }) => ({
     topic,
     partitions: partitions.map(({ partition, offset, metadata = null }) => ({ partition, offset, metadata })),
+  }));
+}
+
+/** OffsetCommit v1 also writes a per-partition timestamp (defaults to now). */
+export function withDefaultMetadataAndTimestamp(
+  topics: readonly OffsetCommitTopicOptions[],
+): { topic: string; partitions: { partition: number; offset: bigint; timestamp: bigint; metadata: string | null }[] }[] {
+  const now = BigInt(Date.now());
+  return topics.map(({ topic, partitions }) => ({
+    topic,
+    partitions: partitions.map(({ partition, offset, timestamp = now, metadata = null }) => ({
+      partition,
+      offset,
+      timestamp,
+      metadata,
+    })),
   }));
 }
 

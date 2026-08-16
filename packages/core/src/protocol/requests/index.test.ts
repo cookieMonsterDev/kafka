@@ -9,6 +9,15 @@ import {
   type ProtocolResult,
   type RequestFamily,
 } from './index';
+import { CreateAcls } from './create-acls/index';
+import { CreateTopics } from './create-topics/index';
+import { DeleteAcls } from './delete-acls/index';
+import { DeleteTopics } from './delete-topics/index';
+import { DescribeAcls } from './describe-acls/index';
+import { DescribeConfigs } from './describe-configs/index';
+import { Fetch } from './fetch/index';
+import { ListOffsets } from './list-offsets/index';
+import { OffsetCommit } from './offset-commit/index';
 import { Produce } from './produce/index';
 
 function fakeFamily(versions: readonly number[]): RequestFamily<Record<string, never>> {
@@ -123,5 +132,88 @@ describe('protocol/requests', () => {
 
   it('the not-implemented marker always throws KafkaNotImplemented', () => {
     expect(() => NOT_IMPLEMENTED_REQUEST_DEFINITIONS.protocol({ version: 0 })).toThrow('This API is not implemented');
+  });
+
+  it('selects Kafka 0.11 admin and data-path versions from a recorded ApiVersions map', () => {
+    const kafka011: BrokerVersions = {
+      [API_KEYS.Produce]: { minVersion: 0, maxVersion: 3 },
+      [API_KEYS.Fetch]: { minVersion: 0, maxVersion: 5 },
+      [API_KEYS.CreateTopics]: { minVersion: 0, maxVersion: 1 },
+      [API_KEYS.DeleteTopics]: { minVersion: 0, maxVersion: 0 },
+      [API_KEYS.DescribeConfigs]: { minVersion: 0, maxVersion: 0 },
+      [API_KEYS.DescribeAcls]: { minVersion: 0, maxVersion: 0 },
+      [API_KEYS.CreateAcls]: { minVersion: 0, maxVersion: 0 },
+      [API_KEYS.DeleteAcls]: { minVersion: 0, maxVersion: 0 },
+      [API_KEYS.ListOffsets]: { minVersion: 0, maxVersion: 1 },
+      [API_KEYS.OffsetCommit]: { minVersion: 0, maxVersion: 2 },
+    };
+
+    expect(negotiatedVersion(kafka011, API_KEYS.Produce, Produce)).toBe(3);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.Fetch, Fetch, {
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [],
+      }),
+    ).toBe(5);
+    expect(negotiatedVersion(kafka011, API_KEYS.CreateTopics, CreateTopics, { topics: [{ topic: 't' }] })).toBe(1);
+    expect(negotiatedVersion(kafka011, API_KEYS.DeleteTopics, DeleteTopics, { topics: ['t'] })).toBe(0);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.DescribeConfigs, DescribeConfigs, {
+        resources: [{ type: 2, name: 't' }],
+      }),
+    ).toBe(0);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.DescribeAcls, DescribeAcls, {
+        resourceType: 2,
+        resourceName: 't',
+        resourcePatternType: 3,
+        principal: null,
+        host: '*',
+        operation: 2,
+        permissionType: 3,
+      }),
+    ).toBe(0);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.CreateAcls, CreateAcls, {
+        creations: [
+          {
+            resourceType: 2,
+            resourceName: 't',
+            resourcePatternType: 3,
+            principal: 'User:a',
+            host: '*',
+            operation: 2,
+            permissionType: 3,
+          },
+        ],
+      }),
+    ).toBe(0);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.DeleteAcls, DeleteAcls, {
+        filters: [
+          {
+            resourceType: 2,
+            resourceName: 't',
+            resourcePatternType: 3,
+            principal: null,
+            host: '*',
+            operation: 2,
+            permissionType: 3,
+          },
+        ],
+      }),
+    ).toBe(0);
+    expect(negotiatedVersion(kafka011, API_KEYS.ListOffsets, ListOffsets, { topics: [] })).toBe(1);
+    expect(
+      negotiatedVersion(kafka011, API_KEYS.OffsetCommit, OffsetCommit, {
+        groupId: 'g',
+        groupGenerationId: 1,
+        memberId: 'm',
+        topics: [],
+      }),
+    ).toBe(2);
   });
 });

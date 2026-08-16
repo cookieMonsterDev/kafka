@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ListOffsets } from './index';
 
 describe('protocol/requests/list-offsets', () => {
-  it('implements versions 1 through 3 — v0 is below the real Kafka 4.0.0 floor', () => {
-    expect(ListOffsets.versions).toEqual([1, 2, 3]);
+  it('implements versions 0 through 3', () => {
+    expect(ListOffsets.versions).toEqual([0, 1, 2, 3]);
   });
 });

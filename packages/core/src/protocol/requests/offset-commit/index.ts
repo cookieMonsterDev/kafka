@@ -1,5 +1,14 @@
 import type { ProtocolFactory, RequestFamily } from '../index';
-import { RETENTION_TIME, type OffsetCommitTopicOptions, withDefaultMetadata } from './shared';
+import {
+  RETENTION_TIME,
+  type OffsetCommitTopicOptions,
+  withDefaultMetadata,
+  withDefaultMetadataAndTimestamp,
+} from './shared';
+import { offsetCommitRequestV0 } from './v0/request';
+import { offsetCommitResponseV0 } from './v0/response';
+import { offsetCommitRequestV1 } from './v1/request';
+import { offsetCommitResponseV1 } from './v1/response';
 import { offsetCommitRequestV2 } from './v2/request';
 import { offsetCommitResponseV2 } from './v2/response';
 import { offsetCommitRequestV3 } from './v3/request';
@@ -18,6 +27,19 @@ export interface OffsetCommitOptions {
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetCommitOptions>>> = {
+  0: ({ groupId, topics }) => ({
+    request: offsetCommitRequestV0({ groupId, topics: withDefaultMetadata(topics) }),
+    response: offsetCommitResponseV0,
+  }),
+  1: ({ groupId, groupGenerationId, memberId, topics }) => ({
+    request: offsetCommitRequestV1({
+      groupId,
+      groupGenerationId,
+      memberId,
+      topics: withDefaultMetadataAndTimestamp(topics),
+    }),
+    response: offsetCommitResponseV1,
+  }),
   2: ({ groupId, groupGenerationId, memberId, retentionTime = RETENTION_TIME, topics }) => ({
     request: offsetCommitRequestV2({
       groupId,

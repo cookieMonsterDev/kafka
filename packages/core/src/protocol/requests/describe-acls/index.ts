@@ -1,4 +1,7 @@
+import { assertNoPrefixedAclOnV0 } from '../acl-v0';
 import type { ProtocolFactory, RequestFamily } from '../index';
+import { describeAclsRequestV0 } from './v0/request';
+import { describeAclsResponseV0 } from './v0/response';
 import { describeAclsRequestV1 } from './v1/request';
 import { describeAclsResponseV1 } from './v1/response';
 
@@ -13,6 +16,20 @@ export interface DescribeAclsOptions {
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeAclsOptions>>> = {
+  0: (values) => {
+    assertNoPrefixedAclOnV0(values.resourcePatternType);
+    return {
+      request: describeAclsRequestV0({
+        resourceType: values.resourceType,
+        resourceName: values.resourceName,
+        principal: values.principal,
+        host: values.host,
+        operation: values.operation,
+        permissionType: values.permissionType,
+      }),
+      response: describeAclsResponseV0,
+    };
+  },
   1: (values) => ({ request: describeAclsRequestV1(values), response: describeAclsResponseV1 }),
 };
 

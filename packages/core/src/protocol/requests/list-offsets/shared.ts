@@ -6,6 +6,8 @@ export interface ListOffsetsPartitionOptions {
   partition: number;
   /** Use -1n for the latest offset, -2n for the earliest. Defaults to -1n. */
   timestamp?: bigint;
+  /** ListOffsets v0 only; how many offsets to return. Defaults to 1. */
+  maxNumOffsets?: number;
 }
 
 export interface ListOffsetsTopicOptions {
@@ -20,6 +22,20 @@ export function withDefaultTimestamps(
   return topics.map(({ topic, partitions }) => ({
     topic,
     partitions: partitions.map(({ partition, timestamp = -1n }) => ({ partition, timestamp })),
+  }));
+}
+
+/** ListOffsets v0 also writes `max_num_offsets` (defaults to 1). */
+export function withDefaultTimestampsAndMaxOffsets(
+  topics: readonly ListOffsetsTopicOptions[],
+): { topic: string; partitions: { partition: number; timestamp: bigint; maxNumOffsets: number }[] }[] {
+  return topics.map(({ topic, partitions }) => ({
+    topic,
+    partitions: partitions.map(({ partition, timestamp = -1n, maxNumOffsets = 1 }) => ({
+      partition,
+      timestamp,
+      maxNumOffsets,
+    })),
   }));
 }
 

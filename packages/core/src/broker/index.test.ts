@@ -251,5 +251,27 @@ describe('broker/Broker', () => {
       const result = await broker.listGroups();
       expect(result).toEqual({ throttleTime: 0, groups: [] });
     });
+
+    it('normalizes ListOffsets v0 offsets[] to a single offset bigint', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.ListOffsets]: { minVersion: 0, maxVersion: 0 } },
+      });
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({
+        responses: [{ topic: 't', partitions: [{ partition: 0, errorCode: 0, offsets: [1n, 2n, 3n] }] }],
+      });
+
+      const result = await broker.listOffsets({ topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
+
+      expect(result.responses[0]?.partitions[0]).toEqual({
+        partition: 0,
+        errorCode: 0,
+        timestamp: -1n,
+        offset: 3n,
+      });
+    });
   });
 });

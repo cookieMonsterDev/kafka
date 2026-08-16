@@ -1,6 +1,13 @@
 import { ISOLATION_LEVEL, type IsolationLevel } from '../../enums/isolation-level';
 import type { ProtocolFactory, RequestFamily } from '../index';
-import { REPLICA_ID, type ListOffsetsTopicOptions, withDefaultTimestamps } from './shared';
+import {
+  REPLICA_ID,
+  type ListOffsetsTopicOptions,
+  withDefaultTimestamps,
+  withDefaultTimestampsAndMaxOffsets,
+} from './shared';
+import { listOffsetsRequestV0 } from './v0/request';
+import { listOffsetsResponseV0 } from './v0/response';
 import { listOffsetsRequestV1 } from './v1/request';
 import { listOffsetsResponseV1 } from './v1/response';
 import { listOffsetsRequestV2 } from './v2/request';
@@ -15,6 +22,10 @@ export interface ListOffsetsOptions {
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<ListOffsetsOptions>>> = {
+  0: ({ replicaId = REPLICA_ID, topics }) => ({
+    request: listOffsetsRequestV0({ replicaId, topics: withDefaultTimestampsAndMaxOffsets(topics) }),
+    response: listOffsetsResponseV0,
+  }),
   1: ({ replicaId = REPLICA_ID, topics }) => ({
     request: listOffsetsRequestV1({ replicaId, topics: withDefaultTimestamps(topics) }),
     response: listOffsetsResponseV1,

@@ -34,10 +34,13 @@ Run from the repo root. Each fans out to every package with `pnpm -r --if-presen
 so a package without that script is skipped instead of failing.
 
 ```sh
-pnpm build       # build all packages, in dependency order
-pnpm dev         # all dev servers/watchers, in parallel
-pnpm typecheck   # tsc --noEmit + astro check
-pnpm clean       # remove build output AND node_modules (re-run pnpm install after)
+pnpm build         # build all packages, in dependency order
+pnpm dev           # all dev servers/watchers, in parallel
+pnpm lint          # eslint across the workspace
+pnpm format:check  # prettier --check
+pnpm typecheck     # tsc --noEmit + astro check
+pnpm test          # unit tests only (never starts Docker)
+pnpm clean         # remove build output AND node_modules (re-run pnpm install after)
 ```
 
 `pnpm -r` resolves the dependency graph, so `@kafka/core` always compiles before
@@ -89,6 +92,37 @@ there and every package follows — they cannot drift apart.
 catalog:
   typescript: ^6.0.3
   astro: ^7.2.2
+```
+
+## Git hooks
+
+`pnpm install` installs [Husky](https://typicode.github.io/husky/) hooks via the
+`prepare` script. Skip them for a single command with `HUSKY=0`.
+
+| Hook         | What it runs                                                    |
+| ------------ | --------------------------------------------------------------- |
+| `pre-commit` | ESLint + Prettier on staged files, then unit tests              |
+| `commit-msg` | [commitlint](https://commitlint.js.org/) (Conventional Commits) |
+
+Integration tests are not part of the hook — they need Docker. CI still runs them.
+
+### Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<optional scope>): <short imperative summary>
+```
+
+Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+`build`, `chore`, `ci`, `revert`.
+
+The subject is at most 72 characters, imperative ("add", not "added"), and has
+no trailing period.
+
+```
+feat(core): add fetch request v4 encoder
+fix(network): retry when the connection pool is exhausted
 ```
 
 ## Adding a package

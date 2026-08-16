@@ -24,13 +24,21 @@ env:
 
 jobs:
   unit:
-    name: Unit
+    name: Lint and unit
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm format:check
+      - name: Lint commit messages
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.sha }} --verbose
+      - name: Lint last commit message
+        if: github.event_name != 'pull_request'
+        run: pnpm exec commitlint --last --verbose
       - run: pnpm --filter @kafka/core exec tsc -p tsconfig.json --noEmit
       - run: pnpm --filter @kafka/core test
 

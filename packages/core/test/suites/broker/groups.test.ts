@@ -55,6 +55,8 @@ describe('broker.groups', () => {
       groupId,
       generationId: join.generationId,
       memberId: join.memberId,
+      protocolType: 'consumer',
+      protocolName: join.groupProtocol,
       groupAssignment: [{ memberId: join.memberId, memberAssignment: Buffer.alloc(0) }],
     });
     expect(sync.errorCode).toBe(0);

@@ -83,6 +83,8 @@ describe('broker.offsets', () => {
       groupId,
       generationId: join.generationId,
       memberId: join.memberId,
+      protocolType: 'consumer',
+      protocolName: join.groupProtocol,
       groupAssignment: [{ memberId: join.memberId, memberAssignment: Buffer.alloc(0) }],
     });
 

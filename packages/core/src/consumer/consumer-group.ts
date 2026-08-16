@@ -272,6 +272,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       generationId,
       memberId,
       groupInstanceId: this.groupInstanceId,
+      protocolType: 'consumer',
+      protocolName: groupProtocol,
       groupAssignment: assignment,
     });
 

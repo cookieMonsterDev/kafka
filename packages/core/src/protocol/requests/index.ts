@@ -45,12 +45,18 @@ export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily<never> = Object.
 });
 
 /**
+ * The per-apiKey version range a broker advertised via `ApiVersions`, keyed by apiKey. Shared with
+ * `network/connection.ts`, which threads it through from `setVersions()` to this same `lookup()`.
+ */
+export type BrokerVersions = Readonly<Record<number, { maxVersion: number } | undefined>>;
+
+/**
  * `lookup(brokerVersions)(apiKey, family)` picks `min(highest version we implement, highest the
  * broker advertised)` and returns that version's factory, or throws if the broker never
  * advertised the API at all.
  */
 export function lookup(
-  brokerVersions: Readonly<Record<number, { maxVersion: number } | undefined>>,
+  brokerVersions: BrokerVersions,
 ): <Options>(apiKey: number, family: RequestFamily<Options>) => ProtocolFactory<Options> {
   return (apiKey, family) => {
     const version = brokerVersions[apiKey];

@@ -15,6 +15,12 @@ import { produceRequestV6 } from './v6/request';
 import { produceResponseV6 } from './v6/response';
 import { produceRequestV7 } from './v7/request';
 import { produceResponseV7 } from './v7/response';
+import { produceRequestV8 } from './v8/request';
+import { produceResponseV8 } from './v8/response';
+import { produceRequestV9 } from './v9/request';
+import { produceResponseV9 } from './v9/response';
+import { produceRequestV10 } from './v10/request';
+import { produceResponseV10 } from './v10/response';
 import type { ProduceRequestOptions } from './shared';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>> = {
@@ -26,12 +32,16 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>>
   5: (options) => ({ request: produceRequestV5(options), response: produceResponseV5 }),
   6: (options) => ({ request: produceRequestV6(options), response: produceResponseV6 }),
   7: (options) => ({ request: produceRequestV7(options), response: produceResponseV7 }),
+  8: (options) => ({ request: produceRequestV8(options), response: produceResponseV8 }),
+  9: (options) => ({ request: produceRequestV9(options), response: produceResponseV9 }),
+  10: (options) => ({ request: produceRequestV10(options), response: produceResponseV10 }),
 };
 
 /**
  * v0–v2 send MessageSet (magic 0/1, Kafka 0.10). v3+ send RecordBatch v2 (KIP-98).
- * Lookup picks the highest overlapping version, so Kafka 4.0 brokers that still advertise
- * `minVersion: 0` (`KAFKA-18659`) negotiate v7, not v2.
+ * v8 adds record-level errors (KIP-467). v9+ is flexible (KIP-482). Lookup picks the highest
+ * overlapping version, so Kafka 4.0 brokers that still advertise `minVersion: 0`
+ * (`KAFKA-18659`) negotiate v10, not v2.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/

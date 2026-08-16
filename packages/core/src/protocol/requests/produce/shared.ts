@@ -6,8 +6,13 @@ import { createErrorFromCode, failure } from '../../error-codes';
 import {
   array,
   bytes,
+  compactArray,
+  compactBytes,
+  compactNullableString,
+  compactString,
   defineResponse,
   field,
+  flexibleObject,
   int16,
   int32,
   int64,
@@ -104,14 +109,34 @@ async function encodePartition(
   return { partition, recordSet: recordBatch.buffer };
 }
 
+const flexibleRequestBodySchema = flexibleObject([
+  field('transactionalId', compactNullableString),
+  field('acks', int16),
+  field('timeout', int32),
+  field(
+    'topicData',
+    compactArray(
+      flexibleObject([
+        field('topic', compactString),
+        field(
+          'partitions',
+          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactBytes)])),
+        ),
+      ]),
+    ),
+  ),
+]);
+
 /**
- * Every version from 3 through 7 shares this exact request wire shape (KIP-98's RecordBatch v2
+ * Every version from 3 through 8 shares this exact request wire shape (KIP-98's RecordBatch v2
  * became mandatory at v3; each later version bump only signals a client capability — quota
- * timing in v6, ZSTD in v7 — with no request field changes at all).
+ * timing in v6, ZSTD in v7, record-level errors in v8 — with no request field changes at all).
+ * v9+ uses the same fields with compact types and tagged fields (KIP-482).
  */
 export function createProduceRequest(apiVersion: number, options: ProduceRequestOptions): RequestDefinition {
   const { acks, timeout, transactionalId = null, producerId, producerEpoch, topicData } = options;
   const compression = options.compression ?? COMPRESSION_TYPES.None;
+  const schema = apiVersion >= 9 ? flexibleRequestBodySchema : requestBodySchema;
 
   return {
     apiKey: API_KEYS.Produce,
@@ -133,7 +158,7 @@ export function createProduceRequest(apiVersion: number, options: ProduceRequest
       );
 
       const encoder = new Encoder();
-      requestBodySchema.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
+      schema.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
       return encoder;
     },
   };

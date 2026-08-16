@@ -5,14 +5,23 @@ import { apiVersionsRequestV1 } from './v1/request';
 import { apiVersionsResponseV1 } from './v1/response';
 import { apiVersionsRequestV2 } from './v2/request';
 import { apiVersionsResponseV2 } from './v2/response';
+import { apiVersionsRequestV3, type ApiVersionsRequestOptions } from './v3/request';
+import { apiVersionsResponseV3 } from './v3/response';
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<Record<string, never>>>> = {
+export type { ApiVersionsRequestOptions };
+
+const VERSIONS: Readonly<Record<number, ProtocolFactory<ApiVersionsRequestOptions>>> = {
   0: () => ({ request: apiVersionsRequestV0({}), response: apiVersionsResponseV0, logResponseError: true }),
   1: () => ({ request: apiVersionsRequestV1({}), response: apiVersionsResponseV1, logResponseError: false }),
   2: () => ({ request: apiVersionsRequestV2({}), response: apiVersionsResponseV2, logResponseError: false }),
+  3: (options) => ({
+    request: apiVersionsRequestV3(options),
+    response: apiVersionsResponseV3,
+    logResponseError: false,
+  }),
 };
 
-export const ApiVersions: RequestFamily<Record<string, never>> = Object.freeze({
+export const ApiVersions: RequestFamily<ApiVersionsRequestOptions> = Object.freeze({
   versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
   protocol({ version }: { version: number }) {
     const factory = VERSIONS[version];

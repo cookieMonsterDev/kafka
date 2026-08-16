@@ -43,10 +43,13 @@ const partitionSchema = object([
 const resultSchema = object([field('topic', string), field('partitions', array(partitionSchema))]);
 export const responseSchema = object([field('throttleTime', int32), field('results', array(resultSchema))]);
 
-function throwOnPartitionErrors(results: ElectLeadersReplicaResult[]): void {
+const ELECTION_NOT_NEEDED = 84;
+
+/** Preferred election when the preferred replica is already leader is not a request failure. */
+export function throwOnElectLeadersPartitionErrors(results: ElectLeadersReplicaResult[]): void {
   const partitionWithError = results
     .flatMap((result) => result.partitions)
-    .find((partition) => failure(partition.errorCode));
+    .find((partition) => failure(partition.errorCode) && partition.errorCode !== ELECTION_NOT_NEEDED);
   if (partitionWithError) throw createErrorFromCode(partitionWithError.errorCode);
 }
 
@@ -56,7 +59,7 @@ export const electLeadersResponseV0: ResponseDefinition<ElectLeadersResponseV0Bo
     return { ...data, errorCode: 0 };
   },
   parse: async (data) => {
-    throwOnPartitionErrors(data.results);
+    throwOnElectLeadersPartitionErrors(data.results);
     return data;
   },
 };

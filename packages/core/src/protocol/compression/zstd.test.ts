@@ -23,4 +23,9 @@ describe('protocol/compression/zstd', () => {
     const compressed = await zstdCodec.compress(encoder);
     await expect(decompressZstd(compressed, 1)).rejects.toBeInstanceOf(KafkaNonRetriableError);
   });
+
+  it('propagates zlib errors that are not a size-cap violation', async () => {
+    await expect(decompressZstd(Buffer.from('not zstd'))).rejects.toThrow();
+    await expect(decompressZstd(Buffer.from('not zstd'))).rejects.not.toBeInstanceOf(KafkaNonRetriableError);
+  });
 });

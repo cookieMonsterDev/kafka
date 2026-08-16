@@ -76,6 +76,14 @@ describe('protocol/error-codes', () => {
       expect(error.retriable).toBe(false);
       expect(error.message).toContain('9999');
     });
+
+    it('attaches topic and partition extras to the protocol error', () => {
+      const error = createErrorFromCode(1, { topic: 'orders', partition: 3 });
+      expect(error.topic).toBe('orders');
+      expect(error.partition).toBe(3);
+      expect(error.message).toContain('topic: orders');
+      expect(error.message).toContain('partition: 3');
+    });
   });
 
   describe('failIfVersionNotSupported', () => {

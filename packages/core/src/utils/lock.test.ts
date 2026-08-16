@@ -82,4 +82,12 @@ describe('utils/Lock', () => {
 
     await expect(waiting).rejects.toThrow('gave up waiting');
   });
+
+  it('rejects when acquire is called with an already-aborted signal while waiting', async () => {
+    const lock = new Lock({ timeout: 1000 });
+    await lock.acquire();
+
+    const waiting = lock.acquire({ signal: AbortSignal.abort(new Error('already aborted')) });
+    await expect(waiting).rejects.toThrow('already aborted');
+  });
 });

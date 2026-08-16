@@ -72,4 +72,59 @@ describe('retry/retrier', () => {
 
     await expect(retry(fn)).rejects.toThrow('give up');
   });
+
+  it('rejects with Aborted when bail is called without an error', async () => {
+    const retry = retrier(FAST_RETRY_DEFAULTS);
+    await expect(
+      retry(async (bail) => {
+        bail();
+      }),
+    ).rejects.toThrow('Aborted');
+  });
+
+  it('does not retry when retries is 0', async () => {
+    const retry = retrier({ ...FAST_RETRY_DEFAULTS, retries: 0 });
+    let attempts = 0;
+
+    await expect(
+      retry(async () => {
+        attempts += 1;
+        const error = new Error('fail') as Error & { retriable?: boolean };
+        error.retriable = true;
+        throw error;
+      }),
+    ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded', retryCount: 0 });
+
+    expect(attempts).toBe(1);
+  });
+
+  it('retries when the retriable flag is omitted', async () => {
+    let attempts = 0;
+    const retry = retrier(FAST_RETRY_DEFAULTS);
+
+    await expect(
+      retry(async () => {
+        attempts += 1;
+        if (attempts < 2) {
+          throw new Error('try again');
+        }
+        return 'ok';
+      }),
+    ).resolves.toBe('ok');
+
+    expect(attempts).toBe(2);
+  });
+
+  it.each([RangeError, ReferenceError, SyntaxError])(
+    'treats %s as unrecoverable regardless of the retriable flag',
+    async (ErrorType) => {
+      const retry = retrier(FAST_RETRY_DEFAULTS);
+      const fn = vi.fn(async () => {
+        throw new ErrorType('boom');
+      });
+
+      await expect(retry(fn)).rejects.toMatchObject({ name: 'KafkaNonRetriableError' });
+      expect(fn).toHaveBeenCalledTimes(1);
+    },
+  );
 });

@@ -102,4 +102,13 @@ describe('consumer/worker-queue', () => {
     await expect(workerQueue.push(...batches)).rejects.toThrow('test');
     expect(handler).toHaveBeenCalledTimes(100);
   });
+
+  it('resolves immediately when push is given no batches', async () => {
+    const handler = vi.fn(async () => {});
+    const workers = seq(1, (workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    await workerQueue.push();
+    expect(handler).not.toHaveBeenCalled();
+    expect(workerQueue.getWorkers()).toHaveLength(1);
+  });
 });

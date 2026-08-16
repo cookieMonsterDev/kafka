@@ -28,6 +28,11 @@ export function waitFor<T>(
 ): Promise<Exclude<T, false>> {
   const { delay: interval = 50, maxWait = 10_000, timeoutMessage = 'Timeout', ignoreTimeout = false, signal } = options;
 
+  if (signal?.aborted) {
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- propagate the caller's abort reason as-is, matching AbortSignal semantics
+    return Promise.reject(signal.reason);
+  }
+
   return new Promise((resolve, reject) => {
     let settled = false;
     let timeoutId: NodeJS.Timeout | undefined;

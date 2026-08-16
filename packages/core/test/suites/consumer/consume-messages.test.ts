@@ -116,4 +116,31 @@ describe('consumer.consumeMessages', () => {
     expect(headerValue(headers['header-a'])).toBe('header-value-a');
     expect(headerValue(headers['header-b'])).toBe('header-value-b');
   });
+
+  it('consumes batches through stream()', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    const offsets: bigint[] = [];
+    const iterating = (async () => {
+      for await (const batch of consumer!.stream()) {
+        for (const message of batch.messages) offsets.push(message.offset);
+        if (offsets.length >= 5) break;
+      }
+    })();
+    await join;
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+    await iterating;
+    expect(offsets).toEqual([0n, 1n, 2n, 3n, 4n]);
+  });
+
+  it('rejects stream() while run() is already active', async () => {
+    await consumer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({ eachMessage: async () => undefined });
+    await join;
+    await expect(consumer!.stream().next()).rejects.toThrow(/already running/);
+  });
 });

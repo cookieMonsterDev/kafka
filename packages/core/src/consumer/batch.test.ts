@@ -145,4 +145,55 @@ describe('consumer/batch', () => {
       expect(batch.isEmptyControlRecord()).toEqual(true);
     });
   });
+
+  describe('#isEmptyDueToFiltering', () => {
+    it('is true when the broker returned records but all of them were filtered', () => {
+      const batch = new Batch(topic, 0n, {
+        partition: 0,
+        highWatermark: 100n,
+        messages: [msg(5n, { isControlRecord: true })],
+      });
+      expect(batch.isEmptyDueToFiltering()).toEqual(true);
+    });
+
+    it('is false for a truly empty fetch', () => {
+      const batch = new Batch(topic, 0n, { partition: 0, highWatermark: 100n, messages: [] });
+      expect(batch.isEmptyDueToFiltering()).toEqual(false);
+    });
+  });
+
+  describe('#isEmptyDueToLogCompactedMessages', () => {
+    it('is true when every message is below fetchedOffset', () => {
+      const batch = new Batch(topic, 10n, {
+        partition: 0,
+        highWatermark: 100n,
+        messages: [msg(1n), msg(2n)],
+      });
+      expect(batch.isEmptyDueToLogCompactedMessages()).toEqual(true);
+      expect(batch.isEmptyIncludingFiltered()).toEqual(true);
+      expect(batch.firstOffset()).toEqual(null);
+      expect(batch.lastOffset()).toEqual(10n);
+    });
+  });
+
+  it('drops aborted transactional records from messages', () => {
+    const abortedContext = { ...defaultBatchContext, producerId: 1n, inTransaction: true };
+    const batch = new Batch(topic, 0n, {
+      partition: 0,
+      highWatermark: 100n,
+      abortedTransactions: [{ producerId: 1n, firstOffset: 1n }],
+      messages: [
+        msg(1n, { key: Buffer.from('k'), batchContext: abortedContext }),
+        msg(2n, {
+          key: Buffer.from([0, 0, 0, 0]),
+          isControlRecord: true,
+          batchContext: abortedContext,
+        }),
+        msg(3n),
+      ],
+    });
+
+    expect(batch.messages.map((m) => m.offset)).toEqual([3n]);
+    expect(batch.isEmptyDueToFiltering()).toEqual(false);
+  });
 });

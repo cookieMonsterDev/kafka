@@ -14,6 +14,13 @@ describe('utils/shuffle', () => {
     expect(shuffle([1])).toEqual([1]);
   });
 
+  it('returns a copy of an empty array', () => {
+    const empty: number[] = [];
+    const result = shuffle(empty);
+    expect(result).toEqual([]);
+    expect(result).not.toBe(empty);
+  });
+
   it('throws if it receives a non-array', () => {
     // @ts-expect-error exercising the runtime guard against non-array input
     expect(() => shuffle(undefined)).toThrow(TypeError);

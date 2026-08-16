@@ -23,4 +23,9 @@ describe('protocol/compression/gzip', () => {
     const compressed = await gzipCodec.compress(encoder);
     await expect(decompressGzip(compressed, 1)).rejects.toBeInstanceOf(KafkaNonRetriableError);
   });
+
+  it('propagates zlib errors that are not a size-cap violation', async () => {
+    await expect(decompressGzip(Buffer.from('not gzip'))).rejects.toThrow();
+    await expect(decompressGzip(Buffer.from('not gzip'))).rejects.not.toBeInstanceOf(KafkaNonRetriableError);
+  });
 });

@@ -96,4 +96,24 @@ describe('consumer/subscription-state assignments', () => {
     subscriptionState.assign([{ topic: 'topic2', partitions: [0, 1, 2, 6, 7] }]);
     expect(subscriptionState.active()).toEqual([{ topic: 'topic2', partitions: [] }]);
   });
+
+  it('returns assigned partitions independently of pause state', () => {
+    const subscriptionState = new SubscriptionState();
+    subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    subscriptionState.pause([{ topic: 'topic1' }]);
+
+    expect(subscriptionState.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
+    expect(subscriptionState.active()).toEqual([{ topic: 'topic1', partitions: [] }]);
+  });
+
+  it('treats empty pause, resume, and assign as no-ops', () => {
+    const subscriptionState = new SubscriptionState();
+    subscriptionState.assign();
+    subscriptionState.pause();
+    subscriptionState.resume();
+
+    expect(subscriptionState.assigned()).toEqual([]);
+    expect(subscriptionState.paused()).toEqual([]);
+    expect(subscriptionState.active()).toEqual([]);
+  });
 });

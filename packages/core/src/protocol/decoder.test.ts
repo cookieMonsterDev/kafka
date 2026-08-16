@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KafkaInvalidVarIntError } from '../errors';
+import { KafkaInvalidLongError, KafkaInvalidVarIntError } from '../errors';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
 
@@ -150,6 +150,10 @@ describe('protocol/Decoder', () => {
       expect(() => new Decoder(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0x01])).readVarInt()).toThrow(
         KafkaInvalidVarIntError,
       );
+    });
+
+    it('throws KafkaInvalidLongError when a signed varlong never terminates within 9 bytes', () => {
+      expect(() => new Decoder(Buffer.alloc(11, 0xff)).readVarLong()).toThrow(KafkaInvalidLongError);
     });
 
     it('throws a RangeError when readUVarInt runs past the end of the buffer', () => {

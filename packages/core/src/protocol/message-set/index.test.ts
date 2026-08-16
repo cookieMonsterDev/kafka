@@ -53,4 +53,28 @@ describe('protocol/message-set', () => {
     expect(decoded[0]?.key?.toString()).toBe('k0');
     expect(decoded[1]?.value?.toString()).toBe('v1');
   });
+
+  it('stops on a truncated trailing message instead of throwing', async () => {
+    const encoded = encodeMessageSet({
+      messageVersion: 0,
+      entries: [
+        { key: 'key-0', value: 'value-0' },
+        { key: 'key-1', value: 'value-1' },
+      ],
+    });
+    const truncated = encoded.buffer.subarray(0, encoded.size() - 4);
+    const decoded = await decodeMessageSet(prefixed(new Encoder().writeBuffer(truncated)));
+
+    expect(decoded.length).toBeGreaterThanOrEqual(1);
+    expect(decoded[0]?.key?.toString()).toBe('key-0');
+  });
+
+  it('stops when a RecordBatch magic byte appears in a MessageSet', async () => {
+    const content = new Encoder().writeInt8(2).writeInt8(0).writeBytes('k').writeBytes('v');
+    const message = new Encoder().writeInt32(0).writeEncoder(content);
+    const set = new Encoder().writeInt64(-1n).writeInt32(message.size()).writeEncoder(message);
+    const decoded = await decodeMessageSet(prefixed(set));
+
+    expect(decoded).toEqual([]);
+  });
 });

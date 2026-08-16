@@ -291,14 +291,13 @@ export function createTopicsApi(
       offset: parseOffset(offset),
     }));
 
+    const topicOffsets = await fetchTopicOffsets(topic);
     const partitionsByBroker = cluster.findLeaderForPartitions(
       topic,
       parsedPartitions.map((entry) => entry.partition),
     );
 
     const partitionsFound = Object.values(partitionsByBroker).flat();
-    const topicOffsets = await fetchTopicOffsets(topic);
-
     const leaderNotFoundErrors: { partition: number; offset: bigint; error: KafkaBrokerNotFound }[] = [];
     for (const { partition, offset } of parsedPartitions) {
       if (!partitionsFound.includes(partition)) {

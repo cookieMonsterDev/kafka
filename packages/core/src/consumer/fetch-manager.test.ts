@@ -174,4 +174,106 @@ describe('consumer/fetcher', () => {
       expect(calledWorkerIds).toContain(workerId);
     }
   });
+
+  it('is a no-op when start is called while already running', async () => {
+    const fetch = vi.fn(async () => {
+      await sleep(20);
+      return [new Batch('test-topic', 0n, { partition: 0, highWatermark: 100n, messages: [] })];
+    });
+    const handler = vi.fn(async () => {
+      await sleep(1);
+    });
+    const workers = seq(1, (workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue,
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    void fetcher.start();
+    await waitFor(() => fetch.mock.calls.length > 0);
+    await expect(fetcher.start()).resolves.toBeUndefined();
+    await fetcher.stop();
+  });
+
+  it('is a no-op when stop is called while not running', async () => {
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch: vi.fn(async () => []),
+      workerQueue: createWorkerQueue({ workers: [] }),
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    await expect(fetcher.stop()).resolves.toBeUndefined();
+  });
+
+  it('propagates a fetch error and stops the loop', async () => {
+    const fetch = vi.fn(async () => {
+      throw new Error('broker down');
+    });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue: createWorkerQueue({ workers: [] }),
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    await expect(fetcher.start()).rejects.toThrow('broker down');
+  });
+
+  it('drops batches already assigned to another fetcher', async () => {
+    const partitionAssignments = new Map([['test-topic|0', 'other']]);
+    const fetch = vi.fn(async () => {
+      await sleep(5);
+      return [
+        new Batch('test-topic', 0n, { partition: 0, highWatermark: 100n, messages: [] }),
+        new Batch('test-topic', 0n, { partition: 1, highWatermark: 100n, messages: [] }),
+      ];
+    });
+    const handler = vi.fn(async (_batch: Batch) => {});
+    const workers = seq(1, (workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue,
+      logger: silentLogger,
+      partitionAssignments,
+    });
+
+    void fetcher.start();
+    await waitFor(() => handler.mock.calls.length > 0);
+    await fetcher.stop();
+
+    const partitions = handler.mock.calls.map(([batch]) => batch?.partition);
+    expect(partitions).toContain(1);
+    expect(partitions).not.toContain(0);
+  });
+
+  it('does not push when fetch returns no batches', async () => {
+    const fetch = vi.fn(async () => {
+      await sleep(5);
+      return [];
+    });
+    const handler = vi.fn(async () => {});
+    const workers = seq(1, (workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue,
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    void fetcher.start();
+    await waitFor(() => fetch.mock.calls.length > 2);
+    await fetcher.stop();
+    expect(handler).not.toHaveBeenCalled();
+  });
 });

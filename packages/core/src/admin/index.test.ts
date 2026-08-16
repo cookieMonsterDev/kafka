@@ -514,4 +514,26 @@ describe('admin', () => {
       admin.setOffsets({ groupId: '', topic: 't', partitions: [{ partition: 0, offset: 1n }] }),
     ).rejects.toThrow(KafkaNonRetriableError);
   });
+
+  it('deletes topic records after loading partition leaders', async () => {
+    const broker = fakeBroker({
+      deleteRecords: vi.fn().mockResolvedValue({}),
+    });
+    const cluster = fakeCluster({
+      findControllerBroker: vi.fn().mockResolvedValue(broker),
+      findBroker: vi.fn().mockResolvedValue(broker),
+      findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
+      findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
+      fetchTopicsOffset: vi
+        .fn()
+        .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 10n }] }])
+        .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 0n }] }]),
+    });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await admin.deleteTopicRecords({ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] });
+    expect(cluster.findLeaderForPartitions).toHaveBeenCalledWith('orders', [0]);
+    expect(broker.deleteRecords).toHaveBeenCalledWith({
+      topics: [{ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] }],
+    });
+  });
 });

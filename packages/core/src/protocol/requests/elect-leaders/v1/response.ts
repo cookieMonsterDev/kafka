@@ -1,6 +1,10 @@
 import { createErrorFromCode, failure } from '../../../error-codes';
 import { array, defineResponse, field, int16, int32, nullableString, object, string } from '../../../schema';
-import type { ElectLeadersReplicaResult, ElectLeadersResponseV0Body } from '../v0/response';
+import {
+  throwOnElectLeadersPartitionErrors,
+  type ElectLeadersReplicaResult,
+  type ElectLeadersResponseV0Body,
+} from '../v0/response';
 
 export type ElectLeadersResponseV1Body = ElectLeadersResponseV0Body;
 
@@ -33,10 +37,7 @@ export const electLeadersResponseV1 = defineResponse<ElectLeadersResponseV1Body>
   schema: responseSchema,
   parse: async (data) => {
     if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
-    const partitionWithError = data.results
-      .flatMap((result) => result.partitions)
-      .find((partition) => failure(partition.errorCode));
-    if (partitionWithError) throw createErrorFromCode(partitionWithError.errorCode);
+    throwOnElectLeadersPartitionErrors(data.results);
     return data;
   },
 });

@@ -11,22 +11,23 @@ export interface ElectLeadersRequestV1Fields {
 }
 
 /**
- * ElectLeaders Request (Version: 1) => election_type timeout_ms [topic_partitions]
+ * ElectLeaders Request (Version: 1) => election_type [topic_partitions] timeout_ms
  *   election_type => INT8
- *   timeout_ms => INT32
  *   topic_partitions => topic [partition_id]
  *     topic => STRING
  *     partition_id => INT32
+ *   timeout_ms => INT32
  *
- * `election_type`: 0 preferred, 1 unclean.
+ * `election_type`: 0 preferred, 1 unclean. Wire order matches the Java client:
+ * ElectionType, TopicPartitions, TimeoutMs (KIP-460).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 const topicSchema = object([field('topic', string), field('partitions', array(int32))]);
 export const requestSchema = object([
   field('electionType', int8),
-  field('timeout', int32),
   field('topicPartitions', nullableArray(topicSchema)),
+  field('timeout', int32),
 ]);
 
 export const electLeadersRequestV1 = defineRequest({

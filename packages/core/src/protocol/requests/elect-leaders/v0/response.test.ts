@@ -38,4 +38,21 @@ describe('protocol/requests/elect-leaders/v0/response', () => {
     const data = await electLeadersResponseV0.decode(encoder.buffer);
     await expect(electLeadersResponseV0.parse(data)).rejects.toBeInstanceOf(KafkaProtocolError);
   });
+
+  it('does not throw when preferred election is not needed', async () => {
+    const wire = {
+      throttleTime: 0,
+      results: [
+        {
+          topic: 'orders',
+          partitions: [{ partition: 0, errorCode: 84, errorMessage: 'Leader election not needed' }],
+        },
+      ],
+    };
+
+    const encoder = new Encoder();
+    responseSchema.write(encoder, wire);
+    const data = await electLeadersResponseV0.decode(encoder.buffer);
+    await expect(electLeadersResponseV0.parse(data)).resolves.toEqual(data);
+  });
 });

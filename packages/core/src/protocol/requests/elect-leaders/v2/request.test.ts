@@ -9,4 +9,15 @@ describe('protocol/requests/elect-leaders/v2/request', () => {
     const encoder = await electLeadersRequestV2(value).encode();
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(value);
   });
+
+  it('round-trips a flexible v2 request with topic partitions', async () => {
+    const value = {
+      electionType: 0,
+      timeout: 5000,
+      topicPartitions: [{ topic: 'orders', partitions: [0, 1] }],
+    };
+
+    const encoder = await electLeadersRequestV2(value).encode();
+    expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(value);
+  });
 });

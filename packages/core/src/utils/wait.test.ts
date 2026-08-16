@@ -52,4 +52,23 @@ describe('utils/wait > waitFor', () => {
     controller.abort(new Error('aborted by caller'));
     await expect(promise).rejects.toThrow('aborted by caller');
   });
+
+  it('rejects when the signal is already aborted', async () => {
+    await expect(waitFor(() => false, { delay: 50, signal: AbortSignal.abort(new Error('already')) })).rejects.toThrow(
+      'already',
+    );
+  });
+
+  it('keeps polling past maxWait when ignoreTimeout is true', async () => {
+    let n = 0;
+    await expect(
+      waitFor(
+        () => {
+          n += 1;
+          return n >= 4 ? 'ok' : false;
+        },
+        { delay: 5, maxWait: 1, ignoreTimeout: true },
+      ),
+    ).resolves.toBe('ok');
+  });
 });

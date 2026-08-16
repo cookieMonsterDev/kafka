@@ -1,16 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, newLogger, secureRandom, waitFor } from '../../helpers/index';
+import { createProducer } from '../../../src/producer/index';
+import {
+  createCluster,
+  generateMessages,
+  newLogger,
+  secureRandom,
+  testIfKafkaAtLeast_0_11,
+  waitFor,
+} from '../../helpers/index';
 
 describe('admin.topics', () => {
   let topicName: string;
   let admin: ReturnType<typeof createAdmin> | undefined;
+  let producer: ReturnType<typeof createProducer> | undefined;
 
   beforeEach(() => {
     topicName = `test-topic-${secureRandom()}`;
   });
 
   afterEach(async () => {
+    await producer?.disconnect();
     if (admin) {
       await admin.deleteTopics({ topics: [topicName] }).catch(() => undefined);
       await admin.disconnect();
@@ -71,5 +81,27 @@ describe('admin.topics', () => {
         topics: [{ topic: topicName, replicaAssignment: [{ partition: 0, replicas }] }],
       }),
     ).resolves.toBe(true);
+  });
+
+  testIfKafkaAtLeast_0_11('deletes records up to an offset', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    producer = createProducer({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await admin.createTopics({
+      waitForLeaders: true,
+      topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+    });
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 10 }) });
+
+    await admin.deleteTopicRecords({ topic: topicName, partitions: [{ partition: 0, offset: 5n }] });
+
+    const offsets = await waitFor(async () => {
+      const topicOffsets = await admin!.fetchTopicOffsets(topicName);
+      const partition = topicOffsets.find((entry) => entry.partition === 0);
+      return partition?.low === 5n ? partition : false;
+    });
+    expect(offsets.high).toBe(10n);
+    expect(offsets.low).toBe(5n);
   });
 });

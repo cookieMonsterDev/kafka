@@ -9,7 +9,7 @@ import {
   int16,
   int32,
 } from '../../../schema';
-import type { ElectLeadersResponseV0Body } from '../v0/response';
+import { throwOnElectLeadersPartitionErrors, type ElectLeadersResponseV0Body } from '../v0/response';
 
 export type ElectLeadersResponseV2Body = ElectLeadersResponseV0Body;
 
@@ -48,10 +48,7 @@ export const electLeadersResponseV2 = defineResponse<ElectLeadersResponseV2Body>
   schema: responseSchema,
   parse: async (data) => {
     if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
-    const partitionWithError = data.results
-      .flatMap((result) => result.partitions)
-      .find((partition) => failure(partition.errorCode));
-    if (partitionWithError) throw createErrorFromCode(partitionWithError.errorCode);
+    throwOnElectLeadersPartitionErrors(data.results);
     return data;
   },
 });

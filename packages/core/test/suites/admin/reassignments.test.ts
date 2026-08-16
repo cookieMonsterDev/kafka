@@ -40,4 +40,27 @@ describe('admin.reassignments', () => {
     });
     expect(listed.topics).toEqual(expect.any(Array));
   });
+
+  testIfKafkaAtLeast_2_4('elects preferred leaders', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const elected = await admin.electLeaders({
+      topicPartitions: [{ topic: topicName, partitions: [0] }],
+    });
+    expect(elected.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          topic: topicName,
+          partitions: expect.arrayContaining([
+            expect.objectContaining({ partition: 0, errorCode: expect.any(Number) }),
+          ]),
+        }),
+      ]),
+    );
+    const partition = elected.results
+      .find((result) => result.topic === topicName)
+      ?.partitions.find((entry) => entry.partition === 0);
+    expect([0, 84]).toContain(partition?.errorCode);
+  });
 });

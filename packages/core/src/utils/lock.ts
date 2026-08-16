@@ -36,6 +36,11 @@ export class Lock {
       return;
     }
 
+    if (signal?.aborted) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- propagate the caller's abort reason as-is, matching AbortSignal semantics
+      return Promise.reject(signal.reason);
+    }
+
     return new Promise<void>((resolve, reject) => {
       let onAbort: (() => void) | undefined;
 

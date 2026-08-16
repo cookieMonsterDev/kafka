@@ -39,4 +39,9 @@ describe('abort', () => {
     const controller = new AbortController();
     await expect(rejectOnAbort(Promise.resolve('ok'), controller.signal)).resolves.toBe('ok');
   });
+
+  it('rejects with the original error when the wrapped promise rejects', async () => {
+    const controller = new AbortController();
+    await expect(rejectOnAbort(Promise.reject(new Error('boom')), controller.signal)).rejects.toThrow('boom');
+  });
 });

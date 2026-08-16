@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types';
+import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../../../src/protocol/enums/incremental-alter-configs-operations';
 import {
   createCluster,
   createTopic,
@@ -8,6 +9,7 @@ import {
   secureRandom,
   testIfKafkaAtLeast_0_11,
   testIfKafkaAtLeast_1_1,
+  testIfKafkaAtLeast_2_4,
   waitFor,
 } from '../../helpers/index';
 
@@ -92,5 +94,33 @@ describe('admin.configs', () => {
         configSource: expect.any(Number),
       }),
     );
+  });
+
+  testIfKafkaAtLeast_2_4('incrementally alters topic configs', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    await admin.connect();
+
+    await admin.incrementalAlterConfigs({
+      resources: [
+        {
+          type: CONFIG_RESOURCE_TYPES.TOPIC,
+          name: topicName,
+          configs: [{ name: 'cleanup.policy', value: 'compact', operation: INCREMENTAL_ALTER_CONFIGS_OPERATIONS.SET }],
+        },
+      ],
+    });
+
+    const updated = await waitFor(async () => {
+      const after = await admin!.describeConfigs({
+        includeSynonyms: false,
+        resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: topicName, configNames: ['cleanup.policy'] }],
+      });
+      const entry = after.resources
+        .find((r) => r.resourceName === topicName)
+        ?.configEntries.find((c) => c.configName === 'cleanup.policy');
+      return entry?.configValue === 'compact' ? entry : false;
+    });
+    expect(updated.configValue).toBe('compact');
   });
 });

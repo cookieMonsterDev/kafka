@@ -20,23 +20,24 @@ export interface ElectLeadersRequestV2Fields {
 }
 
 /**
- * ElectLeaders Request (Version: 2) => election_type timeout_ms [topic_partitions] TAG_BUFFER
+ * ElectLeaders Request (Version: 2) => election_type [topic_partitions] timeout_ms TAG_BUFFER
  *   election_type => INT8
- *   timeout_ms => INT32
  *   topic_partitions => topic [partition_id] TAG_BUFFER
  *     topic => COMPACT_STRING
  *     partition_id => INT32
+ *   timeout_ms => INT32
  *
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  * `topicPartitions: null` elects preferred/unclean leaders for every partition.
+ * Wire order matches the Java client: ElectionType, TopicPartitions, TimeoutMs.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 export const requestSchema = flexibleObject([
   field('electionType', int8),
-  field('timeout', int32),
   field('topicPartitions', compactNullableArray(topicSchema)),
+  field('timeout', int32),
 ]);
 
 export const electLeadersRequestV2 = defineRequest({

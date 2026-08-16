@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiVersions } from './index.js';
+import { ApiVersions } from './index';
 
 describe('protocol/requests/api-versions', () => {
   it('implements versions 0 through 2', () => {

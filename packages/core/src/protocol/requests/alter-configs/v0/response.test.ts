@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types.js';
-import { alterConfigsResponseV0 } from './response.js';
+import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types';
+import { alterConfigsResponseV0 } from './response';
 
 describe('protocol/requests/alter-configs/v0/response', () => {
   it('decodes a real fixture', async () => {

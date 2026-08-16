@@ -1,5 +1,5 @@
-import { array, defineRequest, field, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Metadata Request (Version: 0) => [topics]

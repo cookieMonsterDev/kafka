@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
-import { produceResponseV5 } from './response.js';
+import { produceResponseV5 } from './response';
 
 describe('protocol/requests/produce/v5/response', () => {
   it('decodes a real fixture, including logStartOffset', async () => {

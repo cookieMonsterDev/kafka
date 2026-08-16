@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../encoder.js';
-import { zstdCodec } from './zstd.js';
+import { Encoder } from '../encoder';
+import { zstdCodec } from './zstd';
 
 describe('protocol/compression/zstd', () => {
   it('round-trips arbitrary bytes', async () => {

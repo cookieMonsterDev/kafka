@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { deleteRecordsRequestV1 } from './request.js';
+import { deleteRecordsRequestV1 } from './request';
 
 describe('protocol/requests/delete-records/v1/request', () => {
   it('encodes to the same wire format as v0', async () => {

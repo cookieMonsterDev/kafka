@@ -21,9 +21,9 @@ source (`tsc --emitDeclarationOnly`); there is no hand-maintained
 | `CompressionCodecs`                                                                   | Mutable codec registry; GZIP and ZSTD are built in                     |
 | `ConfigResourceTypes`, `ConfigSource`                                                 | Config APIs                                                            |
 | `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                               |
-| `KafkaJS*` error classes                                                              | Same names as the kafkajs public errors                                |
+| `Kafka*` error classes                                                                | `KafkaError`, `KafkaNonRetriableError`, `KafkaProtocolError`, …        |
 
-`isRebalancing` and `isKafkaJSError` are not part of the public barrel.
+`isRebalancing` and `isKafkaError` are not part of the public barrel.
 
 ## Client config
 
@@ -46,9 +46,11 @@ new Kafka({
 SASL mechanisms: `plain`, `scram-sha-256`, `scram-sha-512`, `aws`,
 `oauthbearer`, or a custom `{ mechanism, authenticationProvider }`.
 
-## Additive APIs
+See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/),
+[consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/),
+and [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
 
-These are extra relative to kafkajs and do not change existing call sites:
+## Extra APIs
 
 - `AbortSignal` on `connect` / `disconnect` / `send` / `sendBatch` / `run`
 - `consumer.stream()` — async iteration over batches

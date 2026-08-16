@@ -1,8 +1,12 @@
-import { KafkaJSNotImplemented } from '../../errors.js';
-import type { Encoder } from '../encoder.js';
-import { gzipCodec } from './gzip.js';
-import { zstdCodec } from './zstd.js';
+import { KafkaNotImplemented } from '../../errors';
+import type { Encoder } from '../encoder';
+import { gzipCodec } from './gzip';
+import { zstdCodec } from './zstd';
 
+/**
+ * Record-batch compression codecs. GZIP and ZSTD are built in; Snappy and LZ4 are pluggable.
+ * @see https://kafka.apache.org/43/implementation/messages/
+ */
 export const COMPRESSION_TYPES = Object.freeze({
   None: 0,
   GZIP: 1,
@@ -24,7 +28,7 @@ export type CompressionCodecFactory = () => CompressionCodec;
 
 function notImplemented(name: string): CompressionCodecFactory {
   return () => {
-    throw new KafkaJSNotImplemented(`${name} compression not implemented`);
+    throw new KafkaNotImplemented(`${name} compression not implemented`);
   };
 }
 

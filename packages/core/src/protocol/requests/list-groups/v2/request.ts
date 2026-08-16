@@ -1,5 +1,5 @@
-import { defineRequest, object } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, object } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 const requestSchema = object([]);
 

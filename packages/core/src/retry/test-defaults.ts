@@ -1,8 +1,4 @@
-/**
- * kafkajs auto-selected this via `NODE_ENV=test`. Here the test harness (test/helpers) imports
- * this explicitly and passes it as a `retry` override instead, so retry timing is never a hidden
- * function of an environment variable.
- */
+/** Fast retry timings for tests. Import explicitly; not selected by environment. */
 export const FAST_RETRY_DEFAULTS = Object.freeze({
   maxRetryTime: 1000,
   initialRetryTime: 50,

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaJSNonRetriableError } from '../../errors.js';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { TransactionStateMachine } from './transaction-state-machine.js';
-import { TRANSACTION_STATES } from './transaction-states.js';
+import { KafkaNonRetriableError } from '../../errors';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { TransactionStateMachine } from './transaction-state-machine';
+import { TRANSACTION_STATES } from './transaction-states';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -22,7 +22,7 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     expect(machine.state()).toBe(TRANSACTION_STATES.TRANSACTING);
 
     expect(() => machine.transitionTo(TRANSACTION_STATES.UNINITIALIZED)).toThrow(
-      new KafkaJSNonRetriableError('Transaction state exception: Invalid transition TRANSACTING --> UNINITIALIZED'),
+      new KafkaNonRetriableError('Transaction state exception: Invalid transition TRANSACTING --> UNINITIALIZED'),
     );
 
     machine.transitionTo(TRANSACTION_STATES.COMMITTING);
@@ -58,7 +58,7 @@ describe('producer/eosManager/TransactionStateMachine', () => {
       );
 
       await expect(guarded.commit()).rejects.toEqual(
-        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
+        new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
       );
     });
 
@@ -70,7 +70,7 @@ describe('producer/eosManager/TransactionStateMachine', () => {
       );
 
       expect(() => guarded.beginTransaction()).toThrow(
-        new KafkaJSNonRetriableError(
+        new KafkaNonRetriableError(
           'Transaction state exception: Cannot call "beginTransaction" in state "UNINITIALIZED"',
         ),
       );

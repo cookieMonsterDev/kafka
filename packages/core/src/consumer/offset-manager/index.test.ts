@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Broker } from '../../broker/index.js';
-import type { Cluster } from '../../cluster/index.js';
-import { KafkaJSProtocolError } from '../../errors.js';
-import { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import { createErrorFromCode } from '../../protocol/error-codes.js';
-import { sleep } from '../../utils/wait.js';
-import { OffsetManager } from './index.js';
+import type { Broker } from '../../broker/index';
+import type { Cluster } from '../../cluster/index';
+import { KafkaProtocolError } from '../../errors';
+import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { createErrorFromCode } from '../../protocol/error-codes';
+import { sleep } from '../../utils/wait';
+import { OffsetManager } from './index';
 
 const NOT_COORDINATOR_FOR_GROUP_CODE = 16;
 
@@ -214,7 +214,7 @@ describe('consumer/offset-manager', () => {
       });
 
       const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 1n }] }] };
-      await expect(offsetManager.commitOffsets(offsets)).rejects.toThrow(KafkaJSProtocolError);
+      await expect(offsetManager.commitOffsets(offsets)).rejects.toThrow(KafkaProtocolError);
       expect(refreshMetadata).toHaveBeenCalled();
     });
   });

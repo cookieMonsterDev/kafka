@@ -1,8 +1,8 @@
-import type { Decoder } from '../decoder.js';
-import { Encoder } from '../encoder.js';
-import type { TimestampType } from '../enums/timestamp-types.js';
-import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js';
-import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header.js';
+import type { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
+import type { TimestampType } from '../enums/timestamp-types';
+import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
+import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header';
 
 /**
  * v2

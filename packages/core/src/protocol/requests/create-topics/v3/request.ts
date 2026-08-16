@@ -1,6 +1,6 @@
-import { array, boolean, defineRequest, field, int32, object } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
-import { createTopicSchema } from '../v2/request.js';
+import { array, boolean, defineRequest, field, int32, object } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
+import { createTopicSchema } from '../v2/request';
 
 /**
  * CreateTopics Request (Version: 3) => [create_topic_requests] timeout validate_only

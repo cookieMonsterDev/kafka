@@ -1,24 +1,24 @@
-import type { Cluster, PartitionMetadata } from '../cluster/index.js';
-import type { InstrumentationEventEmitter, RemoveInstrumentationEventListener } from '../instrumentation/emitter.js';
-import type { InstrumentationEvent } from '../instrumentation/event.js';
-import type { Logger } from '../loggers/index.js';
-import type { AclOperationType } from '../protocol/enums/acl-operation-types.js';
-import type { AclPermissionType } from '../protocol/enums/acl-permission-types.js';
-import type { AclResourceType } from '../protocol/enums/acl-resource-types.js';
-import type { ConfigResourceType } from '../protocol/enums/config-resource-types.js';
-import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types.js';
-import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response.js';
-import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response.js';
-import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response.js';
-import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response.js';
-import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response.js';
-import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response.js';
-import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response.js';
-import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response.js';
-import type { RetryOptions } from '../retry/index.js';
-import type { ConnectOptions } from '../utils/abort.js';
-import type { AdminEventName } from './instrumentation-events.js';
-import { events } from './instrumentation-events.js';
+import type { Cluster, PartitionMetadata } from '../cluster/index';
+import type { InstrumentationEventEmitter, RemoveInstrumentationEventListener } from '../instrumentation/emitter';
+import type { InstrumentationEvent } from '../instrumentation/event';
+import type { Logger } from '../loggers/index';
+import type { AclOperationType } from '../protocol/enums/acl-operation-types';
+import type { AclPermissionType } from '../protocol/enums/acl-permission-types';
+import type { AclResourceType } from '../protocol/enums/acl-resource-types';
+import type { ConfigResourceType } from '../protocol/enums/config-resource-types';
+import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
+import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
+import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
+import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
+import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
+import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
+import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
+import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
+import type { RetryOptions } from '../retry/index';
+import type { ConnectOptions } from '../utils/abort';
+import type { AdminEventName } from './instrumentation-events';
+import { events } from './instrumentation-events';
 
 export type OffsetInput = bigint | number | string;
 
@@ -32,6 +32,11 @@ export interface ResourceConfigEntry {
   value: string;
 }
 
+/**
+ * Topic to create via {@link Admin.createTopics}.
+ * @see https://kafka.apache.org/43/configuration/topic-configs/
+ * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+ */
 export interface TopicConfig {
   topic: string;
   numPartitions?: number;
@@ -86,6 +91,10 @@ export interface ResourceConfig {
   configEntries: ResourceConfigEntry[];
 }
 
+/**
+ * ACL identity and permission.
+ * @see https://kafka.apache.org/43/security/authorization-and-acls/
+ */
 export interface Acl {
   principal: string;
   host: string;
@@ -134,6 +143,11 @@ export interface AdminOptions {
   instrumentationEmitter?: InstrumentationEventEmitter | null;
 }
 
+/**
+ * Admin client returned by {@link Kafka.admin}.
+ * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+ * @see https://kafka.apache.org/43/configuration/admin-configs/
+ */
 export interface Admin {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;

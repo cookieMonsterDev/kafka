@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { saslHandshakeRequestV0 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { saslHandshakeRequestV0 } from './request';
 
 describe('protocol/requests/sasl-handshake/v0/request', () => {
   it('encodes the mechanism as a string', async () => {

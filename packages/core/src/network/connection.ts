@@ -1,21 +1,21 @@
 import type { Socket } from 'node:net';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
-import { INT_32_MAX_VALUE } from '../constants.js';
-import { KafkaJSConnectionClosedError, KafkaJSConnectionError } from '../errors.js';
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import type { Logger } from '../loggers/index.js';
-import { createRequest } from '../protocol/request.js';
-import { Decoder } from '../protocol/decoder.js';
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import type { AnyRequestDefinition, AnyResponseDefinition, BrokerVersions } from '../protocol/requests/index.js';
-import { sharedPromiseTo } from '../utils/shared-promise-to.js';
-import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status.js';
-import type { ConnectionStatus } from './connection-status.js';
-import type { NetworkEventMap } from './instrumentation-events.js';
-import { RequestQueue } from './request-queue/index.js';
-import type { RequestEntry } from './request-queue/socket-request.js';
-import { createSocket } from './socket.js';
-import type { SocketFactory } from './socket-factory.js';
+import { INT_32_MAX_VALUE } from '../constants';
+import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { Logger } from '../loggers/index';
+import { createRequest } from '../protocol/request';
+import { Decoder } from '../protocol/decoder';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import type { AnyRequestDefinition, AnyResponseDefinition, BrokerVersions } from '../protocol/requests/index';
+import { sharedPromiseTo } from '../utils/shared-promise-to';
+import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status';
+import type { ConnectionStatus } from './connection-status';
+import type { NetworkEventMap } from './instrumentation-events';
+import { RequestQueue } from './request-queue/index';
+import type { RequestEntry } from './request-queue/socket-request';
+import { createSocket } from './socket';
+import type { SocketFactory } from './socket-factory';
 
 const requestInfo = ({
   apiName,
@@ -191,7 +191,7 @@ export class Connection {
   #authenticate = sharedPromiseTo(async (): Promise<void> => {
     if (this.sasl && !this.isAuthenticated()) {
       if (!this.#createSaslAuthenticator) {
-        throw new KafkaJSConnectionError('SASL is configured but no SASL authenticator was provided', {
+        throw new KafkaConnectionError('SASL is configured but no SASL authenticator was provided', {
           broker: this.broker,
         });
       }
@@ -220,7 +220,7 @@ export class Connection {
       rack = null,
       ssl = null,
       sasl = null,
-      clientId = 'kafkajs',
+      clientId = 'kafka',
       connectionTimeout,
       enforceRequestTimeout = true,
       maxInFlightRequests = null,
@@ -254,8 +254,8 @@ export class Connection {
       isConnected: () => this.isConnected(),
     });
 
-    this.#shouldLogBuffers = process.env.KAFKAJS_DEBUG_PROTOCOL_BUFFERS === '1';
-    this.#shouldLogFetchBuffer = this.#shouldLogBuffers && process.env.KAFKAJS_DEBUG_EXTENDED_PROTOCOL_BUFFERS === '1';
+    this.#shouldLogBuffers = process.env.KAFKA_DEBUG_PROTOCOL_BUFFERS === '1';
+    this.#shouldLogFetchBuffer = this.#shouldLogBuffers && process.env.KAFKA_DEBUG_EXTENDED_PROTOCOL_BUFFERS === '1';
   }
 
   #logDebug(message: string, extra: Record<string, unknown> = {}): void {
@@ -314,7 +314,7 @@ export class Connection {
           } else if (wasConnected) {
             this.#logDebug('Kafka server has closed connection');
             this.#rejectRequests(
-              new KafkaJSConnectionClosedError('Closed connection', { host: this.host, port: this.port }),
+              new KafkaConnectionClosedError('Closed connection', { host: this.host, port: this.port }),
             );
           }
 
@@ -326,7 +326,7 @@ export class Connection {
         void (async () => {
           clearTimeout(timeoutId);
 
-          const error = new KafkaJSConnectionError(`Connection error: ${e.message}`, {
+          const error = new KafkaConnectionError(`Connection error: ${e.message}`, {
             broker: `${this.host}:${this.port}`,
             code: e.code,
           });
@@ -341,7 +341,7 @@ export class Connection {
 
       const onTimeout = (): void => {
         void (async () => {
-          const error = new KafkaJSConnectionError('Connection timeout', {
+          const error = new KafkaConnectionError('Connection timeout', {
             broker: `${this.host}:${this.port}`,
           });
 
@@ -370,7 +370,7 @@ export class Connection {
       } catch (e) {
         clearTimeout(timeoutId!);
         reject(
-          new KafkaJSConnectionError(`Failed to connect: ${(e as Error).message}`, {
+          new KafkaConnectionError(`Failed to connect: ${(e as Error).message}`, {
             broker: `${this.host}:${this.port}`,
           }),
         );
@@ -459,7 +459,7 @@ export class Connection {
           this.#authExpectResponse = false;
 
           reject(
-            new KafkaJSConnectionError('Connection closed by the server', {
+            new KafkaConnectionError('Connection closed by the server', {
               broker: `${this.host}:${this.port}`,
             }),
           );
@@ -575,7 +575,7 @@ export class Connection {
 
   #failIfNotConnected(): void {
     if (!this.isConnected()) {
-      throw new KafkaJSConnectionError('Not connected', { broker: `${this.host}:${this.port}` });
+      throw new KafkaConnectionError('Not connected', { broker: `${this.host}:${this.port}` });
     }
   }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { joinGroupResponseV3 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { joinGroupResponseV3 } from './response';
 
 function buildWire(throttleTime: number): Buffer {
   return new Encoder()

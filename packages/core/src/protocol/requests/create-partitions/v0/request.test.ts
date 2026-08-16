@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { createPartitionsRequestV0, withAssignmentDefaults } from './request.js';
+import { createPartitionsRequestV0, withAssignmentDefaults } from './request';
 
 describe('protocol/requests/create-partitions/v0/request', () => {
   it('encodes a real fixture', async () => {

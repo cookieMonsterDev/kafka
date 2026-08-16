@@ -1,10 +1,10 @@
-import { KafkaJSDeleteGroupsError, KafkaJSNonRetriableError } from '../errors.js';
-import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response.js';
-import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response.js';
-import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response.js';
-import { retrier } from '../retry/index.js';
-import type { AdminContext } from './helpers.js';
-import { protocolType, formatUnknown } from './helpers.js';
+import { KafkaDeleteGroupsError, KafkaNonRetriableError } from '../errors';
+import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
+import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
+import { retrier } from '../retry/index';
+import type { AdminContext } from './helpers';
+import { protocolType, formatUnknown } from './helpers';
 
 export interface GroupsApi {
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
@@ -60,12 +60,12 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
 
   const deleteGroups = async (groupIds: string[]): Promise<DeleteGroupsResult[]> => {
     if (!groupIds || !Array.isArray(groupIds)) {
-      throw new KafkaJSNonRetriableError(`Invalid groupIds array ${formatUnknown(groupIds)}`);
+      throw new KafkaNonRetriableError(`Invalid groupIds array ${formatUnknown(groupIds)}`);
     }
 
     const invalidGroupId = groupIds.some((groupId) => typeof groupId !== 'string');
     if (invalidGroupId) {
-      throw new KafkaJSNonRetriableError(`Invalid groupId name: ${JSON.stringify(invalidGroupId)}`);
+      throw new KafkaNonRetriableError(`Invalid groupId name: ${JSON.stringify(invalidGroupId)}`);
     }
 
     let remaining = groupIds.slice();
@@ -101,7 +101,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         remaining = errors.map(({ groupId }) => groupId);
 
         if (errors.length > 0) {
-          throw new KafkaJSDeleteGroupsError('Error in DeleteGroups', errors);
+          throw new KafkaDeleteGroupsError('Error in DeleteGroups', errors);
         }
 
         return responses.flatMap(({ results }) => results);

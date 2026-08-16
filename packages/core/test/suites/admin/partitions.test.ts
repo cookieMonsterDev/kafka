@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { createCluster, newLogger, secureRandom, waitFor } from '../../helpers/index.js';
+import { createAdmin } from '../../../src/admin/index';
+import { createCluster, newLogger, secureRandom, waitFor } from '../../helpers/index';
 
 describe('admin.partitions', () => {
   let topicName: string;

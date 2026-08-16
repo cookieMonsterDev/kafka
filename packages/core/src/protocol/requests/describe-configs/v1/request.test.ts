@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types.js';
-import { describeConfigsRequestV1, withDefaultConfigNames } from './request.js';
+import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types';
+import { describeConfigsRequestV1, withDefaultConfigNames } from './request';
 
 describe('protocol/requests/describe-configs/v1/request', () => {
   it('encodes to match the real fixture', async () => {

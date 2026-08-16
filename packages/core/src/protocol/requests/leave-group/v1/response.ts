@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { defineResponse, field, int16, int32, object } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { defineResponse, field, int16, int32, object } from '../../../schema';
 
 /**
  * LeaveGroup Response (Version: 1) => throttle_time_ms error_code

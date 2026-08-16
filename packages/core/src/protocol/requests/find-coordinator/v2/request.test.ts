@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { findCoordinatorRequestV2 } from './request.js';
+import { findCoordinatorRequestV2 } from './request';
 
 describe('protocol/requests/find-coordinator/v2/request', () => {
   it('encodes to match the real fixture (identical wire format to v1)', async () => {

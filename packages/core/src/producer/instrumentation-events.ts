@@ -1,4 +1,4 @@
-import { namespace } from '../instrumentation/event-type.js';
+import { namespace } from '../instrumentation/event-type';
 import {
   NETWORK_REQUEST,
   NETWORK_REQUEST_QUEUE_SIZE,
@@ -6,8 +6,8 @@ import {
   type NetworkRequestEvent,
   type NetworkRequestQueueSizeEvent,
   type NetworkRequestTimeoutEvent,
-} from '../network/instrumentation-events.js';
-import { swapObject } from '../utils/swap-object.js';
+} from '../network/instrumentation-events';
+import { swapObject } from '../utils/swap-object';
 
 const producerType = namespace('producer');
 

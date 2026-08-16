@@ -1,5 +1,5 @@
-import { API_KEYS } from '../../api-keys.js';
-import { array, defineRequest, field, int8, object, string } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys';
+import { array, defineRequest, field, int8, object, string } from '../../../schema';
 
 /**
  * CreateAcls Request (Version: 1) => [creations]

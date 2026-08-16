@@ -1,9 +1,9 @@
-import { defineRequest } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
-import { requestSchema } from '../v1/request.js';
+import { defineRequest } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
+import { requestSchema } from '../v1/request';
 
-export { type DescribeConfigsRequestV1Fields as DescribeConfigsRequestV2Fields } from '../v1/request.js';
-export { type DescribeConfigsResource, withDefaultConfigNames } from '../v1/request.js';
+export { type DescribeConfigsRequestV1Fields as DescribeConfigsRequestV2Fields } from '../v1/request';
+export { type DescribeConfigsResource, withDefaultConfigNames } from '../v1/request';
 
 /**
  * DescribeConfigs Request (Version: 2) — wire format identical to v1; only the response's

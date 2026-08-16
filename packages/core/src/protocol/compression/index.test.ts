@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Encoder } from '../encoder.js';
+import type { Encoder } from '../encoder';
 import {
   COMPRESSION_CODEC_MASK,
   COMPRESSION_TYPES,
   CompressionCodecs,
   lookupCodec,
   lookupCodecByAttributes,
-} from './index.js';
+} from './index';
 
 describe('protocol/compression', () => {
   it('returns null for CompressionTypes.None', () => {
@@ -18,7 +18,7 @@ describe('protocol/compression', () => {
     expect(lookupCodec(COMPRESSION_TYPES.ZSTD)).not.toBeNull();
   });
 
-  it('throws KafkaJSNotImplemented for Snappy and LZ4 out of the box', () => {
+  it('throws KafkaNotImplemented for Snappy and LZ4 out of the box', () => {
     expect(() => lookupCodec(COMPRESSION_TYPES.Snappy)).toThrow('Snappy compression not implemented');
     expect(() => lookupCodec(COMPRESSION_TYPES.LZ4)).toThrow('LZ4 compression not implemented');
   });

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Broker } from '../broker/index.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { KafkaJSConnectionError } from '../errors.js';
-import type { ConnectionPool } from '../network/connection-pool.js';
-import { BrokerPool } from './broker-pool.js';
-import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder.js';
+import { Broker } from '../broker/index';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { KafkaConnectionError } from '../errors';
+import type { ConnectionPool } from '../network/connection-pool';
+import { BrokerPool } from './broker-pool';
+import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -48,14 +48,14 @@ describe('cluster/BrokerPool', () => {
     expect(brokerPool.hasConnectedBrokers()).toBe(true);
   });
 
-  it('connect rotates the seed broker on KafkaJSConnectionError and eventually succeeds', async () => {
+  it('connect rotates the seed broker on KafkaConnectionError and eventually succeeds', async () => {
     let attempt = 0;
     const build = vi.fn(async () => {
       attempt += 1;
       const isFirstAttempt = attempt === 1;
       return fakeConnectionPool({
         getConnection: vi.fn().mockImplementation(() => {
-          if (isFirstAttempt) throw new KafkaJSConnectionError('refused');
+          if (isFirstAttempt) throw new KafkaConnectionError('refused');
           return Promise.resolve({
             getSupportAuthenticationProtocol: vi.fn().mockReturnValue(true),
             authenticate: vi.fn().mockResolvedValue(undefined),
@@ -111,7 +111,7 @@ describe('cluster/BrokerPool', () => {
   });
 
   describe('findBroker / withBroker / findConnectedBroker', () => {
-    it('findBroker throws KafkaJSBrokerNotFound for an unknown nodeId', async () => {
+    it('findBroker throws KafkaBrokerNotFound for an unknown nodeId', async () => {
       const brokerPool = new BrokerPool({
         connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
         logger: silentLogger,
@@ -119,7 +119,7 @@ describe('cluster/BrokerPool', () => {
       await expect(brokerPool.findBroker({ nodeId: 'missing' })).rejects.toThrow('not found in the cached metadata');
     });
 
-    it('withBroker throws KafkaJSBrokerNotFound when the pool is empty', async () => {
+    it('withBroker throws KafkaBrokerNotFound when the pool is empty', async () => {
       const brokerPool = new BrokerPool({
         connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
         logger: silentLogger,

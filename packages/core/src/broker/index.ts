@@ -1,118 +1,118 @@
 import {
-  KafkaJSConnectionClosedError,
-  KafkaJSInvariantViolation,
-  KafkaJSMemberIdRequired,
-  KafkaJSProtocolError,
-} from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import type { ConnectionPool } from '../network/connection-pool.js';
-import { asTypedSend } from '../network/connection.js';
-import { COMPRESSION_TYPES } from '../protocol/compression/index.js';
-import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types.js';
-import { failure } from '../protocol/error-codes.js';
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import { lookup } from '../protocol/requests/index.js';
+  KafkaConnectionClosedError,
+  KafkaInvariantViolation,
+  KafkaMemberIdRequired,
+  KafkaProtocolError,
+} from '../errors';
+import type { Logger } from '../loggers/index';
+import type { ConnectionPool } from '../network/connection-pool';
+import { asTypedSend } from '../network/connection';
+import { COMPRESSION_TYPES } from '../protocol/compression/index';
+import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
+import { failure } from '../protocol/error-codes';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import { lookup } from '../protocol/requests/index';
 import type {
   AnyRequestDefinition,
   AnyResponseDefinition,
   BrokerVersions,
   ProtocolFactory,
-} from '../protocol/requests/index.js';
-import { Lock } from '../utils/lock.js';
-import { shuffle } from '../utils/shuffle.js';
+} from '../protocol/requests/index';
+import { Lock } from '../utils/lock';
+import { shuffle } from '../utils/shuffle';
 
-import { AddOffsetsToTxn } from '../protocol/requests/add-offsets-to-txn/index.js';
-import type { AddOffsetsToTxnOptions } from '../protocol/requests/add-offsets-to-txn/index.js';
-import type { AddOffsetsToTxnResponseV1Body } from '../protocol/requests/add-offsets-to-txn/v1/response.js';
-import { AddPartitionsToTxn } from '../protocol/requests/add-partitions-to-txn/index.js';
-import type { AddPartitionsToTxnOptions } from '../protocol/requests/add-partitions-to-txn/index.js';
-import type { AddPartitionsToTxnResponseV1Body } from '../protocol/requests/add-partitions-to-txn/v1/response.js';
-import { AlterConfigs } from '../protocol/requests/alter-configs/index.js';
-import type { AlterConfigsOptions } from '../protocol/requests/alter-configs/index.js';
-import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response.js';
-import { AlterPartitionReassignments } from '../protocol/requests/alter-partition-reassignments/index.js';
-import type { AlterPartitionReassignmentsRequestV0Options } from '../protocol/requests/alter-partition-reassignments/v0/request.js';
-import type { AlterPartitionReassignmentsResponseV0Body } from '../protocol/requests/alter-partition-reassignments/v0/response.js';
-import { ApiVersions } from '../protocol/requests/api-versions/index.js';
-import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response.js';
-import { CreateAcls } from '../protocol/requests/create-acls/index.js';
-import type { CreateAclsOptions } from '../protocol/requests/create-acls/index.js';
-import type { CreateAclsResponseV1Body } from '../protocol/requests/create-acls/v1/response.js';
-import { CreatePartitions } from '../protocol/requests/create-partitions/index.js';
-import type { CreatePartitionsOptions } from '../protocol/requests/create-partitions/index.js';
-import type { CreatePartitionsResponseV1Body } from '../protocol/requests/create-partitions/v1/response.js';
-import { CreateTopics } from '../protocol/requests/create-topics/index.js';
-import type { CreateTopicsOptions } from '../protocol/requests/create-topics/index.js';
-import type { CreateTopicsResponseV3Body } from '../protocol/requests/create-topics/v3/response.js';
-import { DeleteAcls } from '../protocol/requests/delete-acls/index.js';
-import type { DeleteAclsOptions } from '../protocol/requests/delete-acls/index.js';
-import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response.js';
-import { DeleteGroups } from '../protocol/requests/delete-groups/index.js';
-import type { DeleteGroupsOptions } from '../protocol/requests/delete-groups/index.js';
-import type { DeleteGroupsResponseV1Body } from '../protocol/requests/delete-groups/v1/response.js';
-import { DeleteRecords } from '../protocol/requests/delete-records/index.js';
-import type { DeleteRecordsOptions } from '../protocol/requests/delete-records/index.js';
-import type { DeleteRecordsResponseV1Body } from '../protocol/requests/delete-records/v1/response.js';
-import { DeleteTopics } from '../protocol/requests/delete-topics/index.js';
-import type { DeleteTopicsOptions } from '../protocol/requests/delete-topics/index.js';
-import type { DeleteTopicsResponseV1Body } from '../protocol/requests/delete-topics/v1/response.js';
-import { DescribeAcls } from '../protocol/requests/describe-acls/index.js';
-import type { DescribeAclsOptions } from '../protocol/requests/describe-acls/index.js';
-import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response.js';
-import { DescribeConfigs } from '../protocol/requests/describe-configs/index.js';
-import type { DescribeConfigsOptions } from '../protocol/requests/describe-configs/index.js';
-import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response.js';
-import { DescribeGroups } from '../protocol/requests/describe-groups/index.js';
-import type { DescribeGroupsOptions } from '../protocol/requests/describe-groups/index.js';
-import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response.js';
-import { EndTxn } from '../protocol/requests/end-txn/index.js';
-import type { EndTxnOptions } from '../protocol/requests/end-txn/index.js';
-import type { EndTxnResponseV1Body } from '../protocol/requests/end-txn/v1/response.js';
-import { Fetch } from '../protocol/requests/fetch/index.js';
-import type { FetchRequestOptions } from '../protocol/requests/fetch/shared.js';
-import type { FetchResponseV11Body } from '../protocol/requests/fetch/v11/response.js';
-import { FindCoordinator } from '../protocol/requests/find-coordinator/index.js';
-import type { FindCoordinatorOptions } from '../protocol/requests/find-coordinator/index.js';
-import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response.js';
-import { Heartbeat } from '../protocol/requests/heartbeat/index.js';
-import type { HeartbeatOptions } from '../protocol/requests/heartbeat/index.js';
-import type { HeartbeatResponseV2Body } from '../protocol/requests/heartbeat/v2/response.js';
-import { InitProducerId } from '../protocol/requests/init-producer-id/index.js';
-import type { InitProducerIdOptions } from '../protocol/requests/init-producer-id/index.js';
-import type { InitProducerIdResponseV1Body } from '../protocol/requests/init-producer-id/v1/response.js';
-import { JoinGroup } from '../protocol/requests/join-group/index.js';
-import type { JoinGroupOptions } from '../protocol/requests/join-group/index.js';
-import type { JoinGroupResponseV5Body } from '../protocol/requests/join-group/v5/response.js';
-import { LeaveGroup } from '../protocol/requests/leave-group/index.js';
-import type { LeaveGroupOptions } from '../protocol/requests/leave-group/index.js';
-import type { LeaveGroupResponseV3Body } from '../protocol/requests/leave-group/v3/response.js';
-import { ListGroups } from '../protocol/requests/list-groups/index.js';
-import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response.js';
-import { ListOffsets } from '../protocol/requests/list-offsets/index.js';
-import type { ListOffsetsOptions } from '../protocol/requests/list-offsets/index.js';
-import type { ListOffsetsResponseV3Body } from '../protocol/requests/list-offsets/v3/response.js';
-import { ListPartitionReassignments } from '../protocol/requests/list-partition-reassignments/index.js';
-import type { ListPartitionReassignmentsRequestV0Options } from '../protocol/requests/list-partition-reassignments/v0/request.js';
-import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response.js';
-import { Metadata } from '../protocol/requests/metadata/index.js';
-import type { MetadataOptions } from '../protocol/requests/metadata/index.js';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
-import { OffsetCommit } from '../protocol/requests/offset-commit/index.js';
-import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index.js';
-import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response.js';
-import { OffsetFetch } from '../protocol/requests/offset-fetch/index.js';
-import type { OffsetFetchOptions } from '../protocol/requests/offset-fetch/index.js';
-import type { OffsetFetchResponseV4Body } from '../protocol/requests/offset-fetch/v4/response.js';
-import { Produce } from '../protocol/requests/produce/index.js';
-import type { ProduceRequestOptions } from '../protocol/requests/produce/shared.js';
-import type { ProduceResponseV6Body } from '../protocol/requests/produce/v6/response.js';
-import { SaslAuthenticate } from '../protocol/requests/sasl-authenticate/index.js';
-import { SyncGroup } from '../protocol/requests/sync-group/index.js';
-import type { SyncGroupOptions } from '../protocol/requests/sync-group/index.js';
-import type { SyncGroupResponseV2Body } from '../protocol/requests/sync-group/v2/response.js';
-import { TxnOffsetCommit } from '../protocol/requests/txn-offset-commit/index.js';
-import type { TxnOffsetCommitOptions } from '../protocol/requests/txn-offset-commit/index.js';
-import type { TxnOffsetCommitResponseV1Body } from '../protocol/requests/txn-offset-commit/v1/response.js';
+import { AddOffsetsToTxn } from '../protocol/requests/add-offsets-to-txn/index';
+import type { AddOffsetsToTxnOptions } from '../protocol/requests/add-offsets-to-txn/index';
+import type { AddOffsetsToTxnResponseV1Body } from '../protocol/requests/add-offsets-to-txn/v1/response';
+import { AddPartitionsToTxn } from '../protocol/requests/add-partitions-to-txn/index';
+import type { AddPartitionsToTxnOptions } from '../protocol/requests/add-partitions-to-txn/index';
+import type { AddPartitionsToTxnResponseV1Body } from '../protocol/requests/add-partitions-to-txn/v1/response';
+import { AlterConfigs } from '../protocol/requests/alter-configs/index';
+import type { AlterConfigsOptions } from '../protocol/requests/alter-configs/index';
+import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
+import { AlterPartitionReassignments } from '../protocol/requests/alter-partition-reassignments/index';
+import type { AlterPartitionReassignmentsRequestV0Options } from '../protocol/requests/alter-partition-reassignments/v0/request';
+import type { AlterPartitionReassignmentsResponseV0Body } from '../protocol/requests/alter-partition-reassignments/v0/response';
+import { ApiVersions } from '../protocol/requests/api-versions/index';
+import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response';
+import { CreateAcls } from '../protocol/requests/create-acls/index';
+import type { CreateAclsOptions } from '../protocol/requests/create-acls/index';
+import type { CreateAclsResponseV1Body } from '../protocol/requests/create-acls/v1/response';
+import { CreatePartitions } from '../protocol/requests/create-partitions/index';
+import type { CreatePartitionsOptions } from '../protocol/requests/create-partitions/index';
+import type { CreatePartitionsResponseV1Body } from '../protocol/requests/create-partitions/v1/response';
+import { CreateTopics } from '../protocol/requests/create-topics/index';
+import type { CreateTopicsOptions } from '../protocol/requests/create-topics/index';
+import type { CreateTopicsResponseV3Body } from '../protocol/requests/create-topics/v3/response';
+import { DeleteAcls } from '../protocol/requests/delete-acls/index';
+import type { DeleteAclsOptions } from '../protocol/requests/delete-acls/index';
+import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
+import { DeleteGroups } from '../protocol/requests/delete-groups/index';
+import type { DeleteGroupsOptions } from '../protocol/requests/delete-groups/index';
+import type { DeleteGroupsResponseV1Body } from '../protocol/requests/delete-groups/v1/response';
+import { DeleteRecords } from '../protocol/requests/delete-records/index';
+import type { DeleteRecordsOptions } from '../protocol/requests/delete-records/index';
+import type { DeleteRecordsResponseV1Body } from '../protocol/requests/delete-records/v1/response';
+import { DeleteTopics } from '../protocol/requests/delete-topics/index';
+import type { DeleteTopicsOptions } from '../protocol/requests/delete-topics/index';
+import type { DeleteTopicsResponseV1Body } from '../protocol/requests/delete-topics/v1/response';
+import { DescribeAcls } from '../protocol/requests/describe-acls/index';
+import type { DescribeAclsOptions } from '../protocol/requests/describe-acls/index';
+import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
+import { DescribeConfigs } from '../protocol/requests/describe-configs/index';
+import type { DescribeConfigsOptions } from '../protocol/requests/describe-configs/index';
+import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
+import { DescribeGroups } from '../protocol/requests/describe-groups/index';
+import type { DescribeGroupsOptions } from '../protocol/requests/describe-groups/index';
+import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import { EndTxn } from '../protocol/requests/end-txn/index';
+import type { EndTxnOptions } from '../protocol/requests/end-txn/index';
+import type { EndTxnResponseV1Body } from '../protocol/requests/end-txn/v1/response';
+import { Fetch } from '../protocol/requests/fetch/index';
+import type { FetchRequestOptions } from '../protocol/requests/fetch/shared';
+import type { FetchResponseV11Body } from '../protocol/requests/fetch/v11/response';
+import { FindCoordinator } from '../protocol/requests/find-coordinator/index';
+import type { FindCoordinatorOptions } from '../protocol/requests/find-coordinator/index';
+import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
+import { Heartbeat } from '../protocol/requests/heartbeat/index';
+import type { HeartbeatOptions } from '../protocol/requests/heartbeat/index';
+import type { HeartbeatResponseV2Body } from '../protocol/requests/heartbeat/v2/response';
+import { InitProducerId } from '../protocol/requests/init-producer-id/index';
+import type { InitProducerIdOptions } from '../protocol/requests/init-producer-id/index';
+import type { InitProducerIdResponseV1Body } from '../protocol/requests/init-producer-id/v1/response';
+import { JoinGroup } from '../protocol/requests/join-group/index';
+import type { JoinGroupOptions } from '../protocol/requests/join-group/index';
+import type { JoinGroupResponseV5Body } from '../protocol/requests/join-group/v5/response';
+import { LeaveGroup } from '../protocol/requests/leave-group/index';
+import type { LeaveGroupOptions } from '../protocol/requests/leave-group/index';
+import type { LeaveGroupResponseV3Body } from '../protocol/requests/leave-group/v3/response';
+import { ListGroups } from '../protocol/requests/list-groups/index';
+import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
+import { ListOffsets } from '../protocol/requests/list-offsets/index';
+import type { ListOffsetsOptions } from '../protocol/requests/list-offsets/index';
+import type { ListOffsetsResponseV3Body } from '../protocol/requests/list-offsets/v3/response';
+import { ListPartitionReassignments } from '../protocol/requests/list-partition-reassignments/index';
+import type { ListPartitionReassignmentsRequestV0Options } from '../protocol/requests/list-partition-reassignments/v0/request';
+import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
+import { Metadata } from '../protocol/requests/metadata/index';
+import type { MetadataOptions } from '../protocol/requests/metadata/index';
+import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import { OffsetCommit } from '../protocol/requests/offset-commit/index';
+import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index';
+import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response';
+import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
+import type { OffsetFetchOptions } from '../protocol/requests/offset-fetch/index';
+import type { OffsetFetchResponseV4Body } from '../protocol/requests/offset-fetch/v4/response';
+import { Produce } from '../protocol/requests/produce/index';
+import type { ProduceRequestOptions } from '../protocol/requests/produce/shared';
+import type { ProduceResponseV6Body } from '../protocol/requests/produce/v6/response';
+import { SaslAuthenticate } from '../protocol/requests/sasl-authenticate/index';
+import { SyncGroup } from '../protocol/requests/sync-group/index';
+import type { SyncGroupOptions } from '../protocol/requests/sync-group/index';
+import type { SyncGroupResponseV2Body } from '../protocol/requests/sync-group/v2/response';
+import { TxnOffsetCommit } from '../protocol/requests/txn-offset-commit/index';
+import type { TxnOffsetCommitOptions } from '../protocol/requests/txn-offset-commit/index';
+import type { TxnOffsetCommitResponseV1Body } from '../protocol/requests/txn-offset-commit/v1/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -231,14 +231,14 @@ export class Broker {
         });
         break;
       } catch (e) {
-        if (!(e instanceof KafkaJSProtocolError) || e.type !== 'UNSUPPORTED_VERSION') {
+        if (!(e instanceof KafkaProtocolError) || e.type !== 'UNSUPPORTED_VERSION') {
           throw e;
         }
       }
     }
 
     if (!response) {
-      throw new KafkaJSProtocolError({ message: 'API Versions not supported', retriable: false });
+      throw new KafkaProtocolError({ message: 'API Versions not supported', retriable: false });
     }
 
     const versions: Record<number, { minVersion: number; maxVersion: number }> = {};
@@ -335,7 +335,7 @@ export class Broker {
     try {
       return await makeRequest();
     } catch (error) {
-      if (error instanceof KafkaJSMemberIdRequired && error.memberId != null) {
+      if (error instanceof KafkaMemberIdRequired && error.memberId != null) {
         return makeRequest(error.memberId);
       }
       throw error;
@@ -488,7 +488,7 @@ export class Broker {
   }): Promise<T> {
     const result = await this.#sendRequest<T>(protocolResult);
     if (result === undefined) {
-      throw new KafkaJSInvariantViolation('Broker request unexpectedly returned no response');
+      throw new KafkaInvariantViolation('Broker request unexpectedly returned no response');
     }
     return result;
   }
@@ -502,7 +502,7 @@ export class Broker {
     try {
       return await this.connectionPool.send<T>(asTypedSend<T>(protocolResult));
     } catch (e) {
-      if (e instanceof KafkaJSConnectionClosedError) {
+      if (e instanceof KafkaConnectionClosedError) {
         await this.disconnect();
       }
       throw e;

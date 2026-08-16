@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { txnOffsetCommitResponseV1 } from './response.js';
+import { txnOffsetCommitResponseV1 } from './response';
 
 describe('protocol/requests/txn-offset-commit/v1/response', () => {
   it('decodes the v0 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

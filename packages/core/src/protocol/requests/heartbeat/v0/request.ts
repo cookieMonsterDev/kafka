@@ -1,5 +1,5 @@
-import { defineRequest, field, int32, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, int32, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Heartbeat Request (Version: 0) => group_id group_generation_id member_id

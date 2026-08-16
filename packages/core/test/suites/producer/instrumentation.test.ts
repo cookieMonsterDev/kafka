@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index.js';
+import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
+import { createProducer } from '../../../src/producer/index';
+import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index';
 
 describe('producer.instrumentation', () => {
   let topicName: string;

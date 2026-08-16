@@ -1,5 +1,5 @@
-import { array, defineRequest, field, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Version 3 changes LeaveGroup to operate on a batch of members and adds group_instance_id to

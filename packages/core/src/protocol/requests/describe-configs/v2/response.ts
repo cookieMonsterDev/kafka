@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { describeConfigsResponseV1, type DescribeConfigsResponseV1Body } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { describeConfigsResponseV1, type DescribeConfigsResponseV1Body } from '../v1/response';
 
 export interface DescribeConfigsResponseV2Body extends DescribeConfigsResponseV1Body {
   clientSideThrottleTime: number;

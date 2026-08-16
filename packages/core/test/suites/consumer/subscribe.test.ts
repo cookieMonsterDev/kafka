@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index';
 
 describe('consumer.subscribe', () => {
   let topicName: string;

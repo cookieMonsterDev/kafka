@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { offsetCommitResponseV4, type OffsetCommitResponseV4Body } from '../v4/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { offsetCommitResponseV4, type OffsetCommitResponseV4Body } from '../v4/response';
 
 /**
  * OffsetCommit Response (Version: 5) => throttle_time_ms [responses]

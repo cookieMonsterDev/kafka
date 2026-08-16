@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isInvalidOffset } from './is-invalid-offset.js';
+import { isInvalidOffset } from './is-invalid-offset';
 
 describe('consumer/offset-manager/is-invalid-offset', () => {
   it('returns true for negative offsets', () => {

@@ -1,9 +1,9 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
 import {
   alterPartitionReassignmentsRequestV0,
   type AlterPartitionReassignmentsRequestV0Options,
-} from './v0/request.js';
-import { alterPartitionReassignmentsResponseV0 } from './v0/response.js';
+} from './v0/request';
+import { alterPartitionReassignmentsResponseV0 } from './v0/response';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterPartitionReassignmentsRequestV0Options>>> = {
   0: (values) => ({

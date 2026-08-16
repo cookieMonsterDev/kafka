@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { LeaveGroup } from './index.js';
-import { leaveGroupRequestV3 } from './v3/request.js';
+import { LeaveGroup } from './index';
+import { leaveGroupRequestV3 } from './v3/request';
 
 describe('protocol/requests/leave-group', () => {
   it('implements versions 0 through 3', () => {

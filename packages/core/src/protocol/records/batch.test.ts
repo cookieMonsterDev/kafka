@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { COMPRESSION_TYPES } from '../compression/index.js';
-import { Decoder } from '../decoder.js';
-import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js';
-import { decodeRecordBatch, encodeRecordBatch } from './batch.js';
-import { encodeRecord } from './record.js';
+import { COMPRESSION_TYPES } from '../compression/index';
+import { Decoder } from '../decoder';
+import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
+import { decodeRecordBatch, encodeRecordBatch } from './batch';
+import { encodeRecord } from './record';
 
-// Captured from kafkajs's recordBatch/fixtures/v0_recordbatch.json — one gzip-compressed record.
+// One gzip-compressed record batch.
 const V0_RECORD_BATCH_FIXTURE = Buffer.from([
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 113, 0, 0, 0, 0, 2, 228, 195, 36, 165, 0, 9, 0, 0, 0, 0, 0, 0, 1, 115, 237, 245, 255,
   167, 0, 0, 1, 115, 237, 245, 255, 201, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 31, 139,
@@ -81,7 +81,7 @@ describe('protocol/records/batch', () => {
     expect(decoded.inTransaction).toBe(true);
   });
 
-  it('throws KafkaJSPartialMessageError when the batch is truncated', async () => {
+  it('throws KafkaPartialMessageError when the batch is truncated', async () => {
     const encoded = await encodeRecordBatch({ records: [encodeRecord({ value: 'v' })] });
     const truncated = encoded.buffer.subarray(0, encoded.buffer.length - 5);
     await expect(decodeRecordBatch(new Decoder(truncated))).rejects.toThrow(/partial record batch/);

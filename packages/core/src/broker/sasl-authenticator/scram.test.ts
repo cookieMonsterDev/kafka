@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { Decoder } from '../../protocol/decoder.js';
-import { scram256AuthenticatorProvider } from './scram256.js';
-import { DIGESTS, SCRAM } from './scram.js';
-import type { ScramServerMessage } from '../../protocol/sasl/scram.js';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { Decoder } from '../../protocol/decoder';
+import { scram256AuthenticatorProvider } from './scram256';
+import { DIGESTS, SCRAM } from './scram';
+import type { ScramServerMessage } from '../../protocol/sasl/scram';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { metadataRequestV1 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { metadataRequestV1 } from './request';
 
 describe('protocol/requests/metadata/v1/request', () => {
   it('encodes a non-empty topics array like a plain array', async () => {

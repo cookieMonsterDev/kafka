@@ -1,6 +1,6 @@
-import type { RequestDefinition } from '../../../schema.js';
-import type { FetchRequestOptions } from '../shared.js';
-import { fetchRequestV5 } from '../v5/request.js';
+import type { RequestDefinition } from '../../../schema';
+import type { FetchRequestOptions } from '../shared';
+import { fetchRequestV5 } from '../v5/request';
 
 /**
  * Fetch Request (Version: 6) => replica_id max_wait_time min_bytes max_bytes isolation_level [topics]

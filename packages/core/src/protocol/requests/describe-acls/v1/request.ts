@@ -1,5 +1,5 @@
-import { API_KEYS } from '../../api-keys.js';
-import { defineRequest, field, int8, nullableString, object } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys';
+import { defineRequest, field, int8, nullableString, object } from '../../../schema';
 
 /**
  * DescribeAcls Request (Version: 1) => resource_type resource_name resource_pattern_type_filter principal host operation permission_type

@@ -11,7 +11,7 @@
  * database and verify that the authentication credentials permit the client to login as the
  * authorization identity. If both steps succeed, the user is logged in.
  */
-import { Encoder } from '../encoder.js';
+import { Encoder } from '../encoder';
 
 const NUL = String.fromCharCode(0);
 

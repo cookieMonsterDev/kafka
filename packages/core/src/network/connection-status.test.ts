@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status.js';
+import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status';
 
 describe('network/connection-status', () => {
   it('considers connected and disconnecting as connected states', () => {

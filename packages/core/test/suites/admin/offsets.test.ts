@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { EARLIEST_OFFSET } from '../../../src/constants.js';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
+import { createAdmin } from '../../../src/admin/index';
+import { EARLIEST_OFFSET } from '../../../src/constants';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
   createModPartitioner,
@@ -12,7 +12,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('admin.offsets', () => {
   let topicName: string;

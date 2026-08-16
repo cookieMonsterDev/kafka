@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PartitionMetadata } from '../../../cluster/index.js';
-import { DefaultPartitioner } from './index.js';
+import type { PartitionMetadata } from '../../../cluster/index';
+import { DefaultPartitioner } from './index';
 
 describe('producer/partitioners/default', () => {
   it('hashes a key deterministically into one of the topic partitions', () => {

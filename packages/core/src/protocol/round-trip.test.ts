@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
 
 /**
  * Property-based round-trip coverage for the codec primitives: generate many random values,

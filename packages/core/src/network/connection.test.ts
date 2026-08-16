@@ -1,14 +1,14 @@
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KafkaJSConnectionClosedError, KafkaJSConnectionError } from '../errors.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { Decoder } from '../protocol/decoder.js';
-import { Encoder } from '../protocol/encoder.js';
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import { Connection } from './connection.js';
-import type { ConnectionOptions, CreateSaslAuthenticator } from './connection.js';
-import { createDefaultSocketFactory } from './socket-factory.js';
+import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { Decoder } from '../protocol/decoder';
+import { Encoder } from '../protocol/encoder';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import { Connection } from './connection';
+import type { ConnectionOptions, CreateSaslAuthenticator } from './connection';
+import { createDefaultSocketFactory } from './socket-factory';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -120,7 +120,7 @@ describe('network/Connection', () => {
       await new Promise<void>((resolve) => temp.close(() => resolve()));
 
       const connection = createConnection(port);
-      await expect(connection.connect()).rejects.toThrow(KafkaJSConnectionError);
+      await expect(connection.connect()).rejects.toThrow(KafkaConnectionError);
       expect(connection.isConnected()).toBe(false);
     });
 
@@ -215,7 +215,7 @@ describe('network/Connection', () => {
       };
 
       await expect(connection.send({ request: metadataRequest(), response })).rejects.toThrow(
-        KafkaJSConnectionClosedError,
+        KafkaConnectionClosedError,
       );
     });
 

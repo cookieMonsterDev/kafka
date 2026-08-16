@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { withTopicDefaults } from '../v2/request.js';
-import { createTopicsRequestV3 } from './request.js';
+import { withTopicDefaults } from '../v2/request';
+import { createTopicsRequestV3 } from './request';
 
 describe('protocol/requests/create-topics/v3/request', () => {
   it('encodes to the same wire format as v2', async () => {

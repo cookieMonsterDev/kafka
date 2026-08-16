@@ -1,11 +1,8 @@
-import { createErrorFromCode, failure } from '../../error-codes.js';
+import { createErrorFromCode, failure } from '../../error-codes';
 
 /**
- * Every Metadata response version shares this error-checking shape (topic-level error code, then
- * each partition's own), even though the surrounding body grows extra fields release over
- * release. kafkajs expresses the reuse by literally re-exporting `parse` from v0's module; here
- * each version keeps its own precise body type and calls this shared check instead, so `parse`'s
- * return type is never widened down to v0's.
+ * Shared Metadata error check: topic-level error first, then each partition's.
+ * Each response version keeps its own body type and calls this helper.
  */
 export interface TopicMetadataErrorShape {
   topicErrorCode: number;

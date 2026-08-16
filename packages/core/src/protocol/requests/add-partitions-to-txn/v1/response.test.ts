@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { addPartitionsToTxnResponseV1 } from './response.js';
+import { addPartitionsToTxnResponseV1 } from './response';
 
 describe('protocol/requests/add-partitions-to-txn/v1/response', () => {
   it('decodes the v0 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

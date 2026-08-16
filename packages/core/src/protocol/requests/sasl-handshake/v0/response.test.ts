@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { saslHandshakeResponseV0 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { saslHandshakeResponseV0 } from './response';
 
 function unsupportedVersionResponse(): Buffer {
   return Buffer.from([0, 35, 0, 0, 0, 0]);
@@ -15,7 +15,7 @@ describe('protocol/requests/sasl-handshake/v0/response', () => {
     await expect(saslHandshakeResponseV0.parse(data)).resolves.toBeTruthy();
   });
 
-  it('throws a KafkaJSProtocolError if the api is not supported', async () => {
+  it('throws a KafkaProtocolError if the api is not supported', async () => {
     const data = await saslHandshakeResponseV0.decode(unsupportedVersionResponse());
     await expect(saslHandshakeResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/);
   });

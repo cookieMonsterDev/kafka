@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { type CreatePartitionsResponseV0Body, createPartitionsResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { type CreatePartitionsResponseV0Body, createPartitionsResponseV0 } from '../v0/response';
 
 export interface CreatePartitionsResponseV1Body extends CreatePartitionsResponseV0Body {
   clientSideThrottleTime: number;

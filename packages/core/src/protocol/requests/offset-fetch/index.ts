@@ -1,13 +1,13 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import type { OffsetFetchTopicOptions } from './shared.js';
-import { offsetFetchRequestV1 } from './v1/request.js';
-import { offsetFetchResponseV1 } from './v1/response.js';
-import { offsetFetchRequestV2 } from './v2/request.js';
-import { offsetFetchResponseV2 } from './v2/response.js';
-import { offsetFetchRequestV3 } from './v3/request.js';
-import { offsetFetchResponseV3 } from './v3/response.js';
-import { offsetFetchRequestV4 } from './v4/request.js';
-import { offsetFetchResponseV4 } from './v4/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import type { OffsetFetchTopicOptions } from './shared';
+import { offsetFetchRequestV1 } from './v1/request';
+import { offsetFetchResponseV1 } from './v1/response';
+import { offsetFetchRequestV2 } from './v2/request';
+import { offsetFetchResponseV2 } from './v2/response';
+import { offsetFetchRequestV3 } from './v3/request';
+import { offsetFetchResponseV3 } from './v3/response';
+import { offsetFetchRequestV4 } from './v4/request';
+import { offsetFetchResponseV4 } from './v4/response';
 
 export interface OffsetFetchOptions {
   groupId: string;

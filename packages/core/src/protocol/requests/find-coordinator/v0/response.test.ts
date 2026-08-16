@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
+import { Encoder } from '../../../encoder';
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { findCoordinatorResponseV0 } from './response.js';
+import { findCoordinatorResponseV0 } from './response';
 
 /** The broker always sends the full coordinator shape, even on error (dummy values). */
 function unsupportedVersionResponse(): Buffer {
@@ -15,7 +15,7 @@ describe('protocol/requests/find-coordinator/v0/response', () => {
     await expect(findCoordinatorResponseV0.parse(data)).resolves.toBeTruthy();
   });
 
-  it('throws a KafkaJSProtocolError if the api is not supported', async () => {
+  it('throws a KafkaProtocolError if the api is not supported', async () => {
     const data = await findCoordinatorResponseV0.decode(unsupportedVersionResponse());
     await expect(findCoordinatorResponseV0.parse(data)).rejects.toThrow(/version of API is not supported/);
   });

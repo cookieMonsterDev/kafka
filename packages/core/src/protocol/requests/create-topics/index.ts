@@ -1,9 +1,9 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import type { CreateTopicInput } from './v2/request.js';
-import { createTopicsRequestV2, withTopicDefaults } from './v2/request.js';
-import { createTopicsResponseV2 } from './v2/response.js';
-import { createTopicsRequestV3 } from './v3/request.js';
-import { createTopicsResponseV3 } from './v3/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import type { CreateTopicInput } from './v2/request';
+import { createTopicsRequestV2, withTopicDefaults } from './v2/request';
+import { createTopicsResponseV2 } from './v2/response';
+import { createTopicsRequestV3 } from './v3/request';
+import { createTopicsResponseV3 } from './v3/response';
 
 export interface CreateTopicsOptions {
   topics: CreateTopicInput[];

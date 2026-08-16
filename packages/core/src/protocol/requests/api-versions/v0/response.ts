@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, object } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, object } from '../../../schema';
 
 /**
  * ApiVersionResponse => ErrorCode [ApiVersions]

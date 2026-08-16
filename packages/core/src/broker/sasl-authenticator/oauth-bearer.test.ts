@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { oauthBearerAuthenticatorProvider } from './oauth-bearer.js';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { oauthBearerAuthenticatorProvider } from './oauth-bearer';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

@@ -28,10 +28,11 @@ dist/          build output (git-ignored)
 tsconfig.json  extends ../../tsconfig.base.json
 ```
 
-Compiler options are shared: strict mode, `nodenext` modules, and
-`erasableSyntaxOnly` (no enums or parameter properties, so the source stays
-runnable by Node's native type stripping). Override per-package settings in
-`tsconfig.json` rather than editing the base.
+Compiler options are shared: strict mode, `bundler` module resolution (Vite
+emits the JS; relative imports omit file extensions), and `erasableSyntaxOnly`
+(no enums or parameter properties, so the source stays runnable by Node's
+native type stripping). Override per-package settings in `tsconfig.json`
+rather than editing the base.
 
 ## Consuming this package
 

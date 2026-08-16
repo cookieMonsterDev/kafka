@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../encoder.js';
-import { gzipCodec } from './gzip.js';
+import { Encoder } from '../encoder';
+import { gzipCodec } from './gzip';
 
 describe('protocol/compression/gzip', () => {
   it('round-trips arbitrary bytes', async () => {

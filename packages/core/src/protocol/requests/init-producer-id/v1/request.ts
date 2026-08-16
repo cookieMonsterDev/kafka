@@ -1,5 +1,5 @@
-import { defineRequest, field, int32, nullableString, object } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, int32, nullableString, object } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * InitProducerId Request (Version: 1) => transactional_id transaction_timeout_ms

@@ -1,28 +1,28 @@
-import { Broker } from '../broker/index.js';
-import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants.js';
+import { Broker } from '../broker/index';
+import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import {
-  KafkaJSBrokerNotFound,
-  KafkaJSError,
-  KafkaJSGroupCoordinatorNotFound,
-  KafkaJSMetadataNotLoaded,
-  KafkaJSTopicMetadataNotLoaded,
-} from '../errors.js';
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import type { Logger } from '../loggers/index.js';
-import type { ConnectionOptions } from '../network/connection.js';
-import type { SocketFactory } from '../network/socket-factory.js';
-import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types.js';
-import type { CoordinatorType } from '../protocol/enums/coordinator-types.js';
-import type { IsolationLevel } from '../protocol/enums/isolation-level.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response.js';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
-import type { RetryOptions } from '../retry/index.js';
-import { retrier } from '../retry/index.js';
-import { Lock } from '../utils/lock.js';
-import { sharedPromiseTo } from '../utils/shared-promise-to.js';
-import { BrokerPool } from './broker-pool.js';
-import { connectionPoolBuilder } from './connection-pool-builder.js';
+  KafkaBrokerNotFound,
+  KafkaError,
+  KafkaGroupCoordinatorNotFound,
+  KafkaMetadataNotLoaded,
+  KafkaTopicMetadataNotLoaded,
+} from '../errors';
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { Logger } from '../loggers/index';
+import type { ConnectionOptions } from '../network/connection';
+import type { SocketFactory } from '../network/socket-factory';
+import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
+import type { CoordinatorType } from '../protocol/enums/coordinator-types';
+import type { IsolationLevel } from '../protocol/enums/isolation-level';
+import { staleMetadata } from '../protocol/error-codes';
+import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
+import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import type { RetryOptions } from '../retry/index';
+import { retrier } from '../retry/index';
+import { Lock } from '../utils/lock';
+import { sharedPromiseTo } from '../utils/shared-promise-to';
+import { BrokerPool } from './broker-pool';
+import { connectionPoolBuilder } from './connection-pool-builder';
 
 type MetadataBroker = MetadataResponseV6Body['brokers'][number];
 type MetadataTopic = MetadataResponseV6Body['topicMetadata'][number];
@@ -162,13 +162,13 @@ export class Cluster {
       const { metadata } = this.brokerPool;
 
       if (!metadata || metadata.controllerId == null) {
-        throw new KafkaJSMetadataNotLoaded('Topic metadata not loaded');
+        throw new KafkaMetadataNotLoaded('Topic metadata not loaded');
       }
 
       const broker = await this.findBroker({ nodeId: String(metadata.controllerId) });
 
       if (!broker) {
-        throw new KafkaJSBrokerNotFound(
+        throw new KafkaBrokerNotFound(
           `Controller broker with id ${metadata.controllerId} not found in the cached metadata`,
         );
       }
@@ -266,9 +266,9 @@ export class Cluster {
       const error = e as Error & { name: string };
       // The client probably has stale metadata.
       if (
-        error.name === 'KafkaJSBrokerNotFound' ||
-        error.name === 'KafkaJSLockTimeout' ||
-        error.name === 'KafkaJSConnectionError'
+        error.name === 'KafkaBrokerNotFound' ||
+        error.name === 'KafkaLockTimeout' ||
+        error.name === 'KafkaConnectionError'
       ) {
         await this.refreshMetadata();
       }
@@ -284,7 +284,7 @@ export class Cluster {
   findTopicPartitionMetadata(topic: string): PartitionMetadata[] {
     const { metadata } = this.brokerPool;
     if (!metadata) {
-      throw new KafkaJSTopicMetadataNotLoaded('Topic metadata not loaded', { topic });
+      throw new KafkaTopicMetadataNotLoaded('Topic metadata not loaded', { topic });
     }
 
     const topicMetadata = metadata.topicMetadata.find((t) => t.topic === topic);
@@ -299,7 +299,7 @@ export class Cluster {
       if (!metadata) return result;
 
       if (metadata.leader == null) {
-        throw new KafkaJSError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
+        throw new KafkaError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
       }
 
       const current = result[metadata.leader] ?? [];
@@ -322,7 +322,7 @@ export class Cluster {
         const error = e as Error & { name: string; type?: string; code?: string };
 
         // A new broker can join the cluster before we have the chance to refresh metadata.
-        if (error.name === 'KafkaJSBrokerNotFound' || error.type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
+        if (error.name === 'KafkaBrokerNotFound' || error.type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
           this.logger.debug(`${error.message}, refreshing metadata and trying again...`, {
             groupId,
             retryCount,
@@ -380,7 +380,7 @@ export class Cluster {
       return brokerMetadata;
     }
 
-    throw new KafkaJSGroupCoordinatorNotFound('Failed to find group coordinator');
+    throw new KafkaGroupCoordinatorNotFound('Failed to find group coordinator');
   }
 
   defaultOffset({ fromBeginning }: { fromBeginning?: boolean }): bigint {

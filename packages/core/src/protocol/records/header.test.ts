@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { decodeHeader, encodeHeader } from './header.js';
+import { Decoder } from '../decoder';
+import { decodeHeader, encodeHeader } from './header';
 
 describe('protocol/records/header', () => {
   it('round-trips a key/value pair', () => {

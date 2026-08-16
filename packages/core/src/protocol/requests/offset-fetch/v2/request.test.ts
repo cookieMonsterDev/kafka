@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { offsetFetchRequestV2 } from './request.js';
+import { offsetFetchRequestV2 } from './request';
 
 describe('protocol/requests/offset-fetch/v2/request', () => {
   it('encodes matching a real fixture', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { syncGroupRequestV0 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { syncGroupRequestV0 } from './request';
 
 describe('protocol/requests/sync-group/v0/request', () => {
   it('encodes group_id, generation_id, member_id, and the assignment array', async () => {

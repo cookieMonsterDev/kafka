@@ -1,7 +1,7 @@
-import { KafkaJSNonRetriableError, KafkaJSRequestTimeoutError } from '../../errors.js';
-import type { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events.js';
-import type { NetworkEventMap } from '../instrumentation-events.js';
+import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
+import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
+import type { NetworkEventMap } from '../instrumentation-events';
 
 export interface RequestEntry {
   apiKey: number;
@@ -28,9 +28,8 @@ export interface SocketRequestOptions {
 }
 
 /**
- * Tracks one in-flight request's lifecycle (pending → sent → completed/rejected), its durations,
- * and its own timeout. Unlike kafkajs's interval-polled timeout check, the timeout here is a
- * single `AbortSignal.timeout()` armed at `send()` time and disarmed on completion/rejection.
+ * Tracks one in-flight request (pending → sent → completed/rejected).
+ * Timeout is a single `AbortSignal.timeout()` armed at `send()` and cleared on settle.
  */
 export class SocketRequest {
   readonly createdAt = Date.now();
@@ -99,7 +98,7 @@ export class SocketRequest {
 
     this.#timeoutHandler();
     this.rejected(
-      new KafkaJSRequestTimeoutError(`Request ${requestInfo} timed out`, {
+      new KafkaRequestTimeoutError(`Request ${requestInfo} timed out`, {
         ...eventData,
         sentAt: eventData.sentAt ?? undefined,
         pendingDuration: eventData.pendingDuration ?? undefined,
@@ -150,6 +149,6 @@ export class SocketRequest {
 
   #throwIfInvalidState({ accepted, next }: { accepted: RequestState[]; next: RequestState }): void {
     if (accepted.includes(this.#state)) return;
-    throw new KafkaJSNonRetriableError(`Invalid state, can't transition from ${this.#state} to ${next}`);
+    throw new KafkaNonRetriableError(`Invalid state, can't transition from ${this.#state} to ${next}`);
   }
 }

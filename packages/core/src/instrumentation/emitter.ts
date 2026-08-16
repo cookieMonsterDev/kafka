@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { KafkaJSError } from '../errors.js';
-import { InstrumentationEvent } from './event.js';
+import { KafkaError } from '../errors';
+import { InstrumentationEvent } from './event';
 
 export type RemoveInstrumentationEventListener = () => void;
 
@@ -13,7 +13,7 @@ export class InstrumentationEventEmitter<EventMap extends object = Record<string
 
   emit<EventName extends keyof EventMap & string>(eventName: EventName, payload: EventMap[EventName]): void {
     if (!eventName) {
-      throw new KafkaJSError('Invalid event name', { retriable: false });
+      throw new KafkaError('Invalid event name', { retriable: false });
     }
 
     if (this.#emitter.listenerCount(eventName) > 0) {

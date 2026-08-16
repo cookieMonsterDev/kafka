@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeleteGroups } from './index.js';
+import { DeleteGroups } from './index';
 
 describe('protocol/requests/delete-groups', () => {
   it('implements versions 0 and 1', () => {

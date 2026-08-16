@@ -1,4 +1,4 @@
-import { isInvalidOffset } from './is-invalid-offset.js';
+import { isInvalidOffset } from './is-invalid-offset';
 
 interface OffsetPartition {
   partition: number;

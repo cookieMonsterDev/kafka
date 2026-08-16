@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaJSInvariantViolation } from '../../errors.js';
-import { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { sleep } from '../../utils/wait.js';
-import { NETWORK_REQUEST_QUEUE_SIZE, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events.js';
-import type { NetworkEventMap } from '../instrumentation-events.js';
-import { RequestQueue } from './index.js';
-import type { PushedRequest, RequestQueueOptions } from './index.js';
-import type { RequestEntry } from './socket-request.js';
+import { KafkaInvariantViolation } from '../../errors';
+import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { sleep } from '../../utils/wait';
+import { NETWORK_REQUEST_QUEUE_SIZE, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
+import type { NetworkEventMap } from '../instrumentation-events';
+import { RequestQueue } from './index';
+import type { PushedRequest, RequestQueueOptions } from './index';
+import type { RequestEntry } from './socket-request';
 
 const testLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -85,12 +85,12 @@ describe('network/request-queue/RequestQueue', () => {
       expect(requestQueue.pending.length).toBe(0);
     });
 
-    it('throws KafkaJSInvariantViolation on a correlation id collision', () => {
+    it('throws KafkaInvariantViolation on a correlation id collision', () => {
       const requestQueue = createRequestQueue();
       const request = createPushedRequest();
       requestQueue.inflight.set(request.entry.correlationId, {} as never);
 
-      expect(() => requestQueue.push(request)).toThrow(new KafkaJSInvariantViolation('Correlation id already exists'));
+      expect(() => requestQueue.push(request)).toThrow(new KafkaInvariantViolation('Correlation id already exists'));
     });
 
     it('delays sending until client-side throttling lifts', async () => {

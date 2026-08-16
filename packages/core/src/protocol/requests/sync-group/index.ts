@@ -1,12 +1,12 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { syncGroupRequestV0 } from './v0/request.js';
-import { syncGroupResponseV0 } from './v0/response.js';
-import { syncGroupRequestV1 } from './v1/request.js';
-import { syncGroupResponseV1 } from './v1/response.js';
-import { syncGroupRequestV2 } from './v2/request.js';
-import { syncGroupResponseV2 } from './v2/response.js';
-import { syncGroupRequestV3 } from './v3/request.js';
-import { syncGroupResponseV3 } from './v3/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { syncGroupRequestV0 } from './v0/request';
+import { syncGroupResponseV0 } from './v0/response';
+import { syncGroupRequestV1 } from './v1/request';
+import { syncGroupResponseV1 } from './v1/response';
+import { syncGroupRequestV2 } from './v2/request';
+import { syncGroupResponseV2 } from './v2/response';
+import { syncGroupRequestV3 } from './v3/request';
+import { syncGroupResponseV3 } from './v3/response';
 
 export interface SyncGroupAssignment {
   memberId: string;

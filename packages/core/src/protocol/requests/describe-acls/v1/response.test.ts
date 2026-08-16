@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
-import { describeAclsResponseV1 } from './response.js';
+import { describeAclsResponseV1 } from './response';
 
 describe('protocol/requests/describe-acls/v1/response', () => {
   it('decodes a real fixture, remapping throttleTime to clientSideThrottleTime', async () => {

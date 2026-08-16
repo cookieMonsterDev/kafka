@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { ConnectionPool } from '../network/connection-pool.js';
-import { createDefaultSocketFactory } from '../network/socket-factory.js';
-import { connectionPoolBuilder } from './connection-pool-builder.js';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { ConnectionPool } from '../network/connection-pool';
+import { createDefaultSocketFactory } from '../network/socket-factory';
+import { connectionPoolBuilder } from './connection-pool-builder';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

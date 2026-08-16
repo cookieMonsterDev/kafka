@@ -1,10 +1,10 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { apiVersionsRequestV0 } from './v0/request.js';
-import { apiVersionsResponseV0 } from './v0/response.js';
-import { apiVersionsRequestV1 } from './v1/request.js';
-import { apiVersionsResponseV1 } from './v1/response.js';
-import { apiVersionsRequestV2 } from './v2/request.js';
-import { apiVersionsResponseV2 } from './v2/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { apiVersionsRequestV0 } from './v0/request';
+import { apiVersionsResponseV0 } from './v0/response';
+import { apiVersionsRequestV1 } from './v1/request';
+import { apiVersionsResponseV1 } from './v1/response';
+import { apiVersionsRequestV2 } from './v2/request';
+import { apiVersionsResponseV2 } from './v2/response';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<Record<string, never>>>> = {
   0: () => ({ request: apiVersionsRequestV0({}), response: apiVersionsResponseV0, logResponseError: true }),

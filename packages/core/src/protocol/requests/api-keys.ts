@@ -1,11 +1,8 @@
 /**
- * https://kafka.apache.org/protocol.html#protocol_api_keys
+ * Numeric Kafka API keys used in request headers.
+ * `GroupCoordinator` is FindCoordinator (10); `ElectPreferredLeaders` is ElectLeaders (43).
  *
- * Ported verbatim from kafkajs's `protocol/requests/apiKeys.js`, including its naming quirks
- * (`GroupCoordinator` for FindCoordinator's apiKey 10, `ElectPreferredLeaders` for what current
- * Kafka calls ElectLeaders) — this is the fixed set of API keys kafkajs knows about; newer
- * KRaft-native APIs (DescribeQuorum, ConsumerGroupHeartbeat/KIP-848, …) are out of scope for this
- * port (see the flexible-versions stretch goal).
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export const API_KEYS = Object.freeze({
   Produce: 0,

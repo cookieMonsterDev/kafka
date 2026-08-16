@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types.js';
-import { Batch } from './batch.js';
-import { seq } from '../utils/seq.js';
-import type { KafkaMessage } from './types.js';
-import { createWorker } from './worker.js';
-import { createWorkerQueue } from './worker-queue.js';
+import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
+import { Batch } from './batch';
+import { seq } from '../utils/seq';
+import type { KafkaMessage } from './types';
+import { createWorker } from './worker';
+import { createWorkerQueue } from './worker-queue';
 
 const defaultBatchContext = {
   firstOffset: 0n,

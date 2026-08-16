@@ -1,4 +1,4 @@
-import { Encoder } from '../encoder.js';
+import { Encoder } from '../encoder';
 
 const NUL = String.fromCharCode(0);
 

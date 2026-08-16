@@ -1,5 +1,5 @@
-import { array, bytes, defineRequest, field, int32, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, bytes, defineRequest, field, int32, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Version 3 adds group_instance_id to indicate member identity across restarts.

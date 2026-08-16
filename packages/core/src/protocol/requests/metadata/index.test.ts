@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Metadata } from './index.js';
+import { Metadata } from './index';
 
 describe('protocol/requests/metadata', () => {
   it('implements versions 0 through 6', () => {

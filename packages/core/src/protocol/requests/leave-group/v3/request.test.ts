@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3RequestFixture from '../fixtures/v3-request.json' with { type: 'json' };
-import { leaveGroupRequestV3 } from './request.js';
+import { leaveGroupRequestV3 } from './request';
 
 describe('protocol/requests/leave-group/v3/request', () => {
   it('encodes a batch of members, matching the real fixture', async () => {

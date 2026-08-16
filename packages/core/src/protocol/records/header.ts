@@ -1,5 +1,5 @@
-import type { Decoder } from '../decoder.js';
-import { Encoder } from '../encoder.js';
+import type { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
 
 /**
  * v2

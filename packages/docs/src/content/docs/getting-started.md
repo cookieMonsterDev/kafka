@@ -13,6 +13,9 @@ pnpm install
 pnpm --filter @kafka/core build
 ```
 
+See the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/)
+for cluster concepts (topics, partitions, consumer groups).
+
 ## Create a client
 
 ```ts

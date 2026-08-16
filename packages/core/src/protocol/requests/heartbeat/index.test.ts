@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Heartbeat } from './index.js';
+import { Heartbeat } from './index';
 
 describe('protocol/requests/heartbeat', () => {
   it('implements versions 0 through 3', () => {

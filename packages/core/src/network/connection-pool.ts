@@ -1,7 +1,7 @@
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import type { BrokerVersions } from '../protocol/requests/index.js';
-import { Connection } from './connection.js';
-import type { ConnectionOptions, SendOptions } from './connection.js';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import type { BrokerVersions } from '../protocol/requests/index';
+import { Connection } from './connection';
+import type { ConnectionOptions, SendOptions } from './connection';
 
 const POOL_SIZE = 2;
 /** `Fetch` gets its own dedicated connection so a long poll never head-of-line blocks metadata/heartbeats/produce. */
@@ -32,7 +32,7 @@ export class ConnectionPool {
     this.rack = options.rack ?? null;
     this.sasl = options.sasl ?? null;
     this.connectionTimeout = options.connectionTimeout;
-    this.clientId = options.clientId ?? 'kafkajs';
+    this.clientId = options.clientId ?? 'kafka';
     this.pool = Array.from({ length: POOL_SIZE }, () => new Connection(options));
   }
 

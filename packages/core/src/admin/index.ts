@@ -1,17 +1,17 @@
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter.js';
-import type { InstrumentationEvent } from '../instrumentation/event.js';
-import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort.js';
-import { createAclsApi } from './acls.js';
-import { createConfigsApi } from './configs.js';
-import { createGroupsApi } from './groups.js';
-import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events.js';
-import { createOffsetsApi } from './offsets.js';
-import { createReassignmentsApi } from './reassignments.js';
-import { createTopicsApi } from './topics.js';
-import type { Admin, AdminOptions } from './types.js';
+import { KafkaNonRetriableError } from '../errors';
+import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
+import type { InstrumentationEvent } from '../instrumentation/event';
+import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
+import { createAclsApi } from './acls';
+import { createConfigsApi } from './configs';
+import { createGroupsApi } from './groups';
+import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
+import { createOffsetsApi } from './offsets';
+import { createReassignmentsApi } from './reassignments';
+import { createTopicsApi } from './topics';
+import type { Admin, AdminOptions } from './types';
 
-export type { Admin, AdminOptions, AclEntry, AclFilter, TopicConfig, TopicOffset } from './types.js';
+export type { Admin, AdminOptions, AclEntry, AclFilter, TopicConfig, TopicOffset } from './types';
 export { events };
 
 const EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(events));
@@ -20,8 +20,9 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 /**
- * The user-facing admin client: topic/group/ACL/config/offset/reassignment operations plus
- * instrumentation events. Split by API group under `admin/`; this factory wires them together.
+ * User-facing admin client: topics, groups, ACLs, configs, offsets, and reassignments.
+ *
+ * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
  */
 export function createAdmin({
   cluster,
@@ -45,7 +46,7 @@ export function createAdmin({
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
   ): RemoveInstrumentationEventListener => {
     if (!EVENT_NAMES.has(eventName)) {
-      throw new KafkaJSNonRetriableError(`Event name should be one of ${EVENT_KEYS}`);
+      throw new KafkaNonRetriableError(`Event name should be one of ${EVENT_KEYS}`);
     }
 
     return instrumentationEmitter.addListener(unwrap(eventName), (event: InstrumentationEvent<unknown>) => {

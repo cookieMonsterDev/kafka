@@ -1,7 +1,7 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
-import type { Admin } from '../admin/types.js';
-import type { PartitionMetadata } from '../cluster/index.js';
-import type { Batch, Consumer, ConsumerSubscribeTopic, ConsumerSubscribeTopics } from '../consumer/index.js';
+import type { Admin } from '../admin/types';
+import type { PartitionMetadata } from '../cluster/index';
+import type { Batch, Consumer, ConsumerSubscribeTopic, ConsumerSubscribeTopics } from '../consumer/index';
 import type {
   Assigner,
   ConsumerRetryOptions,
@@ -15,13 +15,13 @@ import type {
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
-} from '../consumer/types.js';
-import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index.js';
-import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection.js';
-import type { SocketFactory } from '../network/socket-factory.js';
-import type { CompressionType } from '../protocol/compression/index.js';
-import type { RecordHeaders } from '../protocol/records/record.js';
-import type { Producer, Transaction } from '../producer/index.js';
+} from '../consumer/types';
+import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
+import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
+import type { SocketFactory } from '../network/socket-factory';
+import type { CompressionType } from '../protocol/compression/index';
+import type { RecordHeaders } from '../protocol/records/record';
+import type { Producer, Transaction } from '../producer/index';
 import type {
   CustomPartitioner,
   Message,
@@ -30,14 +30,16 @@ import type {
   ProducerRecord,
   RecordMetadata,
   TopicMessages,
-} from '../producer/types.js';
-import type { RetryOptions } from '../retry/index.js';
-import type { ConnectOptions } from '../utils/abort.js';
+} from '../producer/types';
+import type { RetryOptions } from '../retry/index';
+import type { ConnectOptions } from '../utils/abort';
 
 export type { ConnectOptions };
 
+/** Resolves bootstrap brokers at connect time as `host:port` strings. */
 export type BrokersFunction = () => readonly string[] | Promise<readonly string[]>;
 
+/** Token returned by an OAUTHBEARER provider. @see https://kafka.apache.org/43/security/authentication-using-sasl/ */
 export interface OauthbearerProviderResponse {
   value: string;
 }
@@ -59,22 +61,48 @@ export type SaslMechanism = keyof SaslMechanismOptionsMap;
 
 type SaslMechanismOptions<T> = T extends SaslMechanism ? { mechanism: T } & SaslMechanismOptionsMap[T] : never;
 
+/** Built-in SASL options. @see https://kafka.apache.org/43/security/authentication-using-sasl/ */
 export type SaslOptions = SaslMechanismOptions<SaslMechanism>;
 
+/** Custom SASL mechanism with a user-supplied authenticator. */
 export type SaslMechanismProvider = {
   mechanism: string;
   authenticationProvider: (args: AuthenticationProviderArgs) => SaslAuthenticationProvider;
 };
 
+/**
+ * Shared client options used by {@link Kafka.producer}, {@link Kafka.consumer}, and {@link Kafka.admin}.
+ *
+ * @see https://kafka.apache.org/43/getting-started/introduction/
+ * @see https://kafka.apache.org/43/security/security-overview/
+ */
 export interface KafkaConfig {
+  /** Bootstrap servers as `host:port`, or a function that returns them. */
   brokers: readonly string[] | BrokersFunction;
+  /**
+   * Enable TLS. `true` uses default Node TLS options; an object is passed to `tls.connect`.
+   * @see https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/
+   */
   ssl?: TlsConnectionOptions | boolean;
+  /**
+   * SASL credentials or a custom mechanism provider.
+   * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+   */
   sasl?: SaslOptions | SaslMechanismProvider;
+  /**
+   * Logical client identifier sent in the request header.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#client.id
+   */
   clientId?: string;
+  /** Socket connect timeout in milliseconds. */
   connectionTimeout?: number;
+  /** SASL handshake timeout in milliseconds. */
   authenticationTimeout?: number;
+  /** Reauthenticate this many milliseconds before the broker session expires. */
   reauthenticationThreshold?: number;
+  /** Per-request timeout in milliseconds. */
   requestTimeout?: number;
+  /** When false, in-flight requests are not timed out by the client. */
   enforceRequestTimeout?: boolean;
   retry?: RetryOptions;
   socketFactory?: SocketFactory;
@@ -82,35 +110,104 @@ export interface KafkaConfig {
   logCreator?: LogCreator;
 }
 
+/**
+ * Options for {@link Kafka.producer}.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/
+ */
 export interface ProducerConfig {
   createPartitioner?: CustomPartitioner;
   retry?: RetryOptions;
+  /** How long cached topic metadata is considered fresh, in milliseconds. */
   metadataMaxAge?: number;
+  /**
+   * Create the topic when a produce targets one that does not exist.
+   * @see https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable
+   */
   allowAutoTopicCreation?: boolean;
+  /**
+   * Assign producer ids and sequence numbers so the broker can deduplicate retries.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#enable.idempotence
+   */
   idempotent?: boolean;
+  /**
+   * Transactional id that fences zombie producers and enables {@link Producer.transaction}.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
+   */
   transactionalId?: string;
+  /**
+   * Transaction timeout in milliseconds.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms
+   */
   transactionTimeout?: number;
   maxInFlightRequests?: number;
 }
 
+/**
+ * Options for {@link Kafka.consumer}.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ */
 export interface ConsumerConfig {
+  /**
+   * Consumer group id. Members that share this id partition assigned topics among themselves.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.id
+   */
   groupId: string;
   partitionAssigners?: PartitionAssigner[];
   metadataMaxAge?: number;
+  /**
+   * Session timeout used by the group coordinator to detect failed members.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms
+   */
   sessionTimeout?: number;
+  /**
+   * Maximum time for a rebalance to complete.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms
+   */
   rebalanceTimeout?: number;
+  /**
+   * How often to send heartbeats to the group coordinator.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms
+   */
   heartbeatInterval?: number;
+  /**
+   * Cap on bytes returned for a single partition in a Fetch.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes
+   */
   maxBytesPerPartition?: number;
+  /**
+   * Wait for at least this many bytes before returning a Fetch (or `maxWaitTimeInMs`).
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes
+   */
   minBytes?: number;
+  /**
+   * Maximum bytes the broker should return for a Fetch.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes
+   */
   maxBytes?: number;
+  /**
+   * How long the broker may wait to accumulate `minBytes`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms
+   */
   maxWaitTimeInMs?: number;
   retry?: ConsumerRetryOptions;
   allowAutoTopicCreation?: boolean;
   maxInFlightRequests?: number;
+  /**
+   * When true, use `read_uncommitted` isolation (aborted transactional records are visible).
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level
+   */
   readUncommitted?: boolean;
+  /**
+   * Consumer rack for fetch-from-closest-replica (KIP-392).
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#client.rack
+   */
   rackId?: string;
 }
 
+/**
+ * Options for {@link Kafka.admin}.
+ * @see https://kafka.apache.org/43/configuration/admin-configs/
+ */
 export interface AdminConfig {
   retry?: RetryOptions;
 }

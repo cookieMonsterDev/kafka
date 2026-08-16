@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeleteTopics } from './index.js';
+import { DeleteTopics } from './index';
 
 describe('protocol/requests/delete-topics', () => {
   it('implements version 1 only', () => {

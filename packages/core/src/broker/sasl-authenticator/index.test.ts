@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { Connection } from '../../network/connection.js';
-import type { SaslConfig } from '../../network/connection.js';
-import { createDefaultSocketFactory } from '../../network/socket-factory.js';
-import { API_KEYS } from '../../protocol/requests/api-keys.js';
-import { createSaslAuthenticator, SASLAuthenticator } from './index.js';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { Connection } from '../../network/connection';
+import type { SaslConfig } from '../../network/connection';
+import { createDefaultSocketFactory } from '../../network/socket-factory';
+import { API_KEYS } from '../../protocol/requests/api-keys';
+import { createSaslAuthenticator, SASLAuthenticator } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

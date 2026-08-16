@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { consoleLogCreator } from './console.js';
-import { LOG_LEVELS, type LogEntry } from './index.js';
+import { consoleLogCreator } from './console';
+import { LOG_LEVELS, type LogEntry } from './index';
 
 describe('loggers/console', () => {
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('loggers/console', () => {
     namespace,
     level,
     label,
-    log: { timestamp: '2024-01-01T00:00:00.000Z', logger: 'kafkajs', message: 'hello' },
+    log: { timestamp: '2024-01-01T00:00:00.000Z', logger: 'kafka', message: 'hello' },
   });
 
   it('routes each level to the matching console method', () => {

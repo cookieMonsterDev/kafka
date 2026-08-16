@@ -1,12 +1,12 @@
-import { ISOLATION_LEVEL, type IsolationLevel } from '../../enums/isolation-level.js';
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { REPLICA_ID, type ListOffsetsTopicOptions, withDefaultTimestamps } from './shared.js';
-import { listOffsetsRequestV1 } from './v1/request.js';
-import { listOffsetsResponseV1 } from './v1/response.js';
-import { listOffsetsRequestV2 } from './v2/request.js';
-import { listOffsetsResponseV2 } from './v2/response.js';
-import { listOffsetsRequestV3 } from './v3/request.js';
-import { listOffsetsResponseV3 } from './v3/response.js';
+import { ISOLATION_LEVEL, type IsolationLevel } from '../../enums/isolation-level';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { REPLICA_ID, type ListOffsetsTopicOptions, withDefaultTimestamps } from './shared';
+import { listOffsetsRequestV1 } from './v1/request';
+import { listOffsetsResponseV1 } from './v1/response';
+import { listOffsetsRequestV2 } from './v2/request';
+import { listOffsetsResponseV2 } from './v2/response';
+import { listOffsetsRequestV3 } from './v3/request';
+import { listOffsetsResponseV3 } from './v3/response';
 
 export interface ListOffsetsOptions {
   replicaId?: number;

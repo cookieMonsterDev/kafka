@@ -1,4 +1,4 @@
-import type { QueueItem, Worker } from './worker.js';
+import type { QueueItem, Worker } from './worker';
 
 export interface WorkerQueue<T> {
   push: (...batches: T[]) => Promise<void>;

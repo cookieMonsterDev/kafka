@@ -1,5 +1,5 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, object, string } from '../../../schema.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, object, string } from '../../../schema';
 
 /**
  * ListGroups Response (Version: 0) => error_code [groups]

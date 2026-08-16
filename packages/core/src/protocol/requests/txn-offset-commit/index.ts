@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { txnOffsetCommitRequestV0 } from './v0/request.js';
-import { txnOffsetCommitResponseV0 } from './v0/response.js';
-import { txnOffsetCommitRequestV1 } from './v1/request.js';
-import { txnOffsetCommitResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { txnOffsetCommitRequestV0 } from './v0/request';
+import { txnOffsetCommitResponseV0 } from './v0/response';
+import { txnOffsetCommitRequestV1 } from './v1/request';
+import { txnOffsetCommitResponseV1 } from './v1/response';
 
 export interface TxnOffsetCommitOptions {
   transactionalId: string;

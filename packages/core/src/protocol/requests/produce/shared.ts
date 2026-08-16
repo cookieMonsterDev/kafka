@@ -1,8 +1,8 @@
-import { encodeRecord, type RecordHeaders } from '../../records/record.js';
-import { encodeRecordBatch } from '../../records/batch.js';
-import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index.js';
-import { Encoder } from '../../encoder.js';
-import { createErrorFromCode, failure } from '../../error-codes.js';
+import { encodeRecord, type RecordHeaders } from '../../records/record';
+import { encodeRecordBatch } from '../../records/batch';
+import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index';
+import { Encoder } from '../../encoder';
+import { createErrorFromCode, failure } from '../../error-codes';
 import {
   array,
   bytes,
@@ -15,8 +15,8 @@ import {
   object,
   string,
   type RequestDefinition,
-} from '../../schema.js';
-import { API_KEYS } from '../api-keys.js';
+} from '../../schema';
+import { API_KEYS } from '../api-keys';
 
 export interface ProduceMessage {
   key?: Buffer | string | null;

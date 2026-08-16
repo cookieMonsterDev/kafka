@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { leaveGroupRequestV2 } from './request.js';
+import { leaveGroupRequestV2 } from './request';
 
 describe('protocol/requests/leave-group/v2/request', () => {
   it('encodes to match the real fixture (identical wire format to v1)', async () => {

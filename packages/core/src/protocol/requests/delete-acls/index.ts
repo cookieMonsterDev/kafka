@@ -1,6 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { deleteAclsRequestV1 } from './v1/request.js';
-import { deleteAclsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { deleteAclsRequestV1 } from './v1/request';
+import { deleteAclsResponseV1 } from './v1/response';
 
 export interface DeleteAclsOptions {
   filters: {

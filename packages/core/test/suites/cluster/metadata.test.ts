@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createCluster, createTopic, secureRandom } from '../../helpers/index.js';
+import { createCluster, createTopic, secureRandom } from '../../helpers/index';
 
 describe('cluster.metadata', () => {
   let cluster: ReturnType<typeof createCluster> | undefined;

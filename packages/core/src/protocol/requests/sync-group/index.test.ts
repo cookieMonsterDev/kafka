@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SyncGroup } from './index.js';
+import { SyncGroup } from './index';
 
 describe('protocol/requests/sync-group', () => {
   it('implements versions 0 through 3', () => {

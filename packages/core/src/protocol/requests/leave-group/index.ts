@@ -1,12 +1,12 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { leaveGroupRequestV0 } from './v0/request.js';
-import { leaveGroupResponseV0 } from './v0/response.js';
-import { leaveGroupRequestV1 } from './v1/request.js';
-import { leaveGroupResponseV1 } from './v1/response.js';
-import { leaveGroupRequestV2 } from './v2/request.js';
-import { leaveGroupResponseV2 } from './v2/response.js';
-import { leaveGroupRequestV3 } from './v3/request.js';
-import { leaveGroupResponseV3 } from './v3/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { leaveGroupRequestV0 } from './v0/request';
+import { leaveGroupResponseV0 } from './v0/response';
+import { leaveGroupRequestV1 } from './v1/request';
+import { leaveGroupResponseV1 } from './v1/response';
+import { leaveGroupRequestV2 } from './v2/request';
+import { leaveGroupResponseV2 } from './v2/response';
+import { leaveGroupRequestV3 } from './v3/request';
+import { leaveGroupResponseV3 } from './v3/response';
 
 export interface LeaveGroupMember {
   memberId: string;

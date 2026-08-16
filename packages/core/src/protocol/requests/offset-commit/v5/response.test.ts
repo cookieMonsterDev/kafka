@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
-import { offsetCommitResponseV5 } from './response.js';
+import { offsetCommitResponseV5 } from './response';
 
 describe('protocol/requests/offset-commit/v5/response', () => {
   it('decodes the v4 wire format', async () => {

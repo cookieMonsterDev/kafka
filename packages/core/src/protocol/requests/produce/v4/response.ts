@@ -11,5 +11,5 @@
  *
  * Wire shape and parsing identical to v3.
  */
-export { produceResponseV3 as produceResponseV4 } from '../shared.js';
-export type { ProduceResponseV3Body as ProduceResponseV4Body } from '../shared.js';
+export { produceResponseV3 as produceResponseV4 } from '../shared';
+export type { ProduceResponseV3Body as ProduceResponseV4Body } from '../shared';

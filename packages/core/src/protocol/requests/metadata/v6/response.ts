@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { metadataResponseV5 } from '../v5/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { metadataResponseV5 } from '../v5/response';
 
 type MetadataResponseV5Body = Awaited<ReturnType<typeof metadataResponseV5.decode>>;
 export type MetadataResponseV6Body = Omit<MetadataResponseV5Body, 'throttleTime'> & {

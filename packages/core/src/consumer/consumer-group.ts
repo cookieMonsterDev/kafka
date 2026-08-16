@@ -1,24 +1,24 @@
-import type { Broker } from '../broker/index.js';
-import type { Cluster } from '../cluster/index.js';
+import type { Broker } from '../broker/index';
+import type { Cluster } from '../cluster/index';
 import {
-  KafkaJSError,
-  KafkaJSNonRetriableError,
-  KafkaJSStaleTopicMetadataAssignment,
+  KafkaError,
+  KafkaNonRetriableError,
+  KafkaStaleTopicMetadataAssignment,
   isRebalancing,
-} from '../errors.js';
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import type { Logger } from '../loggers/index.js';
-import type { IsolationLevel } from '../protocol/enums/isolation-level.js';
-import { retrier, type RetryOptions } from '../retry/index.js';
-import { arrayDiff } from '../utils/array-diff.js';
-import { sharedPromiseTo } from '../utils/shared-promise-to.js';
-import { sleep } from '../utils/wait.js';
-import { MemberAssignment } from './assigner-protocol.js';
-import { Batch } from './batch.js';
-import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events.js';
-import { OffsetManager } from './offset-manager/index.js';
-import { SeekOffsets } from './seek-offsets.js';
-import { SubscriptionState } from './subscription-state.js';
+} from '../errors';
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { Logger } from '../loggers/index';
+import type { IsolationLevel } from '../protocol/enums/isolation-level';
+import { retrier, type RetryOptions } from '../retry/index';
+import { arrayDiff } from '../utils/array-diff';
+import { sharedPromiseTo } from '../utils/shared-promise-to';
+import { sleep } from '../utils/wait';
+import { MemberAssignment } from './assigner-protocol';
+import { Batch } from './batch';
+import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
+import { OffsetManager } from './offset-manager/index';
+import { SeekOffsets } from './seek-offsets';
+import { SubscriptionState } from './subscription-state';
 import type {
   Assigner,
   MemberAssignment as MemberAssignmentMap,
@@ -27,7 +27,7 @@ import type {
   TopicPartition,
   TopicPartitionOffset,
   TopicPartitions,
-} from './types.js';
+} from './types';
 
 const STALE_METADATA_ERRORS = Object.freeze([
   'LEADER_NOT_AVAILABLE',
@@ -229,7 +229,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     const { groupId, generationId, memberId, members, groupProtocol, topicsSubscribed, coordinator } = this;
 
     if (!coordinator || generationId == null || memberId == null) {
-      throw new KafkaJSNonRetriableError('Consumer group has not joined');
+      throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
     if (this.isLeader()) {
@@ -237,7 +237,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const assigner = this.assigners.find(({ name }) => name === groupProtocol);
 
       if (!assigner) {
-        throw new KafkaJSNonRetriableError(
+        throw new KafkaNonRetriableError(
           `Unsupported partition assigner "${groupProtocol}", the assigner wasn't found in the assigners list`,
         );
       }
@@ -368,14 +368,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         const error = e as Error & { type?: string };
         if (isRebalancing(error)) {
           // Rebalance in progress isn't a retriable protocol error: the consumer has to find the
-          // coordinator and join again before it can retry. Wrapping in a retriable KafkaJSError
+          // coordinator and join again before it can retry. Wrapping in a retriable KafkaError
           // restarts the join + sync sequence through the retrier.
-          throw new KafkaJSError(error);
+          throw new KafkaError(error);
         }
 
         if (error.type === 'UNKNOWN_MEMBER_ID') {
           this.memberId = null;
-          throw new KafkaJSError(error);
+          throw new KafkaError(error);
         }
 
         bail(error);
@@ -385,7 +385,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   #requireOffsetManager(): OffsetManager {
     if (!this.offsetManager) {
-      throw new KafkaJSNonRetriableError('Offset manager is not initialized');
+      throw new KafkaNonRetriableError('Offset manager is not initialized');
     }
     return this.offsetManager;
   }
@@ -543,7 +543,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       unknownPartitions?: unknown;
     };
 
-    if (STALE_METADATA_ERRORS.includes(error.type ?? '') || error.name === 'KafkaJSTopicMetadataNotLoaded') {
+    if (STALE_METADATA_ERRORS.includes(error.type ?? '') || error.name === 'KafkaTopicMetadataNotLoaded') {
       this.logger.debug('Stale cluster metadata, refreshing...', {
         groupId: this.groupId,
         memberId: this.memberId,
@@ -555,7 +555,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       return;
     }
 
-    if (error.name === 'KafkaJSStaleTopicMetadataAssignment') {
+    if (error.name === 'KafkaStaleTopicMetadataAssignment') {
       this.logger.warn(`${error.message}, resync group`, {
         groupId: this.groupId,
         memberId: this.memberId,
@@ -567,17 +567,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       return;
     }
 
-    if (error.name === 'KafkaJSOffsetOutOfRange') {
+    if (error.name === 'KafkaOffsetOutOfRange') {
       await this.recoverFromOffsetOutOfRange(error);
       return;
     }
 
-    if (error.name === 'KafkaJSConnectionClosedError' && error.host != null && error.port != null) {
+    if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
       this.cluster.removeBroker({ host: error.host, port: error.port });
       return;
     }
 
-    if (error.name === 'KafkaJSBrokerNotFound' || error.name === 'KafkaJSConnectionClosedError') {
+    if (error.name === 'KafkaBrokerNotFound' || error.name === 'KafkaConnectionClosedError') {
       this.logger.debug(`${error.message}, refreshing metadata and retrying...`);
       await this.cluster.refreshMetadata();
       return;
@@ -637,7 +637,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const diff = arrayDiff(partitions, this.partitionsPerSubscribedTopic.get(topic) ?? []);
 
       if (diff.length > 0) {
-        throw new KafkaJSStaleTopicMetadataAssignment('Topic has been updated', {
+        throw new KafkaStaleTopicMetadataAssignment('Topic has been updated', {
           topic,
           unknownPartitions: diff,
         });
@@ -682,7 +682,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (!metadata) return result;
 
       if (metadata.leader == null) {
-        throw new KafkaJSError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
+        throw new KafkaError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
       }
 
       let nodeId: number = metadata.leader;

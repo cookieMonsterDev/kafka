@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
-import { KafkaJSNonRetriableError, KafkaJSSASLAuthenticationError } from '../../errors.js';
-import type { Logger } from '../../loggers/index.js';
-import { scramFinalMessageRequest, scramFirstMessageRequest, scramResponse } from '../../protocol/sasl/scram.js';
-import type { ScramServerMessage } from '../../protocol/sasl/scram.js';
+import { KafkaNonRetriableError, KafkaSASLAuthenticationError } from '../../errors';
+import type { Logger } from '../../loggers/index';
+import { scramFinalMessageRequest, scramFirstMessageRequest, scramResponse } from '../../protocol/sasl/scram';
+import type { ScramServerMessage } from '../../protocol/sasl/scram';
 
 const GS2_HEADER = 'n,,';
 
@@ -87,7 +87,7 @@ export class SCRAM {
     const length = Buffer.byteLength(left);
 
     if (length !== Buffer.byteLength(right)) {
-      throw new KafkaJSNonRetriableError('Buffers must be of the same length');
+      throw new KafkaNonRetriableError('Buffers must be of the same length');
     }
 
     const result = new Array<number>(length);
@@ -120,7 +120,7 @@ export class SCRAM {
     const broker = `${this.#host}:${this.#port}`;
 
     if (this.#sasl.username == null || this.#sasl.password == null) {
-      throw new KafkaJSSASLAuthenticationError(`${this.#prefix}: Invalid username or password`);
+      throw new KafkaSASLAuthenticationError(`${this.#prefix}: Invalid username or password`);
     }
 
     try {
@@ -143,7 +143,7 @@ export class SCRAM {
 
       this.#logger.debug(`${this.#prefix} successful`, { broker });
     } catch (e) {
-      const error = new KafkaJSSASLAuthenticationError(`${this.#prefix} failed: ${(e as Error).message}`);
+      const error = new KafkaSASLAuthenticationError(`${this.#prefix} failed: ${(e as Error).message}`);
       this.#logger.error(error.message, { broker });
       throw error;
     }
@@ -154,7 +154,7 @@ export class SCRAM {
     const request = scramFirstMessageRequest({ clientFirstMessage });
 
     const response = await this.#saslAuthenticate({ request, response: scramResponse });
-    if (!response) throw new KafkaJSNonRetriableError('SCRAM: broker did not respond to the first client message');
+    if (!response) throw new KafkaNonRetriableError('SCRAM: broker did not respond to the first client message');
     return response;
   }
 
@@ -163,13 +163,13 @@ export class SCRAM {
     const { minIterations } = this.#digestDefinition;
 
     if (!clientMessageResponse.r?.startsWith(this.currentNonce)) {
-      throw new KafkaJSSASLAuthenticationError(
+      throw new KafkaSASLAuthenticationError(
         `${this.#prefix} failed: Invalid server nonce, it does not start with the client nonce`,
       );
     }
 
     if (iterations < minIterations) {
-      throw new KafkaJSSASLAuthenticationError(
+      throw new KafkaSASLAuthenticationError(
         `${this.#prefix} failed: Requested iterations ${iterations} is less than the minimum ${minIterations}`,
       );
     }
@@ -180,7 +180,7 @@ export class SCRAM {
     const request = scramFinalMessageRequest({ finalMessage });
 
     const response = await this.#saslAuthenticate({ request, response: scramResponse });
-    if (!response) throw new KafkaJSNonRetriableError('SCRAM: broker did not respond to the final client message');
+    if (!response) throw new KafkaNonRetriableError('SCRAM: broker did not respond to the final client message');
     return response;
   }
 

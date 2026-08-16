@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { murmur2 } from './murmur2.js';
+import { murmur2 } from './murmur2';
 
 const KNOWN_ANSWERS: Readonly<Record<string, number>> = {
   '0': 272173970,
@@ -21,7 +21,7 @@ const KNOWN_ANSWERS: Readonly<Record<string, number>> = {
 };
 
 describe('producer/partitioners/legacy/murmur2', () => {
-  it('matches kafkajs pre-2.0.0 known-answer vectors, deliberately distinct from the default hash', () => {
+  it('matches pre-2.0.0 known-answer vectors, distinct from the default hash', () => {
     for (const [key, expected] of Object.entries(KNOWN_ANSWERS)) {
       expect(murmur2(key)).toBe(expected);
     }

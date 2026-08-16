@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
-import type { Logger } from '../loggers/index.js';
-import type { WorkerQueue } from './worker-queue.js';
+import type { Logger } from '../loggers/index';
+import type { WorkerQueue } from './worker-queue';
 
 export interface FetchBatch {
   topic: string;

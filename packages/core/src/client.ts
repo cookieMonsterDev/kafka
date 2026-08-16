@@ -1,16 +1,16 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
-import { createAdmin } from './admin/index.js';
-import type { Admin } from './admin/types.js';
-import { Cluster, type CommittedOffsetsByGroup } from './cluster/index.js';
-import { createConsumer, type Consumer } from './consumer/index.js';
-import { InstrumentationEventEmitter } from './instrumentation/emitter.js';
-import { consoleLogCreator } from './loggers/console.js';
-import { createLogger, LOG_LEVELS, type Logger } from './loggers/index.js';
-import { createDefaultSocketFactory } from './network/socket-factory.js';
-import { createProducer, type Producer } from './producer/index.js';
-import { ISOLATION_LEVEL, type IsolationLevel } from './protocol/enums/isolation-level.js';
-import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig } from './types/index.js';
-import { once } from './utils/once.js';
+import { createAdmin } from './admin/index';
+import type { Admin } from './admin/types';
+import { Cluster, type CommittedOffsetsByGroup } from './cluster/index';
+import { createConsumer, type Consumer } from './consumer/index';
+import { InstrumentationEventEmitter } from './instrumentation/emitter';
+import { consoleLogCreator } from './loggers/console';
+import { createLogger, LOG_LEVELS, type Logger } from './loggers/index';
+import { createDefaultSocketFactory } from './network/socket-factory';
+import { createProducer, type Producer } from './producer/index';
+import { ISOLATION_LEVEL, type IsolationLevel } from './protocol/enums/isolation-level';
+import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig } from './types/index';
+import { once } from './utils/once';
 
 const DEFAULT_METADATA_MAX_AGE = 300_000;
 
@@ -29,8 +29,10 @@ function normalizeSsl(ssl: KafkaConfig['ssl']): TlsConnectionOptions | null {
 }
 
 /**
- * The public client: one shared logger and offset map, plus `producer()` / `consumer()` / `admin()`
- * factories that each get their own cluster and instrumentation emitter.
+ * Entry point for the client. One instance holds shared logging and a committed-offset map;
+ * each `producer()`, `consumer()`, and `admin()` call gets its own cluster connection pool.
+ *
+ * @see https://kafka.apache.org/43/getting-started/introduction/
  */
 export class Kafka {
   readonly #logger: Logger;
@@ -57,9 +59,9 @@ export class Kafka {
     this.#logger = createLogger({ level: logLevel, logCreator });
     this.#clusterRetry = retry;
     this.#warnOfDefaultPartitioner = once((logger: Logger) => {
-      if (process.env.KAFKAJS_NO_PARTITIONER_WARNING == null) {
+      if (process.env.KAFKA_NO_PARTITIONER_WARNING == null) {
         logger.warn(
-          'The default partitioner changed. To retain the previous routing, create the producer with "createPartitioner: Partitioners.LegacyPartitioner". Silence this warning by setting the environment variable "KAFKAJS_NO_PARTITIONER_WARNING=1"',
+          'The default partitioner changed. To retain the previous routing, create the producer with "createPartitioner: Partitioners.LegacyPartitioner". Silence this warning by setting the environment variable "KAFKA_NO_PARTITIONER_WARNING=1"',
         );
       }
     });
@@ -96,6 +98,10 @@ export class Kafka {
       });
   }
 
+  /**
+   * Create a producer. Idempotent and transactional producers require matching broker support.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/
+   */
   producer({
     createPartitioner,
     retry,
@@ -130,6 +136,10 @@ export class Kafka {
     });
   }
 
+  /**
+   * Create a consumer in the given group.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/
+   */
   consumer({
     groupId,
     partitionAssigners,
@@ -177,6 +187,11 @@ export class Kafka {
     });
   }
 
+  /**
+   * Create an admin client for topics, groups, ACLs, configs, and reassignments.
+   * @see https://kafka.apache.org/43/configuration/admin-configs/
+   * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+   */
   admin({ retry }: AdminConfig = {}): Admin {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({

@@ -1,6 +1,10 @@
-import { KafkaJSNonRetriableError, KafkaJSNumberOfRetriesExceeded } from '../errors.js';
-import { RETRY_DEFAULTS } from './defaults.js';
+import { KafkaNonRetriableError, KafkaNumberOfRetriesExceeded } from '../errors';
+import { RETRY_DEFAULTS } from './defaults';
 
+/**
+ * Exponential backoff used by producer, consumer, and admin requests.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#retries
+ */
 export interface RetryConfig {
   maxRetryTime: number;
   initialRetryTime: number;
@@ -68,10 +72,10 @@ function createRetriable<T>(
           if (shouldRetry) {
             scheduleRetry();
           } else {
-            reject(new KafkaJSNumberOfRetriesExceeded(e, { retryCount, retryTime }));
+            reject(new KafkaNumberOfRetriesExceeded(e, { retryCount, retryTime }));
           }
         } else {
-          reject(new KafkaJSNonRetriableError(e, { cause: e.cause ?? e }));
+          reject(new KafkaNonRetriableError(e, { cause: e.cause ?? e }));
         }
       });
   };

@@ -1,11 +1,11 @@
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSError, KafkaJSNonRetriableError } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status.js';
-import type { Retrier } from '../retry/index.js';
-import { rejectOnAbort } from '../utils/abort.js';
-import type { EosManager } from './eos-manager/index.js';
-import { createSendMessages } from './send-messages.js';
+import type { Cluster } from '../cluster/index';
+import { KafkaError, KafkaNonRetriableError } from '../errors';
+import type { Logger } from '../loggers/index';
+import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
+import type { Retrier } from '../retry/index';
+import { rejectOnAbort } from '../utils/abort';
+import type { EosManager } from './eos-manager/index';
+import { createSendMessages } from './send-messages';
 import type {
   CustomPartitioner,
   Message,
@@ -13,7 +13,7 @@ import type {
   ProducerRecord,
   RecordMetadata,
   TopicMessages,
-} from './types.js';
+} from './types';
 
 export interface MessageProducerOptions {
   logger: Logger;
@@ -48,13 +48,13 @@ export function createMessageProducer({
     const connectionStatus = getConnectionStatus();
 
     if (connectionStatus === CONNECTION_STATUS.DISCONNECTING) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `The producer is disconnecting; therefore, it can't safely accept messages anymore`,
       );
     }
 
     if (connectionStatus === CONNECTION_STATUS.DISCONNECTED) {
-      throw new KafkaJSError('The producer is disconnected');
+      throw new KafkaError('The producer is disconnected');
     }
   }
 
@@ -66,23 +66,23 @@ export function createMessageProducer({
     signal,
   }: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]> {
     if (topicMessages.some(({ topic }) => !topic)) {
-      throw new KafkaJSNonRetriableError('Invalid topic');
+      throw new KafkaNonRetriableError('Invalid topic');
     }
 
     if (idempotent && acks !== -1) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `Not requiring ack for all messages invalidates the idempotent producer's EoS guarantees`,
       );
     }
 
     for (const { topic, messages } of topicMessages) {
       if (!messages) {
-        throw new KafkaJSNonRetriableError(`Invalid messages array [${String(messages)}] for topic "${topic}"`);
+        throw new KafkaNonRetriableError(`Invalid messages array [${String(messages)}] for topic "${topic}"`);
       }
 
       const messageWithoutValue = messages.find((message) => message.value === undefined);
       if (messageWithoutValue) {
-        throw new KafkaJSNonRetriableError(
+        throw new KafkaNonRetriableError(
           `Invalid message without value for topic "${topic}": ${JSON.stringify(messageWithoutValue)}`,
         );
       }

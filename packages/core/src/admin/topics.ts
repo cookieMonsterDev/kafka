@@ -1,15 +1,15 @@
 import {
-  KafkaJSAggregateError,
-  KafkaJSBrokerNotFound,
-  KafkaJSDeleteTopicRecordsError,
-  KafkaJSNonRetriableError,
-} from '../errors.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import { retrier } from '../retry/index.js';
-import { parseOffset } from '../consumer/types.js';
-import type { AdminContext } from './helpers.js';
-import { protocolType, requireMetadata, retryOnLeaderNotAvailable, formatUnknown } from './helpers.js';
-import type { SeekInput, TopicConfig, TopicMetadata, TopicOffset, TopicPartitionConfig } from './types.js';
+  KafkaAggregateError,
+  KafkaBrokerNotFound,
+  KafkaDeleteTopicRecordsError,
+  KafkaNonRetriableError,
+} from '../errors';
+import { staleMetadata } from '../protocol/error-codes';
+import { retrier } from '../retry/index';
+import { parseOffset } from '../consumer/types';
+import type { AdminContext } from './helpers';
+import { protocolType, requireMetadata, retryOnLeaderNotAvailable, formatUnknown } from './helpers';
+import type { SeekInput, TopicConfig, TopicMetadata, TopicOffset, TopicPartitionConfig } from './types';
 
 const NO_CONTROLLER_ID = -1;
 
@@ -57,28 +57,28 @@ export function createTopicsApi(
     waitForLeaders?: boolean;
   }): Promise<boolean> => {
     if (!topics || !Array.isArray(topics)) {
-      throw new KafkaJSNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
+      throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
     }
 
     if (topics.filter(({ topic }) => typeof topic !== 'string').length > 0) {
-      throw new KafkaJSNonRetriableError('Invalid topics array, the topic names have to be a valid string');
+      throw new KafkaNonRetriableError('Invalid topics array, the topic names have to be a valid string');
     }
 
     const topicNames = new Set(topics.map(({ topic }) => topic));
     if (topicNames.size < topics.length) {
-      throw new KafkaJSNonRetriableError('Invalid topics array, it cannot have multiple entries for the same topic');
+      throw new KafkaNonRetriableError('Invalid topics array, it cannot have multiple entries for the same topic');
     }
 
     for (const { topic, configEntries } of topics) {
       if (configEntries == null) continue;
 
       if (!Array.isArray(configEntries)) {
-        throw new KafkaJSNonRetriableError(`Invalid configEntries for topic "${topic}", must be an array`);
+        throw new KafkaNonRetriableError(`Invalid configEntries for topic "${topic}", must be an array`);
       }
 
       configEntries.forEach((entry, index) => {
         if (typeof entry !== 'object' || entry == null) {
-          throw new KafkaJSNonRetriableError(
+          throw new KafkaNonRetriableError(
             `Invalid configEntries for topic "${topic}". Entry ${index} must be an object`,
           );
         }
@@ -88,7 +88,7 @@ export function createTopicsApi(
             !Object.prototype.hasOwnProperty.call(entry, requiredProperty) ||
             typeof entry[requiredProperty] !== 'string'
           ) {
-            throw new KafkaJSNonRetriableError(
+            throw new KafkaNonRetriableError(
               `Invalid configEntries for topic "${topic}". Entry ${index} must have a valid "${requiredProperty}" property`,
             );
           }
@@ -122,7 +122,7 @@ export function createTopicsApi(
           throw error;
         }
 
-        if (error instanceof KafkaJSAggregateError) {
+        if (error instanceof KafkaAggregateError) {
           if (error.errors.every((entry) => protocolType(entry) === 'TOPIC_ALREADY_EXISTS')) {
             return false;
           }
@@ -144,19 +144,19 @@ export function createTopicsApi(
     timeout?: number;
   }): Promise<void> => {
     if (!topicPartitions || !Array.isArray(topicPartitions)) {
-      throw new KafkaJSNonRetriableError(`Invalid topic partitions array ${formatUnknown(topicPartitions)}`);
+      throw new KafkaNonRetriableError(`Invalid topic partitions array ${formatUnknown(topicPartitions)}`);
     }
     if (topicPartitions.length === 0) {
-      throw new KafkaJSNonRetriableError('Empty topic partitions array');
+      throw new KafkaNonRetriableError('Empty topic partitions array');
     }
 
     if (topicPartitions.filter(({ topic }) => typeof topic !== 'string').length > 0) {
-      throw new KafkaJSNonRetriableError('Invalid topic partitions array, the topic names have to be a valid string');
+      throw new KafkaNonRetriableError('Invalid topic partitions array, the topic names have to be a valid string');
     }
 
     const topicNames = new Set(topicPartitions.map(({ topic }) => topic));
     if (topicNames.size < topicPartitions.length) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         'Invalid topic partitions array, it cannot have multiple entries for the same topic',
       );
     }
@@ -183,11 +183,11 @@ export function createTopicsApi(
 
   const deleteTopics = async ({ topics, timeout }: { topics: string[]; timeout?: number }): Promise<void> => {
     if (!topics || !Array.isArray(topics)) {
-      throw new KafkaJSNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
+      throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
     }
 
     if (topics.filter((topic) => typeof topic !== 'string').length > 0) {
-      throw new KafkaJSNonRetriableError('Invalid topics array, the names must be a valid string');
+      throw new KafkaNonRetriableError('Invalid topics array, the names must be a valid string');
     }
 
     await retrier(retry)(async (bail, retryCount, retryTime) => {
@@ -234,7 +234,7 @@ export function createTopicsApi(
     if (topics) {
       for (const topic of topics) {
         if (!topic || typeof topic !== 'string') {
-          throw new KafkaJSNonRetriableError(`Invalid topic ${topic}`);
+          throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
         }
       }
     }
@@ -265,11 +265,11 @@ export function createTopicsApi(
     partitions: SeekInput[];
   }): Promise<void> => {
     if (!topic || typeof topic !== 'string') {
-      throw new KafkaJSNonRetriableError(`Invalid topic "${topic}"`);
+      throw new KafkaNonRetriableError(`Invalid topic "${topic}"`);
     }
 
     if (!partitions || partitions.length === 0) {
-      throw new KafkaJSNonRetriableError('Invalid partitions');
+      throw new KafkaNonRetriableError('Invalid partitions');
     }
 
     const parsedPartitions = partitions.map(({ partition, offset }) => ({
@@ -285,13 +285,13 @@ export function createTopicsApi(
     const partitionsFound = Object.values(partitionsByBroker).flat();
     const topicOffsets = await fetchTopicOffsets(topic);
 
-    const leaderNotFoundErrors: { partition: number; offset: bigint; error: KafkaJSBrokerNotFound }[] = [];
+    const leaderNotFoundErrors: { partition: number; offset: bigint; error: KafkaBrokerNotFound }[] = [];
     for (const { partition, offset } of parsedPartitions) {
       if (!partitionsFound.includes(partition)) {
         leaderNotFoundErrors.push({
           partition,
           offset,
-          error: new KafkaJSBrokerNotFound('Could not find the leader for the partition', { retriable: false }),
+          error: new KafkaBrokerNotFound('Could not find the leader for the partition', { retriable: false }),
         });
         continue;
       }
@@ -306,7 +306,7 @@ export function createTopicsApi(
     }
 
     if (leaderNotFoundErrors.length > 0) {
-      throw new KafkaJSDeleteTopicRecordsError({ partitions: leaderNotFoundErrors });
+      throw new KafkaDeleteTopicRecordsError({ partitions: leaderNotFoundErrors });
     }
 
     const seekEntriesByBroker = new Map<
@@ -340,7 +340,7 @@ export function createTopicsApi(
         await Promise.all(
           requests.map((request) =>
             request.catch((error: unknown) => {
-              if (error instanceof KafkaJSDeleteTopicRecordsError) {
+              if (error instanceof KafkaDeleteTopicRecordsError) {
                 for (const { partition, offset, error: partitionError } of error.partitions) {
                   partitionErrors.push({
                     partition,
@@ -357,16 +357,16 @@ export function createTopicsApi(
         );
 
         if (partitionErrors.length > 0) {
-          throw new KafkaJSDeleteTopicRecordsError({ partitions: partitionErrors });
+          throw new KafkaDeleteTopicRecordsError({ partitions: partitionErrors });
         }
       } catch (error) {
         if (
-          error instanceof KafkaJSDeleteTopicRecordsError &&
+          error instanceof KafkaDeleteTopicRecordsError &&
           error.retriable &&
           error.partitions.some(({ error: partitionError }) => {
             if (partitionError == null) return false;
             const descriptor = partitionError as { type?: string; name?: string };
-            return staleMetadata(descriptor) || descriptor.name === 'KafkaJSMetadataNotLoaded';
+            return staleMetadata(descriptor) || descriptor.name === 'KafkaMetadataNotLoaded';
           })
         ) {
           await cluster.refreshMetadata();

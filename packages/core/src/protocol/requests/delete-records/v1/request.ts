@@ -1,6 +1,6 @@
-import { array, defineRequest, field, int32, object } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
-import { topicSchema } from '../v0/request.js';
+import { array, defineRequest, field, int32, object } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
+import { topicSchema } from '../v0/request';
 
 /**
  * DeleteRecords Request (Version: 1) => [topics] timeout_ms

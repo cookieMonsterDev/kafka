@@ -1,21 +1,21 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { fetchRequestV4 } from './v4/request.js';
-import { fetchResponseV4 } from './v4/response.js';
-import { fetchRequestV5 } from './v5/request.js';
-import { fetchResponseV5 } from './v5/response.js';
-import { fetchRequestV6 } from './v6/request.js';
-import { fetchResponseV6 } from './v6/response.js';
-import { fetchRequestV7 } from './v7/request.js';
-import { fetchResponseV7 } from './v7/response.js';
-import { fetchRequestV8 } from './v8/request.js';
-import { fetchResponseV8 } from './v8/response.js';
-import { fetchRequestV9 } from './v9/request.js';
-import { fetchResponseV9 } from './v9/response.js';
-import { fetchRequestV10 } from './v10/request.js';
-import { fetchResponseV10 } from './v10/response.js';
-import { fetchRequestV11 } from './v11/request.js';
-import { fetchResponseV11 } from './v11/response.js';
-import type { FetchRequestOptions } from './shared.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { fetchRequestV4 } from './v4/request';
+import { fetchResponseV4 } from './v4/response';
+import { fetchRequestV5 } from './v5/request';
+import { fetchResponseV5 } from './v5/response';
+import { fetchRequestV6 } from './v6/request';
+import { fetchResponseV6 } from './v6/response';
+import { fetchRequestV7 } from './v7/request';
+import { fetchResponseV7 } from './v7/response';
+import { fetchRequestV8 } from './v8/request';
+import { fetchResponseV8 } from './v8/response';
+import { fetchRequestV9 } from './v9/request';
+import { fetchResponseV9 } from './v9/response';
+import { fetchRequestV10 } from './v10/request';
+import { fetchResponseV10 } from './v10/response';
+import { fetchRequestV11 } from './v11/request';
+import { fetchResponseV11 } from './v11/response';
+import type { FetchRequestOptions } from './shared';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> = {
   4: (options) => ({ request: fetchRequestV4(options), response: fetchResponseV4 }),
@@ -29,11 +29,10 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> =
 };
 
 /**
- * Versions 0-3 are not implemented: Kafka 4.0.0's real floor for this API is v4
- * (`FetchRequest.json`'s `validVersions` is `"4-17"`) - the version RecordBatch v2 (KIP-98) and
- * transactional fetching became mandatory. The broker's live `ApiVersionsResponse` advertises
- * `minVersion: 4` for this API directly (unlike `Produce`, there's no librdkafka compatibility
- * override here), so the advertised floor is the real one.
+ * Versions 0-3 are not implemented. Kafka 4.0+ requires Fetch v4+ (RecordBatch v2 / KIP-98).
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/43/implementation/messages/
  */
 export const Fetch: RequestFamily<FetchRequestOptions> = Object.freeze({
   versions: Object.freeze(Object.keys(VERSIONS).map(Number)),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { createTopicsRequestV2, withTopicDefaults } from './request.js';
+import { createTopicsRequestV2, withTopicDefaults } from './request';
 
 describe('protocol/requests/create-topics/v2/request', () => {
   it('encodes a real fixture', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { offsetCommitRequestV2 } from './request.js';
+import { offsetCommitRequestV2 } from './request';
 
 describe('protocol/requests/offset-commit/v2/request', () => {
   it('encodes groupId, memberId, retentionTime and topics matching a real fixture', async () => {

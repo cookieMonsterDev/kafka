@@ -1,6 +1,6 @@
-import { Decoder } from '../protocol/decoder.js';
-import { Encoder } from '../protocol/encoder.js';
-import type { MemberAssignment as MemberAssignmentMap } from './types.js';
+import { Decoder } from '../protocol/decoder';
+import { Encoder } from '../protocol/encoder';
+import type { MemberAssignment as MemberAssignmentMap } from './types';
 
 export interface EncodedMemberMetadata {
   version: number;
@@ -14,6 +14,10 @@ export interface DecodedMemberMetadata {
   userData: Buffer;
 }
 
+/**
+ * Encode/decode JoinGroup member metadata and SyncGroup assignments.
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
 export const MemberMetadata = Object.freeze({
   encode({ version, topics, userData = Buffer.alloc(0) }: EncodedMemberMetadata): Buffer {
     return new Encoder().writeInt16(version).writeArray(topics).writeBytes(userData).buffer;

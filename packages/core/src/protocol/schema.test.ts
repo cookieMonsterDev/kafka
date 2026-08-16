@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
-import { array, boolean, field, int16, int32, int64, nullableArray, nullableString, object, string } from './schema.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
+import { array, boolean, field, int16, int32, int64, nullableArray, nullableString, object, string } from './schema';
 
 describe('protocol/schema', () => {
   it('round-trips a flat object', () => {

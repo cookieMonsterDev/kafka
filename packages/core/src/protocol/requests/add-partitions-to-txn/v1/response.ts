@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { addPartitionsToTxnResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { addPartitionsToTxnResponseV0 } from '../v0/response';
 
 export interface AddPartitionsToTxnResponseV1Body {
   errors: { topic: string; partitionErrors: { partition: number; errorCode: number }[] }[];

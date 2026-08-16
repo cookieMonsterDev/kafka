@@ -1,4 +1,4 @@
-import { namespace } from '../instrumentation/event-type.js';
+import { namespace } from '../instrumentation/event-type';
 
 const eventType = namespace('network');
 

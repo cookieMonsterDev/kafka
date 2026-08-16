@@ -1,13 +1,13 @@
-import type { Broker } from '../../broker/index.js';
-import type { Cluster, TopicOffsets } from '../../cluster/index.js';
-import { INT_32_MAX_VALUE } from '../../constants.js';
-import { KafkaJSNonRetriableError } from '../../errors.js';
-import type { Logger } from '../../loggers/index.js';
-import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types.js';
-import { retrier } from '../../retry/index.js';
-import { Lock } from '../../utils/lock.js';
-import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine.js';
-import { TRANSACTION_STATES } from './transaction-states.js';
+import type { Broker } from '../../broker/index';
+import type { Cluster, TopicOffsets } from '../../cluster/index';
+import { INT_32_MAX_VALUE } from '../../constants';
+import { KafkaNonRetriableError } from '../../errors';
+import type { Logger } from '../../loggers/index';
+import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
+import { retrier } from '../../retry/index';
+import { Lock } from '../../utils/lock';
+import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
+import { TRANSACTION_STATES } from './transaction-states';
 
 const NO_PRODUCER_ID = -1n;
 const SEQUENCE_START = 0;
@@ -22,15 +22,7 @@ const INIT_PRODUCER_RETRIABLE_PROTOCOL_ERRORS = new Set([
   'CONCURRENT_TRANSACTIONS',
 ]);
 
-/**
- * kafkajs's own equivalent lists here are `['UNKNOWN_TOPIC_OR_PARTITION', 'COORDINATOR_LOAD_IN_PROGRESS']`
- * and `['COORDINATOR_NOT_AVAILABLE', 'NOT_COORDINATOR']` - but those newer error-code names don't
- * exist anywhere in kafkajs's own error table (`protocol/error.js` only ever produces
- * `GROUP_LOAD_IN_PROGRESS`/`GROUP_COORDINATOR_NOT_AVAILABLE`/`NOT_COORDINATOR_FOR_GROUP` for these
- * codes), so half of each list can never match a real error there. Using the names this port's own
- * `error-codes.ts` actually produces restores the intended "retry while the coordinator is still
- * loading, look up a fresh coordinator once it moves" behavior.
- */
+/** Retry while the coordinator is still loading; refresh the coordinator once it moves. */
 const COMMIT_RETRIABLE_PROTOCOL_ERRORS = new Set(['UNKNOWN_TOPIC_OR_PARTITION', 'GROUP_LOAD_IN_PROGRESS']);
 const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set([
   'GROUP_COORDINATOR_NOT_AVAILABLE',
@@ -78,7 +70,7 @@ export function createEosManager({
   transactionalId,
 }: EosManagerOptions): EosManager {
   if (transactional && !transactionalId) {
-    throw new KafkaJSNonRetriableError('Cannot manage transactions without a transactionalId');
+    throw new KafkaNonRetriableError('Cannot manage transactions without a transactionalId');
   }
 
   const retry = retrier();
@@ -112,7 +104,7 @@ export function createEosManager({
 
   function transactionalGuard(): void {
     if (!transactional) {
-      throw new KafkaJSNonRetriableError('Method unavailable if non-transactional');
+      throw new KafkaNonRetriableError('Method unavailable if non-transactional');
     }
   }
 

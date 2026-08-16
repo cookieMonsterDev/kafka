@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { abortError, rejectOnAbort } from './abort.js';
+import { abortError, rejectOnAbort } from './abort';
 
 describe('abort', () => {
   it('uses the signal reason when it is already an Error', () => {

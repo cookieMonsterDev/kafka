@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { saslHandshakeRequestV0 } from './v0/request.js';
-import { saslHandshakeResponseV0 } from './v0/response.js';
-import { saslHandshakeRequestV1 } from './v1/request.js';
-import { saslHandshakeResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { saslHandshakeRequestV0 } from './v0/request';
+import { saslHandshakeResponseV0 } from './v0/response';
+import { saslHandshakeRequestV1 } from './v1/request';
+import { saslHandshakeResponseV1 } from './v1/response';
 
 export interface SaslHandshakeOptions {
   mechanism: string;

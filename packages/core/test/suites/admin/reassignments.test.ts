@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index.js';
+import { createAdmin } from '../../../src/admin/index';
+import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index';
 
 describe('admin.reassignments', () => {
   let topicName: string;

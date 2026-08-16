@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
 
 const MAX_SAFE_POSITIVE_SIGNED_INT = 2147483647;
 const MIN_SAFE_NEGATIVE_SIGNED_INT = -2147483648;
@@ -48,13 +48,13 @@ describe('protocol/Encoder', () => {
     it('encodes', () => {
       expect(ubytes(null)).toEqual(B(0x00));
       expect(ubytes('')).toEqual(B(0x01));
-      expect(ubytes('kafkajs')).toEqual(B(0x08, 0x6b, 0x61, 0x66, 0x6b, 0x61, 0x6a, 0x73));
+      expect(ubytes('kafka')).toEqual(B(0x06, 0x6b, 0x61, 0x66, 0x6b, 0x61));
     });
 
     it('decodes', () => {
       expect(decodeUBytes(ubytes(null))).toEqual(null);
       expect(decodeUBytes(ubytes(''))).toEqual(B());
-      expect(decodeUBytes(ubytes('kafkajs'))).toEqual(B(0x6b, 0x61, 0x66, 0x6b, 0x61, 0x6a, 0x73));
+      expect(decodeUBytes(ubytes('kafka'))).toEqual(B(0x6b, 0x61, 0x66, 0x6b, 0x61));
     });
   });
 
@@ -62,13 +62,13 @@ describe('protocol/Encoder', () => {
     it('encodes', () => {
       expect(ustring(null)).toEqual(B(0x00));
       expect(ustring('')).toEqual(B(0x01));
-      expect(ustring('kafkajs')).toEqual(B(0x08, 0x6b, 0x61, 0x66, 0x6b, 0x61, 0x6a, 0x73));
+      expect(ustring('kafka')).toEqual(B(0x06, 0x6b, 0x61, 0x66, 0x6b, 0x61));
     });
 
     it('decodes', () => {
       expect(decodeUString(ustring(null))).toEqual(null);
       expect(decodeUString(ustring(''))).toEqual('');
-      expect(decodeUString(ustring('kafkajs'))).toEqual('kafkajs');
+      expect(decodeUString(ustring('kafka'))).toEqual('kafka');
     });
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { listGroupsResponseV1 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { listGroupsResponseV1 } from './response';
 
 describe('protocol/requests/list-groups/v1/response', () => {
   it('decodes throttleTime ahead of error_code and groups', async () => {

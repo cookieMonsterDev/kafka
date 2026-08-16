@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure, staleMetadata } from './error-codes.js';
+import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure, staleMetadata } from './error-codes';
 
 describe('protocol/error-codes', () => {
   it('has a unique code per entry', () => {
@@ -19,7 +19,7 @@ describe('protocol/error-codes', () => {
   });
 
   describe('createErrorFromCode', () => {
-    it('builds a KafkaJSProtocolError from a known code', () => {
+    it('builds a KafkaProtocolError from a known code', () => {
       const error = createErrorFromCode(1);
       expect(error.type).toBe('OFFSET_OUT_OF_RANGE');
       expect(error.code).toBe(1);
@@ -27,9 +27,9 @@ describe('protocol/error-codes', () => {
       expect(error.message).toContain('offset');
     });
 
-    it('falls back to a KAFKAJS_UNKNOWN_ERROR_CODE placeholder for unknown codes', () => {
+    it('falls back to a KAFKA_UNKNOWN_ERROR_CODE placeholder for unknown codes', () => {
       const error = createErrorFromCode(9999);
-      expect(error.type).toBe('KAFKAJS_UNKNOWN_ERROR_CODE');
+      expect(error.type).toBe('KAFKA_UNKNOWN_ERROR_CODE');
       expect(error.code).toBe(-99);
       expect(error.retriable).toBe(false);
       expect(error.message).toContain('9999');

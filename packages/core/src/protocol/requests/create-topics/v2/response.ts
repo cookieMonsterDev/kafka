@@ -1,8 +1,8 @@
-import { KafkaJSAggregateError, KafkaJSCreateTopicError } from '../../../../errors.js';
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import { array, field, int16, int32, nullableString, object, string } from '../../../schema.js';
+import { KafkaAggregateError, KafkaCreateTopicError } from '../../../../errors';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
+import { array, field, int16, int32, nullableString, object, string } from '../../../schema';
 
 export interface CreateTopicsResponseV2Body {
   throttleTime: number;
@@ -34,9 +34,9 @@ export const createTopicsResponseV2: ResponseDefinition<CreateTopicsResponseV2Bo
   parse: async (data) => {
     const topicsWithError = data.topicErrors.filter(({ errorCode }) => failure(errorCode));
     if (topicsWithError.length > 0) {
-      throw new KafkaJSAggregateError(
+      throw new KafkaAggregateError(
         'Topic creation errors',
-        topicsWithError.map((error) => new KafkaJSCreateTopicError(createErrorFromCode(error.errorCode), error.topic)),
+        topicsWithError.map((error) => new KafkaCreateTopicError(createErrorFromCode(error.errorCode), error.topic)),
       );
     }
     return data;

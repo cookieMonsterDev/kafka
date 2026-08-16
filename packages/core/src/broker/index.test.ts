@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaJSConnectionClosedError, KafkaJSMemberIdRequired, KafkaJSProtocolError } from '../errors.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import type { ConnectionPool } from '../network/connection-pool.js';
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import { Broker } from './index.js';
+import { KafkaConnectionClosedError, KafkaMemberIdRequired, KafkaProtocolError } from '../errors';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import type { ConnectionPool } from '../network/connection-pool';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import { Broker } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -95,7 +95,7 @@ describe('broker/Broker', () => {
     it('falls back to lower versions on UNSUPPORTED_VERSION', async () => {
       const pool = createFakeConnectionPool();
       pool.send
-        .mockRejectedValueOnce(new KafkaJSProtocolError({ message: 'nope', type: 'UNSUPPORTED_VERSION', code: 35 }))
+        .mockRejectedValueOnce(new KafkaProtocolError({ message: 'nope', type: 'UNSUPPORTED_VERSION', code: 35 }))
         .mockResolvedValueOnce({ errorCode: 0, throttleTime: 0, apiVersions: [] });
 
       const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
@@ -187,12 +187,12 @@ describe('broker/Broker', () => {
       expect(sent.request.apiKey).toBe(API_KEYS.Heartbeat);
     });
 
-    it('joinGroup retries with the assigned memberId on KafkaJSMemberIdRequired', async () => {
+    it('joinGroup retries with the assigned memberId on KafkaMemberIdRequired', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);
 
       pool.send
-        .mockRejectedValueOnce(new KafkaJSMemberIdRequired({ message: 'need a member id' }, { memberId: 'assigned-1' }))
+        .mockRejectedValueOnce(new KafkaMemberIdRequired({ message: 'need a member id' }, { memberId: 'assigned-1' }))
         .mockResolvedValueOnce({ memberId: 'assigned-1', leader: 'assigned-1', members: [] });
 
       const result = await broker.joinGroup({
@@ -210,10 +210,10 @@ describe('broker/Broker', () => {
     it('reconnects when the connection pool reports a closed connection', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);
-      pool.send.mockRejectedValueOnce(new KafkaJSConnectionClosedError('closed'));
+      pool.send.mockRejectedValueOnce(new KafkaConnectionClosedError('closed'));
 
       await expect(broker.heartbeat({ groupId: 'g', groupGenerationId: 1, memberId: 'm' })).rejects.toThrow(
-        KafkaJSConnectionClosedError,
+        KafkaConnectionClosedError,
       );
       expect(pool.destroy).toHaveBeenCalledOnce();
     });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapValues } from './map-values.js';
+import { mapValues } from './map-values';
 
 describe('utils/mapValues', () => {
   it('maps each value through the mapper, keeping the keys', () => {

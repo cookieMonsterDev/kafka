@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types.js';
-import { alterConfigsRequestV1 } from './request.js';
+import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types';
+import { alterConfigsRequestV1 } from './request';
 
 describe('protocol/requests/alter-configs/v1/request', () => {
   it('encodes identically to v0 (wire format is unchanged)', async () => {

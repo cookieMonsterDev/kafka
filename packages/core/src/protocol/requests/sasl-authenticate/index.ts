@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { saslAuthenticateRequestV0 } from './v0/request.js';
-import { saslAuthenticateResponseV0 } from './v0/response.js';
-import { saslAuthenticateRequestV1 } from './v1/request.js';
-import { saslAuthenticateResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { saslAuthenticateRequestV0 } from './v0/request';
+import { saslAuthenticateResponseV0 } from './v0/response';
+import { saslAuthenticateRequestV1 } from './v1/request';
+import { saslAuthenticateResponseV1 } from './v1/response';
 
 export interface SaslAuthenticateOptions {
   authBytes: Buffer;

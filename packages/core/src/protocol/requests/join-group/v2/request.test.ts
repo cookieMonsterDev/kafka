@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v2AssignerMetadataFixture from '../fixtures/v2-assigner-metadata.json' with { type: 'json' };
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { joinGroupRequestV2 } from './request.js';
+import { joinGroupRequestV2 } from './request';
 
 describe('protocol/requests/join-group/v2/request', () => {
   it('encodes to match the real fixture', async () => {

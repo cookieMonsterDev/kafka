@@ -1,16 +1,16 @@
-import type { Broker } from '../../broker/index.js';
-import type { Cluster } from '../../cluster/index.js';
-import type { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import { COMMIT_OFFSETS } from '../instrumentation-events.js';
+import type { Broker } from '../../broker/index';
+import type { Cluster } from '../../cluster/index';
+import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { COMMIT_OFFSETS } from '../instrumentation-events';
 import type {
   MemberAssignment,
   Offsets,
   OffsetsByTopicPartition,
   TopicPartition,
   TopicPartitionOffset,
-} from '../types.js';
-import { initializeConsumerOffsets } from './initialize-consumer-offsets.js';
-import { isInvalidOffset } from './is-invalid-offset.js';
+} from '../types';
+import { initializeConsumerOffsets } from './initialize-consumer-offsets';
+import { isInvalidOffset } from './is-invalid-offset';
 
 function indexTopics(topics: readonly string[]): Record<string, Record<string, bigint>> {
   return topics.reduce<Record<string, Record<string, bigint>>>((obj, topic) => {

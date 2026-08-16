@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { type AlterConfigsResource, alterConfigsRequestV0 } from './v0/request.js';
-import { alterConfigsResponseV0 } from './v0/response.js';
-import { alterConfigsRequestV1 } from './v1/request.js';
-import { alterConfigsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { type AlterConfigsResource, alterConfigsRequestV0 } from './v0/request';
+import { alterConfigsResponseV0 } from './v0/response';
+import { alterConfigsRequestV1 } from './v1/request';
+import { alterConfigsResponseV1 } from './v1/response';
 
 export interface AlterConfigsOptions {
   resources: AlterConfigsResource[];

@@ -1,6 +1,6 @@
-import { KafkaJSNotImplemented, KafkaJSServerDoesNotSupportApiKey } from '../../errors.js';
-import type { Encoder } from '../encoder.js';
-import { apiKeyName } from './api-keys.js';
+import { KafkaNotImplemented, KafkaServerDoesNotSupportApiKey } from '../../errors';
+import type { Encoder } from '../encoder';
+import { apiKeyName } from './api-keys';
 
 export interface AnyRequestDefinition {
   apiKey: number;
@@ -22,13 +22,8 @@ export interface ProtocolResult {
 }
 
 /**
- * The per-version factory a family's `protocol({version})` resolves to, e.g. SaslHandshake's is
- * `(values: {mechanism: string}) => ProtocolResult`, ApiVersions's is `(values: {}) => ProtocolResult`
- * — every family takes exactly one options object, mirroring kafkajs's own calling convention
- * (`metadata({topics, allowAutoTopicCreation})`). `Options` carries the real per-family field
- * shape through `RequestFamily<Options>`, so a concrete family export (e.g. `SaslHandshake`) is
- * fully typed at its call site; only `NOT_IMPLEMENTED_REQUEST_DEFINITIONS` and other
- * apiKey-generic code default it to `unknown`.
+ * Per-version factory returned by a family's `protocol({ version })`.
+ * Each family takes one options object, e.g. `metadata({ topics, allowAutoTopicCreation })`.
  */
 export type ProtocolFactory<Options> = (values: Options) => ProtocolResult;
 
@@ -40,7 +35,7 @@ export interface RequestFamily<Options = unknown> {
 export const NOT_IMPLEMENTED_REQUEST_DEFINITIONS: RequestFamily<never> = Object.freeze({
   versions: Object.freeze([]),
   protocol(): never {
-    throw new KafkaJSNotImplemented('This API is not implemented');
+    throw new KafkaNotImplemented('This API is not implemented');
   },
 });
 
@@ -61,7 +56,7 @@ export function lookup(
   return (apiKey, family) => {
     const version = brokerVersions[apiKey];
     if (version == null || version.maxVersion == null) {
-      throw new KafkaJSServerDoesNotSupportApiKey('The Kafka server does not support the requested API version', {
+      throw new KafkaServerDoesNotSupportApiKey('The Kafka server does not support the requested API version', {
         apiKey,
         apiName: apiKeyName(apiKey),
       });

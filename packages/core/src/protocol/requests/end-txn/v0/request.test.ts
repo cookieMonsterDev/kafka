@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { endTxnRequestV0 } from './request.js';
+import { endTxnRequestV0 } from './request';
 
 describe('protocol/requests/end-txn/v0/request', () => {
   it('encodes to match the real fixture', async () => {

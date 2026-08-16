@@ -1,4 +1,4 @@
-import { sharedPromiseTo } from '../utils/shared-promise-to.js';
+import { sharedPromiseTo } from '../utils/shared-promise-to';
 
 export type WorkerHandler<T> = (batch: T, metadata: { workerId: number }) => Promise<void>;
 

@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { initProducerIdRequestV0 } from './v0/request.js';
-import { initProducerIdResponseV0 } from './v0/response.js';
-import { initProducerIdRequestV1 } from './v1/request.js';
-import { initProducerIdResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { initProducerIdRequestV0 } from './v0/request';
+import { initProducerIdResponseV0 } from './v0/response';
+import { initProducerIdRequestV1 } from './v1/request';
+import { initProducerIdResponseV1 } from './v1/response';
 
 export interface InitProducerIdOptions {
   transactionalId: string | null;

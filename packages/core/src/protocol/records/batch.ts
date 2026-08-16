@@ -1,16 +1,16 @@
-import { KafkaJSPartialMessageError } from '../../errors.js';
+import { KafkaPartialMessageError } from '../../errors';
 import {
   COMPRESSION_CODEC_MASK,
   COMPRESSION_TYPES,
   lookupCodec,
   lookupCodecByAttributes,
   type CompressionType,
-} from '../compression/index.js';
-import { crc32c } from '../crc32c.js';
-import { Decoder } from '../decoder.js';
-import { Encoder } from '../encoder.js';
-import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js';
-import { decodeRecord, type DecodedRecord, type RecordBatchContext } from './record.js';
+} from '../compression/index';
+import { crc32c } from '../crc32c';
+import { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
+import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
+import { decodeRecord, type DecodedRecord, type RecordBatchContext } from './record';
 
 /**
  * v2
@@ -146,7 +146,7 @@ export async function decodeRecordBatch(fetchDecoder: Decoder): Promise<DecodedR
 
   const remainingBytes = Buffer.byteLength(decoder.buffer);
   if (remainingBytes < length) {
-    throw new KafkaJSPartialMessageError(
+    throw new KafkaPartialMessageError(
       `Tried to decode a partial record batch: remainingBytes(${remainingBytes}) < recordBatchLength(${length})`,
     );
   }

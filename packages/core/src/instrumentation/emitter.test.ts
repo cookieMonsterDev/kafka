@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InstrumentationEventEmitter } from './emitter.js';
+import { InstrumentationEventEmitter } from './emitter';
 
 interface TestEventMap {
   'consumer.crash': { error: Error };

@@ -12,5 +12,5 @@
  *
  * Wire shape and parsing identical to v6.
  */
-export { produceResponseV6 as produceResponseV7 } from '../v6/response.js';
-export type { ProduceResponseV6Body as ProduceResponseV7Body } from '../v6/response.js';
+export { produceResponseV6 as produceResponseV7 } from '../v6/response';
+export type { ProduceResponseV6Body as ProduceResponseV7Body } from '../v6/response';

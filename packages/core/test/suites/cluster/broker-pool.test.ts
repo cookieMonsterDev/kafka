@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createBrokerPool } from '../../helpers/index.js';
+import { createBrokerPool } from '../../helpers/index';
 
 describe('cluster.brokerPool', () => {
   let brokerPool: ReturnType<typeof createBrokerPool> | undefined;

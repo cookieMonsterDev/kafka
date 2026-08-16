@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { metadataResponseV1 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { metadataResponseV1 } from './response';
 
 function buildResponse(): Buffer {
   return new Encoder()

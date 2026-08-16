@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupBy } from './group-by.js';
+import { groupBy } from './group-by';
 
 describe('utils/groupBy', () => {
   it('groups items by the function return', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { namespace } from './event-type.js';
+import { namespace } from './event-type';
 
 describe('instrumentation/eventType', () => {
   it('joins namespace and type with a dot', () => {

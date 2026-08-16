@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS, type LogEntry } from './index.js';
+import { createLogger, LOG_LEVELS, type LogEntry } from './index';
 
 describe('loggers', () => {
   let entries: LogEntry[];
 
   beforeEach(() => {
     entries = [];
-    vi.stubEnv('KAFKAJS_LOG_LEVEL', '');
+    vi.stubEnv('KAFKA_LOG_LEVEL', '');
   });
 
   afterEach(() => {
@@ -58,8 +58,8 @@ describe('loggers', () => {
     expect(entries).toHaveLength(0);
   });
 
-  it('KAFKAJS_LOG_LEVEL overrides the configured level', () => {
-    vi.stubEnv('KAFKAJS_LOG_LEVEL', 'DEBUG');
+  it('KAFKA_LOG_LEVEL overrides the configured level', () => {
+    vi.stubEnv('KAFKA_LOG_LEVEL', 'DEBUG');
     const logger = createLogger({ level: LOG_LEVELS.ERROR, logCreator });
 
     logger.debug('debug message');

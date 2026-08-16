@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { plainRequest, plainResponse } from './plain.js';
+import { Decoder } from '../decoder';
+import { plainRequest, plainResponse } from './plain';
 
 const NUL = String.fromCharCode(0);
 

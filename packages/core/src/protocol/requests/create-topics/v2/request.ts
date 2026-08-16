@@ -1,5 +1,5 @@
-import { array, boolean, defineRequest, field, int16, int32, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, boolean, defineRequest, field, int16, int32, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 export interface CreateTopicReplicaAssignment {
   partition: number;

@@ -1,7 +1,7 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import { array, field, int16, int32, nullableString, object, string } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
+import { array, field, int16, int32, nullableString, object, string } from '../../../schema';
 
 export interface CreatePartitionsResponseV0Body {
   throttleTime: number;

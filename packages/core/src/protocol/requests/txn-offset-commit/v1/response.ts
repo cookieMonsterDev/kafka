@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { txnOffsetCommitResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { txnOffsetCommitResponseV0 } from '../v0/response';
 
 export interface TxnOffsetCommitResponseV1Body {
   topics: { topic: string; partitions: { partition: number; errorCode: number }[] }[];

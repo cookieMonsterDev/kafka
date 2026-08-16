@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
-import { offsetCommitResponseV2 } from './response.js';
+import { offsetCommitResponseV2 } from './response';
 
 describe('protocol/requests/offset-commit/v2/response', () => {
   it('decodes a real fixture', async () => {

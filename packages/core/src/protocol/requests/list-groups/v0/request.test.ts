@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { listGroupsRequestV0 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { listGroupsRequestV0 } from './request';
 
 describe('protocol/requests/list-groups/v0/request', () => {
   it('encodes to an empty body', async () => {

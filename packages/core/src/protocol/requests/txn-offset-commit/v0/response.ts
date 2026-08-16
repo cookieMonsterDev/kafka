@@ -1,5 +1,5 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, int32, object, string } from '../../../schema.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, int32, object, string } from '../../../schema';
 
 /**
  * TxnOffsetCommit Response (Version: 0) => throttle_time_ms [topics]

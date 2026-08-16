@@ -1,5 +1,5 @@
-import type { PartitionMetadata } from '../cluster/index.js';
-import type { CustomPartitioner, Message } from './types.js';
+import type { PartitionMetadata } from '../cluster/index';
+import type { CustomPartitioner, Message } from './types';
 
 export interface GroupMessagesPerPartitionOptions {
   topic: string;

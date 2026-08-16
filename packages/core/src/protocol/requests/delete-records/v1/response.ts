@@ -1,6 +1,6 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import type { DeleteRecordsTopic } from '../v0/request.js';
-import { type DeleteRecordsResponseV0Body, deleteRecordsResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import type { DeleteRecordsTopic } from '../v0/request';
+import { type DeleteRecordsResponseV0Body, deleteRecordsResponseV0 } from '../v0/response';
 
 export interface DeleteRecordsResponseV1Body extends DeleteRecordsResponseV0Body {
   clientSideThrottleTime: number;

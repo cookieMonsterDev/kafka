@@ -1,5 +1,5 @@
-import { array, boolean, defineRequest, field, int8, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, boolean, defineRequest, field, int8, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 export interface AlterConfigsEntry {
   name: string;

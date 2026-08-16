@@ -1,9 +1,9 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import type { CreatePartitionsTopicInput } from './v0/request.js';
-import { createPartitionsRequestV0, withAssignmentDefaults } from './v0/request.js';
-import { createPartitionsResponseV0 } from './v0/response.js';
-import { createPartitionsRequestV1 } from './v1/request.js';
-import { createPartitionsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import type { CreatePartitionsTopicInput } from './v0/request';
+import { createPartitionsRequestV0, withAssignmentDefaults } from './v0/request';
+import { createPartitionsResponseV0 } from './v0/response';
+import { createPartitionsRequestV1 } from './v1/request';
+import { createPartitionsResponseV1 } from './v1/response';
 
 export interface CreatePartitionsOptions {
   topicPartitions: CreatePartitionsTopicInput[];

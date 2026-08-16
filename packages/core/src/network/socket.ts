@@ -1,5 +1,5 @@
 import type { Socket } from 'node:net';
-import type { SocketFactory, SocketFactoryArgs } from './socket-factory.js';
+import type { SocketFactory, SocketFactoryArgs } from './socket-factory';
 
 export interface CreateSocketOptions {
   socketFactory: SocketFactory;

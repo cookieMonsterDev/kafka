@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { KafkaJSNoBrokerAvailableError, KafkaJSNonRetriableError } from '../errors.js';
-import { seq } from '../utils/seq.js';
-import { sleep, waitFor } from '../utils/wait.js';
-import { Batch } from './batch.js';
-import { createFetchManager, type FetchManager } from './fetch-manager.js';
-import { createFetcher } from './fetcher.js';
-import { createWorker } from './worker.js';
-import { createWorkerQueue } from './worker-queue.js';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { KafkaNoBrokerAvailableError, KafkaNonRetriableError } from '../errors';
+import { seq } from '../utils/seq';
+import { sleep, waitFor } from '../utils/wait';
+import { Batch } from './batch';
+import { createFetchManager, type FetchManager } from './fetch-manager';
+import { createFetcher } from './fetcher';
+import { createWorker } from './worker';
+import { createWorkerQueue } from './worker-queue';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -89,7 +89,7 @@ describe('consumer/fetch-manager', () => {
     ]);
     const fetch = vi.fn(async (nodeId: string) => {
       if (!getNodeIds().includes(nodeId)) {
-        throw new KafkaJSNonRetriableError('Node not found');
+        throw new KafkaNonRetriableError('Node not found');
       }
       return realFetch();
     });
@@ -115,7 +115,7 @@ describe('consumer/fetch-manager', () => {
       getNodeIds: vi.fn(() => []),
     });
     fetchManager = manager;
-    await expect(manager.start()).rejects.toThrow(KafkaJSNoBrokerAvailableError);
+    await expect(manager.start()).rejects.toThrow(KafkaNoBrokerAvailableError);
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Kafka } from './client.js';
-import { KafkaJSNonRetriableError } from './errors.js';
-import { logLevel, Partitioners, type KafkaConfig } from './index.js';
+import { Kafka } from './client';
+import { KafkaNonRetriableError } from './errors';
+import { logLevel, Partitioners, type KafkaConfig } from './index';
 
 function createClient(overrides: Partial<KafkaConfig> = {}): Kafka {
   return new Kafka({
@@ -29,7 +29,7 @@ describe('Kafka', () => {
   });
 
   it('creates a consumer that requires a groupId', () => {
-    expect(() => createClient().consumer({ groupId: '' })).toThrow(KafkaJSNonRetriableError);
+    expect(() => createClient().consumer({ groupId: '' })).toThrow(KafkaNonRetriableError);
 
     const consumer = createClient().consumer({ groupId: 'test-group' });
     expect(typeof consumer.subscribe).toBe('function');
@@ -87,7 +87,7 @@ describe('Kafka', () => {
   });
 
   it('silences the default-partitioner warning when the env var is set', () => {
-    vi.stubEnv('KAFKAJS_NO_PARTITIONER_WARNING', '1');
+    vi.stubEnv('KAFKA_NO_PARTITIONER_WARNING', '1');
     const warnings: string[] = [];
     const kafka = createClient({
       logLevel: logLevel.WARN,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SaslHandshake } from './index.js';
+import { SaslHandshake } from './index';
 
 describe('protocol/requests/sasl-handshake', () => {
   it('implements versions 0 and 1', () => {

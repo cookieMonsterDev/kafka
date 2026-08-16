@@ -1,6 +1,6 @@
 import { promisify } from 'node:util';
 import { zstdCompress, zstdDecompress } from 'node:zlib';
-import type { CompressionCodec } from './index.js';
+import type { CompressionCodec } from './index';
 
 const compress = promisify(zstdCompress);
 const decompress = promisify(zstdDecompress);

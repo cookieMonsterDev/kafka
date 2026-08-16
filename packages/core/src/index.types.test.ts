@@ -13,7 +13,7 @@ import {
   type Producer,
   type RecordMetadata,
   type SaslOptions,
-} from './index.js';
+} from './index';
 
 describe('public types', () => {
   it('types KafkaConfig, including ssl: true and SASL mechanism unions', () => {

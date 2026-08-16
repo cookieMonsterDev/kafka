@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterAbortedMessages, type FilterableMessage } from './filter-aborted-messages.js';
+import { filterAbortedMessages, type FilterableMessage } from './filter-aborted-messages';
 
 function message(offset: bigint, extra: Partial<FilterableMessage> = {}): FilterableMessage {
   return {

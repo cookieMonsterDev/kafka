@@ -1,5 +1,5 @@
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
 
 /**
  * A codec for one wire-format shape: writes a value of type `T` onto an `Encoder`, reads it back
@@ -108,11 +108,11 @@ export function array<T>(element: FieldCodec<T>): FieldCodec<T[]> {
 }
 
 /**
- * Mirrors `Encoder#writeNullableArray`: an empty input array is written as wire length `-1`
- * (kafkajs's collapsed stand-in for "null", meaning e.g. "all topics" to a `Metadata` request)
- * rather than an actual `0`-length array — there's no way to request a true `0`-length array
- * through this codec, matching kafkajs's own behavior byte-for-byte. Reading is identical to
- * `array()`: a `-1` length (or `0`) always comes back as `[]`.
+ * Empty input is written as wire length `-1` (null), the Kafka convention for
+ * "all topics" on Metadata. A true empty array cannot be requested through this
+ * codec. A `-1` or `0` length always decodes as `[]`.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
   return codec(
@@ -177,9 +177,9 @@ export interface RequestDefinition {
 }
 
 /**
- * Builds the per-version `request.ts` factory: given the fixed `{apiKey, apiVersion, apiName}`
- * and a body schema, returns a function of the request's field values to a `RequestDefinition`,
- * mirroring kafkajs's `module.exports = (values) => ({ apiKey, apiVersion, apiName, encode })`.
+ * Builds a per-version request factory from `{ apiKey, apiVersion, apiName }` and a body schema.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export function defineRequest<T>(options: {
   apiKey: number;

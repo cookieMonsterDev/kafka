@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
-import { createRequest } from './request.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
+import { createRequest } from './request';
 
 describe('protocol/createRequest', () => {
   it('wraps the encoded body with a length prefix and the request header', async () => {

@@ -19,7 +19,7 @@ import {
   STOP,
   unwrap,
   wrap,
-} from './instrumentation-events.js';
+} from './instrumentation-events';
 
 describe('consumer/instrumentation-events', () => {
   it('namespaces every event under consumer.*', () => {

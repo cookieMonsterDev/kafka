@@ -1,4 +1,4 @@
-import { KafkaJSLockTimeout } from '../errors.js';
+import { KafkaLockTimeout } from '../errors';
 
 export interface LockOptions {
   timeout: number;
@@ -56,7 +56,7 @@ export class Lock {
       this.#waiting.add(tryToAcquire);
 
       const timeoutId = setTimeout(() => {
-        const error = new KafkaJSLockTimeout(this.#timeoutMessage());
+        const error = new KafkaLockTimeout(this.#timeoutMessage());
         cleanup();
         reject(error);
       }, this.#timeout);

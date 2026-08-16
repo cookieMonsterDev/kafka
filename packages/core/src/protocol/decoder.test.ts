@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from './decoder.js';
-import { Encoder } from './encoder.js';
+import { Decoder } from './decoder';
+import { Encoder } from './encoder';
 
 const MAX_INT64 = 9223372036854775807n;
 const MIN_INT64 = -9223372036854775808n;
@@ -31,8 +31,8 @@ describe('protocol/Decoder', () => {
 
   describe('readString / readBytes (length-prefixed)', () => {
     it('round-trips a string', () => {
-      const buffer = new Encoder().writeString('kafkajs').buffer;
-      expect(new Decoder(buffer).readString()).toEqual('kafkajs');
+      const buffer = new Encoder().writeString('kafka').buffer;
+      expect(new Decoder(buffer).readString()).toEqual('kafka');
     });
 
     it('decodes a null string as null (length -1)', () => {
@@ -53,8 +53,8 @@ describe('protocol/Decoder', () => {
 
   describe('readVarIntString / readVarIntBytes', () => {
     it('round-trips a string', () => {
-      const buffer = new Encoder().writeVarIntString('kafkajs').buffer;
-      expect(new Decoder(buffer).readVarIntString()).toEqual('kafkajs');
+      const buffer = new Encoder().writeVarIntString('kafka').buffer;
+      expect(new Decoder(buffer).readVarIntString()).toEqual('kafka');
     });
 
     it('decodes a null varint string as null', () => {

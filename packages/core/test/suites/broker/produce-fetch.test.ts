@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
-import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index.js';
+import { Broker } from '../../../src/broker/index';
+import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index';
 import {
   advertisedAddress,
   createConnectionPool,
@@ -9,7 +9,7 @@ import {
   retryProtocol,
   secureRandom,
   TRANSIENT_METADATA_ERRORS,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 const timestamp = 1_509_928_155_660;
 

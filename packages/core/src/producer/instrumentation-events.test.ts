@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { events, REQUEST, REQUEST_QUEUE_SIZE, REQUEST_TIMEOUT, unwrap, wrap } from './instrumentation-events.js';
+import { events, REQUEST, REQUEST_QUEUE_SIZE, REQUEST_TIMEOUT, unwrap, wrap } from './instrumentation-events';
 
 describe('producer/instrumentation-events', () => {
   it('namespaces every event under producer.*', () => {

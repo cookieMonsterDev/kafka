@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { createAclsRequestV1 } from './request.js';
+import { createAclsRequestV1 } from './request';
 
 describe('protocol/requests/create-acls/v1/request', () => {
   it('encodes a real fixture', async () => {

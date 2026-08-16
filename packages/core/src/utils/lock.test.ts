@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Lock } from './lock.js';
-import { sleep } from './wait.js';
+import { Lock } from './lock';
+import { sleep } from './wait';
 
 describe('utils/Lock', () => {
   it('allows only one resource at a time', async () => {

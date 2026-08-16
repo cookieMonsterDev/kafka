@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../../decoder.js';
-import { JoinGroup } from './index.js';
+import { Decoder } from '../../decoder';
+import { JoinGroup } from './index';
 
 describe('protocol/requests/join-group', () => {
   it('implements versions 0 through 5', () => {

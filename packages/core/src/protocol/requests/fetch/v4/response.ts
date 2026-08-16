@@ -1,7 +1,7 @@
-import { Decoder } from '../../../decoder.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import type { DecodedRecordBatch } from '../../../records/batch.js';
-import { decodeRecordSet, parseFetchResponse, readTopicName } from '../shared.js';
+import { Decoder } from '../../../decoder';
+import type { ResponseDefinition } from '../../../schema';
+import type { DecodedRecordBatch } from '../../../records/batch';
+import { decodeRecordSet, parseFetchResponse, readTopicName } from '../shared';
 
 export interface FetchPartitionResponseV4 {
   partition: number;

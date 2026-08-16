@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { initProducerIdResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { initProducerIdResponseV0 } from '../v0/response';
 
 export interface InitProducerIdResponseV1Body {
   errorCode: number;

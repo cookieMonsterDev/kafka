@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { PartitionMetadata } from '../cluster/index.js';
-import { groupMessagesPerPartition } from './group-messages-per-partition.js';
-import type { Message } from './types.js';
+import type { PartitionMetadata } from '../cluster/index';
+import { groupMessagesPerPartition } from './group-messages-per-partition';
+import type { Message } from './types';
 
 function fakePartitionMetadata(partitionId: number): PartitionMetadata {
   return { partitionErrorCode: 0, partitionId, leader: 0, replicas: [0], isr: [0], offlineReplicas: [] };

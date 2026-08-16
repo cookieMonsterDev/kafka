@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v2AssignerMetadataFixture from '../fixtures/v2-assigner-metadata.json' with { type: 'json' };
 import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
-import { joinGroupResponseV2 } from './response.js';
+import { joinGroupResponseV2 } from './response';
 
 describe('protocol/requests/join-group/v2/response', () => {
   it('decodes a real fixture, with throttleTime ahead of error_code', async () => {

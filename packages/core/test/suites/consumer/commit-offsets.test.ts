@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { KafkaJSNonRetriableError } from '../../../src/errors.js';
+import { createAdmin } from '../../../src/admin/index';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import { KafkaNonRetriableError } from '../../../src/errors';
 import {
   createCluster,
   createModPartitioner,
@@ -12,7 +12,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.commitOffsets', () => {
   let topicName: string;
@@ -47,7 +47,7 @@ describe('consumer.commitOffsets', () => {
 
   it('rejects commit before run', async () => {
     await expect(consumer!.commitOffsets([{ topic: topicName, partition: 0, offset: 1n }])).rejects.toThrow(
-      KafkaJSNonRetriableError,
+      KafkaNonRetriableError,
     );
   });
 

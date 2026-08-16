@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { Partitioners } from '../../../src/index.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import { Partitioners } from '../../../src/index';
 import {
   createCluster,
   createModPartitioner,
@@ -10,7 +10,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('producer.partitioning', () => {
   let topicName: string;

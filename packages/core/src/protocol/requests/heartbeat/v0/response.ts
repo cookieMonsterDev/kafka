@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { defineResponse, field, int16, object } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { defineResponse, field, int16, object } from '../../../schema';
 
 /**
  * Heartbeat Response (Version: 0) => error_code

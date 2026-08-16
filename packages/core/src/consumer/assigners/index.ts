@@ -1,1 +1,1 @@
-export { roundRobin } from './round-robin-assigner.js';
+export { roundRobin } from './round-robin-assigner';

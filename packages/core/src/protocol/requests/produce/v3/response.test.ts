@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3ResponseFixture from '../fixtures/v3-response.json' with { type: 'json' };
-import { produceResponseV3 } from './response.js';
+import { produceResponseV3 } from './response';
 
 describe('protocol/requests/produce/v3/response', () => {
   it('decodes a real fixture', async () => {

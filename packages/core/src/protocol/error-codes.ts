@@ -1,4 +1,4 @@
-import { KafkaJSProtocolError } from '../errors.js';
+import { KafkaProtocolError } from '../errors';
 
 export interface ErrorCodeEntry {
   type: string;
@@ -8,7 +8,7 @@ export interface ErrorCodeEntry {
   helpUrl?: string;
 }
 
-// https://kafka.apache.org/protocol.html#protocol_error_codes
+/** @see https://kafka.apache.org/43/design/protocol/ */
 export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   {
     type: 'UNKNOWN',
@@ -562,7 +562,7 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
 
 function unknownErrorCode(errorCode: number): ErrorCodeEntry {
   return {
-    type: 'KAFKAJS_UNKNOWN_ERROR_CODE',
+    type: 'KAFKA_UNKNOWN_ERROR_CODE',
     code: -99,
     retriable: false,
     message: `Unknown error code ${errorCode}`,
@@ -576,9 +576,9 @@ export function failure(code: number): boolean {
   return code !== SUCCESS_CODE;
 }
 
-export function createErrorFromCode(code: number): KafkaJSProtocolError {
+export function createErrorFromCode(code: number): KafkaProtocolError {
   const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code);
-  return new KafkaJSProtocolError(entry);
+  return new KafkaProtocolError(entry);
 }
 
 export function failIfVersionNotSupported(code: number): void {

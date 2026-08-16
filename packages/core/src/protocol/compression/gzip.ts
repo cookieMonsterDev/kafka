@@ -1,6 +1,6 @@
 import { promisify } from 'node:util';
 import { gzip as gzipCallback, unzip as unzipCallback } from 'node:zlib';
-import type { CompressionCodec } from './index.js';
+import type { CompressionCodec } from './index';
 
 const gzip = promisify(gzipCallback);
 const unzip = promisify(unzipCallback);

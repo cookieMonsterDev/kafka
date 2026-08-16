@@ -1,5 +1,5 @@
-import { array, defineRequest, field, int16, int32, int64, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, int16, int32, int64, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * TxnOffsetCommit Request (Version: 0) => transactional_id group_id producer_id producer_epoch [topics]

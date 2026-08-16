@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { bytes, defineResponse, field, int16, int32, object } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { bytes, defineResponse, field, int16, int32, object } from '../../../schema';
 
 /**
  * SyncGroup Response (Version: 1) => throttle_time_ms error_code member_assignment

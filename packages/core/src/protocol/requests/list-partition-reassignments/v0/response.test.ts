@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { listPartitionReassignmentsResponseV0 } from './response.js';
+import { listPartitionReassignmentsResponseV0 } from './response';
 
 describe('protocol/requests/list-partition-reassignments/v0/response', () => {
   it('decodes topics with their replica reassignment state', async () => {

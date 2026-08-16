@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3RequestFixture from '../fixtures/v3-request.json' with { type: 'json' };
-import { heartbeatRequestV3 } from './request.js';
+import { heartbeatRequestV3 } from './request';
 
 describe('protocol/requests/heartbeat/v3/request', () => {
   it('encodes to match the real fixture, including group_instance_id', async () => {

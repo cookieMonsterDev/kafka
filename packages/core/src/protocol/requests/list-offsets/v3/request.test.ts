@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2RequestFixture from '../fixtures/v2-request.json' with { type: 'json' };
-import { listOffsetsRequestV3 } from './request.js';
+import { listOffsetsRequestV3 } from './request';
 
 describe('protocol/requests/list-offsets/v3/request', () => {
   it('encodes identically to v2, wire-for-wire', async () => {

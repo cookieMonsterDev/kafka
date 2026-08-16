@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Cluster } from '../cluster/index.js';
-import { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level.js';
-import { ConsumerGroup } from './consumer-group.js';
-import type { OffsetManager } from './offset-manager/index.js';
+import type { Cluster } from '../cluster/index';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
+import { ConsumerGroup } from './consumer-group';
+import type { OffsetManager } from './offset-manager/index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

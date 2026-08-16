@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { joinGroupResponseV2 } from '../v2/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { joinGroupResponseV2 } from '../v2/response';
 
 type JoinGroupResponseV2Body = Awaited<ReturnType<typeof joinGroupResponseV2.decode>>;
 export type JoinGroupResponseV3Body = Omit<JoinGroupResponseV2Body, 'throttleTime'> & {

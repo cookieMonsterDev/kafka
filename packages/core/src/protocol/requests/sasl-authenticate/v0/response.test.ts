@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import scram256FirstRequestResponseFixture from '../fixtures/scram256-first-request-response.json' with { type: 'json' };
 import v0ResponsePlainFixture from '../fixtures/v0-response-plain.json' with { type: 'json' };
 import v0ResponseScram256Fixture from '../fixtures/v0-response-scram256.json' with { type: 'json' };
-import { saslAuthenticateResponseV0 } from './response.js';
+import { saslAuthenticateResponseV0 } from './response';
 
 describe('protocol/requests/sasl-authenticate/v0/response', () => {
   it('decodes a real PLAIN fixture, re-framing authBytes with a fresh length prefix', async () => {

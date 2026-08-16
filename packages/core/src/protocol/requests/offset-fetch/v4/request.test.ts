@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3RequestFixture from '../fixtures/v3-request.json' with { type: 'json' };
-import { offsetFetchRequestV4 } from './request.js';
+import { offsetFetchRequestV4 } from './request';
 
 describe('protocol/requests/offset-fetch/v4/request', () => {
   it('encodes identically to v3, wire-for-wire', async () => {

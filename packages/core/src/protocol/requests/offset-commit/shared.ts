@@ -1,4 +1,4 @@
-import { createErrorFromCode, failure } from '../../error-codes.js';
+import { createErrorFromCode, failure } from '../../error-codes';
 
 /** Signals to the broker that its default retention configuration should be used. */
 export const RETENTION_TIME = -1n;

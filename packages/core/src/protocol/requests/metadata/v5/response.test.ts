@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v5OfflineReplicasResponseFixture from '../fixtures/v5-offline-replicas-response.json' with { type: 'json' };
 import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
-import { metadataResponseV5 } from './response.js';
+import { metadataResponseV5 } from './response';
 
 describe('protocol/requests/metadata/v5/response', () => {
   it('decodes a real fixture, including empty offlineReplicas', async () => {

@@ -1,7 +1,7 @@
-import { Decoder } from '../../../decoder.js';
-import { Encoder } from '../../../encoder.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import { saslAuthenticateResponseV0 } from '../v0/response.js';
+import { Decoder } from '../../../decoder';
+import { Encoder } from '../../../encoder';
+import type { ResponseDefinition } from '../../../schema';
+import { saslAuthenticateResponseV0 } from '../v0/response';
 
 export interface SaslAuthenticateResponseV1Body {
   errorCode: number;

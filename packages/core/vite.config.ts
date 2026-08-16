@@ -7,7 +7,6 @@ export default defineConfig({
     minify: false,
     lib: { entry: 'src/index.ts', formats: ['es'] },
     rollupOptions: {
-      // D5: zero runtime deps, so builtins are the entire external surface
       external: [/^node:/],
       output: {
         // 1:1 with src, so the emitted .js tree matches the tsc-emitted .d.ts tree
@@ -43,7 +42,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov'],
       thresholds: {
-        // Phase 0 gate: no source ported yet, nothing to ratchet against.
+        // Raise these as coverage grows.
       },
     },
   },

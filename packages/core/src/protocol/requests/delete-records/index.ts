@@ -1,9 +1,9 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import type { DeleteRecordsTopic } from './v0/request.js';
-import { deleteRecordsRequestV0 } from './v0/request.js';
-import { deleteRecordsResponseV0 } from './v0/response.js';
-import { deleteRecordsRequestV1 } from './v1/request.js';
-import { deleteRecordsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import type { DeleteRecordsTopic } from './v0/request';
+import { deleteRecordsRequestV0 } from './v0/request';
+import { deleteRecordsResponseV0 } from './v0/response';
+import { deleteRecordsRequestV1 } from './v1/request';
+import { deleteRecordsResponseV1 } from './v1/response';
 
 export interface DeleteRecordsOptions {
   topics: DeleteRecordsTopic[];

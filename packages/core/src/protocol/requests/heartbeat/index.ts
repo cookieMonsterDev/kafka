@@ -1,12 +1,12 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { heartbeatRequestV0 } from './v0/request.js';
-import { heartbeatResponseV0 } from './v0/response.js';
-import { heartbeatRequestV1 } from './v1/request.js';
-import { heartbeatResponseV1 } from './v1/response.js';
-import { heartbeatRequestV2 } from './v2/request.js';
-import { heartbeatResponseV2 } from './v2/response.js';
-import { heartbeatRequestV3 } from './v3/request.js';
-import { heartbeatResponseV3 } from './v3/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { heartbeatRequestV0 } from './v0/request';
+import { heartbeatResponseV0 } from './v0/response';
+import { heartbeatRequestV1 } from './v1/request';
+import { heartbeatResponseV1 } from './v1/response';
+import { heartbeatRequestV2 } from './v2/request';
+import { heartbeatResponseV2 } from './v2/response';
+import { heartbeatRequestV3 } from './v3/request';
+import { heartbeatResponseV3 } from './v3/response';
 
 export interface HeartbeatOptions {
   groupId: string;

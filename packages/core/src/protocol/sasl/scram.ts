@@ -12,8 +12,8 @@
  * message is invalid and authentication MUST fail. This is important, as it allows for GS2
  * extensibility (e.g., to add support for security layers).
  */
-import { Decoder } from '../decoder.js';
-import { Encoder } from '../encoder.js';
+import { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
 
 const ENTRY_REGEX = /^([rsiev])=(.*)$/;
 

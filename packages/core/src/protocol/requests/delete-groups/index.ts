@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { deleteGroupsRequestV0 } from './v0/request.js';
-import { deleteGroupsResponseV0 } from './v0/response.js';
-import { deleteGroupsRequestV1 } from './v1/request.js';
-import { deleteGroupsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { deleteGroupsRequestV0 } from './v0/request';
+import { deleteGroupsResponseV0 } from './v0/response';
+import { deleteGroupsRequestV1 } from './v1/request';
+import { deleteGroupsResponseV1 } from './v1/response';
 
 export interface DeleteGroupsOptions {
   groupIds: string[];

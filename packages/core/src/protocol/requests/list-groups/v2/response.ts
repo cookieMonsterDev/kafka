@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { listGroupsResponseV1 } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { listGroupsResponseV1 } from '../v1/response';
 
 export interface ListGroupsResponseV2Body {
   errorCode: number;

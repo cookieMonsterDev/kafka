@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Broker } from '../broker/index.js';
-import { KafkaJSTopicMetadataNotLoaded } from '../errors.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { createDefaultSocketFactory } from '../network/socket-factory.js';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
-import { Cluster } from './index.js';
+import { Broker } from '../broker/index';
+import { KafkaTopicMetadataNotLoaded } from '../errors';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createDefaultSocketFactory } from '../network/socket-factory';
+import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import { Cluster } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -32,9 +32,9 @@ function fakeMetadata(overrides: Partial<MetadataResponseV6Body> = {}): Metadata
 
 describe('cluster/Cluster', () => {
   describe('findTopicPartitionMetadata', () => {
-    it('throws KafkaJSTopicMetadataNotLoaded when metadata has never been fetched', () => {
+    it('throws KafkaTopicMetadataNotLoaded when metadata has never been fetched', () => {
       const cluster = createCluster();
-      expect(() => cluster.findTopicPartitionMetadata('my-topic')).toThrow(KafkaJSTopicMetadataNotLoaded);
+      expect(() => cluster.findTopicPartitionMetadata('my-topic')).toThrow(KafkaTopicMetadataNotLoaded);
     });
 
     it('returns an empty array for a topic missing from metadata', () => {
@@ -163,7 +163,7 @@ describe('cluster/Cluster', () => {
     it('refreshes metadata and rethrows when the broker pool reports a stale broker', async () => {
       const cluster = createCluster();
       vi.spyOn(cluster.brokerPool, 'findBroker').mockRejectedValue(
-        Object.assign(new Error('not found'), { name: 'KafkaJSBrokerNotFound' }),
+        Object.assign(new Error('not found'), { name: 'KafkaBrokerNotFound' }),
       );
       const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
 

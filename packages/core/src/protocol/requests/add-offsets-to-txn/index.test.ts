@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AddOffsetsToTxn } from './index.js';
+import { AddOffsetsToTxn } from './index';
 
 describe('protocol/requests/add-offsets-to-txn', () => {
   it('implements versions 0 through 1', () => {

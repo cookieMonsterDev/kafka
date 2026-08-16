@@ -1,5 +1,5 @@
-import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * JoinGroup Request (Version: 1) => group_id session_timeout rebalance_timeout member_id protocol_type [group_protocols]

@@ -1,5 +1,5 @@
-import { defineRequest, field, int8, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, int8, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * FindCoordinator Request (Version: 1) => coordinator_key coordinator_type

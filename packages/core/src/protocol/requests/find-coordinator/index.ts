@@ -1,10 +1,10 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { findCoordinatorRequestV0 } from './v0/request.js';
-import { findCoordinatorResponseV0 } from './v0/response.js';
-import { findCoordinatorRequestV1 } from './v1/request.js';
-import { findCoordinatorResponseV1 } from './v1/response.js';
-import { findCoordinatorRequestV2 } from './v2/request.js';
-import { findCoordinatorResponseV2 } from './v2/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { findCoordinatorRequestV0 } from './v0/request';
+import { findCoordinatorResponseV0 } from './v0/response';
+import { findCoordinatorRequestV1 } from './v1/request';
+import { findCoordinatorResponseV1 } from './v1/response';
+import { findCoordinatorRequestV2 } from './v2/request';
+import { findCoordinatorResponseV2 } from './v2/response';
 
 export interface FindCoordinatorOptions {
   groupId?: string;

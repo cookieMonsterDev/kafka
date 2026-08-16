@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { defineResponse, field, int16, int32, object, string } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { defineResponse, field, int16, int32, object, string } from '../../../schema';
 
 /**
  * FindCoordinator Response (Version: 0) => error_code coordinator

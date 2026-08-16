@@ -1,5 +1,5 @@
-import { array, defineResponse, field, int16, int32, object, string } from '../../../schema.js';
-import { checkOffsetCommitErrors } from '../shared.js';
+import { array, defineResponse, field, int16, int32, object, string } from '../../../schema';
+import { checkOffsetCommitErrors } from '../shared';
 
 /**
  * OffsetCommit Response (Version: 2) => [responses]

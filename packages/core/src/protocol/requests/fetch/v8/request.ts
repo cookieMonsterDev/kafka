@@ -1,6 +1,6 @@
-import type { RequestDefinition } from '../../../schema.js';
-import type { FetchRequestOptions } from '../shared.js';
-import { fetchRequestV7 } from '../v7/request.js';
+import type { RequestDefinition } from '../../../schema';
+import type { FetchRequestOptions } from '../shared';
+import { fetchRequestV7 } from '../v7/request';
 
 /**
  * Quota violation brokers send out responses before throttling.

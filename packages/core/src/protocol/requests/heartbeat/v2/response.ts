@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { heartbeatResponseV1 } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { heartbeatResponseV1 } from '../v1/response';
 
 export interface HeartbeatResponseV2Body {
   errorCode: number;

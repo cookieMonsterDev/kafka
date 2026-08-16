@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { deleteGroupsRequestV0 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { deleteGroupsRequestV0 } from './request';
 
 describe('protocol/requests/delete-groups/v0/request', () => {
   it('encodes an array of group ids', async () => {

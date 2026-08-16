@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { alterConfigsResponseV0, type AlterConfigsResponseV0Body } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { alterConfigsResponseV0, type AlterConfigsResponseV0Body } from '../v0/response';
 
 export interface AlterConfigsResponseV1Body extends AlterConfigsResponseV0Body {
   clientSideThrottleTime: number;

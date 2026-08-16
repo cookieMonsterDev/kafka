@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { metadataRequestV5 } from './request.js';
+import { metadataRequestV5 } from './request';
 
 describe('protocol/requests/metadata/v5/request', () => {
   it('carries apiVersion 5', () => {

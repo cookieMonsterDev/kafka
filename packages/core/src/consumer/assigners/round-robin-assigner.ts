@@ -1,10 +1,10 @@
-import type { Cluster } from '../../cluster/index.js';
-import { MemberAssignment, MemberMetadata } from '../assigner-protocol.js';
-import type { Assigner, GroupMember, GroupMemberAssignment, GroupProtocol, PartitionAssigner } from '../types.js';
+import type { Cluster } from '../../cluster/index';
+import { MemberAssignment, MemberMetadata } from '../assigner-protocol';
+import type { Assigner, GroupMember, GroupMemberAssignment, GroupProtocol, PartitionAssigner } from '../types';
 
 /**
- * Spreads topic-partitions across members in member-id order. `Object.create(null)` keeps topic
- * names that collide with `Object.prototype` (e.g. `toString`) from being inherited as methods.
+ * Spreads topic-partitions across members in member-id order.
+ * @see https://kafka.apache.org/43/design/design/
  */
 export const roundRobin: PartitionAssigner = ({ cluster }: { cluster: Cluster }): Assigner => {
   const assigner: Assigner = {

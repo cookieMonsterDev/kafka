@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { NETWORK_REQUEST } from '../network/instrumentation-events.js';
-import { createProducer } from './index.js';
+import type { Cluster } from '../cluster/index';
+import { KafkaNonRetriableError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { NETWORK_REQUEST } from '../network/instrumentation-events';
+import { createProducer } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -140,7 +140,7 @@ describe('producer', () => {
         retry: { retries: 0 },
       }),
     ).toThrow(
-      new KafkaJSNonRetriableError('Idempotent producer must allow retries to protect against transient errors'),
+      new KafkaNonRetriableError('Idempotent producer must allow retries to protect against transient errors'),
     );
   });
 
@@ -178,7 +178,7 @@ describe('producer', () => {
     it('requires a transactionalId', async () => {
       const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
       await expect(producer.transaction()).rejects.toEqual(
-        new KafkaJSNonRetriableError('Must provide transactional id for transactional producer'),
+        new KafkaNonRetriableError('Must provide transactional id for transactional producer'),
       );
     });
 
@@ -192,7 +192,7 @@ describe('producer', () => {
 
       await producer.transaction();
       await expect(producer.transaction()).rejects.toEqual(
-        new KafkaJSNonRetriableError(
+        new KafkaNonRetriableError(
           'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
         ),
       );
@@ -211,7 +211,7 @@ describe('producer', () => {
       await txn.abort();
       expect(txn.isActive()).toBe(false);
 
-      const ended = new KafkaJSNonRetriableError('Cannot continue to use transaction once ended');
+      const ended = new KafkaNonRetriableError('Cannot continue to use transaction once ended');
       await expect(txn.send({ topic: 't', messages: [] })).rejects.toEqual(ended);
       await expect(txn.sendBatch({ topicMessages: [] })).rejects.toEqual(ended);
       await expect(txn.commit()).rejects.toEqual(ended);

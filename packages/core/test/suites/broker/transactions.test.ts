@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
-import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types.js';
+import { Broker } from '../../../src/broker/index';
+import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
 import {
   advertisedAddress,
   createConnectionPool,
@@ -8,7 +8,7 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('broker.transactions', () => {
   let transactionalId: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SeekOffsets } from './seek-offsets.js';
+import { SeekOffsets } from './seek-offsets';
 
 describe('consumer/seek-offsets', () => {
   it('stores the latest offset per topic-partition and reports has()', () => {

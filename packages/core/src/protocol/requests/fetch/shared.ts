@@ -1,7 +1,7 @@
-import { KafkaJSOffsetOutOfRange, KafkaJSPartialMessageError } from '../../../errors.js';
-import { createErrorFromCode, ERROR_CODES, failure } from '../../error-codes.js';
-import { decodeRecordBatch, type DecodedRecordBatch } from '../../records/batch.js';
-import { Decoder } from '../../decoder.js';
+import { KafkaOffsetOutOfRange, KafkaPartialMessageError } from '../../../errors';
+import { createErrorFromCode, ERROR_CODES, failure } from '../../error-codes';
+import { decodeRecordBatch, type DecodedRecordBatch } from '../../records/batch';
+import { Decoder } from '../../decoder';
 
 /** The wire's `topic` field is a non-nullable STRING; every version's response decode uses this. */
 export function readTopicName(decoder: Decoder): string {
@@ -48,9 +48,10 @@ export interface FetchRequestOptions {
 const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSET_OUT_OF_RANGE')?.code;
 
 /**
- * Shared by every Fetch response version: scan every topic's partitions for the first failure
- * (`OFFSET_OUT_OF_RANGE` gets its own error class carrying which topic/partition), matching
- * kafkajs's own v0 `parse` that every later version reuses unchanged.
+ * Shared by every Fetch response version: scan partitions for the first failure.
+ * `OFFSET_OUT_OF_RANGE` becomes {@link KafkaOffsetOutOfRange} with topic and partition.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export async function parseFetchResponse<
   T extends {
@@ -66,7 +67,7 @@ export async function parseFetchResponse<
   if (firstError) {
     const { errorCode, topic, partition } = firstError;
     if (errorCode === OFFSET_OUT_OF_RANGE_ERROR_CODE) {
-      throw new KafkaJSOffsetOutOfRange(createErrorFromCode(errorCode), { topic, partition });
+      throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), { topic, partition });
     }
     throw createErrorFromCode(errorCode);
   }
@@ -75,11 +76,11 @@ export async function parseFetchResponse<
 }
 
 /**
- * `record_set` on the wire is a length-prefixed byte blob that can hold more than one
- * consecutive RecordBatch - the broker fills it up to `max_bytes` and simply cuts the last batch
- * off mid-way when it runs out of room, rather than never sending a partial one. Loop-decode
- * batches until either the blob is exhausted or a partial trailing batch is hit, and flatten
- * every batch's records into one array (matching kafkajs's own `decodeMessages`).
+ * Decode a Fetch `record_set`: a length-prefixed blob that may hold several RecordBatches.
+ * The broker fills it up to `max_bytes` and may cut the last batch short; a trailing partial
+ * batch is ignored and the rest are flattened into one record array.
+ *
+ * @see https://kafka.apache.org/43/implementation/messages/
  */
 export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
   const messagesSize = decoder.readInt32();
@@ -98,7 +99,7 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
   // producerId(8) + producerEpoch(2) + firstSequence(4). Stop once fewer than that remain, rather
   // than attempting one more decode: reading the header fields themselves would throw a raw
   // out-of-bounds `RangeError` (from `Buffer#readInt32BE`/`readBigInt64BE`) before
-  // `decodeRecordBatch`'s own `KafkaJSPartialMessageError` truncation check ever runs.
+  // `decodeRecordBatch`'s own `KafkaPartialMessageError` truncation check ever runs.
   const RECORD_BATCH_HEADER_SIZE = 57;
   while (messagesDecoder.canReadBytes(RECORD_BATCH_HEADER_SIZE)) {
     try {
@@ -107,7 +108,7 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
     } catch (e) {
       // The tail of the record batches can have incomplete records due to how max_bytes works.
       // @see https://kafka.apache.org/protocol#The_Messages_Fetch
-      if (e instanceof KafkaJSPartialMessageError) break;
+      if (e instanceof KafkaPartialMessageError) break;
       throw e;
     }
   }

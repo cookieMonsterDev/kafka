@@ -1,7 +1,7 @@
-import { KafkaJSSASLAuthenticationError } from '../../errors.js';
-import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection.js';
-import { awsIamRequest, awsIamResponse } from '../../protocol/sasl/aws-iam.js';
-import type { AwsIamSaslConfig } from '../../protocol/sasl/aws-iam.js';
+import { KafkaSASLAuthenticationError } from '../../errors';
+import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection';
+import { awsIamRequest, awsIamResponse } from '../../protocol/sasl/aws-iam';
+import type { AwsIamSaslConfig } from '../../protocol/sasl/aws-iam';
 
 export function awsIamAuthenticatorProvider(
   sasl: AwsIamSaslConfig,
@@ -9,13 +9,13 @@ export function awsIamAuthenticatorProvider(
   return ({ host, port, logger, saslAuthenticate }) => ({
     authenticate: async () => {
       if (!sasl.authorizationIdentity) {
-        throw new KafkaJSSASLAuthenticationError('SASL AWS-IAM: Missing authorizationIdentity');
+        throw new KafkaSASLAuthenticationError('SASL AWS-IAM: Missing authorizationIdentity');
       }
       if (!sasl.accessKeyId) {
-        throw new KafkaJSSASLAuthenticationError('SASL AWS-IAM: Missing accessKeyId');
+        throw new KafkaSASLAuthenticationError('SASL AWS-IAM: Missing accessKeyId');
       }
       if (!sasl.secretAccessKey) {
-        throw new KafkaJSSASLAuthenticationError('SASL AWS-IAM: Missing secretAccessKey');
+        throw new KafkaSASLAuthenticationError('SASL AWS-IAM: Missing secretAccessKey');
       }
       if (!sasl.sessionToken) {
         sasl.sessionToken = '';
@@ -28,7 +28,7 @@ export function awsIamAuthenticatorProvider(
         await saslAuthenticate({ request: awsIamRequest(sasl), response: awsIamResponse });
         logger.debug('SASL AWS-IAM authentication successful', { broker });
       } catch (e) {
-        const error = new KafkaJSSASLAuthenticationError(`SASL AWS-IAM authentication failed: ${(e as Error).message}`);
+        const error = new KafkaSASLAuthenticationError(`SASL AWS-IAM authentication failed: ${(e as Error).message}`);
         logger.error(error.message, { broker });
         throw error;
       }

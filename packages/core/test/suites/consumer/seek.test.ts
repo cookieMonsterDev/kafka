@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { KafkaJSNonRetriableError } from '../../../src/errors.js';
-import type { EachMessagePayload } from '../../../src/consumer/types.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import { KafkaNonRetriableError } from '../../../src/errors';
+import type { EachMessagePayload } from '../../../src/consumer/types';
 import {
   createCluster,
   createModPartitioner,
@@ -12,7 +12,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.seek', () => {
   let topicName: string;
@@ -41,7 +41,7 @@ describe('consumer.seek', () => {
   });
 
   it('rejects seek before run', () => {
-    expect(() => consumer!.seek({ topic: topicName, partition: 0, offset: 1n })).toThrow(KafkaJSNonRetriableError);
+    expect(() => consumer!.seek({ topic: topicName, partition: 0, offset: 1n })).toThrow(KafkaNonRetriableError);
   });
 
   it('seeks to an absolute offset', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { KafkaJSMemberIdRequired } from '../../../../errors.js';
-import { Encoder } from '../../../encoder.js';
-import { joinGroupResponseV4 } from './response.js';
+import { KafkaMemberIdRequired } from '../../../../errors';
+import { Encoder } from '../../../encoder';
+import { joinGroupResponseV4 } from './response';
 
 function buildWire(errorCode: number): Buffer {
   return new Encoder()
@@ -23,10 +23,10 @@ describe('protocol/requests/join-group/v4/response', () => {
     await expect(joinGroupResponseV4.parse(data)).resolves.toBeTruthy();
   });
 
-  it('throws KafkaJSMemberIdRequired carrying memberId on MEMBER_ID_REQUIRED', async () => {
+  it('throws KafkaMemberIdRequired carrying memberId on MEMBER_ID_REQUIRED', async () => {
     const data = await joinGroupResponseV4.decode(buildWire(79));
     const error: unknown = await joinGroupResponseV4.parse(data).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(KafkaJSMemberIdRequired);
-    expect((error as KafkaJSMemberIdRequired).memberId).toBe('member-1');
+    expect(error).toBeInstanceOf(KafkaMemberIdRequired);
+    expect((error as KafkaMemberIdRequired).memberId).toBe('member-1');
   });
 });

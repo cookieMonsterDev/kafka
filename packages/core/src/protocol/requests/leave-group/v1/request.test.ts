@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { leaveGroupRequestV1 } from './request.js';
+import { leaveGroupRequestV1 } from './request';
 
 describe('protocol/requests/leave-group/v1/request', () => {
   it('encodes to match the real fixture', async () => {

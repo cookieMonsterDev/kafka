@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { type DescribeConfigsResource, describeConfigsRequestV1, withDefaultConfigNames } from './v1/request.js';
-import { describeConfigsResponseV1 } from './v1/response.js';
-import { describeConfigsRequestV2 } from './v2/request.js';
-import { describeConfigsResponseV2 } from './v2/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { type DescribeConfigsResource, describeConfigsRequestV1, withDefaultConfigNames } from './v1/request';
+import { describeConfigsResponseV1 } from './v1/response';
+import { describeConfigsRequestV2 } from './v2/request';
+import { describeConfigsResponseV2 } from './v2/response';
 
 export interface DescribeConfigsOptions {
   resources: DescribeConfigsResource[];
@@ -27,9 +27,9 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeConfigsOptions>>
 };
 
 /**
- * Kafka 4.0.0's real floor for this API is v1, not v0: `DescribeConfigsRequest.json`'s
- * `validVersions` is `"1-4"` (advertised live as min=1, max=4), and no librdkafka-style
- * advertising override applies here (only Produce has one) — kafkajs's v0 is genuinely gone.
+ * Kafka 4.0+ advertises DescribeConfigs as versions 1-4; v0 is not implemented.
+ *
+ * @see https://kafka.apache.org/43/configuration/topic-configs/
  */
 export const DescribeConfigs: RequestFamily<DescribeConfigsOptions> = Object.freeze({
   versions: Object.freeze(Object.keys(VERSIONS).map(Number)),

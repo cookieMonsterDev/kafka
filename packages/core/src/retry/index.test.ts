@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { retrier } from './index.js';
-import { FAST_RETRY_DEFAULTS } from './test-defaults.js';
+import { retrier } from './index';
+import { FAST_RETRY_DEFAULTS } from './test-defaults';
 
 describe('retry/retrier', () => {
   it('resolves with the value returned by fn', async () => {
@@ -37,7 +37,7 @@ describe('retry/retrier', () => {
         error.retriable = true;
         throw error;
       }),
-    ).rejects.toMatchObject({ name: 'KafkaJSNumberOfRetriesExceeded' });
+    ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
 
     expect(attempts).toBe(3); // initial attempt + 2 retries
   });
@@ -50,7 +50,7 @@ describe('retry/retrier', () => {
       throw error;
     });
 
-    await expect(retry(fn)).rejects.toMatchObject({ name: 'KafkaJSNonRetriableError' });
+    await expect(retry(fn)).rejects.toMatchObject({ name: 'KafkaNonRetriableError' });
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
@@ -60,7 +60,7 @@ describe('retry/retrier', () => {
       throw new TypeError('boom');
     });
 
-    await expect(retry(fn)).rejects.toMatchObject({ name: 'KafkaJSNonRetriableError' });
+    await expect(retry(fn)).rejects.toMatchObject({ name: 'KafkaNonRetriableError' });
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

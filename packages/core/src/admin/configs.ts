@@ -1,12 +1,12 @@
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response.js';
-import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response.js';
-import { retrier } from '../retry/index.js';
-import type { AdminContext } from './helpers.js';
-import { groupResourcesByBroker, protocolType, formatUnknown } from './helpers.js';
-import type { ResourceConfig, ResourceConfigQuery } from './types.js';
+import { KafkaNonRetriableError } from '../errors';
+import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
+import { staleMetadata } from '../protocol/error-codes';
+import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
+import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
+import { retrier } from '../retry/index';
+import type { AdminContext } from './helpers';
+import { groupResourcesByBroker, protocolType, formatUnknown } from './helpers';
+import type { ResourceConfig, ResourceConfigQuery } from './types';
 
 export interface ConfigsApi {
   describeConfigs: (options: {
@@ -30,21 +30,21 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
     includeSynonyms?: boolean;
   }): Promise<{ resources: DescribeConfigsResponseV2Body['resources'] }> => {
     if (!resources || !Array.isArray(resources)) {
-      throw new KafkaJSNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
+      throw new KafkaNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
     }
 
     if (resources.length === 0) {
-      throw new KafkaJSNonRetriableError('Resources array cannot be empty');
+      throw new KafkaNonRetriableError('Resources array cannot be empty');
     }
 
     const invalidType = resources.find((resource) => !VALID_RESOURCE_TYPES.includes(resource.type));
     if (invalidType) {
-      throw new KafkaJSNonRetriableError(`Invalid resource type ${invalidType.type}: ${JSON.stringify(invalidType)}`);
+      throw new KafkaNonRetriableError(`Invalid resource type ${invalidType.type}: ${JSON.stringify(invalidType)}`);
     }
 
     const invalidName = resources.find((resource) => !resource.name || typeof resource.name !== 'string');
     if (invalidName) {
-      throw new KafkaJSNonRetriableError(`Invalid resource name ${invalidName.name}: ${JSON.stringify(invalidName)}`);
+      throw new KafkaNonRetriableError(`Invalid resource name ${invalidName.name}: ${JSON.stringify(invalidName)}`);
     }
 
     const invalidConfigs = resources.find(
@@ -52,7 +52,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
     );
     if (invalidConfigs) {
       const { configNames } = invalidConfigs;
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `Invalid resource configNames ${formatUnknown(configNames)}: ${JSON.stringify(invalidConfigs)}`,
       );
     }
@@ -99,27 +99,27 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
     validateOnly?: boolean;
   }): Promise<{ resources: AlterConfigsResponseV1Body['resources'] }> => {
     if (!resources || !Array.isArray(resources)) {
-      throw new KafkaJSNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
+      throw new KafkaNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
     }
 
     if (resources.length === 0) {
-      throw new KafkaJSNonRetriableError('Resources array cannot be empty');
+      throw new KafkaNonRetriableError('Resources array cannot be empty');
     }
 
     const invalidType = resources.find((resource) => !VALID_RESOURCE_TYPES.includes(resource.type));
     if (invalidType) {
-      throw new KafkaJSNonRetriableError(`Invalid resource type ${invalidType.type}: ${JSON.stringify(invalidType)}`);
+      throw new KafkaNonRetriableError(`Invalid resource type ${invalidType.type}: ${JSON.stringify(invalidType)}`);
     }
 
     const invalidName = resources.find((resource) => !resource.name || typeof resource.name !== 'string');
     if (invalidName) {
-      throw new KafkaJSNonRetriableError(`Invalid resource name ${invalidName.name}: ${JSON.stringify(invalidName)}`);
+      throw new KafkaNonRetriableError(`Invalid resource name ${invalidName.name}: ${JSON.stringify(invalidName)}`);
     }
 
     const invalidConfigs = resources.find((resource) => !Array.isArray(resource.configEntries));
     if (invalidConfigs) {
       const { configEntries } = invalidConfigs;
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `Invalid resource configEntries ${formatUnknown(configEntries)}: ${JSON.stringify(invalidConfigs)}`,
       );
     }
@@ -128,7 +128,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       resource.configEntries.some((entry) => typeof entry.name !== 'string' || typeof entry.value !== 'string'),
     );
     if (invalidConfigValue) {
-      throw new KafkaJSNonRetriableError(`Invalid resource config value: ${JSON.stringify(invalidConfigValue)}`);
+      throw new KafkaNonRetriableError(`Invalid resource config value: ${JSON.stringify(invalidConfigValue)}`);
     }
 
     return retrier(retry)(async (bail, retryCount, retryTime) => {

@@ -1,5 +1,5 @@
-import { array, defineRequest, field, int8, int32, int64, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, int8, int32, int64, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * ListOffsets Request (Version: 3) => replica_id isolation_level [topics]

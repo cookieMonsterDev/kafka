@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v1MemberAssignmentFixture from '../fixtures/v1-member-assignment.json' with { type: 'json' };
 import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
-import { syncGroupResponseV1 } from './response.js';
+import { syncGroupResponseV1 } from './response';
 
 describe('protocol/requests/sync-group/v1/response', () => {
   it('decodes a real fixture', async () => {

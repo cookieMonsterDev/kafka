@@ -1,6 +1,6 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
 
 export interface ApiVersionEntry {
   apiKey: number;
@@ -37,10 +37,7 @@ export const apiVersionsResponseV1: ResponseDefinition<ApiVersionsResponseV1Body
     const errorCode = decoder.readInt16();
     const apiVersions = decoder.readArray(readApiVersionEntry);
 
-    /**
-     * The Java client defaults this to 0 when absent, even though it's required by the protocol.
-     * Works around https://github.com/tulios/kafkajs/issues/491.
-     */
+    /** Default to 0 when the broker omits the required throttle_time_ms field. */
     const throttleTime = decoder.canReadInt32() ? decoder.readInt32() : 0;
 
     return { errorCode, apiVersions, throttleTime };

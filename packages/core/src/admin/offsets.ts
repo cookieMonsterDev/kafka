@@ -1,12 +1,12 @@
-import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants.js';
-import { createConsumer } from '../consumer/index.js';
-import { parseOffset } from '../consumer/types.js';
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { LOG_LEVELS } from '../loggers/index.js';
-import { retrier } from '../retry/index.js';
-import type { AdminContext } from './helpers.js';
-import { findTopicPartitions, isConsumerGroupIdle, protocolType } from './helpers.js';
-import type { FetchOffsetsPartition, SeekEntry, SeekInput, TopicOffset } from './types.js';
+import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
+import { createConsumer } from '../consumer/index';
+import { parseOffset } from '../consumer/types';
+import { KafkaNonRetriableError } from '../errors';
+import { LOG_LEVELS } from '../loggers/index';
+import { retrier } from '../retry/index';
+import type { AdminContext } from './helpers';
+import { findTopicPartitions, isConsumerGroupIdle, protocolType } from './helpers';
+import type { FetchOffsetsPartition, SeekEntry, SeekInput, TopicOffset } from './types';
 
 export interface OffsetsApi {
   fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
@@ -29,7 +29,7 @@ function toTimestamp(timestamp: bigint | number | string | undefined): bigint | 
 export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): OffsetsApi {
   const fetchTopicOffsets = async (topic: string): Promise<TopicOffset[]> => {
     if (!topic || typeof topic !== 'string') {
-      throw new KafkaJSNonRetriableError(`Invalid topic ${topic}`);
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
     return retrier(retry)(async (bail) => {
@@ -71,7 +71,7 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     timestamp?: bigint | number | string,
   ): Promise<SeekEntry[]> => {
     if (!topic || typeof topic !== 'string') {
-      throw new KafkaJSNonRetriableError(`Invalid topic ${topic}`);
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
     return retrier(retry)(async (bail) => {
@@ -114,15 +114,15 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     partitions: SeekInput[];
   }): Promise<void> => {
     if (!groupId) {
-      throw new KafkaJSNonRetriableError(`Invalid groupId ${groupId}`);
+      throw new KafkaNonRetriableError(`Invalid groupId ${groupId}`);
     }
 
     if (!topic) {
-      throw new KafkaJSNonRetriableError(`Invalid topic ${topic}`);
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
     if (!partitions || partitions.length === 0) {
-      throw new KafkaJSNonRetriableError('Invalid partitions');
+      throw new KafkaNonRetriableError('Invalid partitions');
     }
 
     const consumer = createConsumer({
@@ -135,7 +135,7 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     const description = await consumer.describeGroup();
 
     if (!isConsumerGroupIdle(description.state)) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `The consumer group must have no running instances, current state: ${description.state}`,
       );
     }
@@ -170,11 +170,11 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     earliest?: boolean;
   }): Promise<void> => {
     if (!groupId) {
-      throw new KafkaJSNonRetriableError(`Invalid groupId ${groupId}`);
+      throw new KafkaNonRetriableError(`Invalid groupId ${groupId}`);
     }
 
     if (!topic) {
-      throw new KafkaJSNonRetriableError(`Invalid topic ${topic}`);
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
     const partitions = await findTopicPartitions(cluster, topic);
@@ -196,12 +196,12 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
     resolveOffsets?: boolean;
   }): Promise<{ topic: string; partitions: FetchOffsetsPartition[] }[]> => {
     if (!groupId) {
-      throw new KafkaJSNonRetriableError(`Invalid groupId ${groupId}`);
+      throw new KafkaNonRetriableError(`Invalid groupId ${groupId}`);
     }
 
     const topicsToQuery = topics ?? [];
     if (!Array.isArray(topicsToQuery)) {
-      throw new KafkaJSNonRetriableError('Expected topics array to be set');
+      throw new KafkaNonRetriableError('Expected topics array to be set');
     }
 
     const coordinator = await cluster.findGroupCoordinator({ groupId });

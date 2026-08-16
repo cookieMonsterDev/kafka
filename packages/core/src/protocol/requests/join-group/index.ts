@@ -1,16 +1,16 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { type GroupProtocol, joinGroupRequestV0, withDefaultMetadata } from './v0/request.js';
-import { joinGroupResponseV0 } from './v0/response.js';
-import { joinGroupRequestV1 } from './v1/request.js';
-import { joinGroupResponseV1 } from './v1/response.js';
-import { joinGroupRequestV2 } from './v2/request.js';
-import { joinGroupResponseV2 } from './v2/response.js';
-import { joinGroupRequestV3 } from './v3/request.js';
-import { joinGroupResponseV3 } from './v3/response.js';
-import { joinGroupRequestV4 } from './v4/request.js';
-import { joinGroupResponseV4 } from './v4/response.js';
-import { joinGroupRequestV5 } from './v5/request.js';
-import { joinGroupResponseV5 } from './v5/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { type GroupProtocol, joinGroupRequestV0, withDefaultMetadata } from './v0/request';
+import { joinGroupResponseV0 } from './v0/response';
+import { joinGroupRequestV1 } from './v1/request';
+import { joinGroupResponseV1 } from './v1/response';
+import { joinGroupRequestV2 } from './v2/request';
+import { joinGroupResponseV2 } from './v2/response';
+import { joinGroupRequestV3 } from './v3/request';
+import { joinGroupResponseV3 } from './v3/response';
+import { joinGroupRequestV4 } from './v4/request';
+import { joinGroupResponseV4 } from './v4/response';
+import { joinGroupRequestV5 } from './v5/request';
+import { joinGroupResponseV5 } from './v5/response';
 
 export interface JoinGroupOptions {
   groupId: string;

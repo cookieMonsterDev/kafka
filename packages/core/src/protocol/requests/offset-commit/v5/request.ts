@@ -1,5 +1,5 @@
-import { array, defineRequest, field, int32, int64, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, int32, int64, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Version 5 removes retention_time — it is now controlled entirely by a broker-side setting.

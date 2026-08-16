@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { murmur2 } from './murmur2.js';
+import { murmur2 } from './murmur2';
 
-// Generated with kafkajs's src/producer/partitioners/defaultJava/Test.java
+// Known-answer vectors for the Java-compatible murmur2 hash.
 const KNOWN_ANSWERS: Readonly<Record<string, number>> = {
   '0': 971027396,
   '1': -1993445489,

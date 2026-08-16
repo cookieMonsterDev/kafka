@@ -22,9 +22,10 @@ function encodeZigZag64(value: bigint): bigint {
 }
 
 /**
- * Wire-format writer for the Kafka protocol: fixed-width ints, strings/bytes (both length-prefixed
- * and varint-prefixed "compact" forms), varint/varlong, and arrays. Grows its backing buffer by
- * doubling, matching kafkajs's allocation strategy so encoded output stays byte-for-byte identical.
+ * Wire-format writer for the Kafka protocol: fixed-width ints, length-prefixed and compact
+ * strings/bytes, varint/varlong, and arrays. The backing buffer doubles as it grows.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export class Encoder {
   static encodeZigZag = encodeZigZag;

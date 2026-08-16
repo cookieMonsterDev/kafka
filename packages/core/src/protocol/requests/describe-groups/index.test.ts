@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DescribeGroups } from './index.js';
+import { DescribeGroups } from './index';
 
 describe('protocol/requests/describe-groups', () => {
   it('implements versions 0 through 2', () => {

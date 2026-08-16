@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { offsetFetchResponseV3 } from '../v3/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { offsetFetchResponseV3 } from '../v3/response';
 
 export interface OffsetFetchResponseV4Body {
   responses: {

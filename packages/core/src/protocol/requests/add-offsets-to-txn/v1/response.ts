@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { addOffsetsToTxnResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { addOffsetsToTxnResponseV0 } from '../v0/response';
 
 export interface AddOffsetsToTxnResponseV1Body {
   errorCode: number;

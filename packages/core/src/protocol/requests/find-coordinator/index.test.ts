@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FindCoordinator } from './index.js';
+import { FindCoordinator } from './index';
 
 describe('protocol/requests/find-coordinator', () => {
   it('implements versions 0 through 2', () => {

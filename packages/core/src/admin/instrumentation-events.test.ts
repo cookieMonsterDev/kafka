@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { events, REQUEST, REQUEST_QUEUE_SIZE, REQUEST_TIMEOUT, unwrap, wrap } from './instrumentation-events.js';
+import { events, REQUEST, REQUEST_QUEUE_SIZE, REQUEST_TIMEOUT, unwrap, wrap } from './instrumentation-events';
 import {
   NETWORK_REQUEST,
   NETWORK_REQUEST_QUEUE_SIZE,
   NETWORK_REQUEST_TIMEOUT,
-} from '../network/instrumentation-events.js';
+} from '../network/instrumentation-events';
 
 describe('admin instrumentation events', () => {
   it('exposes namespaced public event names', () => {

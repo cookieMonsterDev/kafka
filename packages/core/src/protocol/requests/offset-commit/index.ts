@@ -1,13 +1,13 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { RETENTION_TIME, type OffsetCommitTopicOptions, withDefaultMetadata } from './shared.js';
-import { offsetCommitRequestV2 } from './v2/request.js';
-import { offsetCommitResponseV2 } from './v2/response.js';
-import { offsetCommitRequestV3 } from './v3/request.js';
-import { offsetCommitResponseV3 } from './v3/response.js';
-import { offsetCommitRequestV4 } from './v4/request.js';
-import { offsetCommitResponseV4 } from './v4/response.js';
-import { offsetCommitRequestV5 } from './v5/request.js';
-import { offsetCommitResponseV5 } from './v5/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { RETENTION_TIME, type OffsetCommitTopicOptions, withDefaultMetadata } from './shared';
+import { offsetCommitRequestV2 } from './v2/request';
+import { offsetCommitResponseV2 } from './v2/response';
+import { offsetCommitRequestV3 } from './v3/request';
+import { offsetCommitResponseV3 } from './v3/response';
+import { offsetCommitRequestV4 } from './v4/request';
+import { offsetCommitResponseV4 } from './v4/response';
+import { offsetCommitRequestV5 } from './v5/request';
+import { offsetCommitResponseV5 } from './v5/response';
 
 export interface OffsetCommitOptions {
   groupId: string;

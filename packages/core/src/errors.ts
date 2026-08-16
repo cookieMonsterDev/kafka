@@ -1,37 +1,37 @@
-export type KafkaJSErrorName =
-  | 'KafkaJSError'
-  | 'KafkaJSNonRetriableError'
-  | 'KafkaJSProtocolError'
-  | 'KafkaJSOffsetOutOfRange'
-  | 'KafkaJSMemberIdRequired'
-  | 'KafkaJSNumberOfRetriesExceeded'
-  | 'KafkaJSConnectionError'
-  | 'KafkaJSConnectionClosedError'
-  | 'KafkaJSRequestTimeoutError'
-  | 'KafkaJSMetadataNotLoaded'
-  | 'KafkaJSTopicMetadataNotLoaded'
-  | 'KafkaJSStaleTopicMetadataAssignment'
-  | 'KafkaJSDeleteGroupsError'
-  | 'KafkaJSServerDoesNotSupportApiKey'
-  | 'KafkaJSBrokerNotFound'
-  | 'KafkaJSPartialMessageError'
-  | 'KafkaJSSASLAuthenticationError'
-  | 'KafkaJSGroupCoordinatorNotFound'
-  | 'KafkaJSNotImplemented'
-  | 'KafkaJSTimeout'
-  | 'KafkaJSLockTimeout'
-  | 'KafkaJSUnsupportedMagicByteInMessageSet'
-  | 'KafkaJSDeleteTopicRecordsError'
-  | 'KafkaJSInvariantViolation'
-  | 'KafkaJSInvalidVarIntError'
-  | 'KafkaJSInvalidLongError'
-  | 'KafkaJSCreateTopicError'
-  | 'KafkaJSAggregateError'
-  | 'KafkaJSFetcherRebalanceError'
-  | 'KafkaJSNoBrokerAvailableError'
-  | 'KafkaJSAlterPartitionReassignmentsError';
+export type KafkaErrorName =
+  | 'KafkaError'
+  | 'KafkaNonRetriableError'
+  | 'KafkaProtocolError'
+  | 'KafkaOffsetOutOfRange'
+  | 'KafkaMemberIdRequired'
+  | 'KafkaNumberOfRetriesExceeded'
+  | 'KafkaConnectionError'
+  | 'KafkaConnectionClosedError'
+  | 'KafkaRequestTimeoutError'
+  | 'KafkaMetadataNotLoaded'
+  | 'KafkaTopicMetadataNotLoaded'
+  | 'KafkaStaleTopicMetadataAssignment'
+  | 'KafkaDeleteGroupsError'
+  | 'KafkaServerDoesNotSupportApiKey'
+  | 'KafkaBrokerNotFound'
+  | 'KafkaPartialMessageError'
+  | 'KafkaSASLAuthenticationError'
+  | 'KafkaGroupCoordinatorNotFound'
+  | 'KafkaNotImplemented'
+  | 'KafkaTimeout'
+  | 'KafkaLockTimeout'
+  | 'KafkaUnsupportedMagicByteInMessageSet'
+  | 'KafkaDeleteTopicRecordsError'
+  | 'KafkaInvariantViolation'
+  | 'KafkaInvalidVarIntError'
+  | 'KafkaInvalidLongError'
+  | 'KafkaCreateTopicError'
+  | 'KafkaAggregateError'
+  | 'KafkaFetcherRebalanceError'
+  | 'KafkaNoBrokerAvailableError'
+  | 'KafkaAlterPartitionReassignmentsError';
 
-export interface KafkaJSErrorOptions {
+export interface KafkaErrorOptions {
   retriable?: boolean;
   cause?: unknown;
 }
@@ -43,13 +43,17 @@ export interface KafkaJSErrorOptions {
  */
 type ErrorLike = { message: string; helpUrl?: string; stack?: string };
 
-export class KafkaJSError extends Error {
-  override readonly name: KafkaJSErrorName = 'KafkaJSError';
+/**
+ * Base client error. `retriable` is true when the operation can be safely retried.
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export class KafkaError extends Error {
+  override readonly name: KafkaErrorName = 'KafkaError';
   readonly retriable: boolean;
   readonly helpUrl: string | undefined;
   override readonly cause: unknown;
 
-  constructor(e: string | ErrorLike, { retriable = true, cause }: KafkaJSErrorOptions = {}) {
+  constructor(e: string | ErrorLike, { retriable = true, cause }: KafkaErrorOptions = {}) {
     const message = typeof e === 'string' ? e : e.message;
     super(message, { cause });
     Error.captureStackTrace(this, this.constructor);
@@ -59,26 +63,31 @@ export class KafkaJSError extends Error {
   }
 }
 
-export class KafkaJSNonRetriableError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSNonRetriableError';
+/** Error that must not be retried (invalid arguments, unimplemented APIs, auth failures). */
+export class KafkaNonRetriableError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaNonRetriableError';
 
   constructor(e: string | ErrorLike, { cause }: { cause?: unknown } = {}) {
     super(e, { retriable: false, cause });
   }
 }
 
-export interface KafkaJSProtocolErrorOptions {
+export interface KafkaProtocolErrorOptions {
   retriable?: boolean;
 }
 
-export class KafkaJSProtocolError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSProtocolError';
+/**
+ * Broker error-code response (`type`, `code`, `retriable`).
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export class KafkaProtocolError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaProtocolError';
   readonly type: string | undefined;
   readonly code: number | undefined;
 
   constructor(
     e: ErrorLike & { retriable?: boolean; type?: string; code?: number },
-    options: KafkaJSProtocolErrorOptions = {},
+    options: KafkaProtocolErrorOptions = {},
   ) {
     super(e, { retriable: options.retriable ?? e.retriable });
     this.type = e.type;
@@ -86,13 +95,13 @@ export class KafkaJSProtocolError extends KafkaJSError {
   }
 }
 
-export class KafkaJSOffsetOutOfRange extends KafkaJSProtocolError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSOffsetOutOfRange';
+export class KafkaOffsetOutOfRange extends KafkaProtocolError {
+  override readonly name: KafkaErrorName = 'KafkaOffsetOutOfRange';
   readonly topic: string | undefined;
   readonly partition: number | undefined;
 
   constructor(
-    e: ConstructorParameters<typeof KafkaJSProtocolError>[0],
+    e: ConstructorParameters<typeof KafkaProtocolError>[0],
     { topic, partition }: { topic?: string; partition?: number },
   ) {
     super(e);
@@ -101,18 +110,18 @@ export class KafkaJSOffsetOutOfRange extends KafkaJSProtocolError {
   }
 }
 
-export class KafkaJSMemberIdRequired extends KafkaJSProtocolError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSMemberIdRequired';
+export class KafkaMemberIdRequired extends KafkaProtocolError {
+  override readonly name: KafkaErrorName = 'KafkaMemberIdRequired';
   readonly memberId: string | undefined;
 
-  constructor(e: ConstructorParameters<typeof KafkaJSProtocolError>[0], { memberId }: { memberId?: string }) {
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], { memberId }: { memberId?: string }) {
     super(e);
     this.memberId = memberId;
   }
 }
 
-export class KafkaJSNumberOfRetriesExceeded extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSNumberOfRetriesExceeded';
+export class KafkaNumberOfRetriesExceeded extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaNumberOfRetriesExceeded';
   readonly retryCount: number;
   readonly retryTime: number;
 
@@ -124,8 +133,8 @@ export class KafkaJSNumberOfRetriesExceeded extends KafkaJSNonRetriableError {
   }
 }
 
-export class KafkaJSConnectionError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSConnectionError';
+export class KafkaConnectionError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaConnectionError';
   readonly broker: string | undefined;
   readonly code: string | undefined;
 
@@ -136,8 +145,8 @@ export class KafkaJSConnectionError extends KafkaJSError {
   }
 }
 
-export class KafkaJSConnectionClosedError extends KafkaJSConnectionError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSConnectionClosedError';
+export class KafkaConnectionClosedError extends KafkaConnectionError {
+  override readonly name: KafkaErrorName = 'KafkaConnectionClosedError';
   readonly host: string | undefined;
   readonly port: number | undefined;
 
@@ -148,8 +157,8 @@ export class KafkaJSConnectionClosedError extends KafkaJSConnectionError {
   }
 }
 
-export class KafkaJSRequestTimeoutError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSRequestTimeoutError';
+export class KafkaRequestTimeoutError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaRequestTimeoutError';
   readonly broker: string | undefined;
   readonly correlationId: number | undefined;
   readonly createdAt: number | undefined;
@@ -181,12 +190,12 @@ export class KafkaJSRequestTimeoutError extends KafkaJSError {
   }
 }
 
-export class KafkaJSMetadataNotLoaded extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSMetadataNotLoaded';
+export class KafkaMetadataNotLoaded extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaMetadataNotLoaded';
 }
 
-export class KafkaJSTopicMetadataNotLoaded extends KafkaJSMetadataNotLoaded {
-  override readonly name: KafkaJSErrorName = 'KafkaJSTopicMetadataNotLoaded';
+export class KafkaTopicMetadataNotLoaded extends KafkaMetadataNotLoaded {
+  override readonly name: KafkaErrorName = 'KafkaTopicMetadataNotLoaded';
   readonly topic: string | undefined;
 
   constructor(e: string | ErrorLike, { topic }: { topic?: string } = {}) {
@@ -195,8 +204,8 @@ export class KafkaJSTopicMetadataNotLoaded extends KafkaJSMetadataNotLoaded {
   }
 }
 
-export class KafkaJSStaleTopicMetadataAssignment extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSStaleTopicMetadataAssignment';
+export class KafkaStaleTopicMetadataAssignment extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaStaleTopicMetadataAssignment';
   readonly topic: string | undefined;
   readonly unknownPartitions: unknown;
 
@@ -213,11 +222,11 @@ export class KafkaJSStaleTopicMetadataAssignment extends KafkaJSError {
 export interface DeleteGroupError {
   groupId: string;
   errorCode?: number;
-  error?: KafkaJSError;
+  error?: KafkaError;
 }
 
-export class KafkaJSDeleteGroupsError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSDeleteGroupsError';
+export class KafkaDeleteGroupsError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaDeleteGroupsError';
   readonly groups: readonly DeleteGroupError[];
 
   constructor(e: string | ErrorLike, groups: readonly DeleteGroupError[] = []) {
@@ -226,8 +235,8 @@ export class KafkaJSDeleteGroupsError extends KafkaJSError {
   }
 }
 
-export class KafkaJSServerDoesNotSupportApiKey extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSServerDoesNotSupportApiKey';
+export class KafkaServerDoesNotSupportApiKey extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaServerDoesNotSupportApiKey';
   readonly apiKey: number | undefined;
   readonly apiName: string | undefined;
 
@@ -238,36 +247,36 @@ export class KafkaJSServerDoesNotSupportApiKey extends KafkaJSNonRetriableError 
   }
 }
 
-export class KafkaJSBrokerNotFound extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSBrokerNotFound';
+export class KafkaBrokerNotFound extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaBrokerNotFound';
 }
 
-export class KafkaJSPartialMessageError extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSPartialMessageError';
+export class KafkaPartialMessageError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaPartialMessageError';
 }
 
-export class KafkaJSSASLAuthenticationError extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSSASLAuthenticationError';
+export class KafkaSASLAuthenticationError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaSASLAuthenticationError';
 }
 
-export class KafkaJSGroupCoordinatorNotFound extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSGroupCoordinatorNotFound';
+export class KafkaGroupCoordinatorNotFound extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaGroupCoordinatorNotFound';
 }
 
-export class KafkaJSNotImplemented extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSNotImplemented';
+export class KafkaNotImplemented extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaNotImplemented';
 }
 
-export class KafkaJSTimeout extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSTimeout';
+export class KafkaTimeout extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaTimeout';
 }
 
-export class KafkaJSLockTimeout extends KafkaJSTimeout {
-  override readonly name: KafkaJSErrorName = 'KafkaJSLockTimeout';
+export class KafkaLockTimeout extends KafkaTimeout {
+  override readonly name: KafkaErrorName = 'KafkaLockTimeout';
 }
 
-export class KafkaJSUnsupportedMagicByteInMessageSet extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSUnsupportedMagicByteInMessageSet';
+export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaUnsupportedMagicByteInMessageSet';
 }
 
 export interface DeleteTopicRecordPartition {
@@ -276,8 +285,8 @@ export interface DeleteTopicRecordPartition {
   [key: string]: unknown;
 }
 
-export class KafkaJSDeleteTopicRecordsError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSDeleteTopicRecordsError';
+export class KafkaDeleteTopicRecordsError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaDeleteTopicRecordsError';
   readonly partitions: readonly DeleteTopicRecordPartition[];
 
   constructor({ partitions }: { partitions: readonly DeleteTopicRecordPartition[] }) {
@@ -290,8 +299,8 @@ export class KafkaJSDeleteTopicRecordsError extends KafkaJSError {
 
 const isErrorLike = (e: unknown): e is ErrorLike => e instanceof Error;
 
-export class KafkaJSInvariantViolation extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSInvariantViolation';
+export class KafkaInvariantViolation extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaInvariantViolation';
 
   constructor(e: string | ErrorLike) {
     const message = isErrorLike(e) ? e.message : e;
@@ -299,38 +308,38 @@ export class KafkaJSInvariantViolation extends KafkaJSNonRetriableError {
   }
 }
 
-export class KafkaJSInvalidVarIntError extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSInvalidVarIntError';
+export class KafkaInvalidVarIntError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaInvalidVarIntError';
 }
 
-export class KafkaJSInvalidLongError extends KafkaJSNonRetriableError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSInvalidLongError';
+export class KafkaInvalidLongError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaInvalidLongError';
 }
 
-export class KafkaJSCreateTopicError extends KafkaJSProtocolError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSCreateTopicError';
+export class KafkaCreateTopicError extends KafkaProtocolError {
+  override readonly name: KafkaErrorName = 'KafkaCreateTopicError';
   readonly topic: string;
 
-  constructor(e: ConstructorParameters<typeof KafkaJSProtocolError>[0], topicName: string) {
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], topicName: string) {
     super(e);
     this.topic = topicName;
   }
 }
 
-export class KafkaJSAlterPartitionReassignmentsError extends KafkaJSProtocolError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSAlterPartitionReassignmentsError';
+export class KafkaAlterPartitionReassignmentsError extends KafkaProtocolError {
+  override readonly name: KafkaErrorName = 'KafkaAlterPartitionReassignmentsError';
   readonly topic: string;
   readonly partition: number;
 
-  constructor(e: ConstructorParameters<typeof KafkaJSProtocolError>[0], topicName: string, partition: number) {
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], topicName: string, partition: number) {
     super(e);
     this.topic = topicName;
     this.partition = partition;
   }
 }
 
-export class KafkaJSAggregateError extends Error {
-  override readonly name: KafkaJSErrorName = 'KafkaJSAggregateError';
+export class KafkaAggregateError extends Error {
+  override readonly name: KafkaErrorName = 'KafkaAggregateError';
   readonly errors: readonly unknown[];
 
   constructor(message: string, errors: readonly unknown[]) {
@@ -339,12 +348,12 @@ export class KafkaJSAggregateError extends Error {
   }
 }
 
-export class KafkaJSFetcherRebalanceError extends Error {
-  override readonly name: KafkaJSErrorName = 'KafkaJSFetcherRebalanceError';
+export class KafkaFetcherRebalanceError extends Error {
+  override readonly name: KafkaErrorName = 'KafkaFetcherRebalanceError';
 }
 
-export class KafkaJSNoBrokerAvailableError extends KafkaJSError {
-  override readonly name: KafkaJSErrorName = 'KafkaJSNoBrokerAvailableError';
+export class KafkaNoBrokerAvailableError extends KafkaError {
+  override readonly name: KafkaErrorName = 'KafkaNoBrokerAvailableError';
 
   constructor() {
     super('No broker available');
@@ -354,4 +363,4 @@ export class KafkaJSNoBrokerAvailableError extends KafkaJSError {
 export const isRebalancing = (e: { type?: string }): boolean =>
   e.type === 'REBALANCE_IN_PROGRESS' || e.type === 'NOT_COORDINATOR_FOR_GROUP' || e.type === 'ILLEGAL_GENERATION';
 
-export const isKafkaJSError = (e: unknown): e is KafkaJSError => e instanceof KafkaJSError;
+export const isKafkaError = (e: unknown): e is KafkaError => e instanceof KafkaError;

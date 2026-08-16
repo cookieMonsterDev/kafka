@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { uniq } from './uniq.js';
+import { uniq } from './uniq';
 
 describe('utils/uniq', () => {
   it('removes duplicate entries, preserving first-seen order', () => {

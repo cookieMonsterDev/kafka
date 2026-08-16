@@ -1,8 +1,8 @@
-import { Decoder } from '../../../decoder.js';
-import { KafkaJSMemberIdRequired } from '../../../../errors.js';
-import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { array, bytes, field, int16, int32, nullableString, object, string } from '../../../schema.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { KafkaMemberIdRequired } from '../../../../errors';
+import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { array, bytes, field, int16, int32, nullableString, object, string } from '../../../schema';
+import type { ResponseDefinition } from '../../../schema';
 
 const MEMBER_ID_REQUIRED_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'MEMBER_ID_REQUIRED')?.code;
 
@@ -58,7 +58,7 @@ export const joinGroupResponseV5: ResponseDefinition<JoinGroupResponseV5Body> = 
     failIfVersionNotSupported(data.errorCode);
     if (failure(data.errorCode)) {
       if (data.errorCode === MEMBER_ID_REQUIRED_ERROR_CODE) {
-        throw new KafkaJSMemberIdRequired(createErrorFromCode(data.errorCode), { memberId: data.memberId });
+        throw new KafkaMemberIdRequired(createErrorFromCode(data.errorCode), { memberId: data.memberId });
       }
       throw createErrorFromCode(data.errorCode);
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { once } from './once.js';
+import { once } from './once';
 
 describe('utils/once', () => {
   it('calls the wrapped function only once', () => {

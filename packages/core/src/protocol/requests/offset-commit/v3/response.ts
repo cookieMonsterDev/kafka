@@ -1,6 +1,6 @@
-import { array, defineResponse, field, int32, object } from '../../../schema.js';
-import { checkOffsetCommitErrors } from '../shared.js';
-import { responseSchema } from '../v2/response.js';
+import { array, defineResponse, field, int32, object } from '../../../schema';
+import { checkOffsetCommitErrors } from '../shared';
+import { responseSchema } from '../v2/response';
 
 /**
  * OffsetCommit Response (Version: 3) => throttle_time_ms [responses]

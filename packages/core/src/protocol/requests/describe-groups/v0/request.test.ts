@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { describeGroupsRequestV0 } from './request.js';
+import { describeGroupsRequestV0 } from './request';
 
 describe('protocol/requests/describe-groups/v0/request', () => {
   it('encodes to match the real fixture', async () => {

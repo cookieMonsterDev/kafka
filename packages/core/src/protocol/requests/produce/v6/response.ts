@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { produceResponseV5 } from '../v5/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { produceResponseV5 } from '../v5/response';
 
 export interface ProduceResponseV6Body {
   topics: {

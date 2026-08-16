@@ -1,5 +1,5 @@
-import { array, defineResponse, field, int16, int32, object, string } from '../../../schema.js';
-import { checkTopicMetadataErrors } from '../shared.js';
+import { array, defineResponse, field, int16, int32, object, string } from '../../../schema';
+import { checkTopicMetadataErrors } from '../shared';
 
 /**
  * Metadata Response (Version: 0) => [brokers] [topic_metadata]

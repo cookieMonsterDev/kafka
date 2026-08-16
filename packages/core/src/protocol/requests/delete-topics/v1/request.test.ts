@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { deleteTopicsRequestV1 } from './request.js';
+import { deleteTopicsRequestV1 } from './request';
 
 describe('protocol/requests/delete-topics/v1/request', () => {
   it('encodes a real fixture', async () => {

@@ -1,11 +1,11 @@
 import { expect, it } from 'vitest';
-import { Kafka } from '../../../src/client.js';
-import { LOG_LEVELS } from '../../../src/loggers/index.js';
-import { FAST_RETRY_DEFAULTS } from '../../../src/retry/test-defaults.js';
+import { Kafka } from '../../../src/client';
+import { LOG_LEVELS } from '../../../src/loggers/index';
+import { FAST_RETRY_DEFAULTS } from '../../../src/retry/test-defaults';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createUnsignedJwt, describeIfOauthbearerEnabled, saslBrokers, secureRandom } from '../../helpers/index.js';
+import { createUnsignedJwt, describeIfOauthbearerEnabled, saslBrokers, secureRandom } from '../../helpers/index';
 
 const certSigned = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../assets/certs/cert-signed');
 

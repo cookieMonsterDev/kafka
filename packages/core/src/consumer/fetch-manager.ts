@@ -1,9 +1,9 @@
-import { KafkaJSFetcherRebalanceError, KafkaJSNoBrokerAvailableError } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import { seq } from '../utils/seq.js';
-import { createFetcher, type Fetcher, type FetchBatch } from './fetcher.js';
-import { createWorker, type WorkerHandler } from './worker.js';
-import { createWorkerQueue } from './worker-queue.js';
+import { KafkaFetcherRebalanceError, KafkaNoBrokerAvailableError } from '../errors';
+import type { Logger } from '../loggers/index';
+import { seq } from '../utils/seq';
+import { createFetcher, type Fetcher, type FetchBatch } from './fetcher';
+import { createWorker, type WorkerHandler } from './worker';
+import { createWorkerQueue } from './worker-queue';
 
 export interface FetchManager<T extends FetchBatch = FetchBatch> {
   start: () => Promise<void>;
@@ -37,14 +37,14 @@ export function createFetchManager<T extends FetchBatch>({
     const partitionAssignments = new Map<string, string>();
 
     if (nodeIds.length === 0) {
-      throw new KafkaJSNoBrokerAvailableError();
+      throw new KafkaNoBrokerAvailableError();
     }
 
     const validateShouldRebalance = (): void => {
       const current = getNodeIds();
       const hasChanged = nodeIds.length !== current.length || nodeIds.some((nodeId) => !current.includes(nodeId));
       if (hasChanged && current.length !== 0) {
-        throw new KafkaJSFetcherRebalanceError();
+        throw new KafkaFetcherRebalanceError();
       }
     };
 
@@ -82,7 +82,7 @@ export function createFetchManager<T extends FetchBatch>({
       } catch (error) {
         await stop();
 
-        if (error instanceof KafkaJSFetcherRebalanceError) {
+        if (error instanceof KafkaFetcherRebalanceError) {
           logger.debug('Rebalancing fetchers...');
           continue;
         }

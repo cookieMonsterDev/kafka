@@ -1,6 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { describeAclsRequestV1 } from './v1/request.js';
-import { describeAclsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { describeAclsRequestV1 } from './v1/request';
+import { describeAclsResponseV1 } from './v1/response';
 
 export interface DescribeAclsOptions {
   resourceType: number;

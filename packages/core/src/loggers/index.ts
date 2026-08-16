@@ -52,7 +52,7 @@ function createLevel(
       label,
       log: {
         timestamp: new Date().toISOString(),
-        logger: 'kafkajs',
+        logger: 'kafka',
         message,
         ...extra,
       },
@@ -63,7 +63,7 @@ function createLevel(
 function evaluateLogLevel(level: LogLevel): LogLevel;
 function evaluateLogLevel(level: LogLevel | null): LogLevel | null;
 function evaluateLogLevel(level: LogLevel | null): LogLevel | null {
-  const envLogLevel = (process.env.KAFKAJS_LOG_LEVEL ?? '').toUpperCase();
+  const envLogLevel = (process.env.KAFKA_LOG_LEVEL ?? '').toUpperCase();
   const envLevel = (LOG_LEVELS as Record<string, LogLevel | undefined>)[envLogLevel];
   return envLevel == null ? level : envLevel;
 }

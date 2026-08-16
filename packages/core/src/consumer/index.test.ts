@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { createConsumer, events } from './index.js';
+import type { Cluster } from '../cluster/index';
+import { KafkaNonRetriableError } from '../errors';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createConsumer, events } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -27,7 +27,7 @@ describe('consumer', () => {
         heartbeatInterval: 10_000,
         sessionTimeout: 10_000,
       }),
-    ).toThrow(KafkaJSNonRetriableError);
+    ).toThrow(KafkaNonRetriableError);
   });
 
   it('throws when groupId is missing', () => {

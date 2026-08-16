@@ -1,5 +1,5 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, int32, int8, nullableString, object, string } from '../../../schema.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, int32, int8, nullableString, object, string } from '../../../schema';
 
 export interface AlterConfigsResourceResult {
   errorCode: number;

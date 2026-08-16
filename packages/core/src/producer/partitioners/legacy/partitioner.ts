@@ -1,5 +1,5 @@
-import type { PartitionerArgs } from '../../types.js';
-import { randomBytes } from './random-bytes.js';
+import type { PartitionerArgs } from '../../types';
+import { randomBytes } from './random-bytes';
 
 /**
  * A cheap way to deterministically convert a number to a positive value. When the input is

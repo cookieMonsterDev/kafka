@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types.js';
-import { describeConfigsRequestV2 } from './request.js';
-import { withDefaultConfigNames } from '../v1/request.js';
+import { CONFIG_RESOURCE_TYPES } from '../../../enums/config-resource-types';
+import { describeConfigsRequestV2 } from './request';
+import { withDefaultConfigNames } from '../v1/request';
 
 describe('protocol/requests/describe-configs/v2/request', () => {
   it('encodes identically to v1 (wire format is unchanged)', async () => {

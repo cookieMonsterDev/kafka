@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { findCoordinatorResponseV1 } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { findCoordinatorResponseV1 } from '../v1/response';
 
 export interface FindCoordinatorResponseV2Body {
   errorCode: number;

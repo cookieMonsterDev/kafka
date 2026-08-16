@@ -1,5 +1,5 @@
-import { defineRequest, field, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * LeaveGroup Request (Version: 0) => group_id member_id

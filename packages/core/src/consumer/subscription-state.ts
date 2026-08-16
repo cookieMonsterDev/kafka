@@ -1,4 +1,4 @@
-import type { TopicPartitions } from './types.js';
+import type { TopicPartitions } from './types';
 
 interface TopicState {
   topic: string;

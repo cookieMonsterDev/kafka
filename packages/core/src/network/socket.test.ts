@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
-import { createSocket } from './socket.js';
+import { createSocket } from './socket';
 
 describe('network/createSocket', () => {
   it('calls the socketFactory with host/port/ssl/onConnect and wires up event listeners', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PartitionMetadata } from '../../../cluster/index.js';
-import { createPartitionerFactory } from './partitioner.js';
+import type { PartitionMetadata } from '../../../cluster/index';
+import { createPartitionerFactory } from './partitioner';
 
 function fakePartitionMetadata(partitionId: number, leader: number): PartitionMetadata {
   return { partitionErrorCode: 0, partitionId, leader, replicas: [leader], isr: [leader], offlineReplicas: [] };

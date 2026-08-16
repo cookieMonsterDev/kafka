@@ -1,6 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { deleteTopicsRequestV1 } from './v1/request.js';
-import { deleteTopicsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { deleteTopicsRequestV1 } from './v1/request';
+import { deleteTopicsResponseV1 } from './v1/response';
 
 export interface DeleteTopicsOptions {
   topics: string[];

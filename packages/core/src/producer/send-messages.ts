@@ -1,15 +1,15 @@
-import type { Broker } from '../broker/index.js';
-import type { Cluster } from '../cluster/index.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import type { CompressionType } from '../protocol/compression/index.js';
-import { KafkaJSMetadataNotLoaded } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import type { Retrier } from '../retry/index.js';
-import { createTopicData } from './create-topic-data.js';
-import type { EosManager } from './eos-manager/index.js';
-import { groupMessagesPerPartition } from './group-messages-per-partition.js';
-import { responseSerializer } from './response-serializer.js';
-import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types.js';
+import type { Broker } from '../broker/index';
+import type { Cluster } from '../cluster/index';
+import { staleMetadata } from '../protocol/error-codes';
+import type { CompressionType } from '../protocol/compression/index';
+import { KafkaMetadataNotLoaded } from '../errors';
+import type { Logger } from '../loggers/index';
+import type { Retrier } from '../retry/index';
+import { createTopicData } from './create-topic-data';
+import type { EosManager } from './eos-manager/index';
+import { groupMessagesPerPartition } from './group-messages-per-partition';
+import { responseSerializer } from './response-serializer';
+import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
 
 export interface SendMessagesOptions {
   logger: Logger;
@@ -46,7 +46,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
 
         if (partitionMetadata.length === 0) {
           logger.debug('Producing to topic without metadata', { topic, targetTopics: [...cluster.targetTopics] });
-          throw new KafkaJSMetadataNotLoaded('Producing to topic without metadata');
+          throw new KafkaMetadataNotLoaded('Producing to topic without metadata');
         }
 
         const messagesPerPartition = groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner });
@@ -132,7 +132,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
       } catch (e) {
         const error = e as Error & { name: string; host?: string; port?: number; retriable?: boolean; type?: string };
 
-        if (error.name === 'KafkaJSConnectionClosedError' && error.host != null && error.port != null) {
+        if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
           cluster.removeBroker({ host: error.host, port: error.port });
         }
 
@@ -147,10 +147,10 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
         // topic has increased in the meantime.
         if (
           staleMetadata(error) ||
-          error.name === 'KafkaJSMetadataNotLoaded' ||
-          error.name === 'KafkaJSConnectionError' ||
-          error.name === 'KafkaJSConnectionClosedError' ||
-          (error.name === 'KafkaJSProtocolError' && error.retriable)
+          error.name === 'KafkaMetadataNotLoaded' ||
+          error.name === 'KafkaConnectionError' ||
+          error.name === 'KafkaConnectionClosedError' ||
+          (error.name === 'KafkaProtocolError' && error.retriable)
         ) {
           logger.error(`Failed to send messages: ${error.message}`, { retryCount, retryTime });
           await cluster.refreshMetadata();

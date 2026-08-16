@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
 import v1ResponseVersionErrorFixture from '../fixtures/v1-response-version-error.json' with { type: 'json' };
-import { findCoordinatorResponseV1 } from './response.js';
+import { findCoordinatorResponseV1 } from './response';
 
 describe('protocol/requests/find-coordinator/v1/response', () => {
   it('decodes a real fixture', async () => {
@@ -15,7 +15,7 @@ describe('protocol/requests/find-coordinator/v1/response', () => {
     await expect(findCoordinatorResponseV1.parse(data)).resolves.toBeTruthy();
   });
 
-  it('throws a KafkaJSProtocolError if the api is not supported', async () => {
+  it('throws a KafkaProtocolError if the api is not supported', async () => {
     const data = await findCoordinatorResponseV1.decode(Buffer.from(v1ResponseVersionErrorFixture.data));
     await expect(findCoordinatorResponseV1.parse(data)).rejects.toThrow(/version of API is not supported/);
   });

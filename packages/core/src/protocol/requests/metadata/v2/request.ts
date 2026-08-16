@@ -1,5 +1,5 @@
-import { defineRequest, field, nullableArray, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, nullableArray, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 const requestSchema = object([field('topics', nullableArray(string))]);
 

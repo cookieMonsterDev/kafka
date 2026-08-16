@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { listOffsetsRequestV1 } from './request.js';
+import { listOffsetsRequestV1 } from './request';
 
 describe('protocol/requests/list-offsets/v1/request', () => {
   it('encodes replicaId and topics/partitions matching a real fixture', async () => {

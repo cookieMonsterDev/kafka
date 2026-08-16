@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { listPartitionReassignmentsRequestV0 } from './request.js';
+import { listPartitionReassignmentsRequestV0 } from './request';
 
 describe('protocol/requests/list-partition-reassignments/v0/request', () => {
   it('encodes the requested topics and their partitions', async () => {

@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { ACL_OPERATION_TYPES } from '../../../src/protocol/enums/acl-operation-types.js';
-import { ACL_PERMISSION_TYPES } from '../../../src/protocol/enums/acl-permission-types.js';
-import { ACL_RESOURCE_TYPES } from '../../../src/protocol/enums/acl-resource-types.js';
-import { RESOURCE_PATTERN_TYPES } from '../../../src/protocol/enums/resource-pattern-types.js';
+import { createAdmin } from '../../../src/admin/index';
+import { createProducer } from '../../../src/producer/index';
+import { ACL_OPERATION_TYPES } from '../../../src/protocol/enums/acl-operation-types';
+import { ACL_PERMISSION_TYPES } from '../../../src/protocol/enums/acl-permission-types';
+import { ACL_RESOURCE_TYPES } from '../../../src/protocol/enums/acl-resource-types';
+import { RESOURCE_PATTERN_TYPES } from '../../../src/protocol/enums/resource-pattern-types';
 import {
   createCluster,
   newLogger,
@@ -12,7 +12,7 @@ import {
   saslConnectionOpts,
   secureRandom,
   waitFor,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 function saslClients() {
   const opts = { ...saslConnectionOpts(), metadataMaxAge: 50 };

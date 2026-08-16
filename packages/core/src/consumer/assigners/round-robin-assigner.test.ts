@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Cluster } from '../../cluster/index.js';
-import { MemberAssignment, MemberMetadata } from '../assigner-protocol.js';
-import { roundRobin } from './round-robin-assigner.js';
+import type { Cluster } from '../../cluster/index';
+import { MemberAssignment, MemberMetadata } from '../assigner-protocol';
+import { roundRobin } from './round-robin-assigner';
 
 describe('consumer/assigners/round-robin-assigner', () => {
   const metadata: Record<string, { partitionId: number }[]> = {};

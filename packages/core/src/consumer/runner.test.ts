@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { KafkaJSNotImplemented, KafkaJSNumberOfRetriesExceeded, KafkaJSProtocolError } from '../errors.js';
-import { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { createErrorFromCode } from '../protocol/error-codes.js';
-import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types.js';
-import { waitFor } from '../utils/wait.js';
-import { Batch } from './batch.js';
-import type { ConsumerGroupHandle } from './consumer-group.js';
-import { Runner } from './runner.js';
-import type { EachBatchHandler, KafkaMessage } from './types.js';
+import { KafkaNotImplemented, KafkaNumberOfRetriesExceeded, KafkaProtocolError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode } from '../protocol/error-codes';
+import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
+import { waitFor } from '../utils/wait';
+import { Batch } from './batch';
+import type { ConsumerGroupHandle } from './consumer-group';
+import { Runner } from './runner';
+import type { EachBatchHandler, KafkaMessage } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -43,8 +43,8 @@ function kafkaMessage(offset: bigint): KafkaMessage {
   };
 }
 
-function rebalancingError(): KafkaJSProtocolError {
-  return new KafkaJSProtocolError(createErrorFromCode(REBALANCE_IN_PROGRESS));
+function rebalancingError(): KafkaProtocolError {
+  return new KafkaProtocolError(createErrorFromCode(REBALANCE_IN_PROGRESS));
 }
 
 describe('consumer/runner', () => {
@@ -210,7 +210,7 @@ describe('consumer/runner', () => {
   });
 
   it('calls onCrash for unknown join errors', async () => {
-    const unknownError = new KafkaJSProtocolError(createErrorFromCode(UNKNOWN));
+    const unknownError = new KafkaProtocolError(createErrorFromCode(UNKNOWN));
     const onCrash = vi.fn();
     const consumerGroup = fakeConsumerGroup({
       joinAndSync: vi.fn(async () => {
@@ -232,8 +232,8 @@ describe('consumer/runner', () => {
     expect(onCrash).toHaveBeenCalledWith(unknownError);
   });
 
-  it('crashes on KafkaJSNotImplemented errors from fetch', async () => {
-    const notImplementedError = new KafkaJSNotImplemented('not implemented');
+  it('crashes on KafkaNotImplemented errors from fetch', async () => {
+    const notImplementedError = new KafkaNotImplemented('not implemented');
     const onCrash = vi.fn();
     const consumerGroup = fakeConsumerGroup({
       fetch: vi.fn(async () => {
@@ -317,6 +317,6 @@ describe('consumer/runner', () => {
     });
     await runner.start();
     await waitFor(() => onCrash.mock.calls.length > 0);
-    expect(onCrash).toHaveBeenCalledWith(expect.any(KafkaJSNumberOfRetriesExceeded));
+    expect(onCrash).toHaveBeenCalledWith(expect.any(KafkaNumberOfRetriesExceeded));
   });
 });

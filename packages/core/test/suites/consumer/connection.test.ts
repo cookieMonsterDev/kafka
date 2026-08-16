@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { KafkaJSNonRetriableError } from '../../../src/errors.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { KafkaNonRetriableError } from '../../../src/errors';
 import {
   createCluster,
   newLogger,
@@ -9,7 +9,7 @@ import {
   secureRandom,
   sslBrokers,
   sslConnectionOpts,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.connection', () => {
   let consumer: ReturnType<typeof createConsumer> | undefined;
@@ -20,7 +20,7 @@ describe('consumer.connection', () => {
 
   it('requires a groupId', () => {
     expect(() => createConsumer({ cluster: createCluster(), groupId: '', logger: newLogger() })).toThrow(
-      KafkaJSNonRetriableError,
+      KafkaNonRetriableError,
     );
   });
 

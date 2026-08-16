@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3RequestFixture from '../fixtures/v3-request.json' with { type: 'json' };
-import { offsetCommitRequestV3 } from './request.js';
+import { offsetCommitRequestV3 } from './request';
 
 describe('protocol/requests/offset-commit/v3/request', () => {
   it('encodes matching a real fixture', async () => {

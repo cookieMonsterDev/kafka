@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTopicData } from './create-topic-data.js';
+import { createTopicData } from './create-topic-data';
 
 describe('producer/createTopicData', () => {
   it('formats data by topic and partition', () => {

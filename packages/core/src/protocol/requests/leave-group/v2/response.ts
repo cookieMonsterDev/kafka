@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { leaveGroupResponseV1 } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { leaveGroupResponseV1 } from '../v1/response';
 
 export interface LeaveGroupResponseV2Body {
   errorCode: number;

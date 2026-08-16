@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { addOffsetsToTxnRequestV0 } from './v0/request.js';
-import { addOffsetsToTxnResponseV0 } from './v0/response.js';
-import { addOffsetsToTxnRequestV1 } from './v1/request.js';
-import { addOffsetsToTxnResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { addOffsetsToTxnRequestV0 } from './v0/request';
+import { addOffsetsToTxnResponseV0 } from './v0/response';
+import { addOffsetsToTxnRequestV1 } from './v1/request';
+import { addOffsetsToTxnResponseV1 } from './v1/response';
 
 export interface AddOffsetsToTxnOptions {
   transactionalId: string;

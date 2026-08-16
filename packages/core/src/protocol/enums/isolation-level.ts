@@ -1,9 +1,14 @@
+/**
+ * Fetch isolation. `READ_COMMITTED` hides aborted transactional records up to the last stable offset.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level
+ */
 export const ISOLATION_LEVEL = Object.freeze({
-  // Makes all records visible.
+  /** All records are visible, including aborted transactional ones. */
   READ_UNCOMMITTED: 0,
-  // Non-transactional and COMMITTED transactional records are visible, up to the current LSO
-  // (last stable offset); includes the list of aborted transactions so consumers can discard
-  // ABORTED transactional records.
+  /**
+   * Non-transactional and committed transactional records are visible up to the last stable
+   * offset. Aborted transactional records are filtered using the aborted-transaction list.
+   */
   READ_COMMITTED: 1,
 });
 

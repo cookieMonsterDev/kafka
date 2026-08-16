@@ -1,11 +1,11 @@
 import { EventEmitter } from 'node:events';
-import { KafkaJSInvariantViolation } from '../../errors.js';
-import type { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import type { Logger } from '../../loggers/index.js';
-import { NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events.js';
-import type { NetworkEventMap } from '../instrumentation-events.js';
-import { SocketRequest } from './socket-request.js';
-import type { RequestEntry } from './socket-request.js';
+import { KafkaInvariantViolation } from '../../errors';
+import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import type { Logger } from '../../loggers/index';
+import { NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events';
+import type { NetworkEventMap } from '../instrumentation-events';
+import { SocketRequest } from './socket-request';
+import type { RequestEntry } from './socket-request';
 
 const REQUEST_QUEUE_EMPTY = 'requestQueueEmpty';
 const CHECK_PENDING_REQUESTS_INTERVAL = 10;
@@ -109,7 +109,7 @@ export class RequestQueue extends EventEmitter {
       enforceRequestTimeout: this.enforceRequestTimeout,
       send: () => {
         if (this.inflight.has(correlationId)) {
-          throw new KafkaJSInvariantViolation('Correlation id already exists');
+          throw new KafkaInvariantViolation('Correlation id already exists');
         }
         this.inflight.set(correlationId, socketRequest);
         pushedRequest.sendRequest();

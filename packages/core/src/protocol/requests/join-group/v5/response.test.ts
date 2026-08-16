@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v2AssignerMetadataFixture from '../fixtures/v2-assigner-metadata.json' with { type: 'json' };
 import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
-import { joinGroupResponseV5 } from './response.js';
+import { joinGroupResponseV5 } from './response';
 
 describe('protocol/requests/join-group/v5/response', () => {
   it('decodes a real fixture, including group_instance_id per member', async () => {

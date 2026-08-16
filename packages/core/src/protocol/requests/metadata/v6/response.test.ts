@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v5ResponseFixture from '../fixtures/v5-response.json' with { type: 'json' };
-import { metadataResponseV6 } from './response.js';
+import { metadataResponseV6 } from './response';
 
 describe('protocol/requests/metadata/v6/response', () => {
   it('decodes the v5 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

@@ -1,4 +1,4 @@
-import { KafkaJSInvalidVarIntError, KafkaJSInvalidLongError } from '../errors.js';
+import { KafkaInvalidVarIntError, KafkaInvalidLongError } from '../errors';
 
 const INT8_SIZE = 1;
 const INT16_SIZE = 2;
@@ -24,9 +24,10 @@ export interface ArrayReader<T> {
 }
 
 /**
- * Wire-format reader for the Kafka protocol, the mirror image of `Encoder`. Every read advances
- * an internal offset; out-of-range reads throw rather than silently returning `undefined`, so
- * callers never have to null-check a decoded primitive.
+ * Wire-format reader for the Kafka protocol. Every read advances an internal offset;
+ * out-of-range reads throw rather than returning `undefined`.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export class Decoder {
   static int32Size(): number {
@@ -264,7 +265,7 @@ export class Decoder {
       result |= (currentByte & OTHER_BITS) << i;
       i += 7;
       if (i > 28) {
-        throw new KafkaJSInvalidVarIntError('Invalid VarInt, must contain 5 bytes or less');
+        throw new KafkaInvalidVarIntError('Invalid VarInt, must contain 5 bytes or less');
       }
       currentByte = this.#readByte(this.offset++);
     }
@@ -296,7 +297,7 @@ export class Decoder {
 
     do {
       if (i > 63n) {
-        throw new KafkaJSInvalidLongError('Invalid Long, must contain 9 bytes or less');
+        throw new KafkaInvalidLongError('Invalid Long, must contain 9 bytes or less');
       }
       currentByte = this.#readByte(this.offset++);
       result += BigInt(currentByte & OTHER_BITS) << i;

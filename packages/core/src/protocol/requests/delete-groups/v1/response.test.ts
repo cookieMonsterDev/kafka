@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { deleteGroupsResponseV1 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { deleteGroupsResponseV1 } from './response';
 
 describe('protocol/requests/delete-groups/v1/response', () => {
   it('decodes the v0 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

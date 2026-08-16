@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
+import { Broker } from '../../../src/broker/index';
 import {
   createConnectionPool,
   connectionOpts,
@@ -7,7 +7,7 @@ import {
   saslEntries,
   saslSCRAM256ConnectionOpts,
   sslConnectionOpts,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('broker.connection', () => {
   let broker: Broker | undefined;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { sharedPromiseTo } from './shared-promise-to.js';
+import { sharedPromiseTo } from './shared-promise-to';
 
 describe('utils/sharedPromiseTo', () => {
   const deferred = <T>() => {

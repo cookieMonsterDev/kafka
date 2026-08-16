@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v1RequestFixture from '../fixtures/v1-request.json' with { type: 'json' };
-import { offsetFetchRequestV1 } from './request.js';
+import { offsetFetchRequestV1 } from './request';
 
 describe('protocol/requests/offset-fetch/v1/request', () => {
   it('encodes groupId and topics matching a real fixture', async () => {

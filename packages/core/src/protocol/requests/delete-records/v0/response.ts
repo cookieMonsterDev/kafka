@@ -1,9 +1,9 @@
-import { KafkaJSDeleteTopicRecordsError } from '../../../../errors.js';
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import { array, field, int16, int32, int64, object, string } from '../../../schema.js';
-import type { DeleteRecordsTopic } from './request.js';
+import { KafkaDeleteTopicRecordsError } from '../../../../errors';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
+import { array, field, int16, int32, int64, object, string } from '../../../schema';
+import type { DeleteRecordsTopic } from './request';
 
 export interface DeleteRecordsResponseV0Body {
   throttleTime: number;
@@ -30,9 +30,8 @@ const bodySchema = object([field('throttleTime', int32), field('topics', array(t
 const topicNameComparator = (a: { topic: string }, b: { topic: string }): number => a.topic.localeCompare(b.topic);
 
 /**
- * The response's parse needs the original request's per-partition offsets to attach onto the
- * error it throws (kafkajs's own response.js is likewise a factory over `{ topics }` for this
- * reason), so unlike every other family this one can't be a static export.
+ * Factory over the request's per-partition offsets so parse can attach them to
+ * {@link KafkaDeleteTopicRecordsError}.
  */
 export function deleteRecordsResponseV0(requestOptions: {
   topics: readonly DeleteRecordsTopic[];
@@ -53,7 +52,7 @@ export function deleteRecordsResponseV0(requestOptions: {
         const requestTopic = requestOptions.topics[0];
         const partitionsWithErrors = topicsWithErrors[0]?.partitionsWithErrors;
         if (responseTopic && requestTopic && partitionsWithErrors) {
-          throw new KafkaJSDeleteTopicRecordsError({
+          throw new KafkaDeleteTopicRecordsError({
             partitions: partitionsWithErrors.map(({ partition, errorCode }) => ({
               partition,
               error: createErrorFromCode(errorCode),

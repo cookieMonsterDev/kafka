@@ -1,13 +1,13 @@
 import { EventEmitter } from 'node:events';
-import { isKafkaJSError, isRebalancing } from '../errors.js';
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import type { Logger } from '../loggers/index.js';
-import { retrier, type RetryOptions } from '../retry/index.js';
-import type { Batch } from './batch.js';
-import type { ConsumerGroupHandle } from './consumer-group.js';
-import { createFetchManager, type FetchManager } from './fetch-manager.js';
-import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events.js';
-import type { EachBatchHandler, EachMessageHandler, Offsets } from './types.js';
+import { isKafkaError, isRebalancing } from '../errors';
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { Logger } from '../loggers/index';
+import { retrier, type RetryOptions } from '../retry/index';
+import type { Batch } from './batch';
+import type { ConsumerGroupHandle } from './consumer-group';
+import { createFetchManager, type FetchManager } from './fetch-manager';
+import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
+import type { EachBatchHandler, EachMessageHandler, Offsets } from './types';
 
 const CONSUMING_START = 'consuming-start';
 const CONSUMING_STOP = 'consuming-stop';
@@ -148,7 +148,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (error.name === 'KafkaJSNotImplemented' || error.name === 'KafkaJSNoBrokerAvailableError') {
+        if (error.name === 'KafkaNotImplemented' || error.name === 'KafkaNoBrokerAvailableError') {
           bail(error);
           return;
         }
@@ -245,7 +245,7 @@ export class Runner extends EventEmitter {
           pause,
         });
       } catch (e) {
-        if (!isKafkaJSError(e)) {
+        if (!isKafkaError(e)) {
           this.logger.error(`Error when calling eachMessage`, {
             topic,
             partition,
@@ -309,7 +309,7 @@ export class Runner extends EventEmitter {
         isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
       });
     } catch (e) {
-      if (!isKafkaJSError(e)) {
+      if (!isKafkaError(e)) {
         this.logger.error(`Error when calling eachBatch`, {
           topic,
           partition,
@@ -456,7 +456,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (error.name === 'KafkaJSNotImplemented') {
+        if (error.name === 'KafkaNotImplemented') {
           bail(error);
           return;
         }

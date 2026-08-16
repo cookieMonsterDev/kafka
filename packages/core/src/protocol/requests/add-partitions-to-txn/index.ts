@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { addPartitionsToTxnRequestV0 } from './v0/request.js';
-import { addPartitionsToTxnResponseV0 } from './v0/response.js';
-import { addPartitionsToTxnRequestV1 } from './v1/request.js';
-import { addPartitionsToTxnResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { addPartitionsToTxnRequestV0 } from './v0/request';
+import { addPartitionsToTxnResponseV0 } from './v0/response';
+import { addPartitionsToTxnRequestV1 } from './v1/request';
+import { addPartitionsToTxnResponseV1 } from './v1/response';
 
 export interface AddPartitionsToTxnOptions {
   transactionalId: string;

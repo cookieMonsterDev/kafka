@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
-import { KafkaJSNonRetriableError } from '../../errors.js';
-import type { Logger } from '../../loggers/index.js';
-import { TRANSACTION_STATES, type TransactionState } from './transaction-states.js';
+import { KafkaNonRetriableError } from '../../errors';
+import type { Logger } from '../../loggers/index';
+import { TRANSACTION_STATES, type TransactionState } from './transaction-states';
 
 /**
  * Typed as a `Record<TransactionState, ...>` (rather than a bare object literal) so this is
@@ -31,7 +31,7 @@ export interface TransactionStateGuard {
 /**
  * Guards a plain object's methods so each only runs while the machine is in one of its declared
  * `legalStates` - otherwise it rejects (or, for `async: false`, throws synchronously) with a
- * `KafkaJSNonRetriableError` instead of running at all.
+ * `KafkaNonRetriableError` instead of running at all.
  */
 export class TransactionStateMachine extends EventEmitter {
   readonly #logger: Logger;
@@ -57,7 +57,7 @@ export class TransactionStateMachine extends EventEmitter {
     this.#logger.debug(`Transaction state transition ${this.#currentState} --> ${state}`);
 
     if (!VALID_STATE_TRANSITIONS[this.#currentState].includes(state)) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         `Transaction state exception: Invalid transition ${this.#currentState} --> ${state}`,
       );
     }
@@ -77,14 +77,14 @@ export class TransactionStateMachine extends EventEmitter {
 
       const fn = rawObject[key];
       if (typeof fn !== 'function') {
-        throw new KafkaJSNonRetriableError(`Cannot add guard on missing method "${key}"`);
+        throw new KafkaNonRetriableError(`Cannot add guard on missing method "${key}"`);
       }
 
       const { legalStates, async: isAsync = true } = guard;
 
       guarded[key] = (...args: unknown[]): unknown => {
         if (!legalStates.includes(this.#currentState)) {
-          const error = new KafkaJSNonRetriableError(
+          const error = new KafkaNonRetriableError(
             `Transaction state exception: Cannot call "${key}" in state "${this.#currentState}"`,
           );
           if (isAsync) return Promise.reject(error);

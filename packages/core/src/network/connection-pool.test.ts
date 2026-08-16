@@ -1,10 +1,10 @@
 import net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { Encoder } from '../protocol/encoder.js';
-import { API_KEYS } from '../protocol/requests/api-keys.js';
-import { ConnectionPool } from './connection-pool.js';
-import { createDefaultSocketFactory } from './socket-factory.js';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { Encoder } from '../protocol/encoder';
+import { API_KEYS } from '../protocol/requests/api-keys';
+import { ConnectionPool } from './connection-pool';
+import { createDefaultSocketFactory } from './socket-factory';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

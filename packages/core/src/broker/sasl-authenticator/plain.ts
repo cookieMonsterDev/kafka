@@ -1,7 +1,7 @@
-import { KafkaJSSASLAuthenticationError } from '../../errors.js';
-import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection.js';
-import { plainRequest, plainResponse } from '../../protocol/sasl/plain.js';
-import type { PlainSaslConfig } from '../../protocol/sasl/plain.js';
+import { KafkaSASLAuthenticationError } from '../../errors';
+import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection';
+import { plainRequest, plainResponse } from '../../protocol/sasl/plain';
+import type { PlainSaslConfig } from '../../protocol/sasl/plain';
 
 export function plainAuthenticatorProvider(
   sasl: PlainSaslConfig,
@@ -9,7 +9,7 @@ export function plainAuthenticatorProvider(
   return ({ host, port, logger, saslAuthenticate }) => ({
     authenticate: async () => {
       if (sasl.username == null || sasl.password == null) {
-        throw new KafkaJSSASLAuthenticationError('SASL Plain: Invalid username or password');
+        throw new KafkaSASLAuthenticationError('SASL Plain: Invalid username or password');
       }
 
       const broker = `${host}:${port}`;
@@ -19,7 +19,7 @@ export function plainAuthenticatorProvider(
         await saslAuthenticate({ request: plainRequest(sasl), response: plainResponse });
         logger.debug('SASL PLAIN authentication successful', { broker });
       } catch (e) {
-        const error = new KafkaJSSASLAuthenticationError(`SASL PLAIN authentication failed: ${(e as Error).message}`);
+        const error = new KafkaSASLAuthenticationError(`SASL PLAIN authentication failed: ${(e as Error).message}`);
         logger.error(error.message, { broker });
         throw error;
       }

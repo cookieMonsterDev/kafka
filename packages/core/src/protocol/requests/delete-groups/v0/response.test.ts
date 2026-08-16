@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { deleteGroupsResponseV0 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { deleteGroupsResponseV0 } from './response';
 
 describe('protocol/requests/delete-groups/v0/response', () => {
   it('decodes per-group results, never throwing from parse', async () => {

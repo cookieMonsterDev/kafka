@@ -1,7 +1,7 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, object } from '../../../schema.js';
-import { checkOffsetFetchPartitionErrors } from '../shared.js';
-import { responseSchema } from '../v1/response.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, object } from '../../../schema';
+import { checkOffsetFetchPartitionErrors } from '../shared';
+import { responseSchema } from '../v1/response';
 
 /**
  * OffsetFetch Response (Version: 2) => [responses] error_code

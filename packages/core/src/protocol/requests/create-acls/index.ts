@@ -1,6 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { createAclsRequestV1 } from './v1/request.js';
-import { createAclsResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { createAclsRequestV1 } from './v1/request';
+import { createAclsResponseV1 } from './v1/response';
 
 export interface CreateAclsOptions {
   creations: {

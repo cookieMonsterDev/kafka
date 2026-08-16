@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CreateTopics } from './index.js';
+import { CreateTopics } from './index';
 
 describe('protocol/requests/create-topics', () => {
   it('implements versions 2 through 3', () => {

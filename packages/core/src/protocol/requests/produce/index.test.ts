@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Produce } from './index.js';
+import { Produce } from './index';
 
 describe('protocol/requests/produce', () => {
   it('implements versions 3 through 7 (v0-v2 removed in Kafka 4.0)', () => {

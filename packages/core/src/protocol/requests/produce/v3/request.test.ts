@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3RequestFixture from '../fixtures/v3-request.json' with { type: 'json' };
-import { produceRequestV3 } from './request.js';
+import { produceRequestV3 } from './request';
 
 describe('protocol/requests/produce/v3/request', () => {
   it('sets expectResponse to false when acks=0', () => {
@@ -14,7 +14,7 @@ describe('protocol/requests/produce/v3/request', () => {
     expect(request.expectResponse?.()).toBe(false);
   });
 
-  it('encodes a request matching a real kafkajs fixture', async () => {
+  it('encodes a request matching a captured protocol fixture', async () => {
     const encoder = await produceRequestV3({
       transactionalId: null,
       acks: -1,

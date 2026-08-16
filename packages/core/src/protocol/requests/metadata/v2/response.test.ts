@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { metadataResponseV2 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { metadataResponseV2 } from './response';
 
 describe('protocol/requests/metadata/v2/response', () => {
   it('decodes clusterId alongside the v1 fields', async () => {

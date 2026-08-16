@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ListGroups } from './index.js';
+import { ListGroups } from './index';
 
 describe('protocol/requests/list-groups', () => {
   it('implements versions 0 through 2', () => {

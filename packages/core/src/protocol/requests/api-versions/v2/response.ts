@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { apiVersionsResponseV1, type ApiVersionsResponseV1Body } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { apiVersionsResponseV1, type ApiVersionsResponseV1Body } from '../v1/response';
 
 export type ApiVersionsResponseV2Body = Omit<ApiVersionsResponseV1Body, 'throttleTime'> & {
   throttleTime: number;

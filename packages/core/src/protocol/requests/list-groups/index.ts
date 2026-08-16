@@ -1,10 +1,10 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { listGroupsRequestV0 } from './v0/request.js';
-import { listGroupsResponseV0 } from './v0/response.js';
-import { listGroupsRequestV1 } from './v1/request.js';
-import { listGroupsResponseV1 } from './v1/response.js';
-import { listGroupsRequestV2 } from './v2/request.js';
-import { listGroupsResponseV2 } from './v2/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { listGroupsRequestV0 } from './v0/request';
+import { listGroupsResponseV0 } from './v0/response';
+import { listGroupsRequestV1 } from './v1/request';
+import { listGroupsResponseV1 } from './v1/response';
+import { listGroupsRequestV2 } from './v2/request';
+import { listGroupsResponseV2 } from './v2/response';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<Record<string, never>>>> = {
   0: () => ({ request: listGroupsRequestV0({}), response: listGroupsResponseV0 }),

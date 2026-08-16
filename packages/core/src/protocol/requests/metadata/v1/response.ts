@@ -8,8 +8,8 @@ import {
   nullableString,
   object,
   string,
-} from '../../../schema.js';
-import { checkTopicMetadataErrors } from '../shared.js';
+} from '../../../schema';
+import { checkTopicMetadataErrors } from '../shared';
 
 /**
  * Metadata Response (Version: 1) => [brokers] controller_id [topic_metadata]

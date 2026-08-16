@@ -1,6 +1,6 @@
-import { Encoder } from '../../../encoder.js';
-import type { RequestDefinition } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { Encoder } from '../../../encoder';
+import type { RequestDefinition } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 export interface AlterPartitionReassignmentsRequestV0Partition {
   partition: number;
@@ -40,9 +40,8 @@ function encodeTopic({ topic, partitionAssignment }: AlterPartitionReassignments
  *       partition_index => INT32
  *       replicas => INT32
  *
- * A flexible-version API (compact strings/arrays, TAG_BUFFER framing) — the schema DSL in
- * `protocol/schema.ts` only wraps the non-flexible wire shapes, so this is hand-written directly
- * against `Encoder`'s existing `writeUVarInt*` primitives, same as kafkajs's own hand-rolled encode.
+ * Flexible-version API (compact strings/arrays, TAG_BUFFER). Hand-written against
+ * `Encoder`'s `writeUVarInt*` primitives because the schema DSL covers non-flexible shapes only.
  *
  * The leading `writeUVarIntBytes()` before `timeout_ms` isn't in the BNF above — it stands in for
  * the flexible request *header*'s trailing TAG_BUFFER (header version 2, KIP-482), which the

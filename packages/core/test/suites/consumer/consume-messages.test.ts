@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import type { EachMessagePayload } from '../../../src/consumer/types.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import type { EachMessagePayload } from '../../../src/consumer/types';
 import {
   createCluster,
   createModPartitioner,
@@ -11,7 +11,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.consumeMessages', () => {
   let topicName: string;

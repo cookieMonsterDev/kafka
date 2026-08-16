@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { metadataRequestV4 } from './request.js';
+import { Encoder } from '../../../encoder';
+import { metadataRequestV4 } from './request';
 
 describe('protocol/requests/metadata/v4/request', () => {
   it('encodes topics then allowAutoTopicCreation', async () => {

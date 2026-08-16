@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { KafkaJSAggregateError } from '../../../../errors.js';
+import { KafkaAggregateError } from '../../../../errors';
 import v0ResponseErrorFixture from '../fixtures/v0-response-error.json' with { type: 'json' };
 import v0ResponseFixture from '../fixtures/v0-response.json' with { type: 'json' };
-import { alterPartitionReassignmentsResponseV0 } from './response.js';
+import { alterPartitionReassignmentsResponseV0 } from './response';
 
 describe('protocol/requests/alter-partition-reassignments/v0/response', () => {
   it('decodes a successful response', async () => {
@@ -32,7 +32,7 @@ describe('protocol/requests/alter-partition-reassignments/v0/response', () => {
     const data = await alterPartitionReassignmentsResponseV0.decode(Buffer.from(v0ResponseErrorFixture.data));
 
     const promise = alterPartitionReassignmentsResponseV0.parse(data);
-    await expect(promise).rejects.toThrow(KafkaJSAggregateError);
+    await expect(promise).rejects.toThrow(KafkaAggregateError);
     await expect(promise).rejects.toThrow(
       expect.objectContaining({
         message: 'Errors altering partition reassignments',

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v1MemberAssignmentFixture from '../fixtures/v1-member-assignment.json' with { type: 'json' };
 import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
-import { syncGroupResponseV2 } from './response.js';
+import { syncGroupResponseV2 } from './response';
 
 describe('protocol/requests/sync-group/v2/response', () => {
   it('decodes the v1 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

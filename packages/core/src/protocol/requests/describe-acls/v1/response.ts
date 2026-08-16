@@ -1,7 +1,7 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, field, int16, int8, nullableString, object, string } from '../../../schema.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, field, int16, int8, nullableString, object, string } from '../../../schema';
+import type { ResponseDefinition } from '../../../schema';
 
 /**
  * On quota violation, brokers send out responses before throttling.

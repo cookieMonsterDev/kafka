@@ -1,4 +1,4 @@
-import { createErrorFromCode, failure } from '../../error-codes.js';
+import { createErrorFromCode, failure } from '../../error-codes';
 
 export const REPLICA_ID = -1;
 
@@ -13,11 +13,7 @@ export interface ListOffsetsTopicOptions {
   partitions: ListOffsetsPartitionOptions[];
 }
 
-/**
- * Every version's request body defaults each partition's `timestamp` to -1n (latest) when
- * omitted, same as kafkajs's own per-partition default — applied here since the schema itself
- * has no notion of field defaults.
- */
+/** Default each partition's `timestamp` to `-1n` (latest) when omitted. */
 export function withDefaultTimestamps(
   topics: readonly ListOffsetsTopicOptions[],
 ): { topic: string; partitions: { partition: number; timestamp: bigint }[] }[] {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
+import { createAdmin } from '../../../src/admin/index';
 import {
   createCluster,
   newLogger,
@@ -7,7 +7,7 @@ import {
   saslEntries,
   sslBrokers,
   sslConnectionOpts,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('admin.connection', () => {
   let admin: ReturnType<typeof createAdmin> | undefined;

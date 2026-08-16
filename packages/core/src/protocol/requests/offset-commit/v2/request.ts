@@ -1,5 +1,5 @@
-import { array, defineRequest, field, int32, int64, nullableString, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, defineRequest, field, int32, int64, nullableString, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * OffsetCommit Request (Version: 2) => group_id group_generation_id member_id retention_time [topics]

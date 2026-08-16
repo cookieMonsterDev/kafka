@@ -1,6 +1,6 @@
-import type { RequestDefinition } from '../../../schema.js';
-import type { FetchRequestOptions } from '../shared.js';
-import { fetchRequestV9 } from '../v9/request.js';
+import type { RequestDefinition } from '../../../schema';
+import type { FetchRequestOptions } from '../shared';
+import { fetchRequestV9 } from '../v9/request';
 
 /**
  * ZSTD Compression.

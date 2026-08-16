@@ -9,5 +9,5 @@
  *       log_append_time => INT64
  *   throttle_time_ms => INT32
  */
-export { produceResponseV3 } from '../shared.js';
-export type { ProduceResponseV3Body } from '../shared.js';
+export { produceResponseV3 } from '../shared';
+export type { ProduceResponseV3Body } from '../shared';

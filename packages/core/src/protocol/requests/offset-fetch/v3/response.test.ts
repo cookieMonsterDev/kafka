@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3ResponseFixture from '../fixtures/v3-response.json' with { type: 'json' };
-import { offsetFetchResponseV3 } from './response.js';
+import { offsetFetchResponseV3 } from './response';
 
 describe('protocol/requests/offset-fetch/v3/response', () => {
   it('decodes a real fixture, including throttleTime and the top-level error_code', async () => {

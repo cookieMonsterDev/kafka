@@ -1,9 +1,10 @@
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSNonRetriableError } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import type { RecordBatchContext, RecordHeaders } from '../protocol/records/record.js';
-import type { RetryOptions } from '../retry/index.js';
+import type { Cluster } from '../cluster/index';
+import { KafkaNonRetriableError } from '../errors';
+import type { Logger } from '../loggers/index';
+import type { RecordBatchContext, RecordHeaders } from '../protocol/records/record';
+import type { RetryOptions } from '../retry/index';
 
+/** Decoded record from a Fetch response. @see https://kafka.apache.org/43/implementation/messages/ */
 export interface KafkaMessage {
   magicByte: number;
   attributes: number;
@@ -25,7 +26,7 @@ export interface EachMessagePayload {
 }
 
 export interface EachBatchPayload {
-  batch: import('./batch.js').Batch;
+  batch: import('./batch').Batch;
   resolveOffset: (offset: bigint) => void;
   heartbeat: () => Promise<void>;
   pause: () => () => void;
@@ -38,11 +39,20 @@ export interface EachBatchPayload {
 export type EachBatchHandler = (payload: EachBatchPayload) => Promise<void>;
 export type EachMessageHandler = (payload: EachMessagePayload) => Promise<void>;
 
+/**
+ * Options for {@link Consumer.run} and {@link Consumer.stream}.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ */
 export interface ConsumerRunConfig {
+  /** Commit offsets automatically after processing. */
   autoCommit?: boolean;
+  /** Commit at least this often, in milliseconds. */
   autoCommitInterval?: number | null;
+  /** Commit after this many messages have been processed. */
   autoCommitThreshold?: number | null;
+  /** When true, resolve the last offset of each batch after `eachBatch` returns. */
   eachBatchAutoResolve?: boolean;
+  /** How many partitions to process in parallel. */
   partitionsConsumedConcurrently?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
@@ -103,6 +113,10 @@ export interface GroupProtocol {
   metadata: Buffer;
 }
 
+/**
+ * Partition assigner used during SyncGroup.
+ * @see https://kafka.apache.org/43/design/design/
+ */
 export interface Assigner {
   name: string;
   version: number;
@@ -134,11 +148,7 @@ export interface GroupDescription {
   state: string;
 }
 
-/**
- * Coerce a user-supplied offset to `bigint`. Accepts `bigint` and integer `number` at the type
- * level; strings are still parsed at runtime so plain-JS callers that haven't migrated off
- * kafkajs's string offsets don't fail on a type-system-only change.
- */
+/** Coerce a user-supplied offset to `bigint`. Accepts `bigint`, integer `number`, and numeric strings. */
 export function parseOffset(offset: unknown): bigint {
   if (typeof offset === 'bigint') return offset;
   if (typeof offset === 'number' && Number.isInteger(offset)) return BigInt(offset);
@@ -150,5 +160,5 @@ export function parseOffset(offset: unknown): bigint {
     }
   }
 
-  throw new KafkaJSNonRetriableError(`Invalid offset, expected a long received ${String(offset)}`);
+  throw new KafkaNonRetriableError(`Invalid offset, expected a long received ${String(offset)}`);
 }

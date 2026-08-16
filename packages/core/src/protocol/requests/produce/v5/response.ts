@@ -1,5 +1,5 @@
-import { array, defineResponse, field, int16, int32, int64, object, string } from '../../../schema.js';
-import { parseProduceResponse } from '../shared.js';
+import { array, defineResponse, field, int16, int32, int64, object, string } from '../../../schema';
+import { parseProduceResponse } from '../shared';
 
 /**
  * Produce Response (Version: 5) => [responses] throttle_time_ms

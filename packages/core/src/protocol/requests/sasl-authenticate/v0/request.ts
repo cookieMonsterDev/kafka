@@ -1,12 +1,13 @@
-import { defineRequest, field, object, rawBytes } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, object, rawBytes } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * SaslAuthenticate Request (Version: 0) => sasl_auth_bytes
  *   sasl_auth_bytes => BYTES
  *
- * Despite the BNF, the body is the raw SASL mechanism bytes with no length prefix — matches
- * kafkajs's `Encoder#writeBuffer`, not `#writeBytes`.
+ * The body is the raw SASL mechanism bytes with no extra length prefix (`writeBuffer`).
+ *
+ * @see https://kafka.apache.org/43/security/authentication-using-sasl/
  */
 const requestSchema = object([field('authBytes', rawBytes)]);
 

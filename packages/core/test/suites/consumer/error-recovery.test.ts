@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { KafkaJSNumberOfRetriesExceeded } from '../../../src/errors.js';
-import type { EachMessagePayload } from '../../../src/consumer/types.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import { KafkaNumberOfRetriesExceeded } from '../../../src/errors';
+import type { EachMessagePayload } from '../../../src/consumer/types';
 import {
   createCluster,
   createTopic,
@@ -11,7 +11,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.errorRecovery', () => {
   let topicName: string;
@@ -80,7 +80,7 @@ describe('consumer.errorRecovery', () => {
     const join = waitForConsumerToJoinGroup(consumer);
     await consumer.run({
       eachMessage: async () => {
-        throw new KafkaJSNumberOfRetriesExceeded(new Error('fatal'), { retryCount: 0, retryTime: 0 });
+        throw new KafkaNumberOfRetriesExceeded(new Error('fatal'), { retryCount: 0, retryTime: 0 });
       },
     });
     await join;

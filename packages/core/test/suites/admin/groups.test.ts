@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { createConsumer } from '../../../src/consumer/index.js';
+import { createAdmin } from '../../../src/admin/index';
+import { createConsumer } from '../../../src/consumer/index';
 import {
   createCluster,
   createTopic,
   newLogger,
   secureRandom,
   waitForConsumerToJoinGroup,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('admin.groups', () => {
   let topicName: string;

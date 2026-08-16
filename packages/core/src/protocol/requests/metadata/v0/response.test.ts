@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { metadataResponseV0 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { metadataResponseV0 } from './response';
 
 function buildResponse({ topicErrorCode = 0, partitionErrorCode = 0 } = {}): Buffer {
   return new Encoder()

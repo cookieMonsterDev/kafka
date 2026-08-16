@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SaslAuthenticate } from './index.js';
+import { SaslAuthenticate } from './index';
 
 describe('protocol/requests/sasl-authenticate', () => {
   it('implements versions 0 and 1', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { InstrumentationEvent } from './event.js';
+import { InstrumentationEvent } from './event';
 
 describe('instrumentation/InstrumentationEvent', () => {
   it('carries the type, payload and a timestamp', () => {

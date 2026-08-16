@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaJSNonRetriableError, KafkaJSRequestTimeoutError } from '../../errors.js';
-import { InstrumentationEventEmitter } from '../../instrumentation/emitter.js';
-import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events.js';
-import type { NetworkEventMap } from '../instrumentation-events.js';
-import { SocketRequest } from './socket-request.js';
-import type { RequestEntry, SocketRequestOptions } from './socket-request.js';
+import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
+import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
+import type { NetworkEventMap } from '../instrumentation-events';
+import { SocketRequest } from './socket-request';
+import type { RequestEntry, SocketRequestOptions } from './socket-request';
 
 describe('network/request-queue/SocketRequest', () => {
   let correlationId = 0;
@@ -54,7 +54,7 @@ describe('network/request-queue/SocketRequest', () => {
       const request = createSocketRequest({ send: sendRequest });
 
       request.send();
-      expect(() => request.send()).toThrow(KafkaJSNonRetriableError);
+      expect(() => request.send()).toThrow(KafkaNonRetriableError);
       expect(sendRequest).toHaveBeenCalledTimes(1);
     });
 
@@ -67,7 +67,7 @@ describe('network/request-queue/SocketRequest', () => {
       request.timeoutRequest();
 
       expect(rejectedSpy).toHaveBeenCalledOnce();
-      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaJSRequestTimeoutError));
+      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
       expect(timeoutHandler).toHaveBeenCalledOnce();
     });
 
@@ -79,7 +79,7 @@ describe('network/request-queue/SocketRequest', () => {
       await new Promise((resolve) => setTimeout(resolve, 60));
 
       expect(timeoutHandler).toHaveBeenCalledOnce();
-      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaJSRequestTimeoutError));
+      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
     });
 
     it('never times out when enforceRequestTimeout is false', async () => {
@@ -130,7 +130,7 @@ describe('network/request-queue/SocketRequest', () => {
       const request = createSocketRequest();
       request.send();
       request.completed({ size, payload });
-      expect(() => request.completed({ size, payload })).toThrow(KafkaJSNonRetriableError);
+      expect(() => request.completed({ size, payload })).toThrow(KafkaNonRetriableError);
       expect(request.entry.resolve).toHaveBeenCalledTimes(1);
     });
   });
@@ -153,7 +153,7 @@ describe('network/request-queue/SocketRequest', () => {
       const request = createSocketRequest();
       request.send();
       request.rejected(error);
-      expect(() => request.rejected(error)).toThrow(KafkaJSNonRetriableError);
+      expect(() => request.rejected(error)).toThrow(KafkaNonRetriableError);
       expect(request.entry.reject).toHaveBeenCalledTimes(1);
     });
 

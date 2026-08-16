@@ -1,5 +1,5 @@
-import { boolean, defineRequest, field, nullableArray, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { boolean, defineRequest, field, nullableArray, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * Metadata Request (Version: 4) => [topics] allow_auto_topic_creation

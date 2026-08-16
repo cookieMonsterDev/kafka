@@ -1,16 +1,16 @@
-import type { Cluster, TopicOffsets } from '../cluster/index.js';
-import { KafkaJSNonRetriableError } from '../errors.js';
-import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter.js';
-import type { InstrumentationEvent } from '../instrumentation/event.js';
-import type { Logger } from '../loggers/index.js';
-import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status.js';
-import { retrier, type RetryOptions } from '../retry/index.js';
-import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort.js';
-import { createEosManager, type EosManager } from './eos-manager/index.js';
-import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events.js';
-import { createMessageProducer } from './message-producer.js';
-import { DefaultPartitioner } from './partitioners/index.js';
-import type { CustomPartitioner, ProducerBatch, ProducerRecord, RecordMetadata } from './types.js';
+import type { Cluster, TopicOffsets } from '../cluster/index';
+import { KafkaNonRetriableError } from '../errors';
+import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
+import type { InstrumentationEvent } from '../instrumentation/event';
+import type { Logger } from '../loggers/index';
+import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
+import { retrier, type RetryOptions } from '../retry/index';
+import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
+import { createEosManager, type EosManager } from './eos-manager/index';
+import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
+import { createMessageProducer } from './message-producer';
+import { DefaultPartitioner } from './partitioners/index';
+import type { CustomPartitioner, ProducerBatch, ProducerRecord, RecordMetadata } from './types';
 
 export interface ProducerOptions {
   cluster: Cluster;
@@ -23,15 +23,24 @@ export interface ProducerOptions {
   instrumentationEmitter?: InstrumentationEventEmitter | null;
 }
 
+/**
+ * In-flight producer transaction. Exactly one may be active per transactional producer.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
+ */
 export interface Transaction {
   send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
   sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
+  /** Commit consumer-group offsets as part of this transaction (exactly-once consume-transform-produce). */
   sendOffsets(options: { consumerGroupId: string; topics: readonly TopicOffsets[] }): Promise<void>;
   commit(): Promise<void>;
   abort(): Promise<void>;
   isActive(): boolean;
 }
 
+/**
+ * Producer returned by {@link Kafka.producer}.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/
+ */
 export interface Producer {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;
@@ -43,6 +52,7 @@ export interface Producer {
   ) => RemoveInstrumentationEventListener;
   send: (record: ProducerRecord & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
   sendBatch: (batch: ProducerBatch & { signal?: AbortSignal }) => Promise<RecordMetadata[]>;
+  /** Begin a transaction. Requires `transactionalId` on the producer. */
   transaction: () => Promise<Transaction>;
   logger: () => Logger;
   [Symbol.asyncDispose]: () => Promise<void>;
@@ -54,8 +64,9 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 /**
- * The user-facing producer: message sending (via `message-producer.ts`), transactions (via
- * `eos-manager/`), and instrumentation events. Mirrors kafkajs's `producer/index.js`.
+ * User-facing producer: send path, optional transactions, and instrumentation events.
+ *
+ * @see https://kafka.apache.org/43/configuration/producer-configs/
  */
 export function createProducer({
   cluster,
@@ -71,7 +82,7 @@ export function createProducer({
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
 
   if (idempotent && producerRetry.retries !== undefined && producerRetry.retries < 1) {
-    throw new KafkaJSNonRetriableError('Idempotent producer must allow retries to protect against transient errors');
+    throw new KafkaNonRetriableError('Idempotent producer must allow retries to protect against transient errors');
   }
 
   const logger = rootLogger.namespace('Producer');
@@ -108,7 +119,7 @@ export function createProducer({
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
   ): RemoveInstrumentationEventListener {
     if (!EVENT_NAMES.has(eventName)) {
-      throw new KafkaJSNonRetriableError(`Event name should be one of ${EVENT_KEYS}`);
+      throw new KafkaNonRetriableError(`Event name should be one of ${EVENT_KEYS}`);
     }
 
     return instrumentationEmitter.addListener(unwrap(eventName), (event: InstrumentationEvent<unknown>) => {
@@ -122,7 +133,7 @@ export function createProducer({
 
   async function transaction(): Promise<Transaction> {
     if (!transactionalId) {
-      throw new KafkaJSNonRetriableError('Must provide transactional id for transactional producer');
+      throw new KafkaNonRetriableError('Must provide transactional id for transactional producer');
     }
 
     let transactionDidEnd = false;
@@ -136,7 +147,7 @@ export function createProducer({
     const activeEosManager = transactionalEosManager;
 
     if (activeEosManager.isInTransaction()) {
-      throw new KafkaJSNonRetriableError(
+      throw new KafkaNonRetriableError(
         'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
       );
     }
@@ -164,7 +175,7 @@ export function createProducer({
     ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
         if (!isActive()) {
-          return Promise.reject(new KafkaJSNonRetriableError('Cannot continue to use transaction once ended'));
+          return Promise.reject(new KafkaNonRetriableError('Cannot continue to use transaction once ended'));
         }
 
         return fn(...args);

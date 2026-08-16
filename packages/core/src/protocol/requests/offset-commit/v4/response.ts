@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { offsetCommitResponseV3 } from '../v3/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { offsetCommitResponseV3 } from '../v3/response';
 
 export interface OffsetCommitResponseV4Body {
   responses: { topic: string; partitions: { partition: number; errorCode: number }[] }[];

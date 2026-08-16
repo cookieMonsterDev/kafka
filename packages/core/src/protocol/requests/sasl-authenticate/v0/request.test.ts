@@ -3,7 +3,7 @@ import plainBytesFixture from '../fixtures/plain-bytes.json' with { type: 'json'
 import scram256BytesFixture from '../fixtures/scram256-bytes.json' with { type: 'json' };
 import v0RequestPlainFixture from '../fixtures/v0-request-plain.json' with { type: 'json' };
 import v0RequestScram256Fixture from '../fixtures/v0-request-scram256.json' with { type: 'json' };
-import { saslAuthenticateRequestV0 } from './request.js';
+import { saslAuthenticateRequestV0 } from './request';
 
 describe('protocol/requests/sasl-authenticate/v0/request', () => {
   it('encodes PLAIN auth bytes with no length prefix, matching the real fixture', async () => {

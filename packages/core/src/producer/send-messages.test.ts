@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Cluster, PartitionMetadata } from '../cluster/index.js';
-import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { retrier } from '../retry/index.js';
-import type { EosManager } from './eos-manager/index.js';
-import { createSendMessages } from './send-messages.js';
-import type { PartitionerArgs } from './types.js';
+import type { Cluster, PartitionMetadata } from '../cluster/index';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { retrier } from '../retry/index';
+import type { EosManager } from './eos-manager/index';
+import { createSendMessages } from './send-messages';
+import type { PartitionerArgs } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';

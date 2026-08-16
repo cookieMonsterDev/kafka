@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { oauthBearerRequest } from './oauth-bearer.js';
+import { Decoder } from '../decoder';
+import { oauthBearerRequest } from './oauth-bearer';
 
 const SOH = String.fromCharCode(1);
 

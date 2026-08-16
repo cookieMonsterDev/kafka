@@ -1,24 +1,24 @@
-import { KafkaJSSASLAuthenticationError } from '../../errors.js';
-import type { Logger } from '../../loggers/index.js';
+import { KafkaSASLAuthenticationError } from '../../errors';
+import type { Logger } from '../../loggers/index';
 import type {
   AuthenticationProviderArgs,
   Connection,
   CreateSaslAuthenticator,
   SaslAuthenticationProvider,
-} from '../../network/connection.js';
-import { asTypedSend } from '../../network/connection.js';
-import { API_KEYS } from '../../protocol/requests/api-keys.js';
-import type { BrokerVersions, ProtocolFactory } from '../../protocol/requests/index.js';
-import { lookup } from '../../protocol/requests/index.js';
-import { SaslAuthenticate } from '../../protocol/requests/sasl-authenticate/index.js';
-import type { SaslAuthenticateOptions } from '../../protocol/requests/sasl-authenticate/index.js';
-import { SaslHandshake } from '../../protocol/requests/sasl-handshake/index.js';
-import type { SaslHandshakeOptions } from '../../protocol/requests/sasl-handshake/index.js';
-import { awsIamAuthenticatorProvider } from './aws-iam.js';
-import { oauthBearerAuthenticatorProvider } from './oauth-bearer.js';
-import { plainAuthenticatorProvider } from './plain.js';
-import { scram256AuthenticatorProvider } from './scram256.js';
-import { scram512AuthenticatorProvider } from './scram512.js';
+} from '../../network/connection';
+import { asTypedSend } from '../../network/connection';
+import { API_KEYS } from '../../protocol/requests/api-keys';
+import type { BrokerVersions, ProtocolFactory } from '../../protocol/requests/index';
+import { lookup } from '../../protocol/requests/index';
+import { SaslAuthenticate } from '../../protocol/requests/sasl-authenticate/index';
+import type { SaslAuthenticateOptions } from '../../protocol/requests/sasl-authenticate/index';
+import { SaslHandshake } from '../../protocol/requests/sasl-handshake/index';
+import type { SaslHandshakeOptions } from '../../protocol/requests/sasl-handshake/index';
+import { awsIamAuthenticatorProvider } from './aws-iam';
+import { oauthBearerAuthenticatorProvider } from './oauth-bearer';
+import { plainAuthenticatorProvider } from './plain';
+import { scram256AuthenticatorProvider } from './scram256';
+import { scram512AuthenticatorProvider } from './scram512';
 
 interface SaslHandshakeResult {
   errorCode: number;
@@ -75,13 +75,13 @@ export class SASLAuthenticator {
 
   async authenticate(): Promise<void> {
     const sasl = this.#connection.sasl;
-    if (!sasl) throw new KafkaJSSASLAuthenticationError('SASL is not configured on this connection');
+    if (!sasl) throw new KafkaSASLAuthenticationError('SASL is not configured on this connection');
 
     const mechanism = sasl.mechanism.toUpperCase();
     const handshake = await this.#connection.send(asTypedSend<SaslHandshakeResult>(this.#saslHandshake({ mechanism })));
 
     if (!handshake?.enabledMechanisms.includes(mechanism)) {
-      throw new KafkaJSSASLAuthenticationError(`SASL ${mechanism} mechanism is not supported by the server`);
+      throw new KafkaSASLAuthenticationError(`SASL ${mechanism} mechanism is not supported by the server`);
     }
 
     const saslAuthenticate = async <Decoded, ParseResult = Decoded>({
@@ -113,7 +113,7 @@ export class SASLAuthenticator {
     }
 
     if (!sasl.authenticationProvider) {
-      throw new KafkaJSSASLAuthenticationError(`SASL ${mechanism} has no authentication provider configured`);
+      throw new KafkaSASLAuthenticationError(`SASL ${mechanism} has no authentication provider configured`);
     }
 
     await sasl

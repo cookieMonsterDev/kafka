@@ -22,7 +22,7 @@
  * permit the client to login as the authorization identity. If both steps succeed, the user is
  * logged in.
  */
-import { Encoder } from '../encoder.js';
+import { Encoder } from '../encoder';
 
 const SOH = String.fromCharCode(1); // Start Of Header
 

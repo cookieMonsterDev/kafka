@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { seq } from './seq.js';
+import { seq } from './seq';
 
 describe('utils/seq', () => {
   it('defaults to the index', () => {

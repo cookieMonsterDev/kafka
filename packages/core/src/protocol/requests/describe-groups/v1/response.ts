@@ -1,6 +1,6 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int32, object } from '../../../schema.js';
-import { groupSchema } from '../v0/response.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int32, object } from '../../../schema';
+import { groupSchema } from '../v0/response';
 
 /**
  * DescribeGroups Response (Version: 1) => throttle_time_ms [groups]

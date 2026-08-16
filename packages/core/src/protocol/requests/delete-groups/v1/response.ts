@@ -1,6 +1,6 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import type { DeleteGroupsResult } from '../v0/response.js';
-import { deleteGroupsResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import type { DeleteGroupsResult } from '../v0/response';
+import { deleteGroupsResponseV0 } from '../v0/response';
 
 export interface DeleteGroupsResponseV1Body {
   results: DeleteGroupsResult[];

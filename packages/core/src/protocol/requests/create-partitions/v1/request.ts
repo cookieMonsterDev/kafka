@@ -1,6 +1,6 @@
-import { array, boolean, defineRequest, field, int32, object } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
-import { topicPartitionSchema } from '../v0/request.js';
+import { array, boolean, defineRequest, field, int32, object } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
+import { topicPartitionSchema } from '../v0/request';
 
 /**
  * CreatePartitions Request (Version: 1) => [topic_partitions] timeout validate_only

@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { KafkaJSTimeout } from '../errors.js';
+import { KafkaTimeout } from '../errors';
 
 export interface SleepOptions {
   signal?: AbortSignal;
@@ -20,7 +20,7 @@ export interface WaitForOptions {
 /**
  * Polls `fn` every `delay` ms until it returns a truthy value, then resolves with it.
  * `false` is the keep-polling sentinel and is never the resolved value.
- * Rejects with `KafkaJSTimeout` after `maxWait` ms, or with `signal`'s abort reason.
+ * Rejects with `KafkaTimeout` after `maxWait` ms, or with `signal`'s abort reason.
  */
 export function waitFor<T>(
   fn: (elapsed: number) => T | false | Promise<T | false>,
@@ -66,7 +66,7 @@ export function waitFor<T>(
 
     if (!ignoreTimeout) {
       timeoutId = setTimeout(() => {
-        settle(() => reject(new KafkaJSTimeout(timeoutMessage)));
+        settle(() => reject(new KafkaTimeout(timeoutMessage)));
       }, maxWait);
     }
 

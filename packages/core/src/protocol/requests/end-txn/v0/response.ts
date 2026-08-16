@@ -1,5 +1,5 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { defineResponse, field, int16, int32, object } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { defineResponse, field, int16, int32, object } from '../../../schema';
 
 /**
  * EndTxn Response (Version: 0) => throttle_time_ms error_code

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createAdmin } from '../../../src/admin/index.js';
-import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types.js';
-import { createCluster, createTopic, newLogger, secureRandom, waitFor } from '../../helpers/index.js';
+import { createAdmin } from '../../../src/admin/index';
+import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types';
+import { createCluster, createTopic, newLogger, secureRandom, waitFor } from '../../helpers/index';
 
 describe('admin.configs', () => {
   let topicName: string;

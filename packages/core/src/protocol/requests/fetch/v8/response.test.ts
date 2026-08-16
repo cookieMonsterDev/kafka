@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v8ResponseFixture from '../fixtures/v8-response.json' with { type: 'json' };
-import { fetchResponseV8 } from './response.js';
+import { fetchResponseV8 } from './response';
 
 const batchContext = {
   firstOffset: expect.any(BigInt),

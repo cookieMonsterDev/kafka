@@ -1,5 +1,5 @@
-import { filterAbortedMessages, type AbortedTransaction } from './filter-aborted-messages.js';
-import type { KafkaMessage } from './types.js';
+import { filterAbortedMessages, type AbortedTransaction } from './filter-aborted-messages';
+import type { KafkaMessage } from './types';
 
 export interface BatchPartitionData {
   partition: number;

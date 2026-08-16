@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createProducer } from '../../../src/producer/index.js';
+import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
   createModPartitioner,
@@ -11,7 +11,7 @@ import {
   secureRandom,
   sslBrokers,
   sslConnectionOpts,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('producer.send', () => {
   let topicName: string;

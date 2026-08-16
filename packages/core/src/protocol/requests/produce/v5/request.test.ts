@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { COMPRESSION_TYPES } from '../../../compression/index.js';
+import { COMPRESSION_TYPES } from '../../../compression/index';
 import v5RequestFixture from '../fixtures/v5-request.json' with { type: 'json' };
-import { produceRequestV5 } from './request.js';
-import type { ProduceRequestOptions } from '../shared.js';
+import { produceRequestV5 } from './request';
+import type { ProduceRequestOptions } from '../shared';
 
 const args: ProduceRequestOptions = {
   acks: -1,
@@ -56,7 +56,7 @@ describe('protocol/requests/produce/v5/request', () => {
     expect(produceRequestV5({ ...args, acks: 0 }).expectResponse?.()).toBe(false);
   });
 
-  it('encodes a request matching a real kafkajs fixture', async () => {
+  it('encodes a request matching a captured protocol fixture', async () => {
     const encoder = await produceRequestV5(args).encode();
     expect(encoder.buffer).toEqual(Buffer.from(v5RequestFixture.data));
   });

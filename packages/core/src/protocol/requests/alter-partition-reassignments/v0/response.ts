@@ -1,7 +1,7 @@
-import { KafkaJSAggregateError, KafkaJSAlterPartitionReassignmentsError } from '../../../../errors.js';
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { KafkaAggregateError, KafkaAlterPartitionReassignmentsError } from '../../../../errors';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
 
 export interface AlterPartitionReassignmentsResponseV0Partition {
   partition: number;
@@ -59,10 +59,7 @@ export const alterPartitionReassignmentsResponseV0: ResponseDefinition<AlterPart
     return { throttleTime, errorCode, responses: decoder.readUVarIntArray(decodeResponse) ?? [] };
   },
   parse: async (data) => {
-    // A request-level failure has no specific topic/partition to attach, unlike the per-partition
-    // case below, so it surfaces as a plain protocol error rather than KafkaJSAlterPartitionReassignmentsError
-    // (kafkajs's own code calls that error's constructor with only the error argument here, relying
-    // on JS to leave `topic`/`partition` as `undefined`; our stronger typing makes both required).
+    // Request-level failures have no topic/partition, so they surface as a plain protocol error.
     if (failure(data.errorCode)) {
       throw createErrorFromCode(data.errorCode);
     }
@@ -72,11 +69,11 @@ export const alterPartitionReassignmentsResponseV0: ResponseDefinition<AlterPart
     );
 
     if (topicPartitionsWithError.length > 0) {
-      throw new KafkaJSAggregateError(
+      throw new KafkaAggregateError(
         'Errors altering partition reassignments',
         topicPartitionsWithError.map(
           ({ topic, partition, errorCode }) =>
-            new KafkaJSAlterPartitionReassignmentsError(createErrorFromCode(errorCode), topic, partition),
+            new KafkaAlterPartitionReassignmentsError(createErrorFromCode(errorCode), topic, partition),
         ),
       );
     }

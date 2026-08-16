@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_KEYS, apiKeyName } from './api-keys.js';
+import { API_KEYS, apiKeyName } from './api-keys';
 
 describe('protocol/requests/api-keys', () => {
   it('assigns the well-known Kafka protocol api keys', () => {

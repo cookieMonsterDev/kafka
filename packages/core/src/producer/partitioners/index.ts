@@ -1,10 +1,10 @@
-import { DefaultPartitioner } from './default/index.js';
-import { LegacyPartitioner } from './legacy/index.js';
+import { DefaultPartitioner } from './default/index';
+import { LegacyPartitioner } from './legacy/index';
 
 export { DefaultPartitioner, LegacyPartitioner };
 
 /**
- * @deprecated Use `DefaultPartitioner` instead. The Java-compatible partitioner was renamed
- * `DefaultPartitioner` and made the default in 2.0.0.
+ * Alias of {@link DefaultPartitioner} (Java-compatible murmur2).
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#partitioner.class
  */
 export const JavaCompatiblePartitioner = DefaultPartitioner;

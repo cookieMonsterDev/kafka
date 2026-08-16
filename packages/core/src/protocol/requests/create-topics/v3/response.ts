@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { type CreateTopicsResponseV2Body, createTopicsResponseV2 } from '../v2/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { type CreateTopicsResponseV2Body, createTopicsResponseV2 } from '../v2/response';
 
 export interface CreateTopicsResponseV3Body extends CreateTopicsResponseV2Body {
   clientSideThrottleTime: number;

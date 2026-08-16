@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { KafkaJSNonRetriableError } from '../../../errors.js';
-import { randomBytes } from './random-bytes.js';
+import { KafkaNonRetriableError } from '../../../errors';
+import { randomBytes } from './random-bytes';
 
 describe('producer/partitioners/legacy/randomBytes', () => {
   it('throws when requesting more bytes than the entropy budget allows', () => {
     expect(() => randomBytes(65537)).toThrow(
-      new KafkaJSNonRetriableError('Byte length (65537) exceeds the max number of bytes of entropy available (65536)'),
+      new KafkaNonRetriableError('Byte length (65537) exceeds the max number of bytes of entropy available (65536)'),
     );
   });
 

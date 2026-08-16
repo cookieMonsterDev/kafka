@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { plainAuthenticatorProvider } from './plain.js';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { plainAuthenticatorProvider } from './plain';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

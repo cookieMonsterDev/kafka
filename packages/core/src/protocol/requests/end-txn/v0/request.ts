@@ -1,5 +1,5 @@
-import { boolean, defineRequest, field, int16, int64, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { boolean, defineRequest, field, int16, int64, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * EndTxn Request (Version: 0) => transactional_id producer_id producer_epoch transaction_result

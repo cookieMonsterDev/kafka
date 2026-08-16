@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v5RequestFixture from '../fixtures/v5-request.json' with { type: 'json' };
-import { offsetCommitRequestV5 } from './request.js';
+import { offsetCommitRequestV5 } from './request';
 
 describe('protocol/requests/offset-commit/v5/request', () => {
   it('encodes without retentionTime, matching a real fixture', async () => {

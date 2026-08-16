@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import v1MemberAssignmentFixture from '../fixtures/v1-member-assignment.json' with { type: 'json' };
 import v1MemberMetadataFixture from '../fixtures/v1-member-metadata.json' with { type: 'json' };
 import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
-import { describeGroupsResponseV1 } from './response.js';
+import { describeGroupsResponseV1 } from './response';
 
 describe('protocol/requests/describe-groups/v1/response', () => {
   it('decodes a real fixture, including throttleTime', async () => {

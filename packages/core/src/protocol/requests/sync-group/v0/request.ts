@@ -1,5 +1,5 @@
-import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 /**
  * SyncGroup Request (Version: 0) => group_id generation_id member_id [group_assignment]
@@ -10,11 +10,9 @@ import { API_KEYS } from '../../api-keys.js';
  *     member_id => STRING
  *     member_assignment => BYTES
  *
- * kafkajs's `writeBytes` falls back to `String(value)` for a non-Buffer, non-string
- * `memberAssignment` — its own v0 request unit test relies on this and captures the literal
- * string `"[object Object]"` in its fixture. `bytes` here requires a real `Buffer`, so that
- * particular footgun isn't reproducible; real callers always pass an encoded assignment anyway
- * (e.g. `AssignerProtocol.MemberAssignment.encode(...)`).
+ * `memberAssignment` must be a `Buffer` (typically from `AssignerProtocol.MemberAssignment.encode`).
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 const groupAssignmentSchema = object([field('memberId', string), field('memberAssignment', bytes)]);
 const requestSchema = object([

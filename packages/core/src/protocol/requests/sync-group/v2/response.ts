@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { syncGroupResponseV1 } from '../v1/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { syncGroupResponseV1 } from '../v1/response';
 
 type SyncGroupResponseV1Body = Awaited<ReturnType<typeof syncGroupResponseV1.decode>>;
 export type SyncGroupResponseV2Body = Omit<SyncGroupResponseV1Body, 'throttleTime'> & {

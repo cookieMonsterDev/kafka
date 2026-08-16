@@ -3,8 +3,8 @@
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
 
     "strict": true,
     "noUncheckedIndexedAccess": true,

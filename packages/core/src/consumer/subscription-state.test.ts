@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SubscriptionState } from './subscription-state.js';
+import { SubscriptionState } from './subscription-state';
 
 const byTopic = (a: { topic: string }, b: { topic: string }): number => a.topic.localeCompare(b.topic);
 

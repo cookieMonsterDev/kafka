@@ -1,6 +1,6 @@
-import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection.js';
-import { DIGESTS, SCRAM } from './scram.js';
-import type { ScramSaslConfig } from './scram.js';
+import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../../network/connection';
+import { DIGESTS, SCRAM } from './scram';
+import type { ScramSaslConfig } from './scram';
 
 export function scram512AuthenticatorProvider(
   sasl: ScramSaslConfig,

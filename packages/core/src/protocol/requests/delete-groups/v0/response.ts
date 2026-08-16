@@ -1,13 +1,13 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { KafkaJSProtocolError } from '../../../../errors.js';
-import { array, field, int16, object, string } from '../../../schema.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { KafkaProtocolError } from '../../../../errors';
+import { array, field, int16, object, string } from '../../../schema';
+import type { ResponseDefinition } from '../../../schema';
 
 export interface DeleteGroupsResult {
   groupId: string;
   errorCode: number;
-  error?: KafkaJSProtocolError;
+  error?: KafkaProtocolError;
 }
 
 export interface DeleteGroupsResponseV0Body {
@@ -25,13 +25,9 @@ const resultsSchema = array(resultSchema);
  *     group_id => STRING
  *     error_code => INT16
  *
- * kafkajs names this field `throttleTimeMs` (every other family calls it `throttleTime`) and its
- * v1 wraps this decode assuming the latter name, so v1's `clientSideThrottleTime` silently reads
- * `undefined` there — a latent, inert kafkajs bug (nothing consumes it). Normalized to
- * `throttleTime` here so v1's remap is actually correct.
+ * `parse` never throws: per-group failures are attached as `.error` on each result.
  *
- * `parse` never throws: per-group failures are attached as `.error` on each result instead,
- * matching kafkajs (`admin.deleteGroups` reports failures per group, not via a single rejection).
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export const deleteGroupsResponseV0: ResponseDefinition<DeleteGroupsResponseV0Body> = {
   decode: async (rawData) => {

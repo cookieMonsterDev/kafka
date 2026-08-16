@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { API_KEYS } from './api-keys.js';
-import { ApiVersions } from './api-versions/index.js';
-import { KafkaJSServerDoesNotSupportApiKey } from '../../errors.js';
-import { lookup, NOT_IMPLEMENTED_REQUEST_DEFINITIONS } from './index.js';
+import { API_KEYS } from './api-keys';
+import { ApiVersions } from './api-versions/index';
+import { KafkaServerDoesNotSupportApiKey } from '../../errors';
+import { lookup, NOT_IMPLEMENTED_REQUEST_DEFINITIONS } from './index';
 
 describe('protocol/requests', () => {
   it('picks min(highest version we implement, highest the broker advertised)', () => {
@@ -15,11 +15,11 @@ describe('protocol/requests', () => {
     expect(factory({}).request.apiVersion).toBe(2);
   });
 
-  it('throws KafkaJSServerDoesNotSupportApiKey when the broker never advertised the api', () => {
-    expect(() => lookup({})(API_KEYS.ApiVersions, ApiVersions)).toThrow(KafkaJSServerDoesNotSupportApiKey);
+  it('throws KafkaServerDoesNotSupportApiKey when the broker never advertised the api', () => {
+    expect(() => lookup({})(API_KEYS.ApiVersions, ApiVersions)).toThrow(KafkaServerDoesNotSupportApiKey);
   });
 
-  it('the not-implemented marker always throws KafkaJSNotImplemented', () => {
+  it('the not-implemented marker always throws KafkaNotImplemented', () => {
     expect(() => NOT_IMPLEMENTED_REQUEST_DEFINITIONS.protocol({ version: 0 })).toThrow('This API is not implemented');
   });
 });

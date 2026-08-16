@@ -1,7 +1,7 @@
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, defineResponse, field, int16, int32, object } from '../../../schema.js';
-import { checkOffsetFetchPartitionErrors } from '../shared.js';
-import { responseSchema } from '../v1/response.js';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, defineResponse, field, int16, int32, object } from '../../../schema';
+import { checkOffsetFetchPartitionErrors } from '../shared';
+import { responseSchema } from '../v1/response';
 
 /**
  * OffsetFetch Response (Version: 3) => throttle_time_ms [responses] error_code

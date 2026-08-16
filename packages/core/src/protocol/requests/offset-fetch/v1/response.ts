@@ -1,5 +1,5 @@
-import { array, defineResponse, field, int16, int32, int64, nullableString, object, string } from '../../../schema.js';
-import { checkOffsetFetchPartitionErrors } from '../shared.js';
+import { array, defineResponse, field, int16, int32, int64, nullableString, object, string } from '../../../schema';
+import { checkOffsetFetchPartitionErrors } from '../shared';
 
 /**
  * OffsetFetch Response (Version: 1) => [responses]

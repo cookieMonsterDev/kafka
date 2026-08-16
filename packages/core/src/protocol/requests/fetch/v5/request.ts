@@ -1,7 +1,7 @@
-import { ISOLATION_LEVEL } from '../../../enums/isolation-level.js';
-import { array, defineRequest, field, int32, int64, int8, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
-import type { FetchRequestOptions } from '../shared.js';
+import { ISOLATION_LEVEL } from '../../../enums/isolation-level';
+import { array, defineRequest, field, int32, int64, int8, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
+import type { FetchRequestOptions } from '../shared';
 
 /**
  * Fetch Request (Version: 5) => replica_id max_wait_time min_bytes max_bytes isolation_level [topics]

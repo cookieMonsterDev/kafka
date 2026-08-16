@@ -1,7 +1,7 @@
-import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes.js';
-import { Decoder } from '../../../decoder.js';
-import { array, field, int16, nullableString, object, string } from '../../../schema.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
+import { Decoder } from '../../../decoder';
+import { array, field, int16, nullableString, object, string } from '../../../schema';
+import type { ResponseDefinition } from '../../../schema';
 
 export interface LeaveGroupResponseV3Member {
   memberId: string;

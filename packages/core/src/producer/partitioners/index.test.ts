@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './index.js';
+import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './index';
 
 describe('producer/partitioners', () => {
   it('exposes the default and legacy partitioners', () => {

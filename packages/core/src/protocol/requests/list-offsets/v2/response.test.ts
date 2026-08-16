@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
-import { listOffsetsResponseV2 } from './response.js';
+import { listOffsetsResponseV2 } from './response';
 
 describe('protocol/requests/list-offsets/v2/response', () => {
   it('decodes a real fixture, including throttleTime', async () => {

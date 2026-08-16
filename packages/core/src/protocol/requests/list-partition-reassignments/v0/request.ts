@@ -1,6 +1,6 @@
-import { Encoder } from '../../../encoder.js';
-import type { RequestDefinition } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { Encoder } from '../../../encoder';
+import type { RequestDefinition } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 export interface ListPartitionReassignmentsRequestV0Topic {
   topic: string;
@@ -29,8 +29,10 @@ function encodeTopic({ topic, partitions }: ListPartitionReassignmentsRequestV0T
  * Flexible-version (see `alter-partition-reassignments/v0/request.ts` for why the leading
  * `writeUVarIntBytes()` stands in for the request header's own TAG_BUFFER).
  *
- * `topics: null` means "list every in-flight reassignment" — `writeUVarIntArray` writes a real
- * compact-array null marker (`0`) for it, not an empty array, matching kafkajs's own encode.
+ * `topics: null` means "list every in-flight reassignment" and is encoded as a compact-array
+ * null marker (`0`), not an empty array.
+ *
+ * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
  */
 export const listPartitionReassignmentsRequestV0: (
   values: ListPartitionReassignmentsRequestV0Options,

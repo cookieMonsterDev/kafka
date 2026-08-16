@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v6ResponseFixture from '../fixtures/v6-response.json' with { type: 'json' };
-import { produceResponseV6 } from './response.js';
+import { produceResponseV6 } from './response';
 
 describe('protocol/requests/produce/v6/response', () => {
   it('decodes a real fixture, remapping throttleTime to clientSideThrottleTime', async () => {

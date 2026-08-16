@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import v1ResponseFixture from '../fixtures/v1-response.json' with { type: 'json' };
-import { CONFIG_SOURCE } from '../../../enums/config-source.js';
-import { describeConfigsResponseV1 } from './response.js';
+import { CONFIG_SOURCE } from '../../../enums/config-source';
+import { describeConfigsResponseV1 } from './response';
 
 describe('protocol/requests/describe-configs/v1/response', () => {
   it('decodes a real fixture, deriving isDefault from configSource', async () => {

@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import v4RequestFixture from '../fixtures/v4-request.json' with { type: 'json' };
-import { fetchRequestV4 } from './request.js';
+import { fetchRequestV4 } from './request';
 
 describe('protocol/requests/fetch/v4/request', () => {
-  it('encodes a request matching a real kafkajs fixture', async () => {
-    // kafkajs's own captured fixture omitted `replicaId`, which its untyped JS silently
-    // coerced to 0 on the wire; this port requires it explicitly.
+  it('encodes a request matching a captured protocol fixture', async () => {
+    // The captured fixture omitted `replicaId`; the encoder requires it explicitly (0 on the wire).
     const encoder = await fetchRequestV4({
       replicaId: 0,
       maxWaitTime: 5,

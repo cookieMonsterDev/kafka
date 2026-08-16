@@ -1,5 +1,5 @@
-import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { array, bytes, defineRequest, field, int32, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 const groupProtocolSchema = object([field('name', string), field('metadata', bytes)]);
 const requestSchema = object([

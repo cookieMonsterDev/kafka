@@ -1,4 +1,4 @@
-import { createErrorFromCode, failure } from '../../error-codes.js';
+import { createErrorFromCode, failure } from '../../error-codes';
 
 export interface OffsetFetchTopicOptions {
   topic: string;

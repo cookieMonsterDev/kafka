@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Broker } from '../../broker/index.js';
-import type { Cluster } from '../../cluster/index.js';
-import { KafkaJSNonRetriableError } from '../../errors.js';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types.js';
-import { createEosManager } from './index.js';
+import type { Broker } from '../../broker/index';
+import type { Cluster } from '../../cluster/index';
+import { KafkaNonRetriableError } from '../../errors';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
+import { createEosManager } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -181,11 +181,11 @@ describe('producer/eosManager', () => {
       });
 
       await expect(eosManager.commit()).rejects.toEqual(
-        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
+        new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
       );
       await eosManager.initProducerId();
       await expect(eosManager.commit()).rejects.toEqual(
-        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "READY"'),
+        new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "READY"'),
       );
 
       eosManager.beginTransaction();
@@ -347,7 +347,7 @@ describe('producer/eosManager', () => {
       await eosManager.initProducerId();
 
       expect(() => eosManager.beginTransaction()).toThrow(
-        new KafkaJSNonRetriableError('Method unavailable if non-transactional'),
+        new KafkaNonRetriableError('Method unavailable if non-transactional'),
       );
     });
 
@@ -358,7 +358,7 @@ describe('producer/eosManager', () => {
         const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
 
         await expect((eosManager[method] as () => Promise<unknown>)()).rejects.toEqual(
-          new KafkaJSNonRetriableError(`Transaction state exception: Cannot call "${method}" in state "UNINITIALIZED"`),
+          new KafkaNonRetriableError(`Transaction state exception: Cannot call "${method}" in state "UNINITIALIZED"`),
         );
       });
     }

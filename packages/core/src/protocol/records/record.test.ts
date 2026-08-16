@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { TIMESTAMP_TYPES } from '../enums/timestamp-types.js';
-import { decodeRecord, encodeRecord, type RecordBatchContext } from './record.js';
+import { Decoder } from '../decoder';
+import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
+import { decodeRecord, encodeRecord, type RecordBatchContext } from './record';
 
-// Captured from kafkajs's recordBatch/fixtures/v0_record.json — a record with a key, a value,
-// and two headers (one single-valued, one repeated twice).
+// Record with a key, a value, and two headers (one single-valued, one repeated).
 const V0_RECORD_FIXTURE = Buffer.from([
   0, 0, 0, 10, 107, 101, 121, 45, 48, 24, 115, 111, 109, 101, 45, 118, 97, 108, 117, 101, 45, 48, 6, 24, 104, 101, 97,
   100, 101, 114, 45, 107, 101, 121, 45, 48, 28, 104, 101, 97, 100, 101, 114, 45, 118, 97, 108, 117, 101, 45, 48, 24,

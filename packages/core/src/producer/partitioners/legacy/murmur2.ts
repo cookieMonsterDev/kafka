@@ -12,18 +12,11 @@ function byteAt(data: Buffer, index: number): number {
 }
 
 /**
- * This is the pre-2.0.0 partitioner's hash, kept bit-for-bit identical to kafkajs's own
- * `legacy/murmur2.js` on purpose - `LegacyPartitioner` exists solely so callers upgrading from an
- * old kafkajs can keep routing keys to the exact same partitions their existing consumers expect,
- * and that means preserving two accidental quirks the "fixed" `default` hash (`../default/murmur2.js`)
- * does not have:
+ * Pre-2.0 murmur2 used by {@link LegacyPartitioner}. Two quirks differ from the default hash:
+ * multiplication uses plain `*` (precision loss above 2^53), and the loop bound is `length / 4`
+ * rather than `Math.floor(length / 4)` (out-of-range reads return 0).
  *
- *  - Multiplication uses plain `*`, not a 32-bit-correct multiply. Once an intermediate product
- *    exceeds 2^53 this loses precision that a real 32-bit multiply would not, so the result is
- *    genuinely different from (and not simply "less correct than") the default hash.
- *  - The loop bound is `length / 4`, not `Math.floor(length / 4)`. For an input whose length isn't
- *    a multiple of 4, this lets the loop run one extra iteration and read past the end of `data` -
- *    `byteAt` returns 0 for those out-of-range reads, mirroring `undefined & 0xff` in the original.
+ * @see https://github.com/apache/kafka/blob/0.10.2/clients/src/main/java/org/apache/kafka/common/utils/Utils.java#L364
  */
 export function murmur2(key: Buffer | string | number): number {
   const data = Buffer.isBuffer(key) ? key : Buffer.from(String(key));
@@ -44,9 +37,7 @@ export function murmur2(key: Buffer | string | number): number {
     h ^= k;
   }
 
-  // Handle the last few bytes of the input array. Written as a cascading if (rather than kafkajs's
-  // own fallthrough switch) so a length%4 of 3 runs all three blocks, 2 runs the last two, and 1
-  // runs only the last - same intentional fallthrough, without tripping `noFallthroughCasesInSwitch`.
+  // Remainder bytes: length%4 of 3 runs all three blocks, 2 the last two, 1 only the last.
   const remainder = length % 4;
   if (remainder >= 3) {
     h ^= byteAt(data, (length & ~3) + 2) << 16;

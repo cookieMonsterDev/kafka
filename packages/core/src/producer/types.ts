@@ -1,7 +1,8 @@
-import type { PartitionMetadata } from '../cluster/index.js';
-import type { CompressionType } from '../protocol/compression/index.js';
-import type { RecordHeaders } from '../protocol/records/record.js';
+import type { PartitionMetadata } from '../cluster/index';
+import type { CompressionType } from '../protocol/compression/index';
+import type { RecordHeaders } from '../protocol/records/record';
 
+/** One record to produce. @see https://kafka.apache.org/43/implementation/messages/ */
 export interface Message {
   key?: Buffer | string | null;
   value: Buffer | string | null;
@@ -16,15 +17,25 @@ export interface TopicMessages {
   messages: readonly Message[];
 }
 
+/** Single-topic produce request. @see https://kafka.apache.org/43/configuration/producer-configs/ */
 export interface ProducerRecord {
   topic: string;
   messages: readonly Message[];
+  /**
+   * Acknowledgments required before the request is complete. `0` none, `1` leader, `-1`/`all` ISR.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   */
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
 }
 
+/** Multi-topic produce request. */
 export interface ProducerBatch {
+  /**
+   * Acknowledgments required before the request is complete. `0` none, `1` leader, `-1`/`all` ISR.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   */
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
@@ -32,9 +43,9 @@ export interface ProducerBatch {
 }
 
 /**
- * Every field the Produce response can carry for a partition (`RecordMetadata.offset`/`timestamp`
- * only ever existed on the legacy message-set response, dropped along with message-set v0/v1 -
- * see the port's D3 decision).
+ * Per-partition Produce response. Offsets are `bigint`; message-set v0/v1 fields are not present.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
  */
 export interface RecordMetadata {
   topicName: string;

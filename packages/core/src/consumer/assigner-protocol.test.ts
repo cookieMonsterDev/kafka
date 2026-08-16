@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { MemberAssignment, MemberMetadata } from './assigner-protocol.js';
+import { MemberAssignment, MemberMetadata } from './assigner-protocol';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/round-robin-assigner');
 

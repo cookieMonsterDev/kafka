@@ -1,6 +1,6 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import type { ResponseDefinition } from '../../../schema.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import type { ResponseDefinition } from '../../../schema';
 
 export interface ListPartitionReassignmentsResponseV0Partition {
   partition: number;

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import v5RequestFixture from '../fixtures/v5-request.json' with { type: 'json' };
-import { fetchRequestV5 } from './request.js';
+import { fetchRequestV5 } from './request';
 
 describe('protocol/requests/fetch/v5/request', () => {
-  it('encodes a request matching a real kafkajs fixture', async () => {
+  it('encodes a request matching a captured protocol fixture', async () => {
     const encoder = await fetchRequestV5({
       replicaId: -1,
       maxWaitTime: 100,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { arrayDiff } from './array-diff.js';
+import { arrayDiff } from './array-diff';
 
 describe('utils/arrayDiff', () => {
   it('returns the elements in A that are not in B', () => {

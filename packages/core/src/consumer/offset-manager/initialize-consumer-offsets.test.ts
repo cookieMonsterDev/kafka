@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initializeConsumerOffsets } from './initialize-consumer-offsets.js';
+import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 
 describe('consumer/offset-manager/initialize-consumer-offsets', () => {
   it('replaces consumer offsets assigned to -1 with topic offsets', () => {

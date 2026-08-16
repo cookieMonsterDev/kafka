@@ -1,4 +1,4 @@
-import { LOG_LEVELS, type LogCreator, type LogEntry } from './index.js';
+import { LOG_LEVELS, type LogCreator, type LogEntry } from './index';
 
 export const consoleLogCreator: LogCreator = () => {
   return (entry: LogEntry) => {

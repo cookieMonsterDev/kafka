@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { responseSerializer } from './response-serializer.js';
+import { responseSerializer } from './response-serializer';
 
 describe('producer/responseSerializer', () => {
   it('flattens topics/partitions into one record per partition', () => {

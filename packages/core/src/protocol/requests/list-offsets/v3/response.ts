@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { listOffsetsResponseV2 } from '../v2/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { listOffsetsResponseV2 } from '../v2/response';
 
 export interface ListOffsetsResponseV3Body {
   responses: {

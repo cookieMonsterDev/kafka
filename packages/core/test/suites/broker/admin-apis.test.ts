@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
-import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types.js';
+import { Broker } from '../../../src/broker/index';
+import { CONFIG_RESOURCE_TYPES } from '../../../src/protocol/enums/config-resource-types';
 import {
   advertisedAddress,
   createConnectionPool,
@@ -8,7 +8,7 @@ import {
   retryProtocol,
   secureRandom,
   TRANSIENT_METADATA_ERRORS,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('broker.adminApis', () => {
   let topicName: string;

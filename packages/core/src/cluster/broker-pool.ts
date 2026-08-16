@@ -1,14 +1,14 @@
-import { Broker } from '../broker/index.js';
-import { KafkaJSBrokerNotFound, KafkaJSProtocolError } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import type { BrokerVersions } from '../protocol/requests/index.js';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
-import { arrayDiff } from '../utils/array-diff.js';
-import { shuffle } from '../utils/shuffle.js';
-import type { RetryOptions } from '../retry/index.js';
-import { retrier } from '../retry/index.js';
-import type { ConnectionPoolBuilder } from './connection-pool-builder.js';
+import { Broker } from '../broker/index';
+import { KafkaBrokerNotFound, KafkaProtocolError } from '../errors';
+import type { Logger } from '../loggers/index';
+import { staleMetadata } from '../protocol/error-codes';
+import type { BrokerVersions } from '../protocol/requests/index';
+import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import { arrayDiff } from '../utils/array-diff';
+import { shuffle } from '../utils/shuffle';
+import type { RetryOptions } from '../retry/index';
+import { retrier } from '../retry/index';
+import type { ConnectionPoolBuilder } from './connection-pool-builder';
 
 function hasBrokerBeenReplaced(
   broker: Broker,
@@ -100,7 +100,7 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaJSConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
           // The connection pool builder always rotates the seed broker.
           await this.createSeedBroker();
           this.logger.error(`Failed to connect to seed broker, trying another broker from the list: ${error.message}`, {
@@ -224,7 +224,7 @@ export class BrokerPool {
     const broker = this.brokers[nodeId];
 
     if (!broker) {
-      throw new KafkaJSBrokerNotFound(`Broker ${nodeId} not found in the cached metadata`);
+      throw new KafkaBrokerNotFound(`Broker ${nodeId} not found in the cached metadata`);
     }
 
     await this.connectBroker(broker);
@@ -234,7 +234,7 @@ export class BrokerPool {
   async withBroker<T>(callback: (params: { nodeId: string; broker: Broker }) => Promise<T>): Promise<T | null> {
     const nodeIds = shuffle(Object.keys(this.brokers));
     if (nodeIds.length === 0) {
-      throw new KafkaJSBrokerNotFound('No brokers in the broker pool');
+      throw new KafkaBrokerNotFound('No brokers in the broker pool');
     }
 
     for (const nodeId of nodeIds) {
@@ -280,13 +280,13 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaJSConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
           await broker.disconnect();
         }
 
         // To avoid reconnecting to an unavailable host, bail on connection errors and refresh
         // metadata on a higher level before reconnecting.
-        if (error.name === 'KafkaJSConnectionError') {
+        if (error.name === 'KafkaConnectionError') {
           bail(error);
           return;
         }
@@ -300,7 +300,7 @@ export class BrokerPool {
           });
 
           this.logger.error('Failed to connect to broker, reconnecting', { retryCount, retryTime });
-          throw new KafkaJSProtocolError({ message: error.message, retriable: true });
+          throw new KafkaProtocolError({ message: error.message, retriable: true });
         }
 
         if (error.retriable) throw error;

@@ -1,5 +1,5 @@
-import type { ProduceMessage, ProducePartitionData, ProduceTopicData } from '../protocol/requests/produce/shared.js';
-import type { Message } from './types.js';
+import type { ProduceMessage, ProducePartitionData, ProduceTopicData } from '../protocol/requests/produce/shared';
+import type { Message } from './types';
 
 export interface TopicDataInput {
   topic: string;

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
-import { API_KEYS } from '../../../src/protocol/requests/api-keys.js';
-import { connectionOpts, createConnectionPool, newLogger } from '../../helpers/index.js';
+import { Broker } from '../../../src/broker/index';
+import { API_KEYS } from '../../../src/protocol/requests/api-keys';
+import { connectionOpts, createConnectionPool, newLogger } from '../../helpers/index';
 
 describe('broker.apiVersions', () => {
   let broker: Broker | undefined;

@@ -1,5 +1,5 @@
-import { API_KEYS } from '../../api-keys.js';
-import { array, defineRequest, field, int8, nullableString, object } from '../../../schema.js';
+import { API_KEYS } from '../../api-keys';
+import { array, defineRequest, field, int8, nullableString, object } from '../../../schema';
 
 /**
  * DeleteAcls Request (Version: 1) => [filters]

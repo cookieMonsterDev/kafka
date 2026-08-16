@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
   createTopic,
   newLogger,
   secureRandom,
   waitForConsumerToJoinGroup,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('consumer.rebalance', () => {
   let topicName: string;

@@ -1,5 +1,5 @@
-import type { RequestDefinition } from '../../../schema.js';
-import { createProduceRequest, type ProduceRequestOptions } from '../shared.js';
+import type { RequestDefinition } from '../../../schema';
+import { createProduceRequest, type ProduceRequestOptions } from '../shared';
 
 /**
  * Produce Request (Version: 5) => transactional_id acks timeout [topic_data]

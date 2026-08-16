@@ -1,5 +1,5 @@
-import { array, defineResponse, field, int16, int32, int64, object, string } from '../../../schema.js';
-import { checkListOffsetsErrors } from '../shared.js';
+import { array, defineResponse, field, int16, int32, int64, object, string } from '../../../schema';
+import { checkListOffsetsErrors } from '../shared';
 
 /**
  * ListOffsets Response (Version: 1) => [responses]

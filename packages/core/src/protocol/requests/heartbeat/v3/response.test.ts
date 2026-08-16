@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v3ResponseFixture from '../fixtures/v3-response.json' with { type: 'json' };
-import { heartbeatResponseV3 } from './response.js';
+import { heartbeatResponseV3 } from './response';
 
 describe('protocol/requests/heartbeat/v3/response', () => {
   it('decodes a real fixture (identical wire format to v2)', async () => {

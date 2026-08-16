@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { COMPRESSION_TYPES } from '../../../compression/index.js';
+import { COMPRESSION_TYPES } from '../../../compression/index';
 import v6RequestFixture from '../fixtures/v6-request.json' with { type: 'json' };
-import { produceRequestV6 } from './request.js';
+import { produceRequestV6 } from './request';
 
 const messages = Array.from({ length: 10 }, (_, i) => ({
   key: `key-${i}`,
@@ -34,7 +34,7 @@ describe('protocol/requests/produce/v6/request', () => {
     expect(produceRequestV6({ ...args, acks: 0 }).expectResponse?.()).toBe(false);
   });
 
-  it('encodes a request matching a real kafkajs fixture', async () => {
+  it('encodes a request matching a captured protocol fixture', async () => {
     const encoder = await produceRequestV6(args).encode();
     expect(encoder.buffer).toEqual(Buffer.from(v6RequestFixture.data));
   });

@@ -1,8 +1,8 @@
-import { Decoder } from '../../../decoder.js';
-import { createErrorFromCode, failure } from '../../../error-codes.js';
-import { array, boolean, field, int16, int8, nullableString, object, string } from '../../../schema.js';
-import type { ResponseDefinition } from '../../../schema.js';
-import { CONFIG_SOURCE } from '../../../enums/config-source.js';
+import { Decoder } from '../../../decoder';
+import { createErrorFromCode, failure } from '../../../error-codes';
+import { array, boolean, field, int16, int8, nullableString, object, string } from '../../../schema';
+import type { ResponseDefinition } from '../../../schema';
+import { CONFIG_SOURCE } from '../../../enums/config-source';
 
 export interface DescribeConfigsSynonym {
   configName: string;

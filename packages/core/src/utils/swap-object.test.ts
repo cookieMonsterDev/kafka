@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { swapObject } from './swap-object.js';
+import { swapObject } from './swap-object';
 
 describe('utils/swapObject', () => {
   it('swaps keys with values', () => {

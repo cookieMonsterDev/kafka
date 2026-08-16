@@ -9,13 +9,13 @@ import {
   ConfigResourceTypes,
   ConfigSource,
   Kafka,
-  KafkaJSError,
-  KafkaJSNonRetriableError,
+  KafkaError,
+  KafkaNonRetriableError,
   PartitionAssigners,
   Partitioners,
   ResourcePatternTypes,
   logLevel,
-} from './index.js';
+} from './index';
 
 describe('public surface', () => {
   it('exports the Kafka client', () => {
@@ -51,7 +51,7 @@ describe('public surface', () => {
   });
 
   it('exports the error classes, not the internal helpers', () => {
-    expect(new KafkaJSError('x')).toBeInstanceOf(Error);
-    expect(new KafkaJSNonRetriableError('x').retriable).toBe(false);
+    expect(new KafkaError('x')).toBeInstanceOf(Error);
+    expect(new KafkaNonRetriableError('x').retriable).toBe(false);
   });
 });

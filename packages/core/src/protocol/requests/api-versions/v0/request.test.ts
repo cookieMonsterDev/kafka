@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v0RequestFixture from '../fixtures/v0-request.json' with { type: 'json' };
-import { apiVersionsRequestV0 } from './request.js';
+import { apiVersionsRequestV0 } from './request';
 
 describe('protocol/requests/api-versions/v0/request', () => {
   it('encodes to an empty body, matching the real fixture', async () => {

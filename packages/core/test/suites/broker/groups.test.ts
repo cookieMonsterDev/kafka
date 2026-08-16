@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Broker } from '../../../src/broker/index.js';
-import { MemberMetadata } from '../../../src/consumer/assigner-protocol.js';
-import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types.js';
+import { Broker } from '../../../src/broker/index';
+import { MemberMetadata } from '../../../src/consumer/assigner-protocol';
+import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
 import {
   advertisedAddress,
   createConnectionPool,
   newLogger,
   retryProtocol,
   secureRandom,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('broker.groups', () => {
   let groupId: string;

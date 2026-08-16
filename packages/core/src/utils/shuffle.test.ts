@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shuffle } from './shuffle.js';
+import { shuffle } from './shuffle';
 
 describe('utils/shuffle', () => {
   it('shuffles', () => {

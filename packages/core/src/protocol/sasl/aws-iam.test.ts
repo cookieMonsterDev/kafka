@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { awsIamRequest, awsIamResponse } from './aws-iam.js';
+import { Decoder } from '../decoder';
+import { awsIamRequest, awsIamResponse } from './aws-iam';
 
 const NUL = String.fromCharCode(0);
 

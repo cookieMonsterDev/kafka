@@ -1,5 +1,5 @@
-import { defineRequest, field, int32, object, string } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, int32, object, string } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 const requestSchema = object([field('groupId', string), field('groupGenerationId', int32), field('memberId', string)]);
 

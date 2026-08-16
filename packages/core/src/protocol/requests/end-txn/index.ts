@@ -1,8 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { endTxnRequestV0 } from './v0/request.js';
-import { endTxnResponseV0 } from './v0/response.js';
-import { endTxnRequestV1 } from './v1/request.js';
-import { endTxnResponseV1 } from './v1/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { endTxnRequestV0 } from './v0/request';
+import { endTxnResponseV0 } from './v0/response';
+import { endTxnRequestV1 } from './v1/request';
+import { endTxnResponseV1 } from './v1/response';
 
 export interface EndTxnOptions {
   transactionalId: string;

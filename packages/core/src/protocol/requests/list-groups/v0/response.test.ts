@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Encoder } from '../../../encoder.js';
-import { listGroupsResponseV0 } from './response.js';
+import { Encoder } from '../../../encoder';
+import { listGroupsResponseV0 } from './response';
 
 describe('protocol/requests/list-groups/v0/response', () => {
   it('decodes error_code and a list of groups', async () => {

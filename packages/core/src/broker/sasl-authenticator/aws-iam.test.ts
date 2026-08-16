@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS } from '../../loggers/index.js';
-import { awsIamAuthenticatorProvider } from './aws-iam.js';
-import type { AwsIamSaslConfig } from '../../protocol/sasl/aws-iam.js';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { awsIamAuthenticatorProvider } from './aws-iam';
+import type { AwsIamSaslConfig } from '../../protocol/sasl/aws-iam';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 

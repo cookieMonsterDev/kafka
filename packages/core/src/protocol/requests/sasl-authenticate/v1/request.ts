@@ -1,5 +1,5 @@
-import { defineRequest, field, object, rawBytes } from '../../../schema.js';
-import { API_KEYS } from '../../api-keys.js';
+import { defineRequest, field, object, rawBytes } from '../../../schema';
+import { API_KEYS } from '../../api-keys';
 
 const requestSchema = object([field('authBytes', rawBytes)]);
 

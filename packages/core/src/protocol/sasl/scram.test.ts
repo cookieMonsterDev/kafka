@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Decoder } from '../decoder.js';
-import { Encoder } from '../encoder.js';
-import { scramFinalMessageRequest, scramFirstMessageRequest, scramResponse } from './scram.js';
+import { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
+import { scramFinalMessageRequest, scramFirstMessageRequest, scramResponse } from './scram';
 
 function readBytesOrThrow(decoder: Decoder): Buffer {
   const bytes = decoder.readBytes();

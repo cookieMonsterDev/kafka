@@ -1,14 +1,14 @@
-import { createSaslAuthenticator } from '../broker/sasl-authenticator/index.js';
-import { KafkaJSConnectionError, KafkaJSNonRetriableError } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import { ConnectionPool } from '../network/connection-pool.js';
-import type { ConnectionOptions } from '../network/connection.js';
-import type { NetworkEventMap } from '../network/instrumentation-events.js';
-import type { SocketFactory } from '../network/socket-factory.js';
+import { createSaslAuthenticator } from '../broker/sasl-authenticator/index';
+import { KafkaConnectionError, KafkaNonRetriableError } from '../errors';
+import type { Logger } from '../loggers/index';
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import { ConnectionPool } from '../network/connection-pool';
+import type { ConnectionOptions } from '../network/connection';
+import type { NetworkEventMap } from '../network/instrumentation-events';
+import type { SocketFactory } from '../network/socket-factory';
 
 export interface ConnectionPoolBuilderOptions {
-  /** Resolved to the built-in default one layer up (the public `Kafka` client), same as kafkajs's own layering. */
+  /** Socket factory; the public `Kafka` client supplies the built-in default. */
   socketFactory: SocketFactory;
   brokers: readonly string[] | (() => readonly string[] | Promise<readonly string[]>);
   ssl?: ConnectionOptions['ssl'];
@@ -39,16 +39,16 @@ function isValidBroker(broker: unknown): broker is string {
 
 function validateBrokers(brokers: readonly string[] | null | undefined): asserts brokers is readonly string[] {
   if (!brokers) {
-    throw new KafkaJSNonRetriableError('Failed to connect: brokers should not be null');
+    throw new KafkaNonRetriableError('Failed to connect: brokers should not be null');
   }
 
   if (!brokers.length) {
-    throw new KafkaJSNonRetriableError('Failed to connect: brokers array is empty');
+    throw new KafkaNonRetriableError('Failed to connect: brokers array is empty');
   }
 
   brokers.forEach((broker, index) => {
     if (!isValidBroker(broker)) {
-      throw new KafkaJSNonRetriableError(`Failed to connect: broker at index ${index} is invalid "${typeof broker}"`);
+      throw new KafkaNonRetriableError(`Failed to connect: broker at index ${index} is invalid "${typeof broker}"`);
     }
   });
 }
@@ -79,7 +79,7 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
       try {
         list = await brokers();
       } catch (e) {
-        const wrappedError = new KafkaJSConnectionError(
+        const wrappedError = new KafkaConnectionError(
           `Failed to connect: "config.brokers" threw: ${(e as Error).message}`,
         );
         wrappedError.stack = `${wrappedError.name}\n  Caused by: ${(e as Error).stack}`;

@@ -1,8 +1,15 @@
-export { Kafka } from './client.js';
+/**
+ * TypeScript Kafka client for Kafka 3.x/4.x (KRaft).
+ *
+ * @see https://kafka.apache.org/43/getting-started/introduction/
+ * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export { Kafka } from './client';
 
-import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol.js';
-import { roundRobin } from './consumer/assigners/index.js';
-import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './producer/partitioners/index.js';
+import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
+import { roundRobin } from './consumer/assigners/index';
+import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './producer/partitioners/index';
 
 export const PartitionAssigners = Object.freeze({ roundRobin });
 export const AssignerProtocol = Object.freeze({ MemberMetadata, MemberAssignment });
@@ -12,49 +19,49 @@ export const Partitioners = Object.freeze({
   LegacyPartitioner,
 });
 
-export { LOG_LEVELS as logLevel } from './loggers/index.js';
-export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index.js';
+export { LOG_LEVELS as logLevel } from './loggers/index';
+export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index';
 
-export { CONFIG_RESOURCE_TYPES as ConfigResourceTypes } from './protocol/enums/config-resource-types.js';
-export { CONFIG_SOURCE as ConfigSource } from './protocol/enums/config-source.js';
-export { ACL_RESOURCE_TYPES as AclResourceTypes } from './protocol/enums/acl-resource-types.js';
-export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-operation-types.js';
-export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types.js';
-export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types.js';
+export { CONFIG_RESOURCE_TYPES as ConfigResourceTypes } from './protocol/enums/config-resource-types';
+export { CONFIG_SOURCE as ConfigSource } from './protocol/enums/config-source';
+export { ACL_RESOURCE_TYPES as AclResourceTypes } from './protocol/enums/acl-resource-types';
+export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-operation-types';
+export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types';
+export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 
 export {
-  KafkaJSError,
-  KafkaJSNonRetriableError,
-  KafkaJSProtocolError,
-  KafkaJSOffsetOutOfRange,
-  KafkaJSMemberIdRequired,
-  KafkaJSNumberOfRetriesExceeded,
-  KafkaJSConnectionError,
-  KafkaJSConnectionClosedError,
-  KafkaJSRequestTimeoutError,
-  KafkaJSMetadataNotLoaded,
-  KafkaJSTopicMetadataNotLoaded,
-  KafkaJSStaleTopicMetadataAssignment,
-  KafkaJSDeleteGroupsError,
-  KafkaJSServerDoesNotSupportApiKey,
-  KafkaJSBrokerNotFound,
-  KafkaJSPartialMessageError,
-  KafkaJSSASLAuthenticationError,
-  KafkaJSGroupCoordinatorNotFound,
-  KafkaJSNotImplemented,
-  KafkaJSTimeout,
-  KafkaJSLockTimeout,
-  KafkaJSUnsupportedMagicByteInMessageSet,
-  KafkaJSDeleteTopicRecordsError,
-  KafkaJSInvariantViolation,
-  KafkaJSInvalidVarIntError,
-  KafkaJSInvalidLongError,
-  KafkaJSCreateTopicError,
-  KafkaJSAggregateError,
-  KafkaJSFetcherRebalanceError,
-  KafkaJSNoBrokerAvailableError,
-  KafkaJSAlterPartitionReassignmentsError,
-} from './errors.js';
+  KafkaError,
+  KafkaNonRetriableError,
+  KafkaProtocolError,
+  KafkaOffsetOutOfRange,
+  KafkaMemberIdRequired,
+  KafkaNumberOfRetriesExceeded,
+  KafkaConnectionError,
+  KafkaConnectionClosedError,
+  KafkaRequestTimeoutError,
+  KafkaMetadataNotLoaded,
+  KafkaTopicMetadataNotLoaded,
+  KafkaStaleTopicMetadataAssignment,
+  KafkaDeleteGroupsError,
+  KafkaServerDoesNotSupportApiKey,
+  KafkaBrokerNotFound,
+  KafkaPartialMessageError,
+  KafkaSASLAuthenticationError,
+  KafkaGroupCoordinatorNotFound,
+  KafkaNotImplemented,
+  KafkaTimeout,
+  KafkaLockTimeout,
+  KafkaUnsupportedMagicByteInMessageSet,
+  KafkaDeleteTopicRecordsError,
+  KafkaInvariantViolation,
+  KafkaInvalidVarIntError,
+  KafkaInvalidLongError,
+  KafkaCreateTopicError,
+  KafkaAggregateError,
+  KafkaFetcherRebalanceError,
+  KafkaNoBrokerAvailableError,
+  KafkaAlterPartitionReassignmentsError,
+} from './errors';
 
 export type {
   Admin,
@@ -104,7 +111,7 @@ export type {
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
   Transaction,
-} from './types/index.js';
+} from './types/index';
 
-export type { AclEntry, AclFilter, TopicConfig, TopicOffset } from './admin/types.js';
-export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index.js';
+export type { AclEntry, AclFilter, TopicConfig, TopicOffset } from './admin/types';
+export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';

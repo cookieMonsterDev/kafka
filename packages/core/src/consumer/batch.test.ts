@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types.js';
-import { Batch } from './batch.js';
-import type { KafkaMessage } from './types.js';
+import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
+import { Batch } from './batch';
+import type { KafkaMessage } from './types';
 
 const defaultBatchContext = {
   firstOffset: 0n,

@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSAggregateError, KafkaJSNonRetriableError, KafkaJSProtocolError } from '../errors.js';
-import { InstrumentationEventEmitter } from '../instrumentation/emitter.js';
-import { createLogger, LOG_LEVELS } from '../loggers/index.js';
-import { NETWORK_REQUEST } from '../network/instrumentation-events.js';
-import { ACL_OPERATION_TYPES } from '../protocol/enums/acl-operation-types.js';
-import { ACL_PERMISSION_TYPES } from '../protocol/enums/acl-permission-types.js';
-import { ACL_RESOURCE_TYPES } from '../protocol/enums/acl-resource-types.js';
-import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types.js';
-import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types.js';
-import { createAdmin } from './index.js';
+import type { Cluster } from '../cluster/index';
+import { KafkaAggregateError, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { NETWORK_REQUEST } from '../network/instrumentation-events';
+import { ACL_OPERATION_TYPES } from '../protocol/enums/acl-operation-types';
+import { ACL_PERMISSION_TYPES } from '../protocol/enums/acl-permission-types';
+import { ACL_RESOURCE_TYPES } from '../protocol/enums/acl-resource-types';
+import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types';
+import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
+import { createAdmin } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -169,7 +169,7 @@ describe('admin', () => {
   });
 
   it('returns false when every createTopics error is TOPIC_ALREADY_EXISTS', async () => {
-    const alreadyExists = new KafkaJSProtocolError({
+    const alreadyExists = new KafkaProtocolError({
       message: 'Topic already exists',
       type: 'TOPIC_ALREADY_EXISTS',
       code: 36,
@@ -178,7 +178,7 @@ describe('admin', () => {
     const cluster = fakeCluster({
       findControllerBroker: vi.fn().mockResolvedValue(
         fakeBroker({
-          createTopics: vi.fn().mockRejectedValue(new KafkaJSAggregateError('Failed', [alreadyExists])),
+          createTopics: vi.fn().mockRejectedValue(new KafkaAggregateError('Failed', [alreadyExists])),
         }),
       ),
     });
@@ -340,10 +340,10 @@ describe('admin', () => {
     await expect(admin.listPartitionReassignments()).resolves.toEqual({ topics: [{ name: 't', partitions: [] }] });
   });
 
-  it('throws KafkaJSNonRetriableError for a missing setOffsets groupId', async () => {
+  it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {
     const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(
       admin.setOffsets({ groupId: '', topic: 't', partitions: [{ partition: 0, offset: 1n }] }),
-    ).rejects.toThrow(KafkaJSNonRetriableError);
+    ).rejects.toThrow(KafkaNonRetriableError);
   });
 });

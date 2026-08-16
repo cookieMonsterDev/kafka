@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createConsumer } from '../../../src/consumer/index.js';
-import { createProducer } from '../../../src/producer/index.js';
-import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index.js';
-import { KafkaJSNotImplemented } from '../../../src/errors.js';
+import { createConsumer } from '../../../src/consumer/index';
+import { createProducer } from '../../../src/producer/index';
+import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index';
+import { KafkaNotImplemented } from '../../../src/errors';
 import {
   createCluster,
   createModPartitioner,
@@ -11,7 +11,7 @@ import {
   secureRandom,
   waitForConsumerToJoinGroup,
   waitForMessages,
-} from '../../helpers/index.js';
+} from '../../helpers/index';
 
 describe('producer.compression', () => {
   let topicName: string;
@@ -73,7 +73,7 @@ describe('producer.compression', () => {
         compression: COMPRESSION_TYPES.Snappy,
         messages: [{ key: 'k', value: 'v' }],
       }),
-    ).rejects.toThrow(KafkaJSNotImplemented);
+    ).rejects.toThrow(KafkaNotImplemented);
     await expect(
       producer!.send({
         acks: 1,
@@ -81,6 +81,6 @@ describe('producer.compression', () => {
         compression: COMPRESSION_TYPES.LZ4,
         messages: [{ key: 'k', value: 'v' }],
       }),
-    ).rejects.toThrow(KafkaJSNotImplemented);
+    ).rejects.toThrow(KafkaNotImplemented);
   });
 });

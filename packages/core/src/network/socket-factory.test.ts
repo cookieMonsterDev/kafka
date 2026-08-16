@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import tls from 'node:tls';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultSocketFactory } from './socket-factory.js';
+import { createDefaultSocketFactory } from './socket-factory';
 
 describe('network/createDefaultSocketFactory', () => {
   let server: net.Server | undefined;

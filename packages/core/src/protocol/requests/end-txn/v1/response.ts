@@ -1,5 +1,5 @@
-import type { ResponseDefinition } from '../../../schema.js';
-import { endTxnResponseV0 } from '../v0/response.js';
+import type { ResponseDefinition } from '../../../schema';
+import { endTxnResponseV0 } from '../v0/response';
 
 export interface EndTxnResponseV1Body {
   errorCode: number;

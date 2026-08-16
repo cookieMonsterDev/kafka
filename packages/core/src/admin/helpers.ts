@@ -1,13 +1,13 @@
-import type { Broker } from '../broker/index.js';
-import type { Cluster } from '../cluster/index.js';
-import { KafkaJSMetadataNotLoaded } from '../errors.js';
-import type { Logger } from '../loggers/index.js';
-import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types.js';
-import { staleMetadata } from '../protocol/error-codes.js';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response.js';
-import type { RetryOptions } from '../retry/index.js';
-import { groupBy } from '../utils/group-by.js';
-import { waitFor, type WaitForOptions } from '../utils/wait.js';
+import type { Broker } from '../broker/index';
+import type { Cluster } from '../cluster/index';
+import { KafkaMetadataNotLoaded } from '../errors';
+import type { Logger } from '../loggers/index';
+import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
+import { staleMetadata } from '../protocol/error-codes';
+import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import type { RetryOptions } from '../retry/index';
+import { groupBy } from '../utils/group-by';
+import { waitFor, type WaitForOptions } from '../utils/wait';
 
 export interface AdminContext {
   cluster: Cluster;
@@ -57,7 +57,7 @@ export async function requireMetadata(
 ): Promise<MetadataResponseV6Body> {
   const metadata = await cluster.metadata(options);
   if (!metadata) {
-    throw new KafkaJSMetadataNotLoaded('Topic metadata not loaded');
+    throw new KafkaMetadataNotLoaded('Topic metadata not loaded');
   }
   return metadata;
 }

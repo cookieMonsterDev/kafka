@@ -1,10 +1,10 @@
-import type { ProtocolFactory, RequestFamily } from '../index.js';
-import { describeGroupsRequestV0 } from './v0/request.js';
-import { describeGroupsResponseV0 } from './v0/response.js';
-import { describeGroupsRequestV1 } from './v1/request.js';
-import { describeGroupsResponseV1 } from './v1/response.js';
-import { describeGroupsRequestV2 } from './v2/request.js';
-import { describeGroupsResponseV2 } from './v2/response.js';
+import type { ProtocolFactory, RequestFamily } from '../index';
+import { describeGroupsRequestV0 } from './v0/request';
+import { describeGroupsResponseV0 } from './v0/response';
+import { describeGroupsRequestV1 } from './v1/request';
+import { describeGroupsResponseV1 } from './v1/response';
+import { describeGroupsRequestV2 } from './v2/request';
+import { describeGroupsResponseV2 } from './v2/response';
 
 export interface DescribeGroupsOptions {
   groupIds: string[];

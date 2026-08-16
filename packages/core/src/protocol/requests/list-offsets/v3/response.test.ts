@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
-import { listOffsetsResponseV3 } from './response.js';
+import { listOffsetsResponseV3 } from './response';
 
 describe('protocol/requests/list-offsets/v3/response', () => {
   it('decodes the v2 wire format, remapping throttleTime to clientSideThrottleTime', async () => {

@@ -9,6 +9,7 @@ import { ACL_PERMISSION_TYPES } from '../protocol/enums/acl-permission-types';
 import { ACL_RESOURCE_TYPES } from '../protocol/enums/acl-resource-types';
 import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
+import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../protocol/enums/incremental-alter-configs-operations';
 import { createAdmin } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -22,9 +23,11 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     metadata: vi.fn().mockResolvedValue({ topicMetadata: [] }),
     describeConfigs: vi.fn().mockResolvedValue({ resources: [] }),
     alterConfigs: vi.fn().mockResolvedValue({ resources: [] }),
+    incrementalAlterConfigs: vi.fn().mockResolvedValue({ resources: [] }),
     listGroups: vi.fn().mockResolvedValue({ groups: [] }),
     describeGroups: vi.fn().mockResolvedValue({ groups: [] }),
     deleteGroups: vi.fn().mockResolvedValue({ results: [] }),
+    offsetDelete: vi.fn().mockResolvedValue({ topics: [] }),
     offsetFetch: vi.fn().mockResolvedValue({ responses: [] }),
     createAcls: vi.fn().mockResolvedValue({}),
     describeAcls: vi.fn().mockResolvedValue({ resources: [] }),
@@ -32,6 +35,7 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     deleteRecords: vi.fn().mockResolvedValue({}),
     alterPartitionReassignments: vi.fn().mockResolvedValue({}),
     listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }),
+    electLeaders: vi.fn().mockResolvedValue({ results: [] }),
     ...overrides,
   };
 }
@@ -270,6 +274,33 @@ describe('admin', () => {
     await expect(admin.describeConfigs({ resources: [] })).rejects.toThrow('Resources array cannot be empty');
   });
 
+  it('incrementally alters configs through the controller', async () => {
+    const broker = fakeBroker({
+      incrementalAlterConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
+    });
+    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(
+      admin.incrementalAlterConfigs({
+        resources: [
+          {
+            type: CONFIG_RESOURCE_TYPES.TOPIC,
+            name: 'orders',
+            configs: [
+              { name: 'cleanup.policy', value: 'compact', operation: INCREMENTAL_ALTER_CONFIGS_OPERATIONS.SET },
+            ],
+          },
+        ],
+      }),
+    ).resolves.toEqual({ resources: [{ resourceName: 'orders' }] });
+    expect(broker.incrementalAlterConfigs).toHaveBeenCalled();
+  });
+
+  it('rejects an empty incrementalAlterConfigs resources array', async () => {
+    const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    await expect(admin.incrementalAlterConfigs({ resources: [] })).rejects.toThrow('Resources array cannot be empty');
+  });
+
   it('lists groups from every broker in the pool', async () => {
     const brokerA = fakeBroker({
       nodeId: 1,
@@ -296,6 +327,24 @@ describe('admin', () => {
     const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
     await expect(admin.deleteGroups(null as never)).rejects.toThrow('Invalid groupIds array null');
     await expect(admin.deleteGroups([1 as never])).rejects.toThrow('Invalid groupId name: true');
+  });
+
+  it('deletes group offsets through the group coordinator', async () => {
+    const broker = fakeBroker({
+      offsetDelete: vi.fn().mockResolvedValue({ topics: [{ name: 'orders', partitions: [] }] }),
+    });
+    const cluster = fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(
+      admin.deleteGroupOffsets({ groupId: 'g', topics: [{ topic: 'orders', partitions: [0] }] }),
+    ).resolves.toEqual({ topics: [{ name: 'orders', partitions: [] }] });
+    expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({ groupId: 'g' });
+    expect(broker.offsetDelete).toHaveBeenCalledWith({ groupId: 'g', topics: [{ topic: 'orders', partitions: [0] }] });
+  });
+
+  it('rejects a missing deleteGroupOffsets groupId', async () => {
+    const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    await expect(admin.deleteGroupOffsets({ groupId: '', topics: [] })).rejects.toThrow('Invalid groupId');
   });
 
   it('creates ACLs through the controller, remapping acl to creations', async () => {
@@ -338,6 +387,22 @@ describe('admin', () => {
     const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.listPartitionReassignments()).resolves.toEqual({ topics: [{ name: 't', partitions: [] }] });
+  });
+
+  it('elects leaders through the controller', async () => {
+    const broker = fakeBroker({
+      electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders', partitions: [] }] }),
+    });
+    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.electLeaders({ topicPartitions: [{ topic: 'orders', partitions: [0] }] })).resolves.toEqual({
+      results: [{ topic: 'orders', partitions: [] }],
+    });
+    expect(broker.electLeaders).toHaveBeenCalledWith({
+      topicPartitions: [{ topic: 'orders', partitions: [0] }],
+      electionType: undefined,
+      timeout: undefined,
+    });
   });
 
   it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {

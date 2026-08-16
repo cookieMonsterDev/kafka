@@ -60,6 +60,9 @@ import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describ
 import { DescribeGroups } from '../protocol/requests/describe-groups/index';
 import type { DescribeGroupsOptions } from '../protocol/requests/describe-groups/index';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import { ElectLeaders } from '../protocol/requests/elect-leaders/index';
+import type { ElectLeadersOptions } from '../protocol/requests/elect-leaders/index';
+import type { ElectLeadersResponseV1Body } from '../protocol/requests/elect-leaders/v1/response';
 import { EndTxn } from '../protocol/requests/end-txn/index';
 import type { EndTxnOptions } from '../protocol/requests/end-txn/index';
 import type { EndTxnResponseV1Body } from '../protocol/requests/end-txn/v1/response';
@@ -72,6 +75,9 @@ import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-co
 import { Heartbeat } from '../protocol/requests/heartbeat/index';
 import type { HeartbeatOptions } from '../protocol/requests/heartbeat/index';
 import type { HeartbeatResponseV2Body } from '../protocol/requests/heartbeat/v2/response';
+import { IncrementalAlterConfigs } from '../protocol/requests/incremental-alter-configs/index';
+import type { IncrementalAlterConfigsOptions } from '../protocol/requests/incremental-alter-configs/index';
+import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
 import { InitProducerId } from '../protocol/requests/init-producer-id/index';
 import type { InitProducerIdOptions } from '../protocol/requests/init-producer-id/index';
 import type { InitProducerIdResponseV1Body } from '../protocol/requests/init-producer-id/v1/response';
@@ -95,9 +101,15 @@ import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/re
 import { OffsetCommit } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response';
+import { OffsetDelete } from '../protocol/requests/offset-delete/index';
+import type { OffsetDeleteOptions } from '../protocol/requests/offset-delete/index';
+import type { OffsetDeleteResponseV1Body } from '../protocol/requests/offset-delete/v1/response';
 import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
 import type { OffsetFetchOptions } from '../protocol/requests/offset-fetch/index';
 import type { OffsetFetchResponseV4Body } from '../protocol/requests/offset-fetch/v4/response';
+import { OffsetForLeaderEpoch } from '../protocol/requests/offset-for-leader-epoch/index';
+import type { OffsetForLeaderEpochOptions } from '../protocol/requests/offset-for-leader-epoch/index';
+import type { OffsetForLeaderEpochResponseV4Body } from '../protocol/requests/offset-for-leader-epoch/v4/response';
 import { Produce } from '../protocol/requests/produce/index';
 import type { ProduceRequestOptions } from '../protocol/requests/produce/shared';
 import type { ProduceResponseV6Body } from '../protocol/requests/produce/v6/response';
@@ -360,6 +372,7 @@ export class Broker {
           timestamp?: bigint;
           offset?: bigint;
           offsets?: bigint[];
+          leaderEpoch?: number;
         }[];
       }[];
     }>(listOffsets(options));
@@ -375,9 +388,18 @@ export class Broker {
           errorCode: partition.errorCode,
           timestamp: partition.timestamp ?? -1n,
           offset: partition.offsets != null ? (partition.offsets.at(-1) ?? -1n) : (partition.offset ?? -1n),
+          leaderEpoch: partition.leaderEpoch ?? -1,
         })),
       })),
     };
+  }
+
+  async offsetForLeaderEpoch(options: OffsetForLeaderEpochOptions): Promise<OffsetForLeaderEpochResponseV4Body> {
+    const offsetForLeaderEpoch = this.lookupRequest<OffsetForLeaderEpochOptions>(
+      API_KEYS.OffsetForLeaderEpoch,
+      OffsetForLeaderEpoch,
+    );
+    return this.#send(offsetForLeaderEpoch(options));
   }
 
   async offsetCommit(options: OffsetCommitOptions): Promise<OffsetCommitResponseV4Body> {
@@ -418,6 +440,21 @@ export class Broker {
   async alterConfigs(options: AlterConfigsOptions): Promise<AlterConfigsResponseV1Body> {
     const alterConfigs = this.lookupRequest<AlterConfigsOptions>(API_KEYS.AlterConfigs, AlterConfigs);
     return this.#send(alterConfigs(options));
+  }
+
+  async incrementalAlterConfigs(
+    options: IncrementalAlterConfigsOptions,
+  ): Promise<IncrementalAlterConfigsResponseV1Body> {
+    const incrementalAlterConfigs = this.lookupRequest<IncrementalAlterConfigsOptions>(
+      API_KEYS.IncrementalAlterConfigs,
+      IncrementalAlterConfigs,
+    );
+    return this.#send(incrementalAlterConfigs(options));
+  }
+
+  async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {
+    const electLeaders = this.lookupRequest<ElectLeadersOptions>(API_KEYS.ElectLeaders, ElectLeaders);
+    return this.#send(electLeaders(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */
@@ -461,6 +498,11 @@ export class Broker {
   async deleteGroups(options: DeleteGroupsOptions): Promise<DeleteGroupsResponseV1Body> {
     const deleteGroups = this.lookupRequest<DeleteGroupsOptions>(API_KEYS.DeleteGroups, DeleteGroups);
     return this.#send(deleteGroups(options));
+  }
+
+  async offsetDelete(options: OffsetDeleteOptions): Promise<OffsetDeleteResponseV1Body> {
+    const offsetDelete = this.lookupRequest<OffsetDeleteOptions>(API_KEYS.OffsetDelete, OffsetDelete);
+    return this.#send(offsetDelete(options));
   }
 
   async deleteRecords(options: DeleteRecordsOptions): Promise<DeleteRecordsResponseV1Body> {

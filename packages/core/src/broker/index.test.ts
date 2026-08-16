@@ -265,6 +265,28 @@ describe('broker/Broker', () => {
         errorCode: 0,
         timestamp: -1n,
         offset: 3n,
+        leaderEpoch: -1,
+      });
+    });
+
+    it('passes through leaderEpoch from ListOffsets v5+ responses', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        responses: [
+          { topic: 't', partitions: [{ partition: 0, errorCode: 0, timestamp: 1n, offset: 9n, leaderEpoch: 4 }] },
+        ],
+      });
+
+      const result = await broker.listOffsets({ topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
+      expect(result.responses[0]?.partitions[0]).toEqual({
+        partition: 0,
+        errorCode: 0,
+        timestamp: 1n,
+        offset: 9n,
+        leaderEpoch: 4,
       });
     });
   });

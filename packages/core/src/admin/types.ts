@@ -13,8 +13,11 @@ import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describ
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
+import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
+import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
+import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
 import type { RetryOptions } from '../retry/index';
 import type { ConnectOptions } from '../utils/abort';
 import type { AdminEventName } from './instrumentation-events';
@@ -89,6 +92,18 @@ export interface ResourceConfig {
   type: ConfigResourceType;
   name: string;
   configEntries: ResourceConfigEntry[];
+}
+
+export interface IncrementalResourceConfigEntry {
+  name: string;
+  value: string | null;
+  operation: number;
+}
+
+export interface IncrementalResourceConfig {
+  type: ConfigResourceType;
+  name: string;
+  configs: IncrementalResourceConfigEntry[];
 }
 
 /**
@@ -184,9 +199,17 @@ export interface Admin {
     resources: ResourceConfig[];
     validateOnly?: boolean;
   }) => Promise<{ resources: AlterConfigsResponseV1Body['resources'] }>;
+  incrementalAlterConfigs: (options: {
+    resources: IncrementalResourceConfig[];
+    validateOnly?: boolean;
+  }) => Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }>;
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
   describeGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
   deleteGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
+  deleteGroupOffsets: (options: {
+    groupId: string;
+    topics: TopicPartitions[];
+  }) => Promise<{ topics: OffsetDeleteResponseV0Body['topics'] }>;
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
   describeAcls: (options: AclFilter) => Promise<{ resources: DescribeAclsResponseV1Body['resources'] }>;
   deleteAcls: (options: {
@@ -197,6 +220,11 @@ export interface Admin {
     topics?: TopicPartitions[] | null;
     timeout?: number;
   }) => Promise<{ topics: ListPartitionReassignmentsResponseV0Body['topics'] }>;
+  electLeaders: (options: {
+    topicPartitions?: TopicPartitions[] | null;
+    electionType?: number;
+    timeout?: number;
+  }) => Promise<{ results: ElectLeadersResponseV0Body['results'] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

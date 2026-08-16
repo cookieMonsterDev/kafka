@@ -1,6 +1,7 @@
 /**
  * Numeric Kafka API keys used in request headers.
- * `GroupCoordinator` is FindCoordinator (10); `ElectPreferredLeaders` is ElectLeaders (43).
+ * `GroupCoordinator` is FindCoordinator (10); `ElectLeaders` (43) was originally
+ * named ElectPreferredLeaders in the protocol.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
@@ -48,10 +49,11 @@ export const API_KEYS = Object.freeze({
   ExpireDelegationToken: 40,
   DescribeDelegationToken: 41,
   DeleteGroups: 42,
-  ElectPreferredLeaders: 43,
+  ElectLeaders: 43, // originally ElectPreferredLeaders
   IncrementalAlterConfigs: 44,
   AlterPartitionReassignments: 45,
   ListPartitionReassignments: 46,
+  OffsetDelete: 47,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];

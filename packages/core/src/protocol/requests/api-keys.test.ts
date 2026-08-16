@@ -7,7 +7,10 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.Fetch).toBe(1);
     expect(API_KEYS.Metadata).toBe(3);
     expect(API_KEYS.ApiVersions).toBe(18);
+    expect(API_KEYS.ElectLeaders).toBe(43);
+    expect(API_KEYS.IncrementalAlterConfigs).toBe(44);
     expect(API_KEYS.ListPartitionReassignments).toBe(46);
+    expect(API_KEYS.OffsetDelete).toBe(47);
   });
 
   it('is frozen', () => {
@@ -18,6 +21,8 @@ describe('protocol/requests/api-keys', () => {
 
   it('resolves a name back from a key', () => {
     expect(apiKeyName(18)).toBe('ApiVersions');
+    expect(apiKeyName(43)).toBe('ElectLeaders');
+    expect(apiKeyName(47)).toBe('OffsetDelete');
     expect(apiKeyName(9999)).toBeUndefined();
   });
 });

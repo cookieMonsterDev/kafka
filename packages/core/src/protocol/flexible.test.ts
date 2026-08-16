@@ -40,10 +40,11 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.SaslAuthenticate)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.CreatePartitions)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.DeleteGroups)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.ElectPreferredLeaders)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.ElectLeaders)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.IncrementalAlterConfigs)).toBe(1);
     expect(firstFlexibleVersion(API_KEYS.AlterPartitionReassignments)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ListPartitionReassignments)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.OffsetDelete)).toBe(1);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });

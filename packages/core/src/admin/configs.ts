@@ -1,12 +1,14 @@
 import { KafkaNonRetriableError } from '../errors';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
+import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../protocol/enums/incremental-alter-configs-operations';
 import { staleMetadata } from '../protocol/error-codes';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
+import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { groupResourcesByBroker, protocolType, formatUnknown } from './helpers';
-import type { ResourceConfig, ResourceConfigQuery } from './types';
+import type { IncrementalResourceConfig, ResourceConfig, ResourceConfigQuery } from './types';
 
 export interface ConfigsApi {
   describeConfigs: (options: {
@@ -17,9 +19,14 @@ export interface ConfigsApi {
     resources: ResourceConfig[];
     validateOnly?: boolean;
   }) => Promise<{ resources: AlterConfigsResponseV1Body['resources'] }>;
+  incrementalAlterConfigs: (options: {
+    resources: IncrementalResourceConfig[];
+    validateOnly?: boolean;
+  }) => Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }>;
 }
 
 const VALID_RESOURCE_TYPES = Object.values(CONFIG_RESOURCE_TYPES);
+const VALID_CONFIG_OPERATIONS: readonly number[] = Object.values(INCREMENTAL_ALTER_CONFIGS_OPERATIONS);
 
 export function createConfigsApi({ cluster, logger, retry }: AdminContext): ConfigsApi {
   const describeConfigs = async ({
@@ -165,5 +172,84 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
     });
   };
 
-  return { describeConfigs, alterConfigs };
+  const incrementalAlterConfigs = async ({
+    resources,
+    validateOnly,
+  }: {
+    resources: IncrementalResourceConfig[];
+    validateOnly?: boolean;
+  }): Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }> => {
+    if (!resources || !Array.isArray(resources)) {
+      throw new KafkaNonRetriableError(`Invalid resources array ${formatUnknown(resources)}`);
+    }
+
+    if (resources.length === 0) {
+      throw new KafkaNonRetriableError('Resources array cannot be empty');
+    }
+
+    const invalidType = resources.find((resource) => !VALID_RESOURCE_TYPES.includes(resource.type));
+    if (invalidType) {
+      throw new KafkaNonRetriableError(`Invalid resource type ${invalidType.type}: ${JSON.stringify(invalidType)}`);
+    }
+
+    const invalidName = resources.find((resource) => !resource.name || typeof resource.name !== 'string');
+    if (invalidName) {
+      throw new KafkaNonRetriableError(`Invalid resource name ${invalidName.name}: ${JSON.stringify(invalidName)}`);
+    }
+
+    const invalidConfigs = resources.find((resource) => !Array.isArray(resource.configs));
+    if (invalidConfigs) {
+      const { configs } = invalidConfigs;
+      throw new KafkaNonRetriableError(
+        `Invalid resource configs ${formatUnknown(configs)}: ${JSON.stringify(invalidConfigs)}`,
+      );
+    }
+
+    const invalidConfigValue = resources.find((resource) =>
+      resource.configs.some(
+        (entry) =>
+          typeof entry.name !== 'string' ||
+          (entry.value !== null && typeof entry.value !== 'string') ||
+          !VALID_CONFIG_OPERATIONS.includes(entry.operation),
+      ),
+    );
+    if (invalidConfigValue) {
+      throw new KafkaNonRetriableError(`Invalid resource config value: ${JSON.stringify(invalidConfigValue)}`);
+    }
+
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        await cluster.refreshMetadata();
+        const controller = await cluster.findControllerBroker();
+        const resourcesByBroker = await groupResourcesByBroker({ resources, defaultBroker: controller, cluster });
+
+        const brokers = [...resourcesByBroker.keys()];
+        const responses = await Promise.all(
+          brokers.map(async (broker) => {
+            const targetBroker = broker || controller;
+            return targetBroker.incrementalAlterConfigs({
+              resources: resourcesByBroker.get(targetBroker) ?? [],
+              validateOnly: !!validateOnly,
+            });
+          }),
+        );
+
+        return { resources: responses.flatMap((response) => response.resources) };
+      } catch (error) {
+        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
+          logger.warn('Could not incrementally alter configs', {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            retryTime,
+          });
+          throw error;
+        }
+
+        bail(error as Error);
+        return { resources: [] };
+      }
+    });
+  };
+
+  return { describeConfigs, alterConfigs, incrementalAlterConfigs };
 }

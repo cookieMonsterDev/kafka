@@ -41,10 +41,11 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.SaslAuthenticate]: 2,
   [API_KEYS.CreatePartitions]: 2,
   [API_KEYS.DeleteGroups]: 2,
-  [API_KEYS.ElectPreferredLeaders]: 2,
+  [API_KEYS.ElectLeaders]: 2,
   [API_KEYS.IncrementalAlterConfigs]: 1,
   [API_KEYS.AlterPartitionReassignments]: 0,
   [API_KEYS.ListPartitionReassignments]: 0,
+  [API_KEYS.OffsetDelete]: 1,
 });
 
 /**

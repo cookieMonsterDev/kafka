@@ -6,6 +6,7 @@ import {
   AssignerProtocol,
   CompressionCodecs,
   CompressionTypes,
+  ConfigOperations,
   ConfigResourceTypes,
   ConfigSource,
   Kafka,
@@ -46,6 +47,8 @@ describe('public surface', () => {
     expect(CompressionTypes.ZSTD).toBe(4);
     expect(CompressionCodecs[CompressionTypes.GZIP]).toBeTypeOf('function');
     expect(ConfigResourceTypes.TOPIC).toBe(2);
+    expect(ConfigOperations.SET).toBe(0);
+    expect(ConfigOperations.DELETE).toBe(1);
     expect(ConfigSource.DYNAMIC_BROKER_CONFIG).toBe(2);
     expect(AclResourceTypes.TOPIC).toBe(2);
     expect(AclOperationTypes.READ).toBe(3);

@@ -1,4 +1,5 @@
 import { KafkaNonRetriableError } from '../errors';
+import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
@@ -11,6 +12,11 @@ export interface ReassignmentsApi {
     topics?: TopicPartitions[] | null;
     timeout?: number;
   }) => Promise<{ topics: ListPartitionReassignmentsResponseV0Body['topics'] }>;
+  electLeaders: (options: {
+    topicPartitions?: TopicPartitions[] | null;
+    electionType?: number;
+    timeout?: number;
+  }) => Promise<{ results: ElectLeadersResponseV0Body['results'] }>;
 }
 
 export function createReassignmentsApi({ cluster, logger, retry }: AdminContext): ReassignmentsApi {
@@ -136,5 +142,65 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
     });
   };
 
-  return { alterPartitionReassignments, listPartitionReassignments };
+  const electLeaders = async ({
+    topicPartitions = null,
+    electionType,
+    timeout,
+  }: {
+    topicPartitions?: TopicPartitions[] | null;
+    electionType?: number;
+    timeout?: number;
+  } = {}): Promise<{ results: ElectLeadersResponseV0Body['results'] }> => {
+    if (topicPartitions) {
+      if (!Array.isArray(topicPartitions)) {
+        throw new KafkaNonRetriableError(`Invalid topicPartitions array ${formatUnknown(topicPartitions)}`);
+      }
+
+      if (topicPartitions.filter(({ topic }) => typeof topic !== 'string').length > 0) {
+        throw new KafkaNonRetriableError('Invalid topicPartitions array, the topic names have to be a valid string');
+      }
+
+      const topicNames = new Set(topicPartitions.map(({ topic }) => topic));
+      if (topicNames.size < topicPartitions.length) {
+        throw new KafkaNonRetriableError(
+          'Invalid topicPartitions array, it cannot have multiple entries for the same topic',
+        );
+      }
+
+      for (const { topic, partitions } of topicPartitions) {
+        if (!partitions || !Array.isArray(partitions)) {
+          throw new KafkaNonRetriableError(`Invalid partition array: ${formatUnknown(partitions)} for topic: ${topic}`);
+        }
+
+        if (partitions.filter((partition) => typeof partition !== 'number' || partition < 0).length >= 1) {
+          throw new KafkaNonRetriableError(
+            `Invalid partition array: ${formatUnknown(partitions)} for topic: ${topic}. The partition indices have to be a valid number greater than 0.`,
+          );
+        }
+      }
+    }
+
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        await cluster.refreshMetadata();
+        const broker = await cluster.findControllerBroker();
+        const response = await broker.electLeaders({ topicPartitions, electionType, timeout });
+        return { results: response.results };
+      } catch (error) {
+        if (protocolType(error) === 'NOT_CONTROLLER') {
+          logger.warn('Could not elect leaders', {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            retryTime,
+          });
+          throw error;
+        }
+
+        bail(error as Error);
+        return { results: [] };
+      }
+    });
+  };
+
+  return { alterPartitionReassignments, listPartitionReassignments, electLeaders };
 }

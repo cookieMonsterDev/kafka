@@ -1,5 +1,6 @@
 import {
   KafkaConnectionClosedError,
+  KafkaInvalidVarIntError,
   KafkaInvariantViolation,
   KafkaMemberIdRequired,
   KafkaProtocolError,
@@ -149,6 +150,12 @@ const notInitializedLookup: LookupRequest = () => {
   throw new Error('Broker not connected');
 };
 
+/** Pre-flexible brokers answer ApiVersions v3+ with a v0/v1 body instead of UNSUPPORTED_VERSION. */
+function isApiVersionsNegotiationFallback(error: unknown): boolean {
+  if (error instanceof KafkaProtocolError) return error.type === 'UNSUPPORTED_VERSION';
+  return error instanceof RangeError || error instanceof KafkaInvalidVarIntError;
+}
+
 export interface BrokerOptions {
   connectionPool: ConnectionPool;
   logger: Logger;
@@ -249,8 +256,11 @@ export class Broker {
   async apiVersions(): Promise<BrokerVersions> {
     let response: ApiVersionsResponseV1Body | undefined;
     const availableVersions = [...ApiVersions.versions].sort((a, b) => b - a);
+    const oldestVersion = availableVersions[availableVersions.length - 1];
 
-    // Find the best version implemented by the server.
+    // Find the best version implemented by the server. Flexible ApiVersions (v3+) uses a v2
+    // request header that pre-KIP-482 brokers cannot parse; they reply with a non-flexible body
+    // which throws RangeError on tagged-field decode instead of UNSUPPORTED_VERSION.
     for (const candidateVersion of availableVersions) {
       try {
         const apiVersions = ApiVersions.protocol({ version: candidateVersion });
@@ -260,9 +270,15 @@ export class Broker {
         });
         break;
       } catch (e) {
-        if (!(e instanceof KafkaProtocolError) || e.type !== 'UNSUPPORTED_VERSION') {
-          throw e;
+        if (candidateVersion !== oldestVersion && isApiVersionsNegotiationFallback(e)) {
+          this.logger.debug('ApiVersions negotiation falling back', {
+            broker: this.brokerAddress,
+            candidateVersion,
+            error: (e as Error).message,
+          });
+          continue;
         }
+        throw e;
       }
     }
 

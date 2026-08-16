@@ -105,6 +105,23 @@ describe('broker/Broker', () => {
       expect(versions).toEqual({});
     });
 
+    it('falls back when a flexible ApiVersions body cannot be decoded', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send
+        .mockRejectedValueOnce(new RangeError('Tried to read past the end of the buffer (offset 14)'))
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: [{ apiKey: API_KEYS.Metadata, minVersion: 0, maxVersion: 1 }],
+        });
+
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      const versions = await broker.apiVersions();
+
+      expect(pool.send).toHaveBeenCalledTimes(2);
+      expect(versions).toEqual({ [API_KEYS.Metadata]: { minVersion: 0, maxVersion: 1 } });
+    });
+
     it('rethrows any other error immediately', async () => {
       const pool = createFakeConnectionPool();
       pool.send.mockRejectedValueOnce(new Error('connection reset'));

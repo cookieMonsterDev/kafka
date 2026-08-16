@@ -5,6 +5,8 @@ import { findCoordinatorRequestV1 } from './v1/request';
 import { findCoordinatorResponseV1 } from './v1/response';
 import { findCoordinatorRequestV2 } from './v2/request';
 import { findCoordinatorResponseV2 } from './v2/response';
+import { findCoordinatorRequestV3 } from './v3/request';
+import { findCoordinatorResponseV3 } from './v3/response';
 
 export interface FindCoordinatorOptions {
   groupId?: string;
@@ -40,6 +42,18 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FindCoordinatorOptions>>
         coordinatorType: options.coordinatorType,
       }),
       response: findCoordinatorResponseV2,
+    };
+  },
+  3: (options) => {
+    if (options.coordinatorKey == null || options.coordinatorType == null) {
+      throw new Error('Invariant violated: FindCoordinator v3 requires coordinatorKey and coordinatorType');
+    }
+    return {
+      request: findCoordinatorRequestV3({
+        coordinatorKey: options.coordinatorKey,
+        coordinatorType: options.coordinatorType,
+      }),
+      response: findCoordinatorResponseV3,
     };
   },
 };

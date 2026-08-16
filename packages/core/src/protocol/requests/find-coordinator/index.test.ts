@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FindCoordinator } from './index';
 
 describe('protocol/requests/find-coordinator', () => {
-  it('implements versions 0 through 2', () => {
-    expect(FindCoordinator.versions).toEqual([0, 1, 2]);
+  it('implements versions 0 through 3', () => {
+    expect(FindCoordinator.versions).toEqual([0, 1, 2, 3]);
   });
 
   it('accepts groupId on v0', () => {

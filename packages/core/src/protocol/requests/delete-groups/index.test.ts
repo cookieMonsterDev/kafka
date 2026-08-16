@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DeleteGroups } from './index';
 
 describe('protocol/requests/delete-groups', () => {
-  it('implements versions 0 and 1', () => {
-    expect(DeleteGroups.versions).toEqual([0, 1]);
+  it('implements versions 0 through 2', () => {
+    expect(DeleteGroups.versions).toEqual([0, 1, 2]);
   });
 
   it('builds a request for the requested version', () => {

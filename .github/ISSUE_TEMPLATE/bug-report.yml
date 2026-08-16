@@ -1,0 +1,107 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly
+title: '[bug]: '
+labels: [bug]
+type: Bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Search [existing issues](https://github.com/cookieMonsterDev/kafka/issues) first, and read the [contributing guide](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md).
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What you did, what you expected, and what actually happened.
+      placeholder: I am doing … What I expect is … What actually happens is …
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Minimal code, a failing test, or a small repo. Include broker logs or client logs at `logLevel.DEBUG` when they help.
+      placeholder: |
+        ```ts
+        import { Kafka } from '@kafka/core';
+        // smallest snippet that fails
+        ```
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead.
+    validations:
+      required: true
+  - type: dropdown
+    id: kafka-version
+    attributes:
+      label: Kafka broker version
+      description: The broker you talked to. Use “other” if it is not in the list and write it in Additional context.
+      options:
+        - '0.10'
+        - '0.11'
+        - '1.1'
+        - '2.4'
+        - '3.6'
+        - '4.0'
+        - '4.1'
+        - '4.2'
+        - '4.3'
+        - other
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: '24.x'
+    validations:
+      required: true
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options:
+        - '@kafka/core'
+        - '@kafka/docs'
+        - workspace / tooling
+        - unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: security
+    attributes:
+      label: Connection
+      multiple: true
+      options:
+        - PLAINTEXT
+        - SSL / TLS
+        - SASL PLAIN
+        - SASL SCRAM
+        - SASL OAUTHBEARER
+        - other
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, how Kafka is running (Docker Compose from this repo, Confluent, MSK, …), and the git SHA or package version if you know it.
+      render: shell
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, related KIPs, or anything else.
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I read the [contributing guide](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md).
+          required: true
+        - label: The reproduction is as small as I can make it.
+          required: true

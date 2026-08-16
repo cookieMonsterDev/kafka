@@ -1,0 +1,207 @@
+# Contributing
+
+Thanks for helping. This repo is a pnpm workspace: `@kafka/core` is the TypeScript Kafka client, `@kafka/docs` is the Astro documentation site.
+
+Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
+
+## Prerequisites
+
+- **Node.js 24** (pinned in `.nvmrc`). `engines` is enforced at install time.
+- **pnpm 11**, pinned via `packageManager` in the root `package.json`.
+- **Docker** only if you run integration tests.
+
+```sh
+nvm use          # reads .nvmrc
+corepack enable  # installs the exact pnpm version from package.json
+pnpm install
+```
+
+`pnpm install` also installs [Husky](https://typicode.github.io/husky/) hooks. Skip them for one command with `HUSKY=0`.
+
+## Local development
+
+From the repo root:
+
+```sh
+pnpm dev           # docs site on http://localhost:4321 + Vite watch for @kafka/core
+pnpm build         # all packages, in dependency order
+pnpm lint          # ESLint
+pnpm format        # Prettier write
+pnpm format:check  # Prettier check (CI)
+pnpm typecheck     # tsc --noEmit + astro check
+pnpm test          # unit tests only (never starts Docker)
+pnpm clean         # build output and node_modules (re-run pnpm install after)
+```
+
+`pnpm -r` walks the workspace graph, so `@kafka/core` compiles before `@kafka/docs` imports it.
+
+### One package
+
+```sh
+pnpm --filter @kafka/core build
+pnpm --filter @kafka/docs dev
+pnpm --filter @kafka/docs add <pkg>
+pnpm --filter @kafka/core add -D <pkg>
+pnpm --filter @kafka/docs... build   # "..." includes workspace dependencies
+```
+
+Each package README has the rest of its workflow: [`@kafka/core`](packages/core/README.md), [`@kafka/docs`](packages/docs/README.md).
+
+### Shared versions
+
+TypeScript, Vite, Vitest, and Astro versions live in the **catalog** in `pnpm-workspace.yaml`. Packages reference them as `"typescript": "catalog:"`. Bump the version once there.
+
+To depend on another workspace package, use the `workspace:` protocol:
+
+```sh
+pnpm --filter @kafka/<name> add @kafka/core --workspace
+```
+
+## Branch names
+
+Branch from `master`. Use kebab-case, with a Conventional Commit **type** as the prefix:
+
+```
+<type>/<short-kebab-description>
+```
+
+| Prefix      | Use for                                      |
+| ----------- | -------------------------------------------- |
+| `feat/`     | New user-facing behavior                     |
+| `fix/`      | Bug fix                                      |
+| `docs/`     | README, site, comments                       |
+| `test/`     | Tests only                                   |
+| `refactor/` | Internal change with no behavior change      |
+| `perf/`     | Performance                                  |
+| `style/`    | Formatting only (rare; let Prettier do this) |
+| `chore/`    | Tooling, deps, repo hygiene                  |
+| `ci/`       | GitHub Actions                               |
+| `build/`    | Build graph, Vite, package exports           |
+
+Examples:
+
+```
+feat/fetch-request-v12
+fix/connection-pool-retry
+docs/getting-started-producer-example
+test/integration-kafka-43
+chore/upgrade-typescript
+```
+
+Keep the description short. One concern per branch.
+
+## Commits
+
+[Conventional Commits](https://www.conventionalcommits.org/), enforced by commitlint on `commit-msg` and again in CI on every commit in the PR:
+
+```
+<type>(<optional scope>): <short imperative summary>
+```
+
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `chore`, `ci`, `revert`
+
+**Scope** (optional): `core`, `docs`, `protocol`, `consumer`, `producer`, `admin`, `network`, or another area of the change.
+
+**Rules:**
+
+- Subject at most 72 characters
+- Imperative mood (`add`, not `added` or `adds`)
+- No trailing period
+- One logical change per commit
+
+```
+feat(core): add fetch request v4 encoder
+fix(network): retry when the connection pool is exhausted
+docs(getting-started): document lingerMs default
+```
+
+### Git hooks
+
+| Hook         | What it runs                                                        |
+| ------------ | ------------------------------------------------------------------- |
+| `pre-commit` | ESLint + Prettier on staged files (`lint-staged`), then `pnpm test` |
+| `commit-msg` | commitlint                                                          |
+
+Integration tests are not in the hook. They need Docker. CI still runs them.
+
+## Pull requests
+
+1. Create a branch from up-to-date `master` using the naming scheme above.
+2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
+3. Push and open a PR against `master`. The PR template is filled in for you.
+4. Link the issue with `Closes #123` when there is one.
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `master`).
+6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
+
+A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
+
+### Review expectations
+
+- Protocol and public API changes need tests.
+- New broker behavior should use the version helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …) instead of parsing `KAFKA_VERSION` in the test file.
+- Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
+
+## Code style
+
+Do not hand-format. Prettier and ESLint run on commit and in CI.
+
+**Prettier** (`.prettierrc.json`): print width 120, single quotes, trailing commas.
+
+**TypeScript** (`tsconfig.base.json`):
+
+- `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`
+- `verbatimModuleSyntax` — use `import type` / inline type imports
+- `erasableSyntaxOnly` — no TypeScript enums or parameter properties (Node type-stripping must still run the source)
+- `bundler` module resolution; relative imports omit file extensions
+
+**ESLint** (`eslint.config.js`): type-checked rules on `packages/core/{src,test}`. Protocol code (`packages/core/src/protocol`, excluding tests) forbids non-null assertions. `packages/docs` is not linted with ESLint; Prettier still applies to Markdown, JSON, YAML, and CSS. `*.astro` is Prettier-ignored.
+
+**Filenames and folders:** kebab-case only (`fetch-request`, not `fetchRequest`).
+
+**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`.
+
+## Tests
+
+Unit tests are protocol fixtures and never start Docker:
+
+```sh
+pnpm test
+pnpm --filter @kafka/core test
+```
+
+Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):
+
+```sh
+KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
+```
+
+`KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+
+## Documentation site
+
+Markdown under `packages/docs/src/content/docs/` becomes a page. After `pnpm clean`, build core first:
+
+```sh
+pnpm --filter @kafka/docs... build
+# or
+pnpm --filter @kafka/docs dev
+```
+
+How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](packages/docs/README.md).
+
+## Adding a package
+
+1. Create `packages/<name>/package.json` with the name `@kafka/<name>` (kebab-case folder).
+2. Run `pnpm install`.
+
+The `packages/*` glob in `pnpm-workspace.yaml` picks it up.
+
+## Configuration notes
+
+pnpm 11 reads **only** auth and registry settings from `.npmrc`. Everything else (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in `pnpm-workspace.yaml`. Settings placed in `.npmrc` are silently ignored.
+
+## License
+
+By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).

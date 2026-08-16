@@ -4,22 +4,33 @@
 
 # @kafka/docs
 
-Astro documentation site. Every Markdown file under `src/content/docs/` becomes
-a page automatically.
+Astro documentation site for [`@kafka/core`](../core/README.md). Every Markdown file under `src/content/docs/` becomes a page.
+
+This package lives in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is not a published npm library.
+
+## What is documented
+
+| Page             | File                                  |
+| ---------------- | ------------------------------------- |
+| Introduction     | `src/content/docs/introduction.md`    |
+| Getting started  | `src/content/docs/getting-started.md` |
+| Compatibility    | `src/content/docs/compatibility.md`   |
+| Public API       | `src/content/docs/public-api.md`      |
+| Breaking changes | `src/content/docs/migration.md`       |
 
 ## Local development
 
 From the repo root (after `pnpm install`):
 
 ```sh
-pnpm --filter @kafka/docs dev        # dev server at http://localhost:4321
+pnpm --filter @kafka/docs dev        # http://localhost:4321
 pnpm --filter @kafka/docs build      # static site into dist/
 pnpm --filter @kafka/docs preview    # serve the built dist/ locally
 pnpm --filter @kafka/docs typecheck  # astro check
 pnpm --filter @kafka/docs clean      # remove dist/ and .astro/
 ```
 
-Or from this directory, with the script name alone:
+Or from this directory:
 
 ```sh
 cd packages/docs
@@ -147,3 +158,12 @@ change where content lives, edit the `base` path there — the routing follows.
 - `site` in `astro.config.mjs` is a placeholder (`https://example.com`). Set it to
   the real deployment URL before publishing, since it is used for canonical URLs
   and sitemaps.
+
+## Contributing
+
+[CONTRIBUTING.md](../../CONTRIBUTING.md) — branch names, Conventional Commits, and PR flow.
+Open a [documentation issue](https://github.com/cookieMonsterDev/kafka/issues/new?template=docs.yml) for typos or missing pages.
+
+## License
+
+[MIT](../../LICENSE) © Mykhailo Toporkov

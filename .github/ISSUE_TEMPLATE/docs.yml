@@ -1,0 +1,38 @@
+name: Documentation
+description: Typo, missing page, or unclear docs
+title: '[docs]: '
+labels: [documentation]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for the Astro site (`packages/docs`) or a README. Bugs in the client belong on a bug report.
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs to change
+      description: What is wrong, missing, or confusing.
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: URL, Markdown path, or README (for example `packages/docs/src/content/docs/getting-started.md`).
+      placeholder: /docs/getting-started/ or packages/core/README.md
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested wording (optional)
+      description: A sketch of the text you would like to see.
+  - type: checkboxes
+    id: validations
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I read the [contributing guide](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md).
+          required: true

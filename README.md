@@ -2,9 +2,73 @@
   <img src="assets/brand/logo-256.png" width="160" height="160" alt="kafka">
 </p>
 
-# kafka
+<h1 align="center">kafka</h1>
 
-A pnpm workspace containing:
+<p align="center">
+  A TypeScript Apache Kafka client for Node.js.<br />
+  Brokers from <strong>Kafka 0.10</strong> onward · producer, consumer, and admin
+</p>
+
+<p align="center">
+  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href=".nvmrc"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node.js 24+" /></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
+</p>
+
+`@kafka/core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@kafka/docs` is the documentation site for that client.
+
+The workspace is **not published to npm yet**. Develop against the packages in this repo.
+
+## Features
+
+- **Producer** — `send` / `sendBatch`, optional idempotence, transactions, headers, GZIP and ZSTD (Snappy and LZ4 are pluggable)
+- **Consumer groups** — pause, resume, seek, `eachMessage` / `eachBatch`, `consumer.stream()`, classic group protocol
+- **Partition assigners** — range, round-robin (default), sticky, cooperative-sticky
+- **Admin** — topics, configs, ACLs, offsets, groups, SCRAM credentials, leader election
+- **Security** — SSL/TLS, SASL PLAIN, SCRAM-SHA-256/512, OAUTHBEARER, AWS IAM helper
+- **Compatibility** — Kafka **0.10+** via `ApiVersions` (not Java-client 4.x parity)
+- **TypeScript-first** — generated `.d.ts`, `AbortSignal` on connect/send/run, `await using` via `Symbol.asyncDispose`
+
+## Quick start
+
+```ts
+import { Kafka, CompressionTypes, logLevel } from '@kafka/core';
+
+const kafka = new Kafka({
+  clientId: 'my-app',
+  brokers: ['localhost:9092'],
+  logLevel: logLevel.INFO,
+});
+
+const producer = kafka.producer();
+await producer.connect();
+await producer.send({
+  topic: 'events',
+  compression: CompressionTypes.GZIP,
+  messages: [{ key: 'user-1', value: 'hello' }],
+});
+
+const consumer = kafka.consumer({ groupId: 'my-group' });
+await consumer.connect();
+await consumer.subscribe({ topics: ['events'], fromBeginning: true });
+await consumer.run({
+  eachMessage: async ({ topic, partition, message }) => {
+    console.log({ topic, partition, offset: message.offset, value: message.value?.toString() });
+  },
+});
+```
+
+Offsets are `bigint` (`42n`), not strings. More examples: [Getting started](packages/docs/src/content/docs/getting-started.md), [public API](packages/docs/src/content/docs/public-api.md), [compatibility](packages/docs/src/content/docs/compatibility.md).
+
+Run the site locally after `pnpm install`:
+
+```sh
+pnpm --filter @kafka/docs... build
+pnpm --filter @kafka/docs dev   # http://localhost:4321
+```
+
+## Packages
 
 | Package       | Path            | What it is                                      |
 | ------------- | --------------- | ----------------------------------------------- |
@@ -13,69 +77,25 @@ A pnpm workspace containing:
 
 ## Requirements
 
-- **Node.js 24** (Krypton LTS). The version is pinned in `.nvmrc`, and `engines`
-  is enforced at install time — a wrong version fails the install rather than warning.
-- **pnpm 11**, pinned via the `packageManager` field.
+- **Node.js 24** (Krypton LTS), pinned in `.nvmrc`. A wrong version fails `pnpm install`.
+- **pnpm 11**, pinned via `packageManager`.
 
 ```sh
-nvm use          # reads .nvmrc
-corepack enable  # installs the exact pnpm version from package.json
+nvm use
+corepack enable
+pnpm install
 ```
 
-## Local development
+## Development
 
 ```sh
-pnpm install     # installs every package, links @kafka/core into @kafka/docs
-pnpm dev         # runs all packages' dev scripts in parallel
-```
-
-`pnpm dev` starts the docs site on <http://localhost:4321> and `tsc --watch` for
-the library, so edits to `packages/core` are recompiled and picked up by the site.
-
-## Workspace-wide commands
-
-Run from the repo root. Each fans out to every package with `pnpm -r --if-present`,
-so a package without that script is skipped instead of failing.
-
-```sh
-pnpm build         # build all packages, in dependency order
-pnpm dev           # all dev servers/watchers, in parallel
-pnpm lint          # eslint across the workspace
-pnpm format:check  # prettier --check
+pnpm dev           # docs + library watchers
+pnpm build         # all packages, dependency order
+pnpm lint          # ESLint
+pnpm format:check  # Prettier
 pnpm typecheck     # tsc --noEmit + astro check
 pnpm test          # unit tests only (never starts Docker)
-pnpm clean         # remove build output AND node_modules (re-run pnpm install after)
 ```
-
-`pnpm -r` resolves the dependency graph, so `@kafka/core` always compiles before
-the docs site that imports it.
-
-## Working on one package
-
-Use `--filter` from the root — no need to `cd`:
-
-```sh
-pnpm --filter @kafka/core build
-pnpm --filter @kafka/docs dev
-```
-
-Add a dependency to a specific package:
-
-```sh
-pnpm --filter @kafka/docs add <pkg>
-pnpm --filter @kafka/core add -D <pkg>
-```
-
-Include a package's own dependencies with the `...` suffix:
-
-```sh
-pnpm --filter @kafka/docs... build   # builds @kafka/core first, then the docs
-```
-
-Each package's README covers its own workflow: [`@kafka/core`](packages/core/README.md),
-[`@kafka/docs`](packages/docs/README.md).
-
-## Tests
 
 ```sh
 pnpm --filter @kafka/core test
@@ -83,72 +103,10 @@ KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
 ```
 
-`KAFKA_VERSION` picks the Docker Compose stack. Unit tests never start Docker.
-See [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
-
-## Shared dependency versions
-
-TypeScript and Astro versions live in a single **catalog** in `pnpm-workspace.yaml`,
-and packages reference them as `"typescript": "catalog:"`. Bump the version once
-there and every package follows — they cannot drift apart.
-
-```yaml
-catalog:
-  typescript: ^6.0.3
-  astro: ^7.2.2
-```
-
-## Git hooks
-
-`pnpm install` installs [Husky](https://typicode.github.io/husky/) hooks via the
-`prepare` script. Skip them for a single command with `HUSKY=0`.
-
-| Hook         | What it runs                                                    |
-| ------------ | --------------------------------------------------------------- |
-| `pre-commit` | ESLint + Prettier on staged files, then unit tests              |
-| `commit-msg` | [commitlint](https://commitlint.js.org/) (Conventional Commits) |
-
-Integration tests are not part of the hook — they need Docker. CI still runs them.
-
-### Commit messages
-
-Use [Conventional Commits](https://www.conventionalcommits.org/):
-
-```
-<type>(<optional scope>): <short imperative summary>
-```
-
-Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
-`build`, `chore`, `ci`, `revert`.
-
-The subject is at most 72 characters, imperative ("add", not "added"), and has
-no trailing period.
-
-```
-feat(core): add fetch request v4 encoder
-fix(network): retry when the connection pool is exhausted
-```
-
-## Adding a package
-
-1. Create `packages/<name>/package.json` with the name `@kafka/<name>`.
-2. Run `pnpm install`.
-
-The `packages/*` glob in `pnpm-workspace.yaml` picks it up — no config change needed.
-
-To depend on another workspace package, use the `workspace:` protocol so it always
-resolves locally rather than from the registry:
-
-```sh
-pnpm --filter @kafka/<name> add @kafka/core --workspace
-```
-
-## Configuration notes
-
-pnpm 11 reads **only** auth and registry settings from `.npmrc`. Everything else
-(`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in
-`pnpm-workspace.yaml` — settings placed in `.npmrc` are silently ignored.
+Branch names, Conventional Commits, PR flow, code style, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@kafka/core`](packages/core/README.md), [`@kafka/docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 
 [MIT](LICENSE) © Mykhailo Toporkov
+
+Apache Kafka and Kafka are trademarks of the Apache Software Foundation. This project is not affiliated with, endorsed by, or sponsored by the ASF.

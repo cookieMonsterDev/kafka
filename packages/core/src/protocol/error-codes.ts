@@ -558,6 +558,12 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: true,
     message: 'There are unstable offsets that need to be cleared',
   },
+  {
+    type: 'THROTTLING_QUOTA_EXCEEDED',
+    code: 89,
+    retriable: true,
+    message: 'The throttling quota has been exceeded',
+  },
 ];
 
 function unknownErrorCode(errorCode: number): ErrorCodeEntry {

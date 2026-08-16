@@ -27,6 +27,12 @@ describe('protocol/error-codes', () => {
       expect(error.message).toContain('offset');
     });
 
+    it('treats THROTTLING_QUOTA_EXCEEDED as retriable', () => {
+      const error = createErrorFromCode(89);
+      expect(error.type).toBe('THROTTLING_QUOTA_EXCEEDED');
+      expect(error.retriable).toBe(true);
+    });
+
     it('falls back to a KAFKA_UNKNOWN_ERROR_CODE placeholder for unknown codes', () => {
       const error = createErrorFromCode(9999);
       expect(error.type).toBe('KAFKA_UNKNOWN_ERROR_CODE');

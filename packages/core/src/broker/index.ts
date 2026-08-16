@@ -120,6 +120,12 @@ import type { SyncGroupResponseV2Body } from '../protocol/requests/sync-group/v2
 import { TxnOffsetCommit } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitOptions } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitResponseV1Body } from '../protocol/requests/txn-offset-commit/v1/response';
+import { AlterUserScramCredentials } from '../protocol/requests/alter-user-scram-credentials/index';
+import type { AlterUserScramCredentialsOptions } from '../protocol/requests/alter-user-scram-credentials/index';
+import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
+import { DescribeUserScramCredentials } from '../protocol/requests/describe-user-scram-credentials/index';
+import type { DescribeUserScramCredentialsOptions } from '../protocol/requests/describe-user-scram-credentials/index';
+import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -455,6 +461,26 @@ export class Broker {
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {
     const electLeaders = this.lookupRequest<ElectLeadersOptions>(API_KEYS.ElectLeaders, ElectLeaders);
     return this.#send(electLeaders(options));
+  }
+
+  async describeUserScramCredentials(
+    options: DescribeUserScramCredentialsOptions = {},
+  ): Promise<DescribeUserScramCredentialsResponseV0Body> {
+    const describeUserScramCredentials = this.lookupRequest<DescribeUserScramCredentialsOptions>(
+      API_KEYS.DescribeUserScramCredentials,
+      DescribeUserScramCredentials,
+    );
+    return this.#send(describeUserScramCredentials(options));
+  }
+
+  async alterUserScramCredentials(
+    options: AlterUserScramCredentialsOptions,
+  ): Promise<AlterUserScramCredentialsResponseV0Body> {
+    const alterUserScramCredentials = this.lookupRequest<AlterUserScramCredentialsOptions>(
+      API_KEYS.AlterUserScramCredentials,
+      AlterUserScramCredentials,
+    );
+    return this.#send(alterUserScramCredentials(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

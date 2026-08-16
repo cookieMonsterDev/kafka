@@ -15,6 +15,7 @@ import {
   PartitionAssigners,
   Partitioners,
   ResourcePatternTypes,
+  ScramMechanisms,
   logLevel,
 } from './index';
 
@@ -54,6 +55,8 @@ describe('public surface', () => {
     expect(AclOperationTypes.READ).toBe(3);
     expect(AclPermissionTypes.ALLOW).toBe(3);
     expect(ResourcePatternTypes.LITERAL).toBe(3);
+    expect(ScramMechanisms.SCRAM_SHA_256).toBe(1);
+    expect(ScramMechanisms.SCRAM_SHA_512).toBe(2);
   });
 
   it('exports the error classes, not the internal helpers', () => {

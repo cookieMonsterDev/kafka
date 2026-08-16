@@ -30,6 +30,7 @@ export { ACL_RESOURCE_TYPES as AclResourceTypes } from './protocol/enums/acl-res
 export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-operation-types';
 export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types';
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
+export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
 
 export {
   KafkaError,

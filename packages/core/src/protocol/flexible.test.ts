@@ -45,6 +45,8 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.AlterPartitionReassignments)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ListPartitionReassignments)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.OffsetDelete)).toBe(1);
+    expect(firstFlexibleVersion(API_KEYS.DescribeUserScramCredentials)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.AlterUserScramCredentials)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });

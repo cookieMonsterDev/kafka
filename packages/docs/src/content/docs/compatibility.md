@@ -61,8 +61,9 @@ partitions; the runtime does not yet do incremental revoke).
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
 (historically ElectPreferredLeaders). `admin.deleteGroupOffsets` is OffsetDelete
-(key 47). Still missing: SCRAM credential admin, client quotas, DescribeLogDirs,
-and describeProducers / transaction describe APIs.
+(key 47). `admin.describeUserScramCredentials` and `admin.alterUserScramCredentials`
+are keys 50–51. Still missing: client quotas, DescribeLogDirs, and describeProducers /
+transaction describe APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

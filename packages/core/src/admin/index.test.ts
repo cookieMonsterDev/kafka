@@ -36,6 +36,8 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     alterPartitionReassignments: vi.fn().mockResolvedValue({}),
     listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }),
     electLeaders: vi.fn().mockResolvedValue({ results: [] }),
+    describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
+    alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
     ...overrides,
   };
 }
@@ -404,6 +406,42 @@ describe('admin', () => {
       electionType: undefined,
       timeout: undefined,
     });
+  });
+
+  it('describes SCRAM credentials through the controller', async () => {
+    const broker = fakeBroker({
+      describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', credentialInfos: [] }] }),
+    });
+    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    await expect(admin.describeUserScramCredentials({ users: ['alice'] })).resolves.toEqual({
+      results: [{ user: 'alice', credentialInfos: [] }],
+    });
+    expect(broker.describeUserScramCredentials).toHaveBeenCalledWith({ users: ['alice'] });
+  });
+
+  it('alters SCRAM credentials with a precomputed salted password', async () => {
+    const broker = fakeBroker({
+      alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', errorCode: 0 }] }),
+    });
+    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+    const salt = Buffer.from([1, 2, 3, 4]);
+    const saltedPassword = Buffer.from([5, 6, 7, 8]);
+    await expect(
+      admin.alterUserScramCredentials({
+        upsertions: [{ name: 'alice', mechanism: 1, iterations: 4096, salt, saltedPassword }],
+      }),
+    ).resolves.toEqual({ results: [{ user: 'alice', errorCode: 0 }] });
+    expect(broker.alterUserScramCredentials).toHaveBeenCalledWith({
+      deletions: [],
+      upsertions: [{ name: 'alice', mechanism: 1, iterations: 4096, salt, saltedPassword }],
+    });
+  });
+
+  it('rejects empty SCRAM alterations', async () => {
+    const admin = createAdmin({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
+    await expect(admin.alterUserScramCredentials({})).rejects.toThrow(KafkaNonRetriableError);
   });
 
   it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {

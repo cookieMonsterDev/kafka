@@ -46,6 +46,10 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.AlterPartitionReassignments]: 0,
   [API_KEYS.ListPartitionReassignments]: 0,
   [API_KEYS.OffsetDelete]: 1,
+  [API_KEYS.DescribeClientQuotas]: 1,
+  [API_KEYS.AlterClientQuotas]: 1,
+  [API_KEYS.DescribeUserScramCredentials]: 0,
+  [API_KEYS.AlterUserScramCredentials]: 0,
 });
 
 /**

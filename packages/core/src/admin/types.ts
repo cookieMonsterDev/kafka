@@ -18,6 +18,8 @@ import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
+import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
+import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
 import type { RetryOptions } from '../retry/index';
 import type { ConnectOptions } from '../utils/abort';
 import type { AdminEventName } from './instrumentation-events';
@@ -226,6 +228,16 @@ export interface Admin {
     electionType?: number;
     timeout?: number;
   }) => Promise<{ results: ElectLeadersResponseV0Body['results'] }>;
+  describeUserScramCredentials: (options?: {
+    users?: string[] | null;
+  }) => Promise<{ results: DescribeUserScramCredentialsResponseV0Body['results'] }>;
+  alterUserScramCredentials: (options: {
+    deletions?: { name: string; mechanism: number }[];
+    upsertions?: (
+      | { name: string; mechanism: number; iterations?: number; password: string; salt?: Buffer }
+      | { name: string; mechanism: number; iterations: number; salt: Buffer; saltedPassword: Buffer }
+    )[];
+  }) => Promise<{ results: AlterUserScramCredentialsResponseV0Body['results'] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

@@ -8,6 +8,7 @@ import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createOffsetsApi } from './offsets';
 import { createReassignmentsApi } from './reassignments';
+import { createScramApi } from './scram';
 import { createTopicsApi } from './topics';
 import type { Admin, AdminOptions } from './types';
 
@@ -40,6 +41,7 @@ export function createAdmin({
   const groups = createGroupsApi(context);
   const acls = createAclsApi(context);
   const reassignments = createReassignmentsApi(context);
+  const scram = createScramApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -79,6 +81,7 @@ export function createAdmin({
     ...groups,
     ...acls,
     ...reassignments,
+    ...scram,
     on,
     logger: () => logger,
     events,

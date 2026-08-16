@@ -11,6 +11,8 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.IncrementalAlterConfigs).toBe(44);
     expect(API_KEYS.ListPartitionReassignments).toBe(46);
     expect(API_KEYS.OffsetDelete).toBe(47);
+    expect(API_KEYS.DescribeUserScramCredentials).toBe(50);
+    expect(API_KEYS.AlterUserScramCredentials).toBe(51);
   });
 
   it('is frozen', () => {
@@ -23,6 +25,7 @@ describe('protocol/requests/api-keys', () => {
     expect(apiKeyName(18)).toBe('ApiVersions');
     expect(apiKeyName(43)).toBe('ElectLeaders');
     expect(apiKeyName(47)).toBe('OffsetDelete');
+    expect(apiKeyName(50)).toBe('DescribeUserScramCredentials');
     expect(apiKeyName(9999)).toBeUndefined();
   });
 });

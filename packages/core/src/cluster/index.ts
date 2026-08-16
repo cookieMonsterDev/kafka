@@ -168,7 +168,9 @@ export class Cluster {
       const broker = await this.findBroker({ nodeId: String(metadata.controllerId) });
 
       if (!broker) {
-        throw new KafkaJSBrokerNotFound(`Controller broker with id ${metadata.controllerId} not found in the cached metadata`);
+        throw new KafkaJSBrokerNotFound(
+          `Controller broker with id ${metadata.controllerId} not found in the cached metadata`,
+        );
       }
 
       return broker;
@@ -321,7 +323,11 @@ export class Cluster {
 
         // A new broker can join the cluster before we have the chance to refresh metadata.
         if (error.name === 'KafkaJSBrokerNotFound' || error.type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
-          this.logger.debug(`${error.message}, refreshing metadata and trying again...`, { groupId, retryCount, retryTime });
+          this.logger.debug(`${error.message}, refreshing metadata and trying again...`, {
+            groupId,
+            retryCount,
+            retryTime,
+          });
           await this.refreshMetadata();
           throw error;
         }

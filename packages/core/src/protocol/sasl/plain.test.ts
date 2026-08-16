@@ -18,7 +18,11 @@ describe('protocol/sasl/plain', () => {
   });
 
   it('uses the given authorizationIdentity when present', async () => {
-    const buffer = await plainRequest({ authorizationIdentity: 'admin', username: 'user', password: 'pencil' }).encode();
+    const buffer = await plainRequest({
+      authorizationIdentity: 'admin',
+      username: 'user',
+      password: 'pencil',
+    }).encode();
     const decoder = new Decoder(buffer);
     expect(readBytesOrThrow(decoder).toString()).toBe(`admin${NUL}user${NUL}pencil`);
   });

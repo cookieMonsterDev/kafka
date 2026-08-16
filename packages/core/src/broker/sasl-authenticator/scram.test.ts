@@ -100,7 +100,14 @@ describe('broker/sasl-authenticator/SCRAM', () => {
       });
 
       it('sanitizes a comma in the username', async () => {
-        const scram = new SCRAM({ username: 'bob,', password: 'password' }, 'host', 9094, silentLogger, saslAuthenticate, DIGESTS.SHA256);
+        const scram = new SCRAM(
+          { username: 'bob,', password: 'password' },
+          'host',
+          9094,
+          silentLogger,
+          saslAuthenticate,
+          DIGESTS.SHA256,
+        );
         saslAuthenticate.mockResolvedValueOnce({ original: '' });
 
         await internals(scram).sendClientFirstMessage();
@@ -112,7 +119,14 @@ describe('broker/sasl-authenticator/SCRAM', () => {
       });
 
       it('sanitizes an equals sign in the username', async () => {
-        const scram = new SCRAM({ username: 'bob=', password: 'password' }, 'host', 9094, silentLogger, saslAuthenticate, DIGESTS.SHA256);
+        const scram = new SCRAM(
+          { username: 'bob=', password: 'password' },
+          'host',
+          9094,
+          silentLogger,
+          saslAuthenticate,
+          DIGESTS.SHA256,
+        );
         saslAuthenticate.mockResolvedValueOnce({ original: '' });
 
         await internals(scram).sendClientFirstMessage();

@@ -13,7 +13,9 @@ function hasBrokerBeenReplaced(
   broker: Broker,
   { host, port, rack }: { host: string; port: number; rack: string | null },
 ): boolean {
-  return broker.connectionPool.host !== host || broker.connectionPool.port !== port || broker.connectionPool.rack !== rack;
+  return (
+    broker.connectionPool.host !== host || broker.connectionPool.port !== port || broker.connectionPool.rack !== rack
+  );
 }
 
 export interface BrokerPoolOptions {
@@ -69,7 +71,9 @@ export class BrokerPool {
   }
 
   hasConnectedBrokers(): boolean {
-    return Object.values(this.brokers).some((broker) => broker.isConnected()) || (this.seedBroker?.isConnected() ?? false);
+    return (
+      Object.values(this.brokers).some((broker) => broker.isConnected()) || (this.seedBroker?.isConnected() ?? false)
+    );
   }
 
   async createSeedBroker(): Promise<void> {

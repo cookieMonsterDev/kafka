@@ -15,11 +15,9 @@ function toProduceMessage(message: Message): ProduceMessage {
 export function createTopicData(topicDataForBroker: readonly TopicDataInput[]): ProduceTopicData[] {
   return topicDataForBroker.map(({ topic, partitions, messagesPerPartition }) => ({
     topic,
-    partitions: partitions.map(
-      (partition): ProducePartitionData => ({
-        partition,
-        messages: (messagesPerPartition.get(partition) ?? []).map(toProduceMessage),
-      }),
-    ),
+    partitions: partitions.map((partition): ProducePartitionData => ({
+      partition,
+      messages: (messagesPerPartition.get(partition) ?? []).map(toProduceMessage),
+    })),
   }));
 }

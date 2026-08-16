@@ -5,7 +5,14 @@ import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-
 import type { Retrier } from '../retry/index.js';
 import type { EosManager } from './eos-manager/index.js';
 import { createSendMessages } from './send-messages.js';
-import type { CustomPartitioner, Message, ProducerBatch, ProducerRecord, RecordMetadata, TopicMessages } from './types.js';
+import type {
+  CustomPartitioner,
+  Message,
+  ProducerBatch,
+  ProducerRecord,
+  RecordMetadata,
+  TopicMessages,
+} from './types.js';
 
 export interface MessageProducerOptions {
   logger: Logger;
@@ -61,7 +68,9 @@ export function createMessageProducer({
     const connectionStatus = getConnectionStatus();
 
     if (connectionStatus === CONNECTION_STATUS.DISCONNECTING) {
-      throw new KafkaJSNonRetriableError(`The producer is disconnecting; therefore, it can't safely accept messages anymore`);
+      throw new KafkaJSNonRetriableError(
+        `The producer is disconnecting; therefore, it can't safely accept messages anymore`,
+      );
     }
 
     if (connectionStatus === CONNECTION_STATUS.DISCONNECTED) {
@@ -81,7 +90,9 @@ export function createMessageProducer({
     }
 
     if (idempotent && acks !== -1) {
-      throw new KafkaJSNonRetriableError(`Not requiring ack for all messages invalidates the idempotent producer's EoS guarantees`);
+      throw new KafkaJSNonRetriableError(
+        `Not requiring ack for all messages invalidates the idempotent producer's EoS guarantees`,
+      );
     }
 
     for (const { topic, messages } of topicMessages) {
@@ -91,7 +102,9 @@ export function createMessageProducer({
 
       const messageWithoutValue = messages.find((message) => message.value === undefined);
       if (messageWithoutValue) {
-        throw new KafkaJSNonRetriableError(`Invalid message without value for topic "${topic}": ${JSON.stringify(messageWithoutValue)}`);
+        throw new KafkaJSNonRetriableError(
+          `Invalid message without value for topic "${topic}": ${JSON.stringify(messageWithoutValue)}`,
+        );
       }
     }
 
@@ -107,12 +120,22 @@ export function createMessageProducer({
       }
     }
 
-    const mergedTopicMessages: TopicMessages[] = [...mergedByTopic.entries()].map(([topic, messages]) => ({ topic, messages }));
+    const mergedTopicMessages: TopicMessages[] = [...mergedByTopic.entries()].map(([topic, messages]) => ({
+      topic,
+      messages,
+    }));
 
     return rejectOnAbort(sendMessages({ acks, timeout, compression, topicMessages: mergedTopicMessages }), signal);
   }
 
-  async function send({ acks, timeout, compression, topic, messages, signal }: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]> {
+  async function send({
+    acks,
+    timeout,
+    compression,
+    topic,
+    messages,
+    signal,
+  }: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]> {
     return sendBatch({ acks, timeout, compression, topicMessages: [{ topic, messages }], signal });
   }
 

@@ -36,7 +36,10 @@ export interface Producer {
   disconnect(): Promise<void>;
   isIdempotent(): boolean;
   readonly events: typeof events;
-  on(eventName: ProducerEventName, listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>): RemoveInstrumentationEventListener;
+  on(
+    eventName: ProducerEventName,
+    listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
+  ): RemoveInstrumentationEventListener;
   send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
   sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
   transaction(): Promise<Transaction>;
@@ -78,7 +81,13 @@ export function createProducer({
   const partitioner = createPartitioner();
   const producerRetrier = retrier(producerRetry);
   const instrumentationEmitter = rootInstrumentationEmitter ?? new InstrumentationEventEmitter();
-  const idempotentEosManager = createEosManager({ logger, cluster, transactionTimeout, transactional: false, transactionalId });
+  const idempotentEosManager = createEosManager({
+    logger,
+    cluster,
+    transactionTimeout,
+    transactional: false,
+    transactionalId,
+  });
 
   const { send, sendBatch } = createMessageProducer({
     logger,
@@ -92,7 +101,10 @@ export function createProducer({
 
   let transactionalEosManager: EosManager | undefined;
 
-  function on(eventName: ProducerEventName, listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>): RemoveInstrumentationEventListener {
+  function on(
+    eventName: ProducerEventName,
+    listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,
+  ): RemoveInstrumentationEventListener {
     if (!EVENT_NAMES.has(eventName)) {
       throw new KafkaJSNonRetriableError(`Event name should be one of ${EVENT_KEYS}`);
     }
@@ -112,7 +124,13 @@ export function createProducer({
     }
 
     let transactionDidEnd = false;
-    transactionalEosManager ??= createEosManager({ logger, cluster, transactionTimeout, transactional: true, transactionalId });
+    transactionalEosManager ??= createEosManager({
+      logger,
+      cluster,
+      transactionTimeout,
+      transactional: true,
+      transactionalId,
+    });
     const activeEosManager = transactionalEosManager;
 
     if (activeEosManager.isInTransaction()) {
@@ -139,7 +157,9 @@ export function createProducer({
 
     const isActive = (): boolean => activeEosManager.isInTransaction() && !transactionDidEnd;
 
-    function transactionGuard<Args extends unknown[], R>(fn: (...args: Args) => Promise<R>): (...args: Args) => Promise<R> {
+    function transactionGuard<Args extends unknown[], R>(
+      fn: (...args: Args) => Promise<R>,
+    ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
         if (!isActive()) {
           return Promise.reject(new KafkaJSNonRetriableError('Cannot continue to use transaction once ended'));
@@ -160,15 +180,17 @@ export function createProducer({
         await activeEosManager.commit();
         transactionDidEnd = true;
       }),
-      sendOffsets: transactionGuard(async ({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => {
-        await activeEosManager.sendOffsets({ consumerGroupId, topics });
+      sendOffsets: transactionGuard(
+        async ({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => {
+          await activeEosManager.sendOffsets({ consumerGroupId, topics });
 
-        for (const { topic, partitions } of topics) {
-          for (const { partition, offset } of partitions) {
-            cluster.markOffsetAsCommitted({ groupId: consumerGroupId, topic, partition, offset });
+          for (const { topic, partitions } of topics) {
+            for (const { partition, offset } of partitions) {
+              cluster.markOffsetAsCommitted({ groupId: consumerGroupId, topic, partition, offset });
+            }
           }
-        }
-      }),
+        },
+      ),
       isActive,
     };
   }

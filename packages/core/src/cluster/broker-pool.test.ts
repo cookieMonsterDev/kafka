@@ -29,7 +29,9 @@ function fakeConnectionPool(overrides: Partial<Record<string, unknown>> = {}): C
   } as unknown as ConnectionPool;
 }
 
-function fakeBuilder(build: (destination?: ConnectionPoolDestination) => Promise<ConnectionPool>): ConnectionPoolBuilder {
+function fakeBuilder(
+  build: (destination?: ConnectionPoolDestination) => Promise<ConnectionPool>,
+): ConnectionPoolBuilder {
   return { build };
 }
 
@@ -77,7 +79,14 @@ describe('cluster/BrokerPool', () => {
     const pool = fakeConnectionPool({ destroy: destroySpy });
     const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(async () => pool), logger: silentLogger });
     await brokerPool.createSeedBroker();
-    brokerPool.metadata = { brokers: [], topicMetadata: [], throttleTime: 0, clusterId: null, controllerId: 0, clientSideThrottleTime: 0 };
+    brokerPool.metadata = {
+      brokers: [],
+      topicMetadata: [],
+      throttleTime: 0,
+      clusterId: null,
+      controllerId: 0,
+      clientSideThrottleTime: 0,
+    };
 
     await brokerPool.disconnect();
 
@@ -88,7 +97,10 @@ describe('cluster/BrokerPool', () => {
 
   it('removeBroker drops the matching broker and reassigns the seed if it was removed', async () => {
     const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
-    const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(async () => seedPool), logger: silentLogger });
+    const brokerPool = new BrokerPool({
+      connectionPoolBuilder: fakeBuilder(async () => seedPool),
+      logger: silentLogger,
+    });
     await brokerPool.createSeedBroker();
     brokerPool.seedBroker!.nodeId = 1;
     brokerPool.brokers = { '1': brokerPool.seedBroker! };

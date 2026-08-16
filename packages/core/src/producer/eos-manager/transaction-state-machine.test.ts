@@ -70,7 +70,9 @@ describe('producer/eosManager/TransactionStateMachine', () => {
       );
 
       expect(() => guarded.beginTransaction()).toThrow(
-        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "beginTransaction" in state "UNINITIALIZED"'),
+        new KafkaJSNonRetriableError(
+          'Transaction state exception: Cannot call "beginTransaction" in state "UNINITIALIZED"',
+        ),
       );
     });
 

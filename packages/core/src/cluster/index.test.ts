@@ -45,7 +45,9 @@ describe('cluster/Cluster', () => {
 
     it('returns the partition metadata for a known topic', () => {
       const cluster = createCluster();
-      const partitionMetadata = [{ partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] }];
+      const partitionMetadata = [
+        { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+      ];
       cluster.brokerPool.metadata = fakeMetadata({
         topicMetadata: [{ topicErrorCode: 0, topic: 'my-topic', isInternal: false, partitionMetadata }],
       });
@@ -83,7 +85,9 @@ describe('cluster/Cluster', () => {
             topicErrorCode: 0,
             topic: 'my-topic',
             isInternal: false,
-            partitionMetadata: [{ partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] }],
+            partitionMetadata: [
+              { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+            ],
           },
         ],
       });
@@ -169,7 +173,10 @@ describe('cluster/Cluster', () => {
 
     it('returns the broker pool result directly on success', async () => {
       const cluster = createCluster();
-      const broker = new Broker({ connectionPool: { host: 'x', port: 1, connectionTimeout: 1 } as never, logger: silentLogger });
+      const broker = new Broker({
+        connectionPool: { host: 'x', port: 1, connectionTimeout: 1 } as never,
+        logger: silentLogger,
+      });
       vi.spyOn(cluster.brokerPool, 'findBroker').mockResolvedValue(broker);
 
       await expect(cluster.findBroker({ nodeId: '1' })).resolves.toBe(broker);

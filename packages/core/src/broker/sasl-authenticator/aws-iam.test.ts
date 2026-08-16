@@ -38,7 +38,11 @@ describe('broker/sasl-authenticator/aws-iam', () => {
 
   it('defaults sessionToken to an empty string and authenticates', async () => {
     const saslAuthenticate = vi.fn().mockResolvedValue(true);
-    const config: AwsIamSaslConfig = { authorizationIdentity: 'identity', accessKeyId: 'AKIA', secretAccessKey: 'secret' };
+    const config: AwsIamSaslConfig = {
+      authorizationIdentity: 'identity',
+      accessKeyId: 'AKIA',
+      secretAccessKey: 'secret',
+    };
     const awsIam = awsIamAuthenticatorProvider(config)({
       host: 'broker',
       port: 9092,

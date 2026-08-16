@@ -34,7 +34,8 @@ export function murmur2(key: Buffer | string | number): number {
 
   for (let i = 0; i < length4; i++) {
     const i4 = i * 4;
-    let k = byteAt(data, i4) + (byteAt(data, i4 + 1) << 8) + (byteAt(data, i4 + 2) << 16) + (byteAt(data, i4 + 3) << 24);
+    let k =
+      byteAt(data, i4) + (byteAt(data, i4 + 1) << 8) + (byteAt(data, i4 + 2) << 16) + (byteAt(data, i4 + 3) << 24);
 
     k *= M;
     k ^= k >>> R;

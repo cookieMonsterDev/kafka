@@ -37,7 +37,13 @@ export class TransactionStateMachine extends EventEmitter {
   readonly #logger: Logger;
   #currentState: TransactionState;
 
-  constructor({ logger, initialState = TRANSACTION_STATES.UNINITIALIZED }: { logger: Logger; initialState?: TransactionState }) {
+  constructor({
+    logger,
+    initialState = TRANSACTION_STATES.UNINITIALIZED,
+  }: {
+    logger: Logger;
+    initialState?: TransactionState;
+  }) {
     super();
     this.#logger = logger;
     this.#currentState = initialState;
@@ -51,7 +57,9 @@ export class TransactionStateMachine extends EventEmitter {
     this.#logger.debug(`Transaction state transition ${this.#currentState} --> ${state}`);
 
     if (!VALID_STATE_TRANSITIONS[this.#currentState].includes(state)) {
-      throw new KafkaJSNonRetriableError(`Transaction state exception: Invalid transition ${this.#currentState} --> ${state}`);
+      throw new KafkaJSNonRetriableError(
+        `Transaction state exception: Invalid transition ${this.#currentState} --> ${state}`,
+      );
     }
 
     const from = this.#currentState;
@@ -76,7 +84,9 @@ export class TransactionStateMachine extends EventEmitter {
 
       guarded[key] = (...args: unknown[]): unknown => {
         if (!legalStates.includes(this.#currentState)) {
-          const error = new KafkaJSNonRetriableError(`Transaction state exception: Cannot call "${key}" in state "${this.#currentState}"`);
+          const error = new KafkaJSNonRetriableError(
+            `Transaction state exception: Cannot call "${key}" in state "${this.#currentState}"`,
+          );
           if (isAsync) return Promise.reject(error);
           throw error;
         }

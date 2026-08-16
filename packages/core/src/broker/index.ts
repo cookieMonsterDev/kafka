@@ -1,11 +1,21 @@
-import { KafkaJSConnectionClosedError, KafkaJSInvariantViolation, KafkaJSMemberIdRequired, KafkaJSProtocolError } from '../errors.js';
+import {
+  KafkaJSConnectionClosedError,
+  KafkaJSInvariantViolation,
+  KafkaJSMemberIdRequired,
+  KafkaJSProtocolError,
+} from '../errors.js';
 import type { Logger } from '../loggers/index.js';
 import type { ConnectionPool } from '../network/connection-pool.js';
 import { asTypedSend } from '../network/connection.js';
 import { COMPRESSION_TYPES } from '../protocol/compression/index.js';
 import { API_KEYS } from '../protocol/requests/api-keys.js';
 import { lookup } from '../protocol/requests/index.js';
-import type { AnyRequestDefinition, AnyResponseDefinition, BrokerVersions, ProtocolFactory } from '../protocol/requests/index.js';
+import type {
+  AnyRequestDefinition,
+  AnyResponseDefinition,
+  BrokerVersions,
+  ProtocolFactory,
+} from '../protocol/requests/index.js';
 import { Lock } from '../utils/lock.js';
 import { shuffle } from '../utils/shuffle.js';
 
@@ -260,7 +270,10 @@ export class Broker {
     const shuffledTopicPartitions = shuffle(flattenedTopicPartitions);
 
     // Consecutive partitions for the same topic can be combined into a single `topic` entry.
-    const consolidatedTopicPartitions: { topic: string; partitions: typeof shuffledTopicPartitions[number]['partition'][] }[] = [];
+    const consolidatedTopicPartitions: {
+      topic: string;
+      partitions: (typeof shuffledTopicPartitions)[number]['partition'][];
+    }[] = [];
     for (const { topic, partition } of shuffledTopicPartitions) {
       const last = consolidatedTopicPartitions.at(-1);
       if (last && last.topic === topic) {

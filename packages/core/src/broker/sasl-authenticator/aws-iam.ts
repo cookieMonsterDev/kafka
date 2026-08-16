@@ -28,9 +28,7 @@ export function awsIamAuthenticatorProvider(
         await saslAuthenticate({ request: awsIamRequest(sasl), response: awsIamResponse });
         logger.debug('SASL AWS-IAM authentication successful', { broker });
       } catch (e) {
-        const error = new KafkaJSSASLAuthenticationError(
-          `SASL AWS-IAM authentication failed: ${(e as Error).message}`,
-        );
+        const error = new KafkaJSSASLAuthenticationError(`SASL AWS-IAM authentication failed: ${(e as Error).message}`);
         logger.error(error.message, { broker });
         throw error;
       }

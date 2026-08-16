@@ -32,7 +32,10 @@ const INIT_PRODUCER_RETRIABLE_PROTOCOL_ERRORS = new Set([
  * loading, look up a fresh coordinator once it moves" behavior.
  */
 const COMMIT_RETRIABLE_PROTOCOL_ERRORS = new Set(['UNKNOWN_TOPIC_OR_PARTITION', 'GROUP_LOAD_IN_PROGRESS']);
-const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set(['GROUP_COORDINATOR_NOT_AVAILABLE', 'NOT_COORDINATOR_FOR_GROUP']);
+const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set([
+  'GROUP_COORDINATOR_NOT_AVAILABLE',
+  'NOT_COORDINATOR_FOR_GROUP',
+]);
 
 export interface EosManagerTopicPartitions {
   topic: string;
@@ -262,7 +265,10 @@ export function createEosManager({
     }
   }
 
-  async function endTransaction(transactionResult: boolean, nextState: typeof TRANSACTION_STATES.COMMITTING | typeof TRANSACTION_STATES.ABORTING): Promise<void> {
+  async function endTransaction(
+    transactionResult: boolean,
+    nextState: typeof TRANSACTION_STATES.COMMITTING | typeof TRANSACTION_STATES.ABORTING,
+  ): Promise<void> {
     transactionalGuard();
     stateMachine.transitionTo(nextState);
 
@@ -303,7 +309,13 @@ export function createEosManager({
     await brokerMutexLocks.get(broker.nodeId!)?.release();
   }
 
-  async function sendOffsets({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }): Promise<void> {
+  async function sendOffsets({
+    consumerGroupId,
+    topics,
+  }: {
+    consumerGroupId: string;
+    topics: readonly TopicOffsets[];
+  }): Promise<void> {
     const transactionCoordinator = await findTransactionCoordinator();
 
     await transactionCoordinator.addOffsetsToTxn({
@@ -315,7 +327,10 @@ export function createEosManager({
 
     hasOffsetsAddedToTransaction = true;
 
-    let groupCoordinator = await cluster.findGroupCoordinator({ groupId: consumerGroupId, coordinatorType: COORDINATOR_TYPES.GROUP });
+    let groupCoordinator = await cluster.findGroupCoordinator({
+      groupId: consumerGroupId,
+      coordinatorType: COORDINATOR_TYPES.GROUP,
+    });
 
     const requestTopics = topics.map(({ topic, partitions }) => ({
       topic,
@@ -353,7 +368,10 @@ export function createEosManager({
             retryCount,
             retryTime,
           });
-          groupCoordinator = await cluster.findGroupCoordinator({ groupId: consumerGroupId, coordinatorType: COORDINATOR_TYPES.GROUP });
+          groupCoordinator = await cluster.findGroupCoordinator({
+            groupId: consumerGroupId,
+            coordinatorType: COORDINATOR_TYPES.GROUP,
+          });
           throw error;
         }
 

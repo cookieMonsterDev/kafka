@@ -1,0 +1,177 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createLogger, LOG_LEVELS } from '../loggers/index.js';
+import { KafkaJSNoBrokerAvailableError, KafkaJSNonRetriableError } from '../errors.js';
+import { seq } from '../utils/seq.js';
+import { sleep, waitFor } from '../utils/wait.js';
+import { Batch } from './batch.js';
+import { createFetchManager, type FetchManager } from './fetch-manager.js';
+import { createFetcher } from './fetcher.js';
+import { createWorker } from './worker.js';
+import { createWorkerQueue } from './worker-queue.js';
+
+const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
+
+describe('consumer/fetch-manager', () => {
+  let fetchManager: FetchManager<Batch> | undefined;
+
+  afterEach(async () => {
+    if (fetchManager) await fetchManager.stop();
+  });
+
+  it('constructs fetchers and workers', async () => {
+    const getNodeIds = vi.fn(() => seq(4, (i) => String(i)));
+    const fetch = vi.fn(async (nodeId: string) =>
+      seq(
+        10,
+        (id) => new Batch('test-topic', 0n, { partition: Number(`${nodeId}${id}`), highWatermark: 100n, messages: [] }),
+      ),
+    );
+    const handler = vi.fn(async () => {
+      await sleep(20);
+    });
+
+    const manager = createFetchManager({ logger: silentLogger, concurrency: 3, fetch, handler, getNodeIds });
+    fetchManager = manager;
+    void manager.start();
+
+    const fetchers = manager.getFetchers();
+    expect(fetchers).toHaveLength(getNodeIds().length);
+    expect(fetchers[0]!.getWorkerQueue().getWorkers()).toHaveLength(3);
+  });
+
+  it('finishes processing other batches in case of an error from any single worker', async () => {
+    const getNodeIds = vi.fn(() => seq(4, (i) => String(i)));
+    const batchSize = 10;
+    const fetch = vi.fn(async (nodeId: string) =>
+      seq(
+        batchSize,
+        (id) => new Batch('test-topic', 0n, { partition: Number(`${nodeId}${id}`), highWatermark: 100n, messages: [] }),
+      ),
+    );
+    const handler = vi.fn(async () => {
+      await sleep(20);
+    });
+    handler.mockImplementationOnce(async () => {
+      throw new Error('test');
+    });
+
+    const manager = createFetchManager({ logger: silentLogger, concurrency: 3, fetch, handler, getNodeIds });
+    fetchManager = manager;
+    await expect(manager.start()).rejects.toThrow('test');
+    expect(handler).toHaveBeenCalledTimes(getNodeIds().length * batchSize);
+  });
+
+  it('rebalances fetchers when nodeIds change', async () => {
+    const getNodeIds = vi.fn(() => seq(2, (i) => String(i)));
+    const fetch = vi.fn(async () => {
+      await sleep(1);
+      return [new Batch('test-topic', 0n, { partition: 0, highWatermark: 100n, messages: [] })];
+    });
+    const handler = vi.fn(async () => {
+      await sleep(20);
+    });
+
+    const manager = createFetchManager({ logger: silentLogger, concurrency: 3, fetch, handler, getNodeIds });
+    fetchManager = manager;
+    void manager.start();
+    expect(manager.getFetchers()).toHaveLength(2);
+
+    getNodeIds.mockImplementation(() => seq(3, (i) => String(i)));
+    fetch.mockClear();
+    await waitFor(() => fetch.mock.calls.length > 0);
+    expect(manager.getFetchers()).toHaveLength(3);
+  });
+
+  it('does not rebalance when all brokers become unavailable; the error bubbles up', async () => {
+    const getNodeIds = vi.fn(() => seq(1, (i) => String(i)));
+    const realFetch = vi.fn(async () => [
+      new Batch('test-topic', 0n, { partition: 0, highWatermark: 100n, messages: [] }),
+    ]);
+    const fetch = vi.fn(async (nodeId: string) => {
+      if (!getNodeIds().includes(nodeId)) {
+        throw new KafkaJSNonRetriableError('Node not found');
+      }
+      return realFetch();
+    });
+    const handler = vi.fn(async () => {
+      await sleep(20);
+    });
+
+    const manager = createFetchManager({ logger: silentLogger, concurrency: 1, fetch, handler, getNodeIds });
+    fetchManager = manager;
+    const startPromise = manager.start();
+    expect(manager.getFetchers()).toHaveLength(1);
+
+    getNodeIds.mockImplementation(() => []);
+    await expect(startPromise).rejects.toThrow('Node not found');
+  });
+
+  it('throws when there are no brokers available', async () => {
+    const manager = createFetchManager<Batch>({
+      logger: silentLogger,
+      concurrency: 1,
+      fetch: vi.fn(async () => []),
+      handler: vi.fn(async () => {}),
+      getNodeIds: vi.fn(() => []),
+    });
+    fetchManager = manager;
+    await expect(manager.start()).rejects.toThrow(KafkaJSNoBrokerAvailableError);
+  });
+});
+
+describe('consumer/fetcher', () => {
+  it('fetches but does not push to the worker queue before exiting', async () => {
+    const fetch = vi.fn(async () => {
+      await sleep(1);
+      return seq(10, (index) => new Batch('test-topic', 0n, { partition: index, highWatermark: 100n, messages: [] }));
+    });
+    const handler = vi.fn(async () => {
+      await sleep(1);
+    });
+    const workers = seq(5, (workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue,
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    void fetcher.start();
+    await fetcher.stop();
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith('0');
+    expect(handler).toHaveBeenCalledTimes(0);
+  });
+
+  it('utilizes all workers', async () => {
+    const fetch = vi.fn(async () => {
+      await sleep(1);
+      return seq(10, (index) => new Batch('test-topic', 0n, { partition: index, highWatermark: 100n, messages: [] }));
+    });
+    const handler = vi.fn(async (_batch: Batch, _meta: { workerId: number }) => {
+      await sleep(1);
+    });
+    const workerIds = seq(5);
+    const workers = workerIds.map((workerId) => createWorker({ handler, workerId }));
+    const workerQueue = createWorkerQueue({ workers });
+    const fetcher = createFetcher({
+      nodeId: '0',
+      fetch,
+      workerQueue,
+      logger: silentLogger,
+      partitionAssignments: new Map(),
+    });
+
+    void fetcher.start();
+    await waitFor(() => handler.mock.calls.length > workerIds.length);
+    await fetcher.stop();
+
+    const calledWorkerIds = handler.mock.calls.map(([, extra]) => extra.workerId);
+    for (const workerId of workerIds) {
+      expect(calledWorkerIds).toContain(workerId);
+    }
+  });
+});

@@ -6,7 +6,13 @@ describe('producer/createTopicData', () => {
     const messagesPerPartition = new Map([
       [1, [{ value: 'v1', key: '1' }]],
       [2, [{ value: 'v2', key: '2' }]],
-      [3, [{ value: 'v3', key: '3' }, { value: 'v4', key: '4' }]],
+      [
+        3,
+        [
+          { value: 'v3', key: '3' },
+          { value: 'v4', key: '4' },
+        ],
+      ],
     ]);
 
     const result = createTopicData([{ topic: 'test-topic', partitions: [1, 2, 3], messagesPerPartition }]);

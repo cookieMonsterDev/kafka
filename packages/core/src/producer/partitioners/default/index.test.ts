@@ -19,6 +19,8 @@ describe('producer/partitioners/default', () => {
     expect(partition).toBeGreaterThanOrEqual(0);
     expect(partition).toBeLessThan(3);
     // Same key, same partition, every time.
-    expect(partitioner({ topic: 'test-topic', partitionMetadata, message: { value: null, key: 'a-key' } })).toBe(partition);
+    expect(partitioner({ topic: 'test-topic', partitionMetadata, message: { value: null, key: 'a-key' } })).toBe(
+      partition,
+    );
   });
 });

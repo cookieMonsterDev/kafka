@@ -79,7 +79,9 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
       try {
         list = await brokers();
       } catch (e) {
-        const wrappedError = new KafkaJSConnectionError(`Failed to connect: "config.brokers" threw: ${(e as Error).message}`);
+        const wrappedError = new KafkaJSConnectionError(
+          `Failed to connect: "config.brokers" threw: ${(e as Error).message}`,
+        );
         wrappedError.stack = `${wrappedError.name}\n  Caused by: ${(e as Error).stack}`;
         throw wrappedError;
       }

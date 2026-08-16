@@ -210,9 +210,11 @@ export class SCRAM {
   }
 
   private authMessage(clientMessageResponse: ScramServerMessage): string {
-    return [this.firstMessageBare(), clientMessageResponse.original, this.finalMessageWithoutProof(clientMessageResponse)].join(
-      ',',
-    );
+    return [
+      this.firstMessageBare(),
+      clientMessageResponse.original,
+      this.finalMessageWithoutProof(clientMessageResponse),
+    ].join(',');
   }
 
   private async saltPassword(clientMessageResponse: ScramServerMessage): Promise<Buffer> {

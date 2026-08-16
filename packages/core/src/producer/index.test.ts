@@ -11,7 +11,13 @@ const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () =>
 function fakeBroker() {
   return {
     nodeId: 1,
-    initProducerId: vi.fn().mockResolvedValue({ producerId: 1000n, producerEpoch: 1, errorCode: 0, throttleTime: 0, clientSideThrottleTime: 0 }),
+    initProducerId: vi.fn().mockResolvedValue({
+      producerId: 1000n,
+      producerEpoch: 1,
+      errorCode: 0,
+      throttleTime: 0,
+      clientSideThrottleTime: 0,
+    }),
   };
 }
 
@@ -51,7 +57,9 @@ describe('producer', () => {
 
   it('throws when sending while disconnected', async () => {
     const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
-    await expect(producer.send({ topic: 'topic', messages: [{ key: 'key', value: 'value' }] })).rejects.toThrow('The producer is disconnected');
+    await expect(producer.send({ topic: 'topic', messages: [{ key: 'key', value: 'value' }] })).rejects.toThrow(
+      'The producer is disconnected',
+    );
   });
 
   it('allows a null message value, for tombstones', async () => {
@@ -75,7 +83,9 @@ describe('producer', () => {
 
   it('rejects an unknown event name', () => {
     const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
-    expect(() => producer.on('NON_EXISTENT_EVENT' as never, () => {})).toThrow(/Event name should be one of producer\.events\./);
+    expect(() => producer.on('NON_EXISTENT_EVENT' as never, () => {})).toThrow(
+      /Event name should be one of producer\.events\./,
+    );
   });
 
   it('emits connect/disconnect events', async () => {
@@ -96,25 +106,42 @@ describe('producer', () => {
   it('forwards network request events, rewriting the event type back to the public name', async () => {
     const emitter = new InstrumentationEventEmitter();
     const cluster = fakeCluster();
-    const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger, instrumentationEmitter: emitter });
+    const producer = createProducer({
+      cluster: cluster as unknown as Cluster,
+      logger: silentLogger,
+      instrumentationEmitter: emitter,
+    });
 
     const requestListener = vi.fn();
     producer.on(producer.events.REQUEST, requestListener);
 
     emitter.emit(NETWORK_REQUEST, { apiName: 'Produce' });
 
-    expect(requestListener).toHaveBeenCalledWith(expect.objectContaining({ type: 'producer.network.request', payload: { apiName: 'Produce' } }));
+    expect(requestListener).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'producer.network.request', payload: { apiName: 'Produce' } }),
+    );
   });
 
   it('reports itself as idempotent when configured that way', () => {
-    const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger, idempotent: true });
+    const producer = createProducer({
+      cluster: fakeCluster() as unknown as Cluster,
+      logger: silentLogger,
+      idempotent: true,
+    });
     expect(producer.isIdempotent()).toBe(true);
   });
 
   it('throws when an idempotent producer disallows retries', () => {
     expect(() =>
-      createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger, idempotent: true, retry: { retries: 0 } }),
-    ).toThrow(new KafkaJSNonRetriableError('Idempotent producer must allow retries to protect against transient errors'));
+      createProducer({
+        cluster: fakeCluster() as unknown as Cluster,
+        logger: silentLogger,
+        idempotent: true,
+        retry: { retries: 0 },
+      }),
+    ).toThrow(
+      new KafkaJSNonRetriableError('Idempotent producer must allow retries to protect against transient errors'),
+    );
   });
 
   it('only initializes the producer id once for an idempotent producer', async () => {
@@ -136,22 +163,34 @@ describe('producer', () => {
   describe('transaction', () => {
     it('requires a transactionalId', async () => {
       const producer = createProducer({ cluster: fakeCluster() as unknown as Cluster, logger: silentLogger });
-      await expect(producer.transaction()).rejects.toEqual(new KafkaJSNonRetriableError('Must provide transactional id for transactional producer'));
+      await expect(producer.transaction()).rejects.toEqual(
+        new KafkaJSNonRetriableError('Must provide transactional id for transactional producer'),
+      );
     });
 
     it('rejects a second concurrent transaction', async () => {
       const cluster = fakeCluster();
-      const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger, transactionalId: 'txn-id' });
+      const producer = createProducer({
+        cluster: cluster as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
 
       await producer.transaction();
       await expect(producer.transaction()).rejects.toEqual(
-        new KafkaJSNonRetriableError('There is already an ongoing transaction for this producer. Please end the transaction before beginning another.'),
+        new KafkaJSNonRetriableError(
+          'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
+        ),
       );
     });
 
     it('rejects every method once the transaction has ended', async () => {
       const cluster = fakeCluster();
-      const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger, transactionalId: 'txn-id' });
+      const producer = createProducer({
+        cluster: cluster as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
 
       const txn = await producer.transaction();
       expect(txn.isActive()).toBe(true);
@@ -167,7 +206,11 @@ describe('producer', () => {
 
     it('allows a new transaction after the previous one ended', async () => {
       const cluster = fakeCluster();
-      const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger, transactionalId: 'txn-id' });
+      const producer = createProducer({
+        cluster: cluster as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
 
       const first = await producer.transaction();
       await first.commit();

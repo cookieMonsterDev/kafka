@@ -18,6 +18,8 @@ describe('producer/partitioners/legacy', () => {
 
     expect(partition).toBeGreaterThanOrEqual(0);
     expect(partition).toBeLessThan(3);
-    expect(partitioner({ topic: 'test-topic', partitionMetadata, message: { value: null, key: 'a-key' } })).toBe(partition);
+    expect(partitioner({ topic: 'test-topic', partitionMetadata, message: { value: null, key: 'a-key' } })).toBe(
+      partition,
+    );
   });
 });

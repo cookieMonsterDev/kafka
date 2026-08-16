@@ -8,7 +8,13 @@ import { createEosManager } from './index.js';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-const mockInitProducerIdResponse = { producerId: 1000n, producerEpoch: 1, errorCode: 0, throttleTime: 0, clientSideThrottleTime: 0 };
+const mockInitProducerIdResponse = {
+  producerId: 1000n,
+  producerEpoch: 1,
+  errorCode: 0,
+  throttleTime: 0,
+  clientSideThrottleTime: 0,
+};
 
 function fakeBroker() {
   return {
@@ -34,7 +40,11 @@ describe('producer/eosManager', () => {
   it('initializes the producer id and epoch', async () => {
     const broker = fakeBroker();
     const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster, transactionTimeout: 30_000 });
+    const eosManager = createEosManager({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      transactionTimeout: 30_000,
+    });
 
     expect(eosManager.getProducerId()).toBe(-1n);
     expect(eosManager.getProducerEpoch()).toBe(0);
@@ -95,7 +105,10 @@ describe('producer/eosManager', () => {
 
       await eosManager.initProducerId();
 
-      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({ groupId: transactionalId, coordinatorType: COORDINATOR_TYPES.TRANSACTION });
+      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({
+        groupId: transactionalId,
+        coordinatorType: COORDINATOR_TYPES.TRANSACTION,
+      });
       expect(broker.initProducerId).toHaveBeenCalledWith({ transactionalId, transactionTimeout: 30_000 });
       expect(eosManager.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
     });
@@ -103,7 +116,12 @@ describe('producer/eosManager', () => {
     it('adds partitions to the transaction, skipping partitions already added', async () => {
       const broker = fakeBroker();
       const cluster = fakeCluster(broker);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster, transactional: true, transactionalId });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
 
       await eosManager.initProducerId();
       eosManager.beginTransaction();
@@ -115,7 +133,10 @@ describe('producer/eosManager', () => {
 
       await eosManager.addPartitionsToTransaction(topicData);
 
-      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({ groupId: transactionalId, coordinatorType: COORDINATOR_TYPES.TRANSACTION });
+      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({
+        groupId: transactionalId,
+        coordinatorType: COORDINATOR_TYPES.TRANSACTION,
+      });
       expect(broker.addPartitionsToTxn).toHaveBeenCalledTimes(1);
       expect(broker.addPartitionsToTxn).toHaveBeenCalledWith({
         transactionalId,
@@ -132,7 +153,11 @@ describe('producer/eosManager', () => {
       expect(broker.addPartitionsToTxn).toHaveBeenCalledTimes(0); // No call if nothing new.
 
       broker.addPartitionsToTxn.mockClear();
-      await eosManager.addPartitionsToTransaction([...topicData, { topic: 'test-2', partitions: [{ partition: 2 }] }, { topic: 'test-3', partitions: [{ partition: 1 }] }]);
+      await eosManager.addPartitionsToTransaction([
+        ...topicData,
+        { topic: 'test-2', partitions: [{ partition: 2 }] },
+        { topic: 'test-3', partitions: [{ partition: 1 }] },
+      ]);
       expect(broker.addPartitionsToTxn).toHaveBeenCalledTimes(1); // Called if some are new.
       expect(broker.addPartitionsToTxn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -155,9 +180,13 @@ describe('producer/eosManager', () => {
         transactionalId,
       });
 
-      await expect(eosManager.commit()).rejects.toEqual(new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'));
+      await expect(eosManager.commit()).rejects.toEqual(
+        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
+      );
       await eosManager.initProducerId();
-      await expect(eosManager.commit()).rejects.toEqual(new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "READY"'));
+      await expect(eosManager.commit()).rejects.toEqual(
+        new KafkaJSNonRetriableError('Transaction state exception: Cannot call "commit" in state "READY"'),
+      );
 
       eosManager.beginTransaction();
       await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
@@ -198,7 +227,12 @@ describe('producer/eosManager', () => {
     it('does not send EndTxn when aborting/committing a transaction with no operations', async () => {
       const broker = fakeBroker();
       const cluster = fakeCluster(broker);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster, transactional: true, transactionalId });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
 
       await eosManager.initProducerId();
       eosManager.beginTransaction();
@@ -229,7 +263,10 @@ describe('producer/eosManager', () => {
 
       await eosManager.sendOffsets({ consumerGroupId, topics });
 
-      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({ groupId: consumerGroupId, coordinatorType: COORDINATOR_TYPES.GROUP });
+      expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({
+        groupId: consumerGroupId,
+        coordinatorType: COORDINATOR_TYPES.GROUP,
+      });
       expect(broker.addOffsetsToTxn).toHaveBeenCalledWith({
         transactionalId,
         producerId: mockInitProducerIdResponse.producerId,
@@ -256,7 +293,12 @@ describe('producer/eosManager', () => {
         .mockRejectedValueOnce(Object.assign(new Error('loading'), { type: 'GROUP_LOAD_IN_PROGRESS' }))
         .mockResolvedValueOnce(undefined);
       const cluster = fakeCluster(broker);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster, transactional: true, transactionalId });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
 
       await eosManager.initProducerId();
       eosManager.beginTransaction();
@@ -269,7 +311,9 @@ describe('producer/eosManager', () => {
       const consumerGroupId = 'consumer-group-id';
       const topics = [{ topic: 'test-topic-1', partitions: [{ partition: 0, offset: 5n }] }];
       const staleBroker = fakeBroker();
-      staleBroker.txnOffsetCommit.mockRejectedValue(Object.assign(new Error('stale'), { type: 'NOT_COORDINATOR_FOR_GROUP' }));
+      staleBroker.txnOffsetCommit.mockRejectedValue(
+        Object.assign(new Error('stale'), { type: 'NOT_COORDINATOR_FOR_GROUP' }),
+      );
       const freshBroker = fakeBroker();
       const cluster = fakeCluster(staleBroker);
       cluster.findGroupCoordinator = vi
@@ -279,7 +323,12 @@ describe('producer/eosManager', () => {
         .mockResolvedValueOnce(staleBroker) // group coordinator lookup, first attempt
         .mockResolvedValueOnce(freshBroker); // group coordinator lookup, after refresh
 
-      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster, transactional: true, transactionalId });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
 
       await eosManager.initProducerId();
       eosManager.beginTransaction();
@@ -297,7 +346,9 @@ describe('producer/eosManager', () => {
       const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
       await eosManager.initProducerId();
 
-      expect(() => eosManager.beginTransaction()).toThrow(new KafkaJSNonRetriableError('Method unavailable if non-transactional'));
+      expect(() => eosManager.beginTransaction()).toThrow(
+        new KafkaJSNonRetriableError('Method unavailable if non-transactional'),
+      );
     });
 
     for (const method of ['addPartitionsToTransaction', 'sendOffsets', 'commit', 'abort'] as const) {

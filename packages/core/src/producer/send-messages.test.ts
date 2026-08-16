@@ -17,7 +17,9 @@ function fakeProduceResponse(topicName: string, partition: number) {
     topics: [
       {
         topicName,
-        partitions: [{ partition, errorCode: 0, baseOffset: BigInt(partition), logAppendTime: -1n, logStartOffset: 0n }],
+        partitions: [
+          { partition, errorCode: 0, baseOffset: BigInt(partition), logAppendTime: -1n, logStartOffset: 0n },
+        ],
       },
     ],
   };
@@ -28,7 +30,14 @@ function fakeBroker(nodeId: number) {
 }
 
 function fakePartitionMetadata(partitionId: number): PartitionMetadata {
-  return { partitionErrorCode: 0, partitionId, leader: partitionId, replicas: [partitionId], isr: [partitionId], offlineReplicas: [] };
+  return {
+    partitionErrorCode: 0,
+    partitionId,
+    leader: partitionId,
+    replicas: [partitionId],
+    isr: [partitionId],
+    offlineReplicas: [],
+  };
 }
 
 function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = {}) {
@@ -64,7 +73,9 @@ describe('producer/sendMessages', () => {
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
       findLeaderForPartitions: vi.fn().mockReturnValue(partitionsPerLeader),
-      findBroker: vi.fn().mockImplementation(({ nodeId }: { nodeId: string }) => Promise.resolve(brokers[Number(nodeId)])),
+      findBroker: vi
+        .fn()
+        .mockImplementation(({ nodeId }: { nodeId: string }) => Promise.resolve(brokers[Number(nodeId)])),
       removeBroker: vi.fn(),
       connect: vi.fn().mockResolvedValue(undefined),
       targetTopics: new Set<string>(),
@@ -92,7 +103,11 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    const response = await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    const response = await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled();
     expect(eosManager.addPartitionsToTransaction).not.toHaveBeenCalled();
@@ -129,7 +144,11 @@ describe('producer/sendMessages', () => {
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
-      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
 
       expect(brokers[1].produce).toHaveBeenCalledTimes(2);
       expect(cluster.refreshMetadata).toHaveBeenCalled();
@@ -195,9 +214,15 @@ describe('producer/sendMessages', () => {
     await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
 
     expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledTimes(3);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([{ topic, partitions: [expect.objectContaining({ partition: 0 })] }]);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([{ topic, partitions: [expect.objectContaining({ partition: 1 })] }]);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([{ topic, partitions: [expect.objectContaining({ partition: 2 })] }]);
+    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+      { topic, partitions: [expect.objectContaining({ partition: 0 })] },
+    ]);
+    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+      { topic, partitions: [expect.objectContaining({ partition: 1 })] },
+    ]);
+    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+      { topic, partitions: [expect.objectContaining({ partition: 2 })] },
+    ]);
   });
 
   it('produces with the transactional id and producer id & epoch when transactional', async () => {
@@ -266,7 +291,11 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    const response = await sendMessages({ acks: 0, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    const response = await sendMessages({
+      acks: 0,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
     expect(response).toEqual([]);
   });
 });

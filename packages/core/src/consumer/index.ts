@@ -85,6 +85,7 @@ export interface ConsumerOptions {
   rackId?: string;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   metadataMaxAge?: number;
+  groupInstanceId?: string;
 }
 
 /**
@@ -143,6 +144,7 @@ export function createConsumer({
   rackId = '',
   instrumentationEmitter: rootInstrumentationEmitter,
   metadataMaxAge = 300_000,
+  groupInstanceId,
 }: ConsumerOptions): Consumer {
   if (!groupId) {
     throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
@@ -316,6 +318,7 @@ export function createConsumer({
         maxWaitTimeInMs,
         instrumentationEmitter,
         isolationLevel,
+        groupInstanceId,
         rackId,
         metadataMaxAge,
         autoCommit,

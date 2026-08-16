@@ -16,6 +16,7 @@ export interface LeaveGroupMember {
 export interface LeaveGroupOptions {
   groupId: string;
   memberId?: string;
+  groupInstanceId?: string | null;
   members?: LeaveGroupMember[];
 }
 
@@ -26,7 +27,7 @@ function toMembers(options: LeaveGroupOptions): { memberId: string; groupInstanc
   if (options.memberId == null) {
     throw new Error('Invariant violated: LeaveGroup v3 requires either memberId or members');
   }
-  return [{ memberId: options.memberId, groupInstanceId: null }];
+  return [{ memberId: options.memberId, groupInstanceId: options.groupInstanceId ?? null }];
 }
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<LeaveGroupOptions>>> = {

@@ -20,4 +20,17 @@ describe('protocol/requests/leave-group', () => {
     }).encode();
     expect((await request.encode()).buffer).toEqual(expected.buffer);
   });
+
+  it('forwards groupInstanceId on v3 when provided', async () => {
+    const { request } = LeaveGroup.protocol({ version: 3 })({
+      groupId: 'g',
+      memberId: 'm',
+      groupInstanceId: 'static-1',
+    });
+    const expected = await leaveGroupRequestV3({
+      groupId: 'g',
+      members: [{ memberId: 'm', groupInstanceId: 'static-1' }],
+    }).encode();
+    expect((await request.encode()).buffer).toEqual(expected.buffer);
+  });
 });

@@ -156,6 +156,7 @@ export class Kafka {
     maxInFlightRequests,
     readUncommitted = false,
     rackId = '',
+    groupInstanceId,
   }: ConsumerConfig): Consumer {
     const isolationLevel = readUncommitted ? ISOLATION_LEVEL.READ_UNCOMMITTED : ISOLATION_LEVEL.READ_COMMITTED;
     const instrumentationEmitter = new InstrumentationEventEmitter();
@@ -184,6 +185,7 @@ export class Kafka {
       instrumentationEmitter,
       rackId,
       metadataMaxAge,
+      groupInstanceId,
     });
   }
 

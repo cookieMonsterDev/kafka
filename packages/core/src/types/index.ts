@@ -202,6 +202,12 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#client.rack
    */
   rackId?: string;
+  /**
+   * Static membership id (KIP-345). When set, the broker can replace this member on restart
+   * without bouncing the rest of the group.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id
+   */
+  groupInstanceId?: string;
 }
 
 /**

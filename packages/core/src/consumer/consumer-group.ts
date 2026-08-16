@@ -60,6 +60,7 @@ export interface ConsumerGroupOptions {
   isolationLevel: IsolationLevel;
   rackId: string;
   metadataMaxAge: number;
+  groupInstanceId?: string;
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
@@ -104,6 +105,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   isolationLevel: IsolationLevel;
   rackId: string;
   metadataMaxAge: number;
+  groupInstanceId: string | null;
 
   seekOffset = new SeekOffsets();
   coordinator: Broker | null = null;
@@ -141,6 +143,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     isolationLevel,
     rackId,
     metadataMaxAge,
+    groupInstanceId,
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
@@ -163,13 +166,19 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.isolationLevel = isolationLevel;
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
+    this.groupInstanceId = groupInstanceId ?? null;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
       const { groupId: id, generationId, memberId } = this;
       const now = Date.now();
 
       if (memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
-        const payload = { groupId: id, memberId, groupGenerationId: generationId };
+        const payload = {
+          groupId: id,
+          memberId,
+          groupGenerationId: generationId,
+          groupInstanceId: this.groupInstanceId,
+        };
         await this.coordinator.heartbeat(payload);
         this.instrumentationEmitter.emit(HEARTBEAT, payload);
         this.lastRequest = Date.now();
@@ -200,6 +209,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       sessionTimeout,
       rebalanceTimeout,
       memberId: this.memberId ?? '',
+      groupInstanceId: this.groupInstanceId,
       protocolType: 'consumer',
       groupProtocols: this.assigners.map((assigner) => assigner.protocol({ topics: this.topicsSubscribed })),
     });
@@ -214,7 +224,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   async leave(): Promise<void> {
     const { groupId, memberId, coordinator } = this;
     if (memberId && coordinator) {
-      await coordinator.leaveGroup({ groupId, memberId });
+      await coordinator.leaveGroup({ groupId, memberId, groupInstanceId: this.groupInstanceId });
       this.memberId = null;
     }
   }
@@ -254,6 +264,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       groupId,
       generationId,
       memberId,
+      groupInstanceId: this.groupInstanceId,
       groupAssignment: assignment,
     });
 

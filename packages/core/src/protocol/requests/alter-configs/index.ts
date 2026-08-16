@@ -3,6 +3,8 @@ import { type AlterConfigsResource, alterConfigsRequestV0 } from './v0/request';
 import { alterConfigsResponseV0 } from './v0/response';
 import { alterConfigsRequestV1 } from './v1/request';
 import { alterConfigsResponseV1 } from './v1/response';
+import { alterConfigsRequestV2 } from './v2/request';
+import { alterConfigsResponseV2 } from './v2/response';
 
 export interface AlterConfigsOptions {
   resources: AlterConfigsResource[];
@@ -17,6 +19,10 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterConfigsOptions>>> =
   1: (options) => ({
     request: alterConfigsRequestV1({ resources: options.resources, validateOnly: options.validateOnly ?? false }),
     response: alterConfigsResponseV1,
+  }),
+  2: (options) => ({
+    request: alterConfigsRequestV2({ resources: options.resources, validateOnly: options.validateOnly ?? false }),
+    response: alterConfigsResponseV2,
   }),
 };
 

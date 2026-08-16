@@ -161,8 +161,9 @@ export class Decoder {
       return null;
     }
 
-    const value = this.buffer.subarray(this.offset, this.offset + byteLength);
-    this.offset += byteLength - 1;
+    const size = byteLength - 1;
+    const value = this.buffer.subarray(this.offset, this.offset + size);
+    this.offset += size;
     return value;
   }
 

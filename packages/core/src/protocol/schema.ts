@@ -75,6 +75,35 @@ export const nullableBytes: FieldCodec<Buffer | null> = codec(
   (d) => d.readBytes(),
 );
 
+export const compactString: FieldCodec<string> = codec(
+  (e, v) => void e.writeUVarIntString(v),
+  (d) => nonNull(d.readUVarIntString(), 'compact string field'),
+);
+export const compactNullableString: FieldCodec<string | null> = codec(
+  (e, v) => void e.writeUVarIntString(v),
+  (d) => d.readUVarIntString(),
+);
+
+export const compactBytes: FieldCodec<Buffer> = codec(
+  (e, v) => void e.writeUVarIntBytes(v),
+  (d) => nonNull(d.readUVarIntBytes(), 'compact bytes field'),
+);
+export const compactNullableBytes: FieldCodec<Buffer | null> = codec(
+  (e, v) => void e.writeUVarIntBytes(v),
+  (d) => d.readUVarIntBytes(),
+);
+
+/**
+ * Empty tagged-fields buffer (`TAG_BUFFER`). Flexible structs always end with one; this codec
+ * writes the empty form (`uvarint 0`) and skips whatever tagged fields the broker sent.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export const taggedFields: FieldCodec<Record<string, unknown> | null> = codec(
+  (e) => void e.writeUVarInt(0),
+  (d) => d.readTaggedFields(),
+);
+
 /**
  * A buffer with no length prefix at all — e.g. `SaslAuthenticate`'s request body, which is just
  * the raw SASL mechanism bytes. Only meaningful as the last field in a schema: reading consumes
@@ -128,6 +157,50 @@ export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
   );
 }
 
+function readCompactArrayBody<T>(d: Decoder, encodedLength: number, element: FieldCodec<T>): T[] {
+  if (encodedLength === 0) return [];
+  return readArrayBody(d, encodedLength - 1, element);
+}
+
+/**
+ * Compact (flexible) array: length is an unsigned varint of `N + 1`. A null compact array
+ * (encoded length `0`) decodes as `[]`.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function compactArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
+  return codec(
+    (e, values) => {
+      e.writeUVarInt(values.length + 1);
+      for (const value of values) element.write(e, value);
+    },
+    (d) => readCompactArrayBody(d, d.readUVarInt(), element),
+  );
+}
+
+/**
+ * Compact array that preserves wire null (encoded length `0`) instead of mapping it to `[]`.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function compactNullableArray<T>(element: FieldCodec<T>): FieldCodec<T[] | null> {
+  return codec(
+    (e, values) => {
+      if (values === null) {
+        e.writeUVarInt(0);
+        return;
+      }
+      e.writeUVarInt(values.length + 1);
+      for (const value of values) element.write(e, value);
+    },
+    (d) => {
+      const encodedLength = d.readUVarInt();
+      if (encodedLength === 0) return null;
+      return readArrayBody(d, encodedLength - 1, element);
+    },
+  );
+}
+
 export interface FieldSpec<Name extends string, T> {
   name: Name;
   codec: FieldCodec<T>;
@@ -159,6 +232,29 @@ export function object<const Fields extends readonly FieldSpec<string, unknown>[
       const result: Record<string, unknown> = {};
       for (const spec of fields) result[spec.name] = spec.codec.read(d);
       return result as InferSchema<Fields>;
+    },
+  );
+}
+
+/**
+ * Like `object()`, but appends an empty `TAG_BUFFER` so callers of flexible request/response
+ * bodies cannot forget the trailing tagged fields required by KIP-482.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function flexibleObject<const Fields extends readonly FieldSpec<string, unknown>[]>(
+  fields: Fields,
+): FieldCodec<InferSchema<Fields>> {
+  const body = object(fields);
+  return codec(
+    (e, value) => {
+      body.write(e, value);
+      taggedFields.write(e, null);
+    },
+    (d) => {
+      const value = body.read(d);
+      taggedFields.read(d);
+      return value;
     },
   );
 }

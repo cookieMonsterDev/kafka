@@ -41,13 +41,8 @@ function encodeTopic({ topic, partitionAssignment }: AlterPartitionReassignments
  *       replicas => INT32
  *
  * Flexible-version API (compact strings/arrays, TAG_BUFFER). Hand-written against
- * `Encoder`'s `writeUVarInt*` primitives because the schema DSL covers non-flexible shapes only.
- *
- * The leading `writeUVarIntBytes()` before `timeout_ms` isn't in the BNF above — it stands in for
- * the flexible request *header*'s trailing TAG_BUFFER (header version 2, KIP-482), which the
- * generic request-wrapping code writes a plain (non-flexible) header regardless of API and never
- * appends. Since this family's `encode()` output is concatenated directly after the header's
- * `client_id`, prepending one empty tag buffer here reproduces a byte-correct flexible header.
+ * `Encoder`'s `writeUVarInt*` primitives because this family's body is not yet on the schema DSL.
+ * Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  */
 export const alterPartitionReassignmentsRequestV0: (
   values: AlterPartitionReassignmentsRequestV0Options,
@@ -57,10 +52,6 @@ export const alterPartitionReassignmentsRequestV0: (
   apiName: 'AlterPartitionReassignments',
   encode: () =>
     Promise.resolve(
-      new Encoder()
-        .writeUVarIntBytes(undefined)
-        .writeInt32(timeout)
-        .writeUVarIntArray(topics.map(encodeTopic))
-        .writeUVarIntBytes(undefined),
+      new Encoder().writeInt32(timeout).writeUVarIntArray(topics.map(encodeTopic)).writeUVarIntBytes(undefined),
     ),
 });

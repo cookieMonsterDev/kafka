@@ -1,7 +1,26 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
-import { array, boolean, field, int16, int32, int64, nullableArray, nullableString, object, string } from './schema';
+import {
+  array,
+  boolean,
+  compactArray,
+  compactBytes,
+  compactNullableArray,
+  compactNullableBytes,
+  compactNullableString,
+  compactString,
+  field,
+  flexibleObject,
+  int16,
+  int32,
+  int64,
+  nullableArray,
+  nullableString,
+  object,
+  string,
+  taggedFields,
+} from './schema';
 
 describe('protocol/schema', () => {
   it('round-trips a flat object', () => {
@@ -64,5 +83,84 @@ describe('protocol/schema', () => {
   it('throws when a non-nullable string field is null on the wire', () => {
     const encoder = new Encoder().writeString(null);
     expect(() => string.read(new Decoder(encoder.buffer))).toThrow(RangeError);
+  });
+
+  it('round-trips compact strings, including empty and null', () => {
+    const hello = new Encoder();
+    compactString.write(hello, 'hello');
+    expect(compactString.read(new Decoder(hello.buffer))).toBe('hello');
+
+    const empty = new Encoder();
+    compactString.write(empty, '');
+    expect(compactString.read(new Decoder(empty.buffer))).toBe('');
+
+    const nullable = new Encoder();
+    compactNullableString.write(nullable, null);
+    expect(compactNullableString.read(new Decoder(nullable.buffer))).toBeNull();
+    expect(nullable.buffer).toEqual(new Encoder().writeUVarInt(0).buffer);
+
+    expect(() => compactString.read(new Decoder(new Encoder().writeUVarIntString(null).buffer))).toThrow(RangeError);
+  });
+
+  it('round-trips compact bytes, including empty and null', () => {
+    const payload = Buffer.from([1, 2, 3]);
+    const encoded = new Encoder();
+    compactBytes.write(encoded, payload);
+    encoded.writeInt32(42);
+    const decoder = new Decoder(encoded.buffer);
+    expect(compactBytes.read(decoder)).toEqual(payload);
+    expect(decoder.readInt32()).toBe(42);
+
+    const empty = new Encoder();
+    compactBytes.write(empty, Buffer.alloc(0));
+    expect(compactBytes.read(new Decoder(empty.buffer))).toEqual(Buffer.alloc(0));
+
+    const nullable = new Encoder();
+    compactNullableBytes.write(nullable, null);
+    expect(compactNullableBytes.read(new Decoder(nullable.buffer))).toBeNull();
+
+    expect(() => compactBytes.read(new Decoder(new Encoder().writeUVarIntBytes(null).buffer))).toThrow(RangeError);
+  });
+
+  it('round-trips compact arrays and maps a null compact array to []', () => {
+    const withValues = new Encoder();
+    compactArray(int32).write(withValues, [7, 8]);
+    expect(compactArray(int32).read(new Decoder(withValues.buffer))).toEqual([7, 8]);
+
+    const empty = new Encoder();
+    compactArray(compactString).write(empty, []);
+    expect(empty.buffer).toEqual(new Encoder().writeUVarInt(1).buffer);
+    expect(compactArray(compactString).read(new Decoder(empty.buffer))).toEqual([]);
+
+    const nullOnWire = new Encoder().writeUVarInt(0);
+    expect(compactArray(int32).read(new Decoder(nullOnWire.buffer))).toEqual([]);
+  });
+
+  it('compactNullableArray preserves wire null', () => {
+    const nullable = new Encoder();
+    compactNullableArray(int32).write(nullable, null);
+    expect(nullable.buffer).toEqual(new Encoder().writeUVarInt(0).buffer);
+    expect(compactNullableArray(int32).read(new Decoder(nullable.buffer))).toBeNull();
+
+    const empty = new Encoder();
+    compactNullableArray(int32).write(empty, []);
+    expect(compactNullableArray(int32).read(new Decoder(empty.buffer))).toEqual([]);
+  });
+
+  it('round-trips an empty tagged-fields buffer', () => {
+    const encoder = new Encoder();
+    taggedFields.write(encoder, null);
+    expect(encoder.buffer).toEqual(Buffer.from([0]));
+    expect(taggedFields.read(new Decoder(encoder.buffer))).toBeNull();
+  });
+
+  it('flexibleObject appends and skips a trailing TAG_BUFFER', () => {
+    const shape = flexibleObject([field('name', compactString), field('count', int32)]);
+    const encoder = new Encoder();
+    shape.write(encoder, { name: 'topic', count: 2 });
+
+    const expected = new Encoder().writeUVarIntString('topic').writeInt32(2).writeUVarInt(0);
+    expect(encoder.buffer).toEqual(expected.buffer);
+    expect(shape.read(new Decoder(encoder.buffer))).toEqual({ name: 'topic', count: 2 });
   });
 });

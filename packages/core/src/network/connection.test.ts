@@ -55,8 +55,17 @@ function startFakeBroker(
   });
 }
 
-function writeResponseFrame(socket: net.Socket, correlationId: number, body: Encoder): void {
-  const responseHeader = new Encoder().writeInt32(correlationId).writeEncoder(body);
+function writeResponseFrame(
+  socket: net.Socket,
+  correlationId: number,
+  body: Encoder,
+  options: { flexibleHeader?: boolean } = {},
+): void {
+  const responseHeader = new Encoder().writeInt32(correlationId);
+  if (options.flexibleHeader) {
+    responseHeader.writeUVarInt(0);
+  }
+  responseHeader.writeEncoder(body);
   const framed = new Encoder().writeInt32(responseHeader.size()).writeEncoder(responseHeader);
   socket.write(framed.buffer);
 }
@@ -65,6 +74,13 @@ const metadataRequest = () => ({
   apiKey: API_KEYS.Metadata,
   apiVersion: 0,
   apiName: 'Metadata',
+  encode: () => Promise.resolve(new Encoder()),
+});
+
+const alterPartitionReassignmentsRequest = () => ({
+  apiKey: API_KEYS.AlterPartitionReassignments,
+  apiVersion: 0,
+  apiName: 'AlterPartitionReassignments',
   encode: () => Promise.resolve(new Encoder()),
 });
 
@@ -167,6 +183,52 @@ describe('network/Connection', () => {
       };
 
       await expect(connection.send({ request: metadataRequest(), response })).resolves.toEqual({ greeting: 'hello' });
+    });
+
+    it('strips flexible response header tagged fields before decode', async () => {
+      const { server, port } = await startFakeBroker((request, socket) => {
+        writeResponseFrame(socket, request.correlationId, new Encoder().writeString('hello'), {
+          flexibleHeader: true,
+        });
+      });
+      servers.push(server);
+
+      const connection = createConnection(port);
+      await connection.connect();
+
+      const response = {
+        decode: async (rawData: Buffer) => ({ greeting: new Decoder(rawData).readString() }),
+        parse: async (data: { greeting: string | null }) => data,
+      };
+
+      await expect(connection.send({ request: alterPartitionReassignmentsRequest(), response })).resolves.toEqual({
+        greeting: 'hello',
+      });
+    });
+
+    it('strips flexible response header tagged fields for ApiVersions v3+', async () => {
+      const { server, port } = await startFakeBroker((request, socket) => {
+        writeResponseFrame(socket, request.correlationId, new Encoder().writeString('hello'), {
+          flexibleHeader: true,
+        });
+      });
+      servers.push(server);
+
+      const connection = createConnection(port);
+      await connection.connect();
+
+      const request = {
+        apiKey: API_KEYS.ApiVersions,
+        apiVersion: 3,
+        apiName: 'ApiVersions',
+        encode: () => Promise.resolve(new Encoder()),
+      };
+      const response = {
+        decode: async (rawData: Buffer) => ({ greeting: new Decoder(rawData).readString() }),
+        parse: async (data: { greeting: string | null }) => data,
+      };
+
+      await expect(connection.send({ request, response })).resolves.toEqual({ greeting: 'hello' });
     });
 
     it('reassembles a response split across multiple TCP chunks', async () => {

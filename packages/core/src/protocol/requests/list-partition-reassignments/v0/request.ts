@@ -26,8 +26,8 @@ function encodeTopic({ topic, partitions }: ListPartitionReassignmentsRequestV0T
  *     name => COMPACT_STRING
  *     partition_indexes => INT32
  *
- * Flexible-version (see `alter-partition-reassignments/v0/request.ts` for why the leading
- * `writeUVarIntBytes()` stands in for the request header's own TAG_BUFFER).
+ * Flexible-version API (compact strings/arrays, TAG_BUFFER). Request header v2's trailing
+ * TAG_BUFFER is written by `createRequest`, not here.
  *
  * `topics: null` means "list every in-flight reassignment" and is encoded as a compact-array
  * null marker (`0`), not an empty array.
@@ -43,7 +43,6 @@ export const listPartitionReassignmentsRequestV0: (
   encode: () =>
     Promise.resolve(
       new Encoder()
-        .writeUVarIntBytes(undefined)
         .writeInt32(timeout)
         .writeUVarIntArray(topics === null ? null : topics.map(encodeTopic))
         .writeUVarIntBytes(undefined),

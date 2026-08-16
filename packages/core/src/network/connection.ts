@@ -6,6 +6,7 @@ import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { createRequest } from '../protocol/request';
 import { Decoder } from '../protocol/decoder';
+import { usesFlexibleResponseHeader } from '../protocol/flexible';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../protocol/requests/index';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
@@ -623,6 +624,10 @@ export class Connection {
       }
 
       const correlationId = response.readInt32();
+      const inflight = this.requestQueue.inflight.get(correlationId);
+      if (inflight && usesFlexibleResponseHeader(inflight.entry.apiKey, inflight.entry.apiVersion)) {
+        response.readTaggedFields();
+      }
       const payload = response.readAll();
 
       this.requestQueue.fulfillRequest({ size: expectedResponseSize, correlationId, payload });

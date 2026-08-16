@@ -69,6 +69,22 @@ describe('protocol/Decoder', () => {
     });
   });
 
+  describe('readUVarIntBytes', () => {
+    it('round-trips compact bytes that are followed by more fields', () => {
+      const buffer = new Encoder().writeUVarIntBytes(Buffer.from([1, 2, 3])).writeInt32(42).buffer;
+      const decoder = new Decoder(buffer);
+      expect(decoder.readUVarIntBytes()).toEqual(Buffer.from([1, 2, 3]));
+      expect(decoder.readInt32()).toBe(42);
+    });
+
+    it('round-trips empty compact bytes that are followed by more fields', () => {
+      const buffer = new Encoder().writeUVarIntBytes('').writeInt32(42).buffer;
+      const decoder = new Decoder(buffer);
+      expect(decoder.readUVarIntBytes()).toEqual(Buffer.alloc(0));
+      expect(decoder.readInt32()).toBe(42);
+    });
+  });
+
   describe('readArray / readVarIntArray', () => {
     it('round-trips a fixed-length-prefixed array', () => {
       const buffer = new Encoder().writeArray([1, 2, 3], 'int32').buffer;

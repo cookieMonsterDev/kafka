@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
 import { createRequest } from './request';
+import { API_KEYS } from './requests/api-keys';
 
 describe('protocol/createRequest', () => {
   it('wraps the encoded body with a length prefix and the request header', async () => {
@@ -59,5 +60,41 @@ describe('protocol/createRequest', () => {
     expect(decoder.readInt16()).toBe(11);
     expect(decoder.readInt32()).toBe(2147483647);
     expect(decoder.readString()).toBe('x');
+  });
+
+  it('appends an empty TAG_BUFFER after clientId for flexible request headers', async () => {
+    const request = {
+      apiKey: API_KEYS.AlterPartitionReassignments,
+      apiVersion: 0,
+      encode: () => Promise.resolve(new Encoder().writeInt32(5000)),
+    };
+
+    const encoded = await createRequest({ correlationId: 1, clientId: 'c', request });
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32(); // size
+
+    expect(decoder.readInt16()).toBe(API_KEYS.AlterPartitionReassignments);
+    expect(decoder.readInt16()).toBe(0);
+    expect(decoder.readInt32()).toBe(1);
+    expect(decoder.readString()).toBe('c');
+    expect(decoder.readUVarInt()).toBe(0); // header TAG_BUFFER
+    expect(decoder.readInt32()).toBe(5000);
+  });
+
+  it('does not use a flexible request header for ApiVersions even at v3+', async () => {
+    const request = {
+      apiKey: API_KEYS.ApiVersions,
+      apiVersion: 3,
+      encode: () => Promise.resolve(new Encoder().writeInt8(9)),
+    };
+
+    const encoded = await createRequest({ correlationId: 0, clientId: '', request });
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32(); // size
+    decoder.readInt16(); // apiKey
+    decoder.readInt16(); // apiVersion
+    decoder.readInt32(); // correlationId
+    expect(decoder.readString()).toBe('');
+    expect(decoder.readInt8()).toBe(9);
   });
 });

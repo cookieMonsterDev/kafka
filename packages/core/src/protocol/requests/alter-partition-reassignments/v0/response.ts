@@ -48,11 +48,11 @@ function decodeResponse(decoder: Decoder): AlterPartitionReassignmentsResponseV0
  *       error_message => COMPACT_NULLABLE_STRING
  *
  * Flexible-version, hand-written for the same reason as the request (see `v0/request.ts`).
+ * Response header v1's trailing TAG_BUFFER is skipped by `Connection` before `decode()` runs.
  */
 export const alterPartitionReassignmentsResponseV0: ResponseDefinition<AlterPartitionReassignmentsResponseV0Body> = {
   decode: async (rawData) => {
     const decoder = new Decoder(rawData);
-    decoder.readTaggedFields();
     const throttleTime = decoder.readInt32();
     const errorCode = decoder.readInt16();
     decoder.readUVarIntString(); // error_message, unused

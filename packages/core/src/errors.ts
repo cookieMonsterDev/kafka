@@ -212,7 +212,8 @@ export class KafkaJSStaleTopicMetadataAssignment extends KafkaJSError {
 
 export interface DeleteGroupError {
   groupId: string;
-  error: KafkaJSError;
+  errorCode?: number;
+  error?: KafkaJSError;
 }
 
 export class KafkaJSDeleteGroupsError extends KafkaJSError {

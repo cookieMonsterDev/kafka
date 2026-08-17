@@ -35,6 +35,8 @@ jobs:
       docs: ${{ steps.flags.outputs.docs }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name == 'push' || inputs.package == 'auto'

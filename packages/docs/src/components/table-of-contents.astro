@@ -1,0 +1,38 @@
+---
+import type { MarkdownHeading } from 'astro'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  headings: MarkdownHeading[]
+  class?: string
+  showHeading?: boolean
+}
+
+const headings = Astro.props.headings.filter((heading) => heading.depth === 2 || heading.depth === 3)
+const showHeading = Astro.props.showHeading ?? true
+---
+
+{
+  headings.length > 0 && (
+    <nav class={cn('text-sm', Astro.props.class)} aria-label="On this page">
+      {showHeading && (
+        <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">On this page</p>
+      )}
+      <ul class="border-border flex flex-col gap-1 border-l">
+        {headings.map((heading) => (
+          <li>
+            <a
+              href={`#${heading.slug}`}
+              class={cn(
+                'text-muted-foreground hover:text-foreground block py-1 transition-colors',
+                heading.depth === 2 ? 'pl-3' : 'pl-6',
+              )}
+            >
+              {heading.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}

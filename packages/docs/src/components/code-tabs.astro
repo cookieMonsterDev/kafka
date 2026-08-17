@@ -1,0 +1,55 @@
+---
+import { cn } from '@/lib/utils'
+
+interface Props {
+  defaultTab?: string
+  class?: string
+}
+
+const TABS = [
+  { id: 'bun', label: 'bun' },
+  { id: 'pnpm', label: 'pnpm' },
+  { id: 'yarn', label: 'yarn' },
+  { id: 'npm', label: 'npm' },
+  { id: 'ts', label: 'TypeScript' },
+  { id: 'js', label: 'JavaScript' },
+] as const
+
+const available = TABS.filter((tab) => Astro.slots.has(tab.id))
+const defaultTab =
+  available.some((tab) => tab.id === Astro.props.defaultTab) ? Astro.props.defaultTab : available[0]?.id
+const group = `tabs-${crypto.randomUUID()}`
+---
+
+{
+  available.length > 0 && (
+    <div class={cn('code-tabs not-prose my-4 overflow-hidden rounded-lg border border-border', Astro.props.class)}>
+      {available.map((tab) => (
+        <input
+          type="radio"
+          name={group}
+          id={`${group}-${tab.id}`}
+          class="code-tabs-input sr-only"
+          data-tab={tab.id}
+          checked={tab.id === defaultTab}
+        />
+      ))}
+      <div class="bg-muted/50 flex gap-1 overflow-x-auto border-b border-border p-1" role="tablist">
+        {available.map((tab) => (
+          <label
+            for={`${group}-${tab.id}`}
+            data-tab={tab.id}
+            class="code-tabs-label text-muted-foreground hover:text-foreground cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium"
+          >
+            {tab.label}
+          </label>
+        ))}
+      </div>
+      {available.map((tab) => (
+        <div data-panel={tab.id} class="code-tabs-panel bg-background [&_pre]:m-0 [&_pre]:rounded-none [&_pre]:border-0">
+          <slot name={tab.id} />
+        </div>
+      ))}
+    </div>
+  )
+}

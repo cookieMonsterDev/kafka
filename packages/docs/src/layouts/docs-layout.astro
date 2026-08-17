@@ -1,0 +1,61 @@
+---
+import type { MarkdownHeading } from 'astro'
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import DocsSidebar from '@/components/docs-sidebar.astro'
+import TableOfContents from '@/components/table-of-contents.astro'
+import PrevNext from '@/components/prev-next.astro'
+
+interface Props {
+  title: string
+  description?: string | undefined
+  headings: MarkdownHeading[]
+  prev?: { href: string; label: string } | undefined
+  next?: { href: string; label: string } | undefined
+}
+
+const { title, description, headings, prev, next } = Astro.props
+const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3)
+---
+
+<BaseLayout title={title} description={description} docs>
+  <div slot="mobile-nav" class="flex h-full flex-col">
+    <DocsSidebar />
+    <a
+      href="https://github.com/cookieMonsterDev/kafka"
+      class="text-muted-foreground hover:text-foreground mt-8 px-2 text-sm"
+    >
+      GitHub
+    </a>
+  </div>
+
+  <div class="flex w-full">
+    <aside
+      class="border-sidebar-border bg-sidebar sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto border-r px-3 py-8 lg:block"
+    >
+      <DocsSidebar />
+    </aside>
+
+    <div class="flex min-w-0 flex-1 justify-center">
+      <main class="w-full max-w-3xl px-6 py-10">
+        {
+          tocHeadings.length > 0 && (
+            <details class="border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">
+              <summary class="cursor-pointer list-none text-sm font-medium [&::-webkit-details-marker]:hidden">
+                On this page
+              </summary>
+              <div class="pt-3 pb-2">
+                <TableOfContents headings={headings} showHeading={false} />
+              </div>
+            </details>
+          )
+        }
+        <slot />
+        <PrevNext prev={prev} next={next} />
+      </main>
+
+      <aside class="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-52 shrink-0 overflow-y-auto py-8 pr-6 xl:block">
+        <TableOfContents headings={headings} />
+      </aside>
+    </div>
+  </div>
+</BaseLayout>

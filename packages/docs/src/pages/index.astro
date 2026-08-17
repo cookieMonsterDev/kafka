@@ -1,52 +1,44 @@
 ---
-import { getCollection } from 'astro:content'
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import { buttonVariants } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-
-const entries = (await getCollection('docs')).sort(
-  (a, b) => a.data.order - b.data.order,
-)
+import { cn } from '@/lib/utils'
 ---
 
-<BaseLayout title="Kafka docs" description="Documentation for @kafka/core">
-  <div class="flex items-center gap-3">
-    <img src="/logo-icon.svg" alt="" width="48" height="48" class="size-12" />
-    <h1 class="text-3xl font-semibold tracking-tight">@kafka/core</h1>
-  </div>
-  <p class="text-muted-foreground mt-2">
-    TypeScript Kafka client — Kafka 0.10+, bigint offsets, generated types.
-  </p>
-
-  <div class="mt-8 grid gap-4">
-    {
-      entries.map((entry) => (
-        <Card>
-          <CardHeader>
-            <CardTitle>{entry.data.title}</CardTitle>
-            {entry.data.description && (
-              <CardDescription>{entry.data.description}</CardDescription>
-            )}
-            <CardAction>
-              {/* For links, apply buttonVariants to a plain <a>. `asChild` does
-                  not work from .astro files — Radix's Slot clones a React
-                  element, and Astro passes children as a slot, not an element. */}
-              <a
-                href={`/docs/${entry.id}/`}
-                class={buttonVariants({ variant: 'secondary', size: 'sm' })}
-              >
-                Read
-              </a>
-            </CardAction>
-          </CardHeader>
-        </Card>
-      ))
-    }
-  </div>
+<BaseLayout
+  description="TypeScript Kafka client for Node.js — Kafka 0.10+, bigint offsets, generated types."
+>
+  <main class="landing-hero relative flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-6 py-20 text-center">
+    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
+      The TypeScript Kafka client for Node.js
+    </h1>
+    <p class="text-muted-foreground mt-6 max-w-2xl text-lg text-pretty">
+      Talk to brokers from Kafka 0.10 onward. Produce, consume, and administer
+      with <span class="text-foreground">bigint offsets</span> and types generated
+      from source.
+    </p>
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <a
+        href="/docs/start/getting-started/"
+        class={cn(buttonVariants({ size: 'lg' }), 'h-10 px-5 bg-foreground text-background hover:bg-foreground/90')}
+      >
+        Get Started
+      </a>
+      <a
+        href="/docs/start/introduction/"
+        class={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-10 px-5')}
+      >
+        Learn more
+      </a>
+    </div>
+    <button
+      type="button"
+      data-copy="npm install @kafka/core"
+      class="text-muted-foreground hover:text-foreground mt-10 inline-flex items-center gap-2 border-0 bg-transparent p-0 font-mono text-sm"
+      aria-label="Copy install command"
+      title="Click to copy"
+    >
+      <img src="/logo-icon.svg" alt="" width="14" height="14" class="size-3.5 opacity-70" />
+      <span class="copy-label">npm install @kafka/core</span>
+    </button>
+  </main>
 </BaseLayout>

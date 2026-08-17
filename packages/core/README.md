@@ -21,7 +21,7 @@ This package is the library in the [kafka](https://github.com/cookieMonsterDev/k
 | Security    | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER, AWS IAM helper                       |
 | DX          | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`         |
 
-Not in scope: Kafka Streams, Kafka Connect, GSSAPI/Kerberos, Java-client 4.x parity. See [compatibility](../docs/src/content/docs/compatibility.md).
+Not in scope: Kafka Streams, Kafka Connect, GSSAPI/Kerberos, Java-client 4.x parity. See [compatibility](../docs/src/content/docs/reference/compatibility.md).
 
 ## Usage
 
@@ -72,12 +72,15 @@ To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartiti
 
 ## Documentation
 
-| Page                                                           | Contents                                         |
-| -------------------------------------------------------------- | ------------------------------------------------ |
-| [Introduction](../docs/src/content/docs/introduction.md)       | What the client is and which brokers it talks to |
-| [Getting started](../docs/src/content/docs/getting-started.md) | Producer, consumer, admin                        |
-| [Public API](../docs/src/content/docs/public-api.md)           | Exports, config, extra APIs                      |
-| [Compatibility](../docs/src/content/docs/compatibility.md)     | Defaults vs the Java client, missing APIs        |
+| Page                                                                       | Contents                                         |
+| -------------------------------------------------------------------------- | ------------------------------------------------ |
+| [Introduction](../docs/src/content/docs/start/introduction.md)             | What the client is and which brokers it talks to |
+| [Getting started](../docs/src/content/docs/start/getting-started.md)       | Produce and consume                              |
+| [Producer API](../docs/src/content/docs/reference/producer.md)             | `send`, `Message`, `RecordMetadata`              |
+| [Consumer API](../docs/src/content/docs/reference/consumer.md)             | `run`, `stream`, `KafkaMessage`                  |
+| [Errors](../docs/src/content/docs/reference/errors.md)                     | Public classes and protocol codes                |
+| [Compatibility](../docs/src/content/docs/reference/compatibility.md)       | Defaults vs the Java client, missing APIs        |
+| [Breaking changes](../docs/src/content/docs/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars              |
 
 Local site: `pnpm --filter @kafka/docs dev` → <http://localhost:4321>
 

@@ -2,14 +2,16 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-// Every .md file under src/content/docs becomes an entry in this collection,
-// and src/pages/docs/[...slug].astro turns each entry into a page.
+// Nested folders under src/content/docs become URL segments:
+// start/introduction.md → /docs/start/introduction/
 const docs = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/docs' }),
   schema: z.object({
     title: z.string(),
-    description: z.string().optional(),
+    description: z.string(),
     order: z.number().default(999),
+    section: z.enum(['start', 'guides', 'reference', 'integrations', 'migration']),
+    sidebarLabel: z.string().optional(),
   }),
 });
 

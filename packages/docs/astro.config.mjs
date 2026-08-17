@@ -8,6 +8,14 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   site: 'https://example.com',
 
+  redirects: {
+    '/docs/introduction': '/docs/start/introduction',
+    '/docs/getting-started': '/docs/start/getting-started',
+    '/docs/compatibility': '/docs/reference/compatibility',
+    '/docs/public-api': '/docs/reference/public-api',
+    '/docs/migration': '/docs/migration/breaking-changes',
+  },
+
   markdown: {
     shikiConfig: {
       themes: { light: 'github-light', dark: 'github-dark' },

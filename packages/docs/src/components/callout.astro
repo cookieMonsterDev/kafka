@@ -1,0 +1,39 @@
+---
+import { Info, Lightbulb, TriangleAlert } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  type?: 'note' | 'warning' | 'tip'
+  title?: string
+  class?: string
+}
+
+const { type = 'note', title } = Astro.props
+
+const copy = {
+  note: { label: 'Note', Icon: Info },
+  warning: { label: 'Warning', Icon: TriangleAlert },
+  tip: { label: 'Tip', Icon: Lightbulb },
+} as const
+
+const { label, Icon } = copy[type]
+---
+
+<aside
+  data-callout={type}
+  class={cn(
+    'not-prose my-4 flex gap-3 rounded-lg border p-4 text-sm',
+    type === 'note' && 'border-border bg-muted/40',
+    type === 'warning' && 'border-destructive/40 bg-destructive/5',
+    type === 'tip' && 'border-primary/30 bg-primary/5',
+    Astro.props.class,
+  )}
+>
+  <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+  <div class="min-w-0 [&_a]:text-foreground [&_a]:underline [&_p]:m-0 [&_p+p]:mt-2">
+    <p class="text-foreground font-medium">{title ?? label}</p>
+    <div class="text-muted-foreground mt-1">
+      <slot />
+    </div>
+  </div>
+</aside>

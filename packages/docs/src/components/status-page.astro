@@ -1,0 +1,47 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  title: string
+  description: string
+  code: string
+  type: string
+  heading: string
+  lede: string
+}
+
+const { title, description, code, type, heading, lede } = Astro.props
+---
+
+<BaseLayout title={title} description={description}>
+  <main
+    class="landing-hero relative isolate flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-6 py-20 text-center"
+  >
+    <p class="text-muted-foreground font-mono text-sm tracking-wide">
+      {code} · {type}
+    </p>
+    <h1 class="mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
+      {heading}
+    </h1>
+    <p class="text-muted-foreground mt-6 max-w-md text-base leading-relaxed sm:text-lg">
+      {lede}
+    </p>
+    <slot />
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      <a
+        href="/"
+        class={cn(buttonVariants({ size: 'lg' }), 'h-10 px-5 bg-foreground text-background hover:bg-foreground/90')}
+      >
+        Back to Core
+      </a>
+      <a
+        href="/docs/start/getting-started/"
+        class={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-10 px-5')}
+      >
+        Getting started
+      </a>
+    </div>
+  </main>
+</BaseLayout>

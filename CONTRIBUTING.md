@@ -181,7 +181,8 @@ KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
 
 ## Documentation site
 
-Markdown under `packages/docs/src/content/docs/` becomes a page. After `pnpm clean`, build core first:
+Markdown under `packages/docs/src/content/docs/<section>/` becomes a page
+(`/docs/start/introduction/`, and so on). After `pnpm clean`, build core first:
 
 ```sh
 pnpm --filter @kafka/docs... build

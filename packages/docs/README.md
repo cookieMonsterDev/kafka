@@ -10,13 +10,16 @@ This package lives in the [kafka](https://github.com/cookieMonsterDev/kafka) wor
 
 ## What is documented
 
-| Page             | File                                  |
-| ---------------- | ------------------------------------- |
-| Introduction     | `src/content/docs/introduction.md`    |
-| Getting started  | `src/content/docs/getting-started.md` |
-| Compatibility    | `src/content/docs/compatibility.md`   |
-| Public API       | `src/content/docs/public-api.md`      |
-| Breaking changes | `src/content/docs/migration.md`       |
+Markdown under `src/content/docs/<section>/` becomes a page. Sections:
+
+- **Start** — introduction, installation, getting started
+- **Guides** — producer, consumer, admin, errors, security, testing
+- **Reference** — Kafka client, producer/consumer/admin APIs, configuration, error catalog, public API, compatibility
+- **Migration** — breaking changes
+
+Nested folders become URL segments (`/docs/start/introduction/`). The old
+flat slugs (`/docs/introduction/`, `/docs/getting-started/`,
+`/docs/compatibility/`, `/docs/public-api/`, `/docs/migration/`) redirect.
 
 ## Local development
 
@@ -49,24 +52,32 @@ pnpm --filter @kafka/docs dev --port 3000
 
 ## Adding a page
 
-Create a `.md` file in `src/content/docs/` with frontmatter:
+Create a `.md` file under `src/content/docs/<section>/` with frontmatter:
 
 ```markdown
 ---
 title: My Page
-description: Optional, used for the meta description and index listing
+description: Used for the meta description, sidebar, and index listing
 order: 3
+section: guides
 ---
 
 Content goes here.
 ```
 
-It is published at `/docs/<filename>/` and appears in the index, sorted by
-`order`. No routing or config changes are needed.
+`section` must be one of `start`, `guides`, `reference`, `integrations`,
+`migration`. Optional `sidebarLabel` overrides the title in the left nav.
 
-`title` is required and `order` defaults to `999` — the schema in
-`src/content.config.ts` validates this at build time, so a typo in frontmatter
-fails the build with a clear message instead of rendering a broken page.
+The page is published at `/docs/<section>/<filename>/`, appears in the
+sidebar under that section, and is sorted by `order` within the section.
+No routing changes are needed.
+
+`title`, `description`, and `section` are required. `order` defaults to
+`999`. The schema in `src/content.config.ts` validates this at build time,
+so a typo in frontmatter fails the build instead of rendering a broken page.
+
+`Callout` and `CodeTabs` live in `src/components/` for use from `.astro`
+(and later MDX). Prefer static HTML; do not hydrate them.
 
 ## UI: shadcn/ui
 
@@ -132,18 +143,26 @@ Tailwind's preflight would otherwise reset it to unstyled HTML.
 ## Layout
 
 ```
-astro.config.mjs               Astro config (React, Tailwind, Shiki, site URL)
-components.json                shadcn/ui config (style, aliases, base color)
-public/                        favicon, apple-touch-icon, and logo assets
-src/content.config.ts          collection schema + glob loader
-src/content/docs/*.md          the content
-src/pages/index.astro          auto-generated index, uses Card + buttonVariants
-src/pages/docs/[...slug].astro renders one page per Markdown file
-src/layouts/BaseLayout.astro   shared HTML shell, imports global.css
-src/components/ui/*            shadcn components (yours to edit)
-src/components/ThemeToggle.tsx interactive React island
-src/lib/utils.ts               cn() class-merge helper
-src/styles/global.css          Tailwind entry + design tokens
+astro.config.mjs                 Astro config (React, Tailwind, Shiki, redirects, site URL)
+components.json                  shadcn/ui config (style, aliases, base color)
+public/                          favicon, apple-touch-icon, and logo assets
+src/content.config.ts            collection schema + glob loader
+src/content/docs/<section>/*.md  the content, grouped by sidebar section
+src/pages/index.astro            landing hero (Get Started, Learn more, install)
+src/pages/docs/[...slug].astro   one page per Markdown file
+src/layouts/BaseLayout.astro     HTML shell, header, GitHub link, theme toggle
+src/layouts/docs-layout.astro    sidebar + article + on-this-page TOC
+src/components/docs-sidebar.astro
+src/components/table-of-contents.astro
+src/components/prev-next.astro
+src/components/callout.astro
+src/components/code-tabs.astro
+src/components/ui/*              shadcn components (yours to edit)
+src/components/copy-code.tsx     click-to-copy for install chip and code blocks
+src/components/ThemeToggle.tsx   interactive React island
+src/lib/docs.ts                  sidebar grouping, prev/next, hrefs
+src/lib/utils.ts                 cn() class-merge helper
+src/styles/global.css            Tailwind entry + design tokens
 ```
 
 Markdown is discovered by the `glob()` loader in `src/content.config.ts`. To

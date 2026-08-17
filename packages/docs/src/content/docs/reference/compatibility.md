@@ -1,7 +1,8 @@
 ---
 title: Compatibility
 description: Broker versions, Java-client defaults, and APIs this client does not implement
-order: 3
+order: 8
+section: reference
 ---
 
 `@kafka/core` is a TypeScript producer/consumer/admin client. It is **not** a

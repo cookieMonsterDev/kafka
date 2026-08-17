@@ -1,0 +1,23 @@
+---
+import StatusPage from '@/components/status-page.astro'
+---
+
+<StatusPage
+  title="Not found"
+  description="This page is not in the log."
+  code="3"
+  type="UNKNOWN_TOPIC_OR_PARTITION"
+  heading="This offset is not in the log"
+  lede="The coordinator checked every replica. Nobody is hosting this URL."
+>
+  <p
+    class="border-border bg-muted/40 text-muted-foreground mt-8 max-w-full rounded-lg border px-3 py-2 font-mono text-sm break-all"
+  >
+    Path: <span id="missing-path">unknown</span>
+  </p>
+</StatusPage>
+
+<script>
+  const el = document.getElementById('missing-path')
+  if (el) el.textContent = window.location.pathname
+</script>

@@ -1,8 +1,8 @@
 ---
 import { getCollection, render } from 'astro:content'
 import type { GetStaticPaths } from 'astro'
-import BaseLayout from '@/layouts/BaseLayout.astro'
-import { buttonVariants } from '@/components/ui/button'
+import DocsLayout from '@/layouts/docs-layout.astro'
+import { hrefFor, navLabel, neighbors } from '@/lib/docs'
 
 export const getStaticPaths = (async () => {
   const entries = await getCollection('docs')
@@ -13,18 +13,20 @@ export const getStaticPaths = (async () => {
 }) satisfies GetStaticPaths
 
 const { entry } = Astro.props
-const { Content } = await render(entry)
+const { Content, headings } = await render(entry)
+const entries = await getCollection('docs')
+const { prev, next } = neighbors(entries, entry.id)
 ---
 
-<BaseLayout title={entry.data.title} description={entry.data.description}>
+<DocsLayout
+  title={entry.data.title}
+  description={entry.data.description}
+  headings={headings}
+  prev={prev ? { href: hrefFor(prev), label: navLabel(prev) } : undefined}
+  next={next ? { href: hrefFor(next), label: navLabel(next) } : undefined}
+>
   <article class="prose prose-neutral dark:prose-invert max-w-none">
     <h1>{entry.data.title}</h1>
     <Content />
   </article>
-
-  <div class="mt-10">
-    <a href="/" class={buttonVariants({ variant: 'outline', size: 'sm' })}>
-      ← Back to index
-    </a>
-  </div>
-</BaseLayout>
+</DocsLayout>

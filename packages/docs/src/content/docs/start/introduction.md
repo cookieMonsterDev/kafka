@@ -2,6 +2,7 @@
 title: Introduction
 description: A TypeScript Kafka client for Kafka 0.10+
 order: 1
+section: start
 ---
 
 `@kafka/core` is a TypeScript Kafka client:
@@ -16,8 +17,14 @@ for pre-KRaft clusters, not a client feature. See
 [KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/)
 and the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/).
 
-This site documents the public API. The library lives in `packages/core`; this
-Astro site is `packages/docs`.
+This site documents the public API. The library lives in
+[`packages/core`](https://github.com/cookieMonsterDev/kafka/tree/master/packages/core);
+this Astro site is `packages/docs`.
+
+Next: [Installation](/docs/start/installation/),
+[Getting started](/docs/start/getting-started/),
+[Kafka client](/docs/reference/kafka/),
+[Errors](/docs/guides/errors/).
 
 ## Supported brokers
 
@@ -39,20 +46,5 @@ This is not Java-client 4.x parity. Integration tests cover 0.10, 0.11, 1.1,
 2.4, 3.6, 4.0, and 4.3. Kafka 4.0 brokers no longer run ZooKeeper.
 The client still encodes older Produce/Fetch versions when a 0.10–3.x broker
 advertises them. Defaults that differ from the Java client, and APIs that are
-not implemented yet, are listed under [Compatibility](/docs/compatibility/).
-
-## Running tests against a version
-
-Unit tests do not start Docker. Integration tests pick a compose file from
-`KAFKA_VERSION` (default `4.0`):
-
-```sh
-pnpm --filter @kafka/core test
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
-```
-
-Leave a cluster running with `DO_NOT_STOP=1`, or point at an already-running
-cluster with `KAFKA_EXTERNAL=1`. The mapping lives in
-`packages/core/test/assets/README.md`.
+not implemented yet, are listed under [Compatibility](/docs/reference/compatibility/).
+How to run the integration matrix: [Testing](/docs/guides/testing/).

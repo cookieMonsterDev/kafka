@@ -4,6 +4,8 @@ Thanks for helping. This repo is a pnpm workspace: `@kafka/core` is the TypeScri
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
+Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file requires them to follow this document (tests, docs, commits, PRs).
+
 ## Prerequisites
 
 - **Node.js 24** (pinned in `.nvmrc`). `engines` is enforced at install time.

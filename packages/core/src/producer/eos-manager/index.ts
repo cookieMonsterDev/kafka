@@ -4,7 +4,7 @@ import { INT_32_MAX_VALUE } from '../../constants';
 import { KafkaNonRetriableError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
-import { retrier } from '../../retry/index';
+import { retrier, type RetryOptions } from '../../retry/index';
 import { Lock } from '../../utils/lock';
 import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
@@ -59,6 +59,7 @@ export interface EosManagerOptions {
   transactionTimeout?: number;
   transactional?: boolean;
   transactionalId?: string;
+  retry?: RetryOptions;
 }
 
 /** Manages idempotent-producer and transaction behavior: producer id/epoch, sequence tracking, and the transaction lifecycle. */
@@ -68,12 +69,13 @@ export function createEosManager({
   transactionTimeout = 60_000,
   transactional = false,
   transactionalId,
+  retry: retryOptions,
 }: EosManagerOptions): EosManager {
   if (transactional && !transactionalId) {
     throw new KafkaNonRetriableError('Cannot manage transactions without a transactionalId');
   }
 
-  const retry = retrier();
+  const retry = retrier(retryOptions);
 
   let producerId = NO_PRODUCER_ID;
   let producerEpoch = 0;

@@ -98,7 +98,7 @@ describe('producer.transactions', () => {
       logger: newLogger(),
       idempotent: true,
       transactionalId,
-      transactionTimeout: 100,
+      transactionTimeout: 2000,
     });
     const second = createProducer({
       cluster: createCluster(),

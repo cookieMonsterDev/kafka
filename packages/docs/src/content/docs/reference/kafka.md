@@ -6,7 +6,7 @@ section: reference
 ---
 
 ```ts
-import { Kafka, logLevel } from '@kafka/core';
+import { Kafka, logLevel } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({
   clientId: 'my-app',

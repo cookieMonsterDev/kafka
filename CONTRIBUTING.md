@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. This repo is a pnpm workspace: `@kafka/core` is the TypeScript Kafka client, `@kafka/docs` is the Astro documentation site.
+Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
@@ -25,7 +25,7 @@ pnpm install
 From the repo root:
 
 ```sh
-pnpm dev           # docs site on http://localhost:4321 + Vite watch for @kafka/core
+pnpm dev           # docs site on http://localhost:4321 + Vite watch for @cookiemonsterdev/kafka-core
 pnpm build         # all packages, in dependency order
 pnpm lint          # ESLint
 pnpm format        # Prettier write
@@ -35,19 +35,19 @@ pnpm test          # unit tests only (never starts Docker)
 pnpm clean         # build output and node_modules (re-run pnpm install after)
 ```
 
-`pnpm -r` walks the workspace graph, so `@kafka/core` compiles before `@kafka/docs` imports it.
+`pnpm -r` walks the workspace graph, so `@cookiemonsterdev/kafka-core` compiles before `@cookiemonsterdev/kafka-docs` imports it.
 
 ### One package
 
 ```sh
-pnpm --filter @kafka/core build
-pnpm --filter @kafka/docs dev
-pnpm --filter @kafka/docs add <pkg>
-pnpm --filter @kafka/core add -D <pkg>
-pnpm --filter @kafka/docs... build   # "..." includes workspace dependencies
+pnpm --filter @cookiemonsterdev/kafka-core build
+pnpm --filter @cookiemonsterdev/kafka-docs dev
+pnpm --filter @cookiemonsterdev/kafka-docs add <pkg>
+pnpm --filter @cookiemonsterdev/kafka-core add -D <pkg>
+pnpm --filter @cookiemonsterdev/kafka-docs... build   # "..." includes workspace dependencies
 ```
 
-Each package README has the rest of its workflow: [`@kafka/core`](packages/core/README.md), [`@kafka/docs`](packages/docs/README.md).
+Each package README has the rest of its workflow: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md).
 
 ### Shared versions
 
@@ -56,7 +56,7 @@ TypeScript, Vite, Vitest, and Astro versions live in the **catalog** in `pnpm-wo
 To depend on another workspace package, use the `workspace:` protocol:
 
 ```sh
-pnpm --filter @kafka/<name> add @kafka/core --workspace
+pnpm --filter @cookiemonsterdev/kafka-<name> add @cookiemonsterdev/kafka-core --workspace
 ```
 
 ## Branch names
@@ -170,15 +170,15 @@ Unit tests are protocol fixtures and never start Docker:
 
 ```sh
 pnpm test
-pnpm --filter @kafka/core test
+pnpm --filter @cookiemonsterdev/kafka-core test
 ```
 
 Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):
 
 ```sh
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
@@ -189,9 +189,9 @@ Markdown under `packages/docs/src/content/docs/<section>/` becomes a page
 (`/docs/start/introduction/`, and so on). After `pnpm clean`, build core first:
 
 ```sh
-pnpm --filter @kafka/docs... build
+pnpm --filter @cookiemonsterdev/kafka-docs... build
 # or
-pnpm --filter @kafka/docs dev
+pnpm --filter @cookiemonsterdev/kafka-docs dev
 ```
 
 How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](packages/docs/README.md).
@@ -200,10 +200,10 @@ How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](pack
 
 `develop` is the default integration branch. `master` is the release branch.
 
-| Package       | What a release does                                                                                   |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| `@kafka/core` | npm publish (`@kafka/core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md`          |
-| `@kafka/docs` | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm) |
+| Package                        | What a release does                                                                                           |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `@cookiemonsterdev/kafka-core` | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md` |
+| `@cookiemonsterdev/kafka-docs` | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)         |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
 2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
@@ -214,7 +214,7 @@ One-time GitHub/npm/Pages settings: [`.github/branch-setup.md`](.github/branch-s
 
 ## Adding a package
 
-1. Create `packages/<name>/package.json` with the name `@kafka/<name>` (kebab-case folder).
+1. Create `packages/<name>/package.json` with the name `@cookiemonsterdev/kafka-<name>` (kebab-case folder).
 2. Run `pnpm install`.
 
 The `packages/*` glob in `pnpm-workspace.yaml` picks it up.

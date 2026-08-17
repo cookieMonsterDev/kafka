@@ -5,7 +5,7 @@ order: 1
 section: start
 ---
 
-`@kafka/core` is a TypeScript Kafka client:
+`@cookiemonsterdev/kafka-core` is a TypeScript Kafka client:
 `new Kafka({ brokers }).producer() / consumer() / admin()`.
 
 It targets **Kafka 0.10 and newer**. Offsets are `bigint`, ZSTD is built in

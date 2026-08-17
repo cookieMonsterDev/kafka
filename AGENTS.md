@@ -10,7 +10,7 @@ agent-specific constraints on top.
 
 ## What this is
 
-`@kafka/core` is a TypeScript Apache Kafka client for Node.js that speaks the Kafka wire protocol directly (no native/JVM dependency): it negotiates API versions with the broker via `ApiVersions`, uses `bigint` for offsets, and supports brokers from Kafka 0.10 onward. `@kafka/docs` is the Astro documentation site. This is a pnpm workspace (`packages/core`, `packages/docs`); the workspace itself is not published to npm.
+`@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for Node.js that speaks the Kafka wire protocol directly (no native/JVM dependency): it negotiates API versions with the broker via `ApiVersions`, uses `bigint` for offsets, and supports brokers from Kafka 0.10 onward. `@cookiemonsterdev/kafka-docs` is the Astro documentation site. This is a pnpm workspace (`packages/core`, `packages/docs`); the workspace itself is not published to npm.
 
 ## Follow CONTRIBUTING.md
 
@@ -42,12 +42,12 @@ or **N/A** with a one-line reason. Do not skip silently.
 4. **Docs**
    - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
    - Workflow, commands, or package usage: the relevant package README and/or [CONTRIBUTING.md](CONTRIBUTING.md).
-   - After `pnpm clean`, build core first (`pnpm --filter @kafka/docs... build`) because docs import `@kafka/core` from `dist/`.
+   - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
 5. **Exports** — New public surface is re-exported from `packages/core/src/index.ts` only. Types come from `tsc --emitDeclarationOnly`.
 6. **Verification** — Run what the change needs from the repo root:
    - `pnpm lint`, `pnpm format:check`, `pnpm typecheck`
    - `pnpm test` (unit only)
-   - Integration (`KAFKA_VERSION=… pnpm --filter @kafka/core test:integration`) if the change touches brokers, protocol, SASL, or admin
+   - Integration (`KAFKA_VERSION=… pnpm --filter @cookiemonsterdev/kafka-core test:integration`) if the change touches brokers, protocol, SASL, or admin
 7. **Hygiene** — Filenames and folders are kebab-case. Nothing listed in CONTRIBUTING.md **Review expectations** is staged.
 8. **Commit** — Suggest a Conventional Commit message. Do not commit unless asked.
 
@@ -60,7 +60,7 @@ or **N/A** with a one-line reason. Do not skip silently.
 
 ## Commands
 
-Run from the repo root unless noted. `pnpm -r` walks the workspace dependency graph, so `@kafka/core` builds before `@kafka/docs` imports it.
+Run from the repo root unless noted. `pnpm -r` walks the workspace dependency graph, so `@cookiemonsterdev/kafka-core` builds before `@cookiemonsterdev/kafka-docs` imports it.
 
 ```sh
 nvm use && corepack enable && pnpm install   # Node 24 + pnpm 11 pinned, engineStrict enforced
@@ -75,13 +75,13 @@ pnpm test          # unit tests only, never starts Docker
 Single package / single test:
 
 ```sh
-pnpm --filter @kafka/core test                       # unit tests (vitest --project unit)
-pnpm --filter @kafka/core test -- fetch-request       # filter by filename/describe substring
-pnpm --filter @kafka/core test:watch                  # watch mode
-pnpm --filter @kafka/core typecheck                   # src + test/tsconfig.json
+pnpm --filter @cookiemonsterdev/kafka-core test                       # unit tests (vitest --project unit)
+pnpm --filter @cookiemonsterdev/kafka-core test -- fetch-request       # filter by filename/describe substring
+pnpm --filter @cookiemonsterdev/kafka-core test:watch                  # watch mode
+pnpm --filter @cookiemonsterdev/kafka-core typecheck                   # src + test/tsconfig.json
 
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration   # requires Docker
-KAFKA_VERSION=4.3  pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration   # requires Docker
+KAFKA_VERSION=4.3  pnpm --filter @cookiemonsterdev/kafka-core test:integration
 # KAFKA_EXTERNAL=1 skips compose up/down; DO_NOT_STOP=1 leaves the cluster running
 ```
 
@@ -118,7 +118,7 @@ TypeScript is strict (`noUncheckedIndexedAccess`, `noImplicitOverride`), `verbat
 
 ## Documentation
 
-Markdown under `packages/docs/src/content/docs/<section>/` becomes a page (`/docs/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @kafka/docs... build`) because docs import `@kafka/core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
+Markdown under `packages/docs/src/content/docs/<section>/` becomes a page (`/docs/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
 
 ## Commits and branches
 

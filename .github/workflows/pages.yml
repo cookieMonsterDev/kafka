@@ -34,7 +34,7 @@ jobs:
       - name: Build
         env:
           GITHUB_PAGES: '1'
-        run: pnpm --filter @kafka/docs... build
+        run: pnpm --filter @cookiemonsterdev/kafka-docs... build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v4
         with:

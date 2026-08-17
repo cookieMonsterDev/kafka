@@ -6,7 +6,7 @@ section: guides
 ---
 
 ```ts
-import { Kafka } from '@kafka/core';
+import { Kafka } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({ clientId: 'my-app', brokers: ['localhost:9092'] });
 const admin = kafka.admin();

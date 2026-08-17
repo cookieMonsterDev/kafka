@@ -13,7 +13,7 @@ body:
     attributes:
       label: Problem
       description: What is hard or impossible today? Who does it affect?
-      placeholder: As a developer using @kafka/core, I want … so that …
+      placeholder: As a developer using @cookiemonsterdev/kafka-core, I want … so that …
     validations:
       required: true
   - type: textarea
@@ -28,8 +28,8 @@ body:
     attributes:
       label: Package
       options:
-        - '@kafka/core'
-        - '@kafka/docs'
+        - '@cookiemonsterdev/kafka-core'
+        - '@cookiemonsterdev/kafka-docs'
         - workspace / tooling
         - unsure
     validations:

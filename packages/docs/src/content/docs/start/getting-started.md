@@ -8,7 +8,7 @@ section: start
 Create one `Kafka` instance per process. Offsets are `bigint` (`42n`).
 
 ```ts
-import { Kafka, CompressionTypes, logLevel } from '@kafka/core';
+import { Kafka, CompressionTypes, logLevel } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({
   clientId: 'my-app',

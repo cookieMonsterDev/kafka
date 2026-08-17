@@ -11,21 +11,21 @@
 
 <p align="center">
   <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/@kafka/core"><img src="https://img.shields.io/npm/v/@kafka/core.svg" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-core"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-core.svg" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
   <a href=".nvmrc"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node.js 24+" /></a>
   <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
 </p>
 
-`@kafka/core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@kafka/docs` is the documentation site for that client.
+`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
 
 Install the client from npm. The workspace root is private and is not published.
 
 ```sh
-npm install @kafka/core
+npm install @cookiemonsterdev/kafka-core
 ```
 
-Docs: [https://cookiemonsterdev.github.io/kafka/](https://cookiemonsterdev.github.io/kafka/). Local site: `pnpm --filter @kafka/docs... build && pnpm --filter @kafka/docs dev`.
+Docs: [https://cookiemonsterdev.github.io/kafka/](https://cookiemonsterdev.github.io/kafka/). Local site: `pnpm --filter @cookiemonsterdev/kafka-docs... build && pnpm --filter @cookiemonsterdev/kafka-docs dev`.
 
 ## Features
 
@@ -40,7 +40,7 @@ Docs: [https://cookiemonsterdev.github.io/kafka/](https://cookiemonsterdev.githu
 ## Quick start
 
 ```ts
-import { Kafka, CompressionTypes, logLevel } from '@kafka/core';
+import { Kafka, CompressionTypes, logLevel } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({
   clientId: 'my-app',
@@ -71,16 +71,16 @@ Offsets are `bigint` (`42n`), not strings. More examples: [Getting started](pack
 Run the site locally after `pnpm install`:
 
 ```sh
-pnpm --filter @kafka/docs... build
-pnpm --filter @kafka/docs dev   # http://localhost:4321
+pnpm --filter @cookiemonsterdev/kafka-docs... build
+pnpm --filter @cookiemonsterdev/kafka-docs dev   # http://localhost:4321
 ```
 
 ## Packages
 
-| Package       | Path            | What it is                                    |
-| ------------- | --------------- | --------------------------------------------- |
-| `@kafka/core` | `packages/core` | TypeScript Kafka client (Kafka 0.10+), on npm |
-| `@kafka/docs` | `packages/docs` | Astro documentation site (GitHub Pages)       |
+| Package                        | Path            | What it is                                    |
+| ------------------------------ | --------------- | --------------------------------------------- |
+| `@cookiemonsterdev/kafka-core` | `packages/core` | TypeScript Kafka client (Kafka 0.10+), on npm |
+| `@cookiemonsterdev/kafka-docs` | `packages/docs` | Astro documentation site (GitHub Pages)       |
 
 ## Requirements
 
@@ -105,12 +105,12 @@ pnpm test          # unit tests only (never starts Docker)
 ```
 
 ```sh
-pnpm --filter @kafka/core test
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
+pnpm --filter @cookiemonsterdev/kafka-core test
+KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
-Branch names, Conventional Commits, PR flow, code style, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Releases and GitHub settings: **[`.github/branch-setup.md`](.github/branch-setup.md)**. Per-package details: [`@kafka/core`](packages/core/README.md), [`@kafka/docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+Branch names, Conventional Commits, PR flow, code style, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Releases and GitHub settings: **[`.github/branch-setup.md`](.github/branch-setup.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 

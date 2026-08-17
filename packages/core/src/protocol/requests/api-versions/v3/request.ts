@@ -6,7 +6,7 @@ export interface ApiVersionsRequestOptions {
   clientSoftwareVersion?: string;
 }
 
-/** Matches `@kafka/core`'s package version; brokers only log this (KIP-511). */
+/** Matches `@cookiemonsterdev/kafka-core`'s package version; brokers only log this (KIP-511). */
 export const DEFAULT_CLIENT_SOFTWARE_NAME = 'kafka';
 export const DEFAULT_CLIENT_SOFTWARE_VERSION = '0.0.0';
 

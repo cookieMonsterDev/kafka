@@ -5,7 +5,7 @@
 ## Test plan
 
 - [ ] Unit tests (`pnpm test`) cover the change
-- [ ] Integration tests run if this touches brokers, protocol, SASL, or admin (`KAFKA_VERSION=… pnpm --filter @kafka/core test:integration`)
+- [ ] Integration tests run if this touches brokers, protocol, SASL, or admin (`KAFKA_VERSION=… pnpm --filter @cookiemonsterdev/kafka-core test:integration`)
 - [ ] Docs or README updated when the public API or workflow changes
 
 ## Checklist

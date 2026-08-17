@@ -39,8 +39,8 @@ jobs:
       - name: Lint last commit message
         if: github.event_name != 'pull_request'
         run: pnpm exec commitlint --last --verbose
-      - run: pnpm --filter @kafka/core exec tsc -p tsconfig.json --noEmit
-      - run: pnpm --filter @kafka/core test
+      - run: pnpm --filter @cookiemonsterdev/kafka-core exec tsc -p tsconfig.json --noEmit
+      - run: pnpm --filter @cookiemonsterdev/kafka-core test
 
   integration-matrix:
     name: Integration matrix
@@ -90,7 +90,7 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
-      - run: pnpm --filter @kafka/core test:integration
+      - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
   oauthbearer:
     name: Integration (OAUTHBEARER / 4.0)
@@ -121,4 +121,4 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
-      - run: pnpm --filter @kafka/core test:integration
+      - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration

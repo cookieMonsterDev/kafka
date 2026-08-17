@@ -6,7 +6,7 @@ section: guides
 ---
 
 ```ts
-import { Kafka, KafkaError, KafkaNonRetriableError, KafkaProtocolError } from '@kafka/core';
+import { Kafka, KafkaError, KafkaNonRetriableError, KafkaProtocolError } from '@cookiemonsterdev/kafka-core';
 
 try {
   await producer.send({ topic: 'events', messages: [{ value: 'hello' }] });

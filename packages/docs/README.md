@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="public/logo-icon.svg" width="72" height="72" alt="@kafka/docs">
+  <img src="public/logo-icon.svg" width="72" height="72" alt="@cookiemonsterdev/kafka-docs">
 </p>
 
-# @kafka/docs
+# @cookiemonsterdev/kafka-docs
 
-Astro documentation site for [`@kafka/core`](../core/README.md). Every Markdown file under `src/content/docs/` becomes a page.
+Astro documentation site for [`@cookiemonsterdev/kafka-core`](../core/README.md). Every Markdown file under `src/content/docs/` becomes a page.
 
 This package lives in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is not a published npm library.
 
@@ -26,11 +26,11 @@ flat slugs (`/docs/introduction/`, `/docs/getting-started/`,
 From the repo root (after `pnpm install`):
 
 ```sh
-pnpm --filter @kafka/docs dev        # http://localhost:4321
-pnpm --filter @kafka/docs build      # static site into dist/
-pnpm --filter @kafka/docs preview    # serve the built dist/ locally
-pnpm --filter @kafka/docs typecheck  # astro check
-pnpm --filter @kafka/docs clean      # remove dist/ and .astro/
+pnpm --filter @cookiemonsterdev/kafka-docs dev        # http://localhost:4321
+pnpm --filter @cookiemonsterdev/kafka-docs build      # static site into dist/
+pnpm --filter @cookiemonsterdev/kafka-docs preview    # serve the built dist/ locally
+pnpm --filter @cookiemonsterdev/kafka-docs typecheck  # astro check
+pnpm --filter @cookiemonsterdev/kafka-docs clean      # remove dist/ and .astro/
 ```
 
 Or from this directory:
@@ -43,11 +43,11 @@ pnpm dev
 The dev server hot-reloads on Markdown edits. To use a different port:
 
 ```sh
-pnpm --filter @kafka/docs dev --port 3000
+pnpm --filter @cookiemonsterdev/kafka-docs dev --port 3000
 ```
 
-> This package imports `@kafka/core`, which resolves to `packages/core/dist/`.
-> After a clean checkout or `pnpm clean`, build it first — `pnpm --filter @kafka/docs... build`
+> This package imports `@cookiemonsterdev/kafka-core`, which resolves to `packages/core/dist/`.
+> After a clean checkout or `pnpm clean`, build it first — `pnpm --filter @cookiemonsterdev/kafka-docs... build`
 > (the `...` suffix includes dependencies), or just `pnpm build` from the root.
 
 ## Adding a page

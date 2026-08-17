@@ -86,7 +86,7 @@ jobs:
             echo "::error::NPM_TOKEN is required to deprecate. Trusted publishing cannot deprecate."
             exit 1
           fi
-          npm deprecate "@kafka/core@${VERSION}" "This version was unpublished or withdrawn. Do not use."
+          npm deprecate "@cookiemonsterdev/kafka-core@${VERSION}" "This version was unpublished or withdrawn. Do not use."
       - name: npm unpublish
         if: inputs.package == 'core' && inputs.npm_action == 'unpublish'
         env:
@@ -98,8 +98,8 @@ jobs:
             echo "::error::NPM_TOKEN is required to unpublish. Trusted publishing cannot unpublish."
             exit 1
           fi
-          npm unpublish "@kafka/core@${VERSION}" --force
-          echo "::warning::npm will not allow republishing @kafka/core@${VERSION}."
+          npm unpublish "@cookiemonsterdev/kafka-core@${VERSION}" --force
+          echo "::warning::npm will not allow republishing @cookiemonsterdev/kafka-core@${VERSION}."
       - name: Summary
         env:
           TAG: ${{ steps.tag.outputs.name }}

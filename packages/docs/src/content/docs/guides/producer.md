@@ -6,7 +6,7 @@ section: guides
 ---
 
 ```ts
-import { Kafka, CompressionTypes, Partitioners } from '@kafka/core';
+import { Kafka, CompressionTypes, Partitioners } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({ clientId: 'my-app', brokers: ['localhost:9092'] });
 const producer = kafka.producer({

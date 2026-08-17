@@ -3,15 +3,15 @@
 Integration tests start a local Kafka cluster with Docker Compose. Select the stack with `KAFKA_VERSION` (semver, default `4.0`) and optionally `OAUTHBEARER_ENABLED=1`.
 
 ```bash
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=0.11 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=1.1 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=2.4 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=3.6 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.1 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.2 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=0.11 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=1.1 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=2.4 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=3.6 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.1 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.2 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `global-setup.ts`, `scripts/compose-up.sh`, `scripts/compose-down.sh`, and `scripts/compose-pull.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
@@ -74,7 +74,7 @@ These read `KAFKA_VERSION` (default `4.0`) and skip when the running cluster is 
 
 GitHub Actions (`.github/workflows/ci.yml`) runs:
 
-- Unit job: format check, `tsc --noEmit` on `src/`, `pnpm --filter @kafka/core test` (no Docker)
+- Unit job: format check, `tsc --noEmit` on `src/`, `pnpm --filter @cookiemonsterdev/kafka-core test` (no Docker)
 - Integration jobs: one per matrix version, with `TEST_RETRIES=2`
 - OAUTHBEARER as a separate 4.0 job (`OAUTHBEARER_ENABLED=1`)
 

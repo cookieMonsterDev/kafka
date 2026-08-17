@@ -1,12 +1,12 @@
-# @kafka/core
+# @cookiemonsterdev/kafka-core
 
 TypeScript Apache Kafka client for **Kafka 0.10+**. Protocol versions are negotiated from `ApiVersions`. Offsets are `bigint`. Types are generated from source.
 
-This package is the library in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is published to npm as [`@kafka/core`](https://www.npmjs.com/package/@kafka/core).
+This package is the library in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is published to npm as [`@cookiemonsterdev/kafka-core`](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core).
 
 <p>
   <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/@kafka/core"><img src="https://img.shields.io/npm/v/@kafka/core.svg" alt="npm" /></a>
+  <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-core"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-core.svg" alt="npm" /></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
 </p>
 
@@ -26,10 +26,10 @@ Not in scope: Kafka Streams, Kafka Connect, GSSAPI/Kerberos, Java-client 4.x par
 
 ## Usage
 
-From another workspace package, or after `pnpm --filter @kafka/core build`:
+From another workspace package, or after `pnpm --filter @cookiemonsterdev/kafka-core build`:
 
 ```ts
-import { Kafka, CompressionTypes, logLevel, Partitioners } from '@kafka/core';
+import { Kafka, CompressionTypes, logLevel, Partitioners } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({
   clientId: 'my-app',
@@ -64,7 +64,7 @@ await consumer.run({
 The `exports` field points at `dist/`, so **`dist/` must exist** before a dependent package builds. `pnpm -r` does that automatically. After a `clean`, build this package first:
 
 ```sh
-pnpm --filter @kafka/docs... build   # "..." includes dependencies
+pnpm --filter @cookiemonsterdev/kafka-docs... build   # "..." includes dependencies
 ```
 
 `await using` works because producer, consumer, and admin implement `Symbol.asyncDispose` (it calls `disconnect()`).
@@ -83,17 +83,17 @@ To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartiti
 | [Compatibility](../docs/src/content/docs/reference/compatibility.md)       | Defaults vs the Java client, missing APIs        |
 | [Breaking changes](../docs/src/content/docs/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars              |
 
-Local site: `pnpm --filter @kafka/docs dev` → <http://localhost:4321>
+Local site: `pnpm --filter @cookiemonsterdev/kafka-docs dev` → <http://localhost:4321>
 
 ## Local development
 
 From the repo root (after `pnpm install`):
 
 ```sh
-pnpm --filter @kafka/core dev        # vite build --watch
-pnpm --filter @kafka/core build      # JS + .d.ts into dist/
-pnpm --filter @kafka/core typecheck  # src + tests, tsc --noEmit
-pnpm --filter @kafka/core clean      # remove dist/
+pnpm --filter @cookiemonsterdev/kafka-core dev        # vite build --watch
+pnpm --filter @cookiemonsterdev/kafka-core build      # JS + .d.ts into dist/
+pnpm --filter @cookiemonsterdev/kafka-core typecheck  # src + tests, tsc --noEmit
+pnpm --filter @cookiemonsterdev/kafka-core clean      # remove dist/
 ```
 
 Or from this directory:
@@ -117,8 +117,8 @@ Compiler options are shared: strict mode, `bundler` module resolution, `erasable
 ### Adding a dependency
 
 ```sh
-pnpm --filter @kafka/core add <pkg>
-pnpm --filter @kafka/core add -D <pkg>
+pnpm --filter @cookiemonsterdev/kafka-core add <pkg>
+pnpm --filter @cookiemonsterdev/kafka-core add -D <pkg>
 ```
 
 For a version shared with other packages, add it to the `catalog:` in the root `pnpm-workspace.yaml` and reference it as `"<pkg>": "catalog:"`.
@@ -128,15 +128,15 @@ For a version shared with other packages, add it to the `catalog:` in the root `
 Unit tests are protocol fixtures and do not start Docker:
 
 ```sh
-pnpm --filter @kafka/core test
+pnpm --filter @cookiemonsterdev/kafka-core test
 ```
 
 Integration tests select a compose file from `KAFKA_VERSION` (default `4.0`). You do not edit compose paths:
 
 ```sh
-KAFKA_VERSION=0.10 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.0 pnpm --filter @kafka/core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @kafka/core test:integration
+KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running after the suite. Mapping, feature gates, and CI matrix: [`test/assets/README.md`](test/assets/README.md).

@@ -65,7 +65,7 @@ jobs:
           echo "docs=$docs" >> "$GITHUB_OUTPUT"
 
   release-core:
-    name: Release @kafka/core
+    name: Release @cookiemonsterdev/kafka-core
     needs: [changes]
     if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
@@ -81,8 +81,8 @@ jobs:
           if [[ "$major" -lt 11 ]]; then
             npm install -g npm@11
           fi
-      - run: pnpm --filter @kafka/core build
-      - run: pnpm --filter @kafka/core test
+      - run: pnpm --filter @cookiemonsterdev/kafka-core build
+      - run: pnpm --filter @cookiemonsterdev/kafka-core test
       - name: semantic-release
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -97,7 +97,7 @@ jobs:
           "${args[@]}"
 
   release-docs:
-    name: Release @kafka/docs
+    name: Release @cookiemonsterdev/kafka-docs
     needs: [changes, release-core]
     if: >-
       always() &&
@@ -116,7 +116,7 @@ jobs:
           git checkout master
           git reset --hard origin/master
       - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm --filter @kafka/docs... build
+      - run: pnpm --filter @cookiemonsterdev/kafka-docs... build
         env:
           GITHUB_PAGES: '1'
       - name: semantic-release

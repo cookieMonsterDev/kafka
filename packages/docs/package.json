@@ -1,8 +1,8 @@
 {
-  "name": "@kafka/docs",
+  "name": "@cookiemonsterdev/kafka-docs",
   "version": "0.0.0",
   "private": true,
-  "description": "Astro documentation site for @kafka/core, published to GitHub Pages.",
+  "description": "Astro documentation site for @cookiemonsterdev/kafka-core, published to GitHub Pages.",
   "type": "module",
   "license": "MIT",
   "author": "Mykhailo Toporkov",
@@ -23,7 +23,7 @@
   "dependencies": {
     "@astrojs/react": "^6.0.2",
     "@fontsource-variable/geist": "^5.3.0",
-    "@kafka/core": "workspace:^",
+    "@cookiemonsterdev/kafka-core": "workspace:^",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",

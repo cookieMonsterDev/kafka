@@ -1,6 +1,6 @@
 ---
 title: Public API
-description: What @kafka/core exports
+description: What @cookiemonsterdev/kafka-core exports
 order: 7
 section: reference
 ---

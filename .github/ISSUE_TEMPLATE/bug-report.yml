@@ -23,7 +23,7 @@ body:
       description: Minimal code, a failing test, or a small repo. Include broker logs or client logs at `logLevel.DEBUG` when they help.
       placeholder: |
         ```ts
-        import { Kafka } from '@kafka/core';
+        import { Kafka } from '@cookiemonsterdev/kafka-core';
         // smallest snippet that fails
         ```
     validations:
@@ -65,8 +65,8 @@ body:
     attributes:
       label: Affected package
       options:
-        - '@kafka/core'
-        - '@kafka/docs'
+        - '@cookiemonsterdev/kafka-core'
+        - '@cookiemonsterdev/kafka-docs'
         - workspace / tooling
         - unsure
     validations:

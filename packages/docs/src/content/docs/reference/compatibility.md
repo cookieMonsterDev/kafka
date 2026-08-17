@@ -5,7 +5,7 @@ order: 8
 section: reference
 ---
 
-`@kafka/core` is a TypeScript producer/consumer/admin client. It is **not** a
+`@cookiemonsterdev/kafka-core` is a TypeScript producer/consumer/admin client. It is **not** a
 Java-client equivalent and does not claim full Kafka 4.x Java-client parity.
 
 The client negotiates protocol versions from `ApiVersions`. The support floor

@@ -20,7 +20,7 @@ await consumer.run({
 });
 ```
 
-`message.offset` is `bigint`. Methods: [`Consumer`](/docs/reference/consumer/).
+`message.offset` is `bigint`. Methods: [`Consumer`](../reference/consumer/).
 Source:
 [`consumer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/consumer/index.ts).
 
@@ -63,5 +63,5 @@ Range, round-robin (default), sticky, and cooperative-sticky are built in
 (`PartitionAssigners`). Groups use the classic protocol only — there is no
 KIP-848 `group.protocol=consumer`. Isolation defaults to `read_committed`
 (`readUncommitted: false`); Java default `isolation.level` is
-`read_uncommitted`. See [Compatibility](/docs/reference/compatibility/) and
+`read_uncommitted`. See [Compatibility](../reference/compatibility/) and
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

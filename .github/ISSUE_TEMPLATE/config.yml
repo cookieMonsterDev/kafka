@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Contributing guide
-    url: https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md
+    url: https://github.com/cookieMonsterDev/kafka/blob/develop/CONTRIBUTING.md
     about: Branch names, commits, pull requests, tests, and code style.

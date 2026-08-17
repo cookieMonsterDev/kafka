@@ -19,4 +19,4 @@ Leave a cluster running with `DO_NOT_STOP=1`, or point at an already-running
 cluster with `KAFKA_EXTERNAL=1`. The mapping lives in
 [`packages/core/test/assets/README.md`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/test/assets/README.md).
 
-The tested broker matrix is on [Compatibility](/docs/reference/compatibility/).
+The tested broker matrix is on [Compatibility](../reference/compatibility/).

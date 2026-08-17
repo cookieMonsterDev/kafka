@@ -2,13 +2,13 @@
 # KAFKA_VERSION (see packages/core/test/assets/README.md).
 #
 # PRs run the expensive ends plus one middle ZooKeeper and one middle KRaft
-# stack (0.10, 2.4, 3.6, 4.0, 4.3). Pushes to the default branch, and manual
-# workflow_dispatch runs, cover the full matrix.
+# stack (0.10, 2.4, 3.6, 4.0, 4.3). Pushes to `develop` (default) or `master`,
+# and manual workflow_dispatch runs, cover the full matrix.
 name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [develop, master]
   pull_request:
   workflow_dispatch:
 
@@ -50,7 +50,7 @@ jobs:
     steps:
       - id: set
         env:
-          FULL_MATRIX: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+          FULL_MATRIX: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) }}
         run: |
           if [[ "${FULL_MATRIX}" == "true" ]]; then
             echo 'versions=["0.10","0.11","1.1","2.4","3.6","4.0","4.1","4.2","4.3"]' >> "$GITHUB_OUTPUT"

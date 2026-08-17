@@ -2,8 +2,16 @@
   "name": "@kafka/docs",
   "version": "0.0.0",
   "private": true,
+  "description": "Astro documentation site for @kafka/core, published to GitHub Pages.",
   "type": "module",
   "license": "MIT",
+  "author": "Mykhailo Toporkov",
+  "homepage": "https://cookiemonsterdev.github.io/kafka/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookieMonsterDev/kafka.git",
+    "directory": "packages/docs"
+  },
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",

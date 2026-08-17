@@ -4,9 +4,12 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
+const githubPages = process.env.GITHUB_PAGES === '1';
+
 // https://docs.astro.build/en/reference/configuration-reference/
 export default defineConfig({
-  site: 'https://example.com',
+  site: 'https://cookiemonsterdev.github.io',
+  base: githubPages ? '/kafka' : '/',
 
   redirects: {
     '/docs/introduction': '/docs/start/introduction',

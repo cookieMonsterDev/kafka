@@ -10,7 +10,7 @@
 
 ## Checklist
 
-- [ ] Branch name follows `type/short-kebab-description` (see [CONTRIBUTING.md](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md))
+- [ ] Branch name follows `type/short-kebab-description` (see [CONTRIBUTING.md](https://github.com/cookieMonsterDev/kafka/blob/develop/CONTRIBUTING.md))
 - [ ] Commits follow Conventional Commits (`feat`, `fix`, `docs`, …)
 - [ ] `pnpm lint`, `pnpm format:check`, and `pnpm typecheck` are clean
 - [ ] No unrelated refactors or formatting-only noise

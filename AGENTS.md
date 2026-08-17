@@ -18,7 +18,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing code. Do not invent a
 parallel workflow. In particular:
 
 - Prerequisites, local commands, shared catalog versions, and pnpm 11 notes
-- Branch names: `<type>/<short-kebab-description>` from `master`
+- Branch names: `<type>/<short-kebab-description>` from `develop`
 - Conventional Commits (commitlint on `commit-msg` and in CI)
 - One concern per branch and per PR; no mixed refactors or formatting-only noise
 - Public API only from `packages/core/src/index.ts`; generated types, never a hand-written `index.d.ts`
@@ -140,4 +140,4 @@ fix(network): retry when the connection pool is exhausted
 docs(getting-started): document lingerMs default
 ```
 
-Branch from `master`. Names: `<type>/<short-kebab-description>` (e.g. `fix/connection-pool-retry`). Full details, including the PR checklist and review expectations, are in [CONTRIBUTING.md](CONTRIBUTING.md).
+Branch from `develop`. Names: `<type>/<short-kebab-description>` (e.g. `fix/connection-pool-retry`). Full details, including the PR checklist and review expectations, are in [CONTRIBUTING.md](CONTRIBUTING.md).

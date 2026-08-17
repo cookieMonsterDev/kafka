@@ -1,4 +1,5 @@
 import type { CollectionEntry } from 'astro:content';
+import { withBase } from '@/lib/base';
 
 export const SECTION_ORDER = ['start', 'guides', 'reference', 'integrations', 'migration'] as const;
 
@@ -15,7 +16,7 @@ export const SECTION_LABELS: Record<DocsSection, string> = {
 export type DocsEntry = CollectionEntry<'docs'>;
 
 export function hrefFor(entry: DocsEntry): string {
-  return `/docs/${entry.id}/`;
+  return withBase(`/docs/${entry.id}/`);
 }
 
 export function navLabel(entry: DocsEntry): string {

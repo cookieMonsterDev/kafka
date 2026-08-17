@@ -174,9 +174,7 @@ change where content lives, edit the `base` path there — the routing follows.
   the command prompts to install interactively and will hang in CI.
 - Import `z` from `astro/zod`, not from `astro:content` — the latter is
   deprecated in Astro 7.
-- `site` in `astro.config.mjs` is a placeholder (`https://example.com`). Set it to
-  the real deployment URL before publishing, since it is used for canonical URLs
-  and sitemaps.
+- `site` in `astro.config.mjs` is `https://cookiemonsterdev.github.io`. GitHub Pages builds set `GITHUB_PAGES=1`, which prefixes URLs with `/kafka`. Local `pnpm dev` stays at `http://localhost:4321/`.
 
 ## Contributing
 

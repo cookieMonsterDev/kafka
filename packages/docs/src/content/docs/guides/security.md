@@ -37,4 +37,4 @@ Source:
 
 GSSAPI / Kerberos is not implemented. `aws` is an extra (non-Apache) helper.
 Failed SASL throws `KafkaSASLAuthenticationError` (non-retriable). See
-[Errors](/docs/reference/errors/).
+[Errors](../reference/errors/).

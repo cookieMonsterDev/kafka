@@ -61,7 +61,7 @@ pnpm --filter @kafka/<name> add @kafka/core --workspace
 
 ## Branch names
 
-Branch from `master`. Use kebab-case, with a Conventional Commit **type** as the prefix:
+Branch from **`develop`**. Use kebab-case, with a Conventional Commit **type** as the prefix:
 
 ```
 <type>/<short-kebab-description>
@@ -128,14 +128,16 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 
 ## Pull requests
 
-1. Create a branch from up-to-date `master` using the naming scheme above.
+1. Create a branch from up-to-date **`develop`** using the naming scheme above.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
-3. Push and open a PR against `master`. The PR template is filled in for you.
+3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `master`).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
+
+Releases are not done from topic PRs. Merge `develop` into `master` (merge commit, not squash) when you want to publish. See [Releasing](#releasing) and the one-time GitHub settings guide ([`.github/branch-setup.md`](.github/branch-setup.md)).
 
 ### Review expectations
 
@@ -193,6 +195,22 @@ pnpm --filter @kafka/docs dev
 ```
 
 How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](packages/docs/README.md).
+
+## Releasing
+
+`develop` is the default integration branch. `master` is the release branch.
+
+| Package       | What a release does                                                                                   |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| `@kafka/core` | npm publish (`@kafka/core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md`          |
+| `@kafka/docs` | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm) |
+
+1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
+2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
+3. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
+4. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
+
+One-time GitHub/npm/Pages settings: [`.github/branch-setup.md`](.github/branch-setup.md).
 
 ## Adding a package
 

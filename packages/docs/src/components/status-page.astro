@@ -1,6 +1,7 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import { buttonVariants } from '@/components/ui/button'
+import { withBase } from '@/lib/base'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -31,13 +32,13 @@ const { title, description, code, type, heading, lede } = Astro.props
     <slot />
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
       <a
-        href="/"
+        href={withBase('/')}
         class={cn(buttonVariants({ size: 'lg' }), 'h-10 px-5 bg-foreground text-background hover:bg-foreground/90')}
       >
         Back to Core
       </a>
       <a
-        href="/docs/start/getting-started/"
+        href={withBase('/docs/start/getting-started/')}
         class={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-10 px-5')}
       >
         Getting started

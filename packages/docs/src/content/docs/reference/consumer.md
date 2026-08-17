@@ -26,8 +26,8 @@ interface Consumer {
 
 Source: [`consumer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/consumer/index.ts).
 Payload types: [`consumer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/consumer/types.ts).
-Guide: [Consumer](/docs/guides/consumer/). Config:
-[ConsumerConfig](/docs/reference/configuration/#consumerconfig).
+Guide: [Consumer](../guides/consumer/). Config:
+[ConsumerConfig](./configuration/#consumerconfig).
 Apache: [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
 
 ## `subscribe`

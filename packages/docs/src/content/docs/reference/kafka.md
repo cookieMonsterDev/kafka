@@ -21,19 +21,19 @@ kafka.logger().info('ready');
 ```
 
 Source: [`client.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/client.ts).
-Config: [`KafkaConfig`](/docs/reference/configuration/#kafkaconfig).
+Config: [`KafkaConfig`](./configuration/#kafkaconfig).
 
 One `Kafka` instance per process. Each `producer()`, `consumer()`, and
 `admin()` call gets its own cluster connection pool.
 
 ## Methods
 
-| Method              | Returns    | Notes                                                            |
-| ------------------- | ---------- | ---------------------------------------------------------------- |
-| `producer(config?)` | `Producer` | Optional `ProducerConfig`. [Producer](/docs/reference/producer/) |
-| `consumer(config)`  | `Consumer` | `groupId` is required. [Consumer](/docs/reference/consumer/)     |
-| `admin(config?)`    | `Admin`    | [Admin](/docs/reference/admin/)                                  |
-| `logger()`          | `Logger`   | Shared logger for this client                                    |
+| Method              | Returns    | Notes                                              |
+| ------------------- | ---------- | -------------------------------------------------- |
+| `producer(config?)` | `Producer` | Optional `ProducerConfig`. [Producer](./producer/) |
+| `consumer(config)`  | `Consumer` | `groupId` is required. [Consumer](./consumer/)     |
+| `admin(config?)`    | `Admin`    | [Admin](./admin/)                                  |
+| `logger()`          | `Logger`   | Shared logger for this client                      |
 
 `connect` / `disconnect` / `send` / `run` take an optional `{ signal?: AbortSignal }`.
 Producer, consumer, and admin implement `Symbol.asyncDispose`.

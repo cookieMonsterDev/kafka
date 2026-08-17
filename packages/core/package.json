@@ -1,9 +1,35 @@
 {
   "name": "@kafka/core",
   "version": "0.0.0",
-  "private": true,
+  "description": "TypeScript Apache Kafka client for Node.js. Speaks the Kafka wire protocol directly.",
   "type": "module",
   "license": "MIT",
+  "author": "Mykhailo Toporkov",
+  "homepage": "https://cookiemonsterdev.github.io/kafka/",
+  "bugs": {
+    "url": "https://github.com/cookieMonsterDev/kafka/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookieMonsterDev/kafka.git",
+    "directory": "packages/core"
+  },
+  "keywords": [
+    "kafka",
+    "apache-kafka",
+    "client",
+    "producer",
+    "consumer",
+    "admin",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,7 +39,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "pnpm run build:js && pnpm run build:types",

@@ -6,7 +6,7 @@ section: reference
 ---
 
 Defaults that differ from the Java client are listed once on
-[Compatibility](/docs/reference/compatibility/). Source:
+[Compatibility](./compatibility/). Source:
 [`types/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/types/index.ts).
 
 ## `KafkaConfig`

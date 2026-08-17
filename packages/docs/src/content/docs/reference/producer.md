@@ -21,8 +21,8 @@ interface Producer {
 
 Source: [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 Types: [`producer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/types.ts).
-Guide: [Producer](/docs/guides/producer/). Config:
-[ProducerConfig](/docs/reference/configuration/#producerconfig).
+Guide: [Producer](../guides/producer/). Config:
+[ProducerConfig](./configuration/#producerconfig).
 Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 ## `send` / `sendBatch`

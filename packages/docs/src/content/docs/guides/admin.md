@@ -17,7 +17,7 @@ await admin.createTopics({
 await admin.disconnect();
 ```
 
-Full method list: [`Admin`](/docs/reference/admin/). Source:
+Full method list: [`Admin`](../reference/admin/). Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Cluster operations:
 [Basic Kafka operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
@@ -42,4 +42,4 @@ and `ResourcePatternTypes`. SCRAM:
 
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
 Missing APIs (describeProducers, transaction describe) are listed under
-[Compatibility](/docs/reference/compatibility/).
+[Compatibility](../reference/compatibility/).

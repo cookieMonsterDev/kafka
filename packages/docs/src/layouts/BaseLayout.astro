@@ -3,6 +3,7 @@ import '@/styles/global.css'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
 import { buttonVariants } from '@/components/ui/button'
+import { withBase } from '@/lib/base'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -22,9 +23,9 @@ const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{documentTitle}</title>
     {description && <meta name="description" content={description} />}
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.ico" sizes="48x48" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
+    <link rel="icon" href={withBase('/favicon.ico')} sizes="48x48" />
+    <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />
   </head>
   <body class="bg-background text-foreground min-h-screen font-sans antialiased">
     {
@@ -77,12 +78,12 @@ const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
             !docs && 'mr-auto',
           )}
         >
-          <a href="/" class="flex items-center gap-2.5 font-semibold tracking-tight">
-            <img src="/logo-icon.svg" alt="" width="28" height="28" class="size-7" />
+          <a href={withBase('/')} class="flex items-center gap-2.5 font-semibold tracking-tight">
+            <img src={withBase('/logo-icon.svg')} alt="" width="28" height="28" class="size-7" />
             Kafka
           </a>
           <a
-            href="/docs/start/getting-started/"
+            href={withBase('/docs/start/getting-started/')}
             class="text-muted-foreground hover:text-foreground hidden text-sm lg:inline"
           >
             Core

@@ -18,13 +18,13 @@ for pre-KRaft clusters, not a client feature. See
 and the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/).
 
 This site documents the public API. The library lives in
-[`packages/core`](https://github.com/cookieMonsterDev/kafka/tree/master/packages/core);
+[`packages/core`](https://github.com/cookieMonsterDev/kafka/tree/develop/packages/core);
 this Astro site is `packages/docs`.
 
-Next: [Installation](/docs/start/installation/),
-[Getting started](/docs/start/getting-started/),
-[Kafka client](/docs/reference/kafka/),
-[Errors](/docs/guides/errors/).
+Next: [Installation](./installation/),
+[Getting started](./getting-started/),
+[Kafka client](../reference/kafka/),
+[Errors](../guides/errors/).
 
 ## Supported brokers
 
@@ -46,5 +46,5 @@ This is not Java-client 4.x parity. Integration tests cover 0.10, 0.11, 1.1,
 2.4, 3.6, 4.0, and 4.3. Kafka 4.0 brokers no longer run ZooKeeper.
 The client still encodes older Produce/Fetch versions when a 0.10–3.x broker
 advertises them. Defaults that differ from the Java client, and APIs that are
-not implemented yet, are listed under [Compatibility](/docs/reference/compatibility/).
-How to run the integration matrix: [Testing](/docs/guides/testing/).
+not implemented yet, are listed under [Compatibility](../reference/compatibility/).
+How to run the integration matrix: [Testing](../guides/testing/).

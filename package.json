@@ -19,17 +19,27 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules",
-    "prepare": "husky"
+    "prepare": "husky",
+    "release:core": "node scripts/run-semantic-release.mjs core",
+    "release:docs": "node scripts/run-semantic-release.mjs docs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@eslint/js": "^10.0.1",
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^11.0.1",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@vitest/eslint-plugin": "^1.6.27",
     "eslint": "^10.8.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
+    "semantic-release": "^25.0.9",
+    "semantic-release-monorepo": "^8.0.2",
     "typescript-eslint": "^8.67.0"
   }
 }

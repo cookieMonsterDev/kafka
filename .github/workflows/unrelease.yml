@@ -1,0 +1,121 @@
+# Delete a GitHub release and git tag. Optionally deprecate or unpublish npm (core only).
+name: Unrelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to unrelease
+        type: choice
+        options: [core, docs]
+        required: true
+      version:
+        description: Exact version, for example 1.2.3
+        type: string
+        required: true
+      confirm:
+        description: Type DELETE to confirm
+        type: string
+        required: true
+      npm_action:
+        description: npm registry action (core only; ignored for docs)
+        type: choice
+        options: [none, deprecate, unpublish]
+        default: none
+
+concurrency:
+  group: unrelease
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  unrelease:
+    name: Unrelease
+    if: inputs.confirm == 'DELETE'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        if: inputs.package == 'core' && inputs.npm_action != 'none'
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Resolve tag
+        id: tag
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Version must look like 1.2.3"
+            exit 1
+          fi
+          echo "name=${PACKAGE}-v${VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Delete GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release delete "$TAG" --yes --cleanup-tag
+            echo "Deleted GitHub release $TAG"
+          else
+            echo "No GitHub release named $TAG"
+            if git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+              git push origin --delete "refs/tags/$TAG"
+              echo "Deleted git tag $TAG"
+            else
+              echo "No git tag $TAG"
+            fi
+          fi
+      - name: npm deprecate
+        if: inputs.package == 'core' && inputs.npm_action == 'deprecate'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "::error::NPM_TOKEN is required to deprecate. Trusted publishing cannot deprecate."
+            exit 1
+          fi
+          npm deprecate "@kafka/core@${VERSION}" "This version was unpublished or withdrawn. Do not use."
+      - name: npm unpublish
+        if: inputs.package == 'core' && inputs.npm_action == 'unpublish'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "::error::NPM_TOKEN is required to unpublish. Trusted publishing cannot unpublish."
+            exit 1
+          fi
+          npm unpublish "@kafka/core@${VERSION}" --force
+          echo "::warning::npm will not allow republishing @kafka/core@${VERSION}."
+      - name: Summary
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          NPM_ACTION: ${{ inputs.npm_action }}
+        run: |
+          {
+            echo "## Unreleased \`${TAG}\`"
+            echo ""
+            echo "- GitHub release and git tag \`${TAG}\` removed (if they existed)"
+            if [[ "$PACKAGE" == "core" ]]; then
+              echo "- npm action: \`${NPM_ACTION}\`"
+            fi
+            echo ""
+            echo "\`package.json\` / \`CHANGELOG.md\` on \`develop\` are not reverted."
+            echo "Close or edit the sync PR, or land a follow-up that restores the previous version."
+            echo "GitHub Pages is not rolled back; re-run the Pages workflow from an older commit if needed."
+          } >> "$GITHUB_STEP_SUMMARY"

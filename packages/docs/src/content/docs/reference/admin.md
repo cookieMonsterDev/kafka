@@ -7,7 +7,7 @@ section: reference
 
 Returned by `kafka.admin()`. Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
-Guide: [Admin](/docs/guides/admin/). Apache:
+Guide: [Admin](../guides/admin/). Apache:
 [basic operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
 
 Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
@@ -55,4 +55,4 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35                                |
 
 Also `connect`, `disconnect`, `logger()`, `Symbol.asyncDispose`. Missing
-methods: [Compatibility](/docs/reference/compatibility/).
+methods: [Compatibility](./compatibility/).

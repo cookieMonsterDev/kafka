@@ -23,8 +23,8 @@ console.log(metadata[0]?.baseOffset); // bigint
 await producer.disconnect();
 ```
 
-Methods live on [`Producer`](/docs/reference/producer/). Config fields are in
-[Configuration](/docs/reference/configuration/). Source:
+Methods live on [`Producer`](../reference/producer/). Config fields are in
+[Configuration](../reference/configuration/). Source:
 [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 
 ## Message shape
@@ -45,7 +45,7 @@ request. Set `lingerMs` / `batchSize` to batch; Java 4.0 default `linger.ms` is
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass
 `createPartitioner: Partitioners.LegacyPartitioner` for pre-2.0 key routing.
 This is not the Java 4.x sticky-until-batch-size partitioner. See
-[Compatibility](/docs/reference/compatibility/).
+[Compatibility](../reference/compatibility/).
 
 ## Idempotence and abort
 
@@ -56,4 +56,4 @@ This is not the Java 4.x sticky-until-batch-size partitioner. See
 await producer.send({ topic: 'events', messages: [{ value: 'hello' }], signal });
 ```
 
-Transactions: [Producer API](/docs/reference/producer/#transaction).
+Transactions: [Producer API](../reference/producer/#transaction).

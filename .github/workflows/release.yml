@@ -1,0 +1,176 @@
+# Per-package semantic-release on master. workflow_dispatch can force a package or dry-run.
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to release
+        type: choice
+        options: [auto, core, docs, all]
+        default: auto
+      dry_run:
+        description: Analyze the next version without publishing, tagging, or opening a sync PR
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  changes:
+    name: Detect packages
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.flags.outputs.core }}
+      docs: ${{ steps.flags.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name == 'push' || inputs.package == 'auto'
+        with:
+          filters: |
+            core:
+              - 'packages/core/**'
+            docs:
+              - 'packages/docs/**'
+      - id: flags
+        env:
+          EVENT: ${{ github.event_name }}
+          PACKAGE: ${{ inputs.package || 'auto' }}
+          FILTER_CORE: ${{ steps.filter.outputs.core }}
+          FILTER_DOCS: ${{ steps.filter.outputs.docs }}
+        run: |
+          set -euo pipefail
+          core=false
+          docs=false
+          if [[ "$EVENT" == "workflow_dispatch" && "$PACKAGE" != "auto" ]]; then
+            [[ "$PACKAGE" == "core" || "$PACKAGE" == "all" ]] && core=true
+            [[ "$PACKAGE" == "docs" || "$PACKAGE" == "all" ]] && docs=true
+          else
+            [[ "$FILTER_CORE" == "true" ]] && core=true
+            [[ "$FILTER_DOCS" == "true" ]] && docs=true
+          fi
+          echo "core=$core" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  release-core:
+    name: Release @kafka/core
+    needs: [changes]
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Ensure npm CLI supports trusted publishing
+        run: |
+          major=$(npm --version | cut -d. -f1)
+          if [[ "$major" -lt 11 ]]; then
+            npm install -g npm@11
+          fi
+      - run: pnpm --filter @kafka/core build
+      - run: pnpm --filter @kafka/core test
+      - name: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HUSKY: '0'
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          args=(node scripts/run-semantic-release.mjs core)
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          "${args[@]}"
+
+  release-docs:
+    name: Release @kafka/docs
+    needs: [changes, release-core]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.changes.outputs.docs == 'true' &&
+      (needs.release-core.result == 'success' || needs.release-core.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Fast-forward to origin/master
+        run: |
+          git fetch origin master
+          git checkout master
+          git reset --hard origin/master
+      - uses: ./.github/actions/setup-node-pnpm
+      - run: pnpm --filter @kafka/docs... build
+        env:
+          GITHUB_PAGES: '1'
+      - name: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HUSKY: '0'
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          args=(node scripts/run-semantic-release.mjs docs)
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          "${args[@]}"
+
+  sync-develop:
+    name: Sync versions to develop
+    needs: [release-core, release-docs]
+    if: >-
+      always() &&
+      inputs.dry_run != true &&
+      (needs.release-core.result == 'success' || needs.release-docs.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Open PR from master into develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin master develop
+          if git merge-base --is-ancestor origin/master origin/develop; then
+            echo "develop already contains master; no sync PR"
+            exit 0
+          fi
+          if gh pr list --base develop --head master --state open --json number --jq 'length' | grep -qx '0'; then
+            gh pr create \
+              --base develop \
+              --head master \
+              --title "chore: sync release versions into develop" \
+              --body "$(cat <<'EOF'
+          ## Summary
+
+          Back-merge `master` into `develop` so `package.json` and `CHANGELOG.md`
+          match the versions just released.
+
+          - Created by the [Release](../actions/workflows/release.yml) workflow
+          - Safe to merge with a merge commit (do not squash: keep release commits)
+
+          EOF
+          )"
+          else
+            echo "A master → develop PR is already open"
+          fi

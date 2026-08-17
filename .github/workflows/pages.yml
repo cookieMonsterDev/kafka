@@ -1,0 +1,50 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/docs/**'
+      - 'packages/core/src/**'
+      - 'packages/core/package.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build
+        env:
+          GITHUB_PAGES: '1'
+        run: pnpm --filter @kafka/docs... build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: packages/docs/dist
+
+  deploy:
+    name: Deploy
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

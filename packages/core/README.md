@@ -2,10 +2,11 @@
 
 TypeScript Apache Kafka client for **Kafka 0.10+**. Protocol versions are negotiated from `ApiVersions`. Offsets are `bigint`. Types are generated from source.
 
-This package is the library in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is **not published to npm yet**.
+This package is the library in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is published to npm as [`@kafka/core`](https://www.npmjs.com/package/@kafka/core).
 
 <p>
-  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=master" alt="CI" /></a>
+  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@kafka/core"><img src="https://img.shields.io/npm/v/@kafka/core.svg" alt="npm" /></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
 </p>
 

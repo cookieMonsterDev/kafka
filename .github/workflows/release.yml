@@ -88,6 +88,7 @@ jobs:
       - name: semantic-release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: '0'
           DRY_RUN: ${{ inputs.dry_run || false }}
         run: |

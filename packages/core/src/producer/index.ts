@@ -112,6 +112,7 @@ export function createProducer({
     transactionTimeout,
     transactional: false,
     transactionalId,
+    retry: producerRetry,
   });
 
   const messageProducerOptions = {
@@ -166,6 +167,7 @@ export function createProducer({
       transactionTimeout,
       transactional: true,
       transactionalId,
+      retry: producerRetry,
     });
     const activeEosManager = transactionalEosManager;
 

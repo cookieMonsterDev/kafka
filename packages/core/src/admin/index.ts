@@ -24,10 +24,12 @@ export type {
   AclEntry,
   AclFilter,
   DescribeProducersOptions,
+  ListTransactionsOptions,
   PartitionProducerState,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
+  TransactionListing,
   TransactionTopic,
 } from './types';
 export { events };

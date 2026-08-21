@@ -68,7 +68,11 @@ import { EndTxn } from '../protocol/requests/end-txn/index';
 import type { EndTxnOptions } from '../protocol/requests/end-txn/index';
 import type { EndTxnResponseV1Body } from '../protocol/requests/end-txn/v1/response';
 import { Fetch } from '../protocol/requests/fetch/index';
-import type { FetchRequestOptions } from '../protocol/requests/fetch/shared';
+import {
+  FETCH_TOPIC_ID_MIN_VERSION,
+  fetchRequestHasUsableTopicIds,
+  type FetchRequestOptions,
+} from '../protocol/requests/fetch/shared';
 import type { FetchResponseV11Body } from '../protocol/requests/fetch/v11/response';
 import { FindCoordinator } from '../protocol/requests/find-coordinator/index';
 import type { FindCoordinatorOptions } from '../protocol/requests/find-coordinator/index';
@@ -340,29 +344,47 @@ export class Broker {
   }
 
   async fetch(options: FetchRequestOptions): Promise<FetchResponseV11Body> {
-    const fetch = this.lookupRequest<FetchRequestOptions>(API_KEYS.Fetch, Fetch);
-
     // Shuffle topic-partitions to ensure fair response allocation across partitions (KIP-74).
-    const flattenedTopicPartitions = options.topics.flatMap(({ topic, partitions }) =>
-      partitions.map((partition) => ({ topic, partition })),
+    const flattenedTopicPartitions = options.topics.flatMap(({ topic, topicId, partitions }) =>
+      partitions.map((partition) => ({ topic, topicId, partition })),
     );
     const shuffledTopicPartitions = shuffle(flattenedTopicPartitions);
 
     // Consecutive partitions for the same topic can be combined into a single `topic` entry.
     const consolidatedTopicPartitions: {
       topic: string;
+      topicId?: Buffer;
       partitions: (typeof shuffledTopicPartitions)[number]['partition'][];
     }[] = [];
-    for (const { topic, partition } of shuffledTopicPartitions) {
+    for (const { topic, topicId, partition } of shuffledTopicPartitions) {
       const last = consolidatedTopicPartitions.at(-1);
       if (last && last.topic === topic) {
         last.partitions.push(partition);
       } else {
-        consolidatedTopicPartitions.push({ topic, partitions: [partition] });
+        consolidatedTopicPartitions.push({ topic, topicId, partitions: [partition] });
       }
     }
 
-    return this.#send(fetch({ ...options, topics: consolidatedTopicPartitions }));
+    const fetchOptions = { ...options, topics: consolidatedTopicPartitions };
+    const fetch = this.lookupRequest<FetchRequestOptions>(API_KEYS.Fetch, Fetch);
+    let protocol = fetch(fetchOptions);
+
+    // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on
+    // the highest mutually supported name-based version (v12 on Kafka 4.0).
+    if (protocol.request.apiVersion >= FETCH_TOPIC_ID_MIN_VERSION && !fetchRequestHasUsableTopicIds(fetchOptions)) {
+      const advertised = this.versions?.[API_KEYS.Fetch];
+      const brokerMin = advertised?.minVersion ?? 0;
+      const brokerMax = advertised?.maxVersion ?? 0;
+      const nameBased = Fetch.versions.filter(
+        (version) => version < FETCH_TOPIC_ID_MIN_VERSION && version >= brokerMin && version <= brokerMax,
+      );
+      if (nameBased.length === 0) {
+        throw new KafkaInvariantViolation('no name-based Fetch protocol for this broker');
+      }
+      protocol = Fetch.protocol({ version: Math.max(...nameBased) })(fetchOptions);
+    }
+
+    return this.#send(protocol);
   }
 
   async heartbeat(options: HeartbeatOptions): Promise<HeartbeatResponseV2Body> {

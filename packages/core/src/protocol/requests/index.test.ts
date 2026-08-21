@@ -273,4 +273,16 @@ describe('protocol/requests', () => {
       }),
     ).toBe(2);
   });
+
+  it('selects Fetch v18 on a Kafka 4.3 ApiVersions map', () => {
+    expect(
+      negotiatedVersion({ [API_KEYS.Fetch]: { minVersion: 4, maxVersion: 18 } }, API_KEYS.Fetch, Fetch, {
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [],
+      }),
+    ).toBe(18);
+  });
 });

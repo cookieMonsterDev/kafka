@@ -16,6 +16,7 @@ import {
   testIfKafkaAtMost_0_10,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_0,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
 
@@ -272,5 +273,46 @@ describe('broker.produceFetch', () => {
       topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
     });
     expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('v');
+  });
+
+  testIfKafkaAtLeast_4_0('Kafka 4.0+ Fetch v13 uses topic IDs from metadata', async () => {
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([topicName]));
+    const topicId = metadata.topicMetadata[0]?.topicId;
+    expect(topicId).toBeInstanceOf(Buffer);
+    expect(topicId?.length).toBe(16);
+
+    const target = await connectToLeader();
+    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+      replicaId: -1,
+      maxWaitTime: 100,
+      minBytes: 1,
+      maxBytes: 1_048_576,
+      topics: [{ topic: topicName, topicId, partitions: [] }],
+    }).request.apiVersion;
+    expect(fetchVersion).toBeGreaterThanOrEqual(13);
+
+    await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      target.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [
+          {
+            topic: topicName,
+            partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v13', timestamp }] }],
+          },
+        ],
+      }),
+    );
+
+    const fetched = await target.fetch({
+      replicaId: -1,
+      maxWaitTime: 1000,
+      minBytes: 1,
+      maxBytes: 10_485_760,
+      topics: [{ topic: topicName, topicId, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
+    });
+    expect(fetched.responses[0]?.topicName).toBe(topicName);
+    expect(fetched.responses[0]?.topicId).toEqual(topicId);
+    expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('v13');
   });
 });

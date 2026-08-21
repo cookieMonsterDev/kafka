@@ -158,7 +158,7 @@ src/components/prev-next.astro
 src/components/callout.astro
 src/components/code-tabs.astro
 src/components/ui/*              shadcn components (yours to edit)
-src/components/copy-code.tsx     click-to-copy for install chip and code blocks
+src/components/copy-code.tsx     copy-icon buttons for the install chip and code blocks
 src/components/ThemeToggle.tsx   interactive React island
 src/lib/docs.ts                  sidebar grouping, prev/next, hrefs
 src/lib/utils.ts                 cn() class-merge helper

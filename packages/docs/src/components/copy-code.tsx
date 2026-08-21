@@ -15,15 +15,15 @@ export function CopyCode() {
 
     function markCopied(button: HTMLElement) {
       if (button.dataset.copyLabel == null) {
-        button.dataset.copyLabel = button.getAttribute('aria-label') ?? 'Copy';
+        button.dataset.copyLabel = button.getAttribute('aria-label') ?? 'Copy code';
       }
       button.dataset.copied = 'true';
       button.setAttribute('aria-label', 'Copied');
-      setStatus('Copied');
+      setStatus('Copied to clipboard');
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         delete button.dataset.copied;
-        button.setAttribute('aria-label', button.dataset.copyLabel ?? 'Copy');
+        button.setAttribute('aria-label', button.dataset.copyLabel ?? 'Copy code');
         setStatus('');
       }, 1500);
     }
@@ -78,12 +78,27 @@ export function CopyCode() {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'copy-btn';
-      button.setAttribute('aria-label', 'Copy');
+      button.setAttribute('aria-label', 'Copy code');
       button.innerHTML = COPY_ICON;
+      pre.setAttribute('translate', 'no');
       pre.replaceWith(wrap);
       wrap.append(pre, button);
       wraps.push(wrap);
     });
+
+    function markOverflow(el: Element) {
+      if (!(el instanceof HTMLElement)) {
+        return;
+      }
+      if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+        el.tabIndex = 0;
+        if (el.tagName === 'PRE' && !el.hasAttribute('aria-label')) {
+          el.setAttribute('aria-label', 'Code sample');
+        }
+      }
+    }
+
+    document.querySelectorAll('pre.astro-code, .prose table').forEach(markOverflow);
 
     document.addEventListener('click', onClick);
     return () => {

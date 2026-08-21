@@ -132,22 +132,27 @@ export function DocsSearch({ index }: DocsSearchProps) {
         aria-label="Search documentation"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-keyshortcuts="Control+K Meta+K"
         onClick={() => setOpen(true)}
       >
         <SearchIcon />
       </button>
       <button
         type="button"
-        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-10 w-64 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3 md:inline-flex lg:w-72"
+        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-11 w-64 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3 md:inline-flex lg:w-72"
         aria-label="Search documentation"
         aria-haspopup="dialog"
         aria-expanded={open}
+        aria-keyshortcuts="Control+K Meta+K"
         onClick={() => setOpen(true)}
       >
         <SearchIcon />
-        <span className="min-w-0 flex-1 truncate text-left">Search documentation...</span>
-        <kbd className="border-border bg-background pointer-events-none rounded-md border px-2 py-0.5 font-sans text-xs font-medium">
-          {modKey}K
+        <span className="min-w-0 flex-1 truncate text-left">Search documentation…</span>
+        <kbd
+          className="border-border bg-background pointer-events-none rounded-md border px-2 py-0.5 font-sans text-xs font-medium"
+          aria-hidden="true"
+        >
+          {modKey}&nbsp;K
         </kbd>
       </button>
 
@@ -161,14 +166,19 @@ export function DocsSearch({ index }: DocsSearchProps) {
         <h2 id={`${reactId}-title`} className="sr-only">
           Search documentation
         </h2>
-        <div className="border-border flex items-center gap-2 border-b px-3">
+        <div className="border-border focus-within:border-ring flex items-center gap-2 border-b px-3">
           <SearchIcon className="text-muted-foreground size-5 shrink-0" />
+          <label htmlFor={`${reactId}-query`} className="sr-only">
+            Search documentation
+          </label>
           <input
             ref={inputRef}
+            id={`${reactId}-query`}
             type="search"
+            name="q"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search documentation..."
+            placeholder="Search documentation…"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -180,9 +190,19 @@ export function DocsSearch({ index }: DocsSearchProps) {
             aria-activedescendant={activeId}
             aria-autocomplete="list"
           />
-          <kbd className="border-border text-muted-foreground pointer-events-none hidden rounded-md border px-1.5 py-0.5 font-sans text-[11px] sm:inline">
+          <kbd
+            className="border-border text-muted-foreground pointer-events-none hidden rounded-md border px-1.5 py-0.5 font-sans text-[11px] sm:inline"
+            aria-hidden="true"
+          >
             Esc
           </kbd>
+        </div>
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {query.trim().length === 0
+            ? ''
+            : hits.length === 0
+              ? `No results for ${query.trim()}`
+              : `${hits.length} result${hits.length === 1 ? '' : 's'}`}
         </div>
         <div
           id={resultsId}
@@ -191,7 +211,9 @@ export function DocsSearch({ index }: DocsSearchProps) {
           className="max-h-80 overflow-y-auto overscroll-contain p-2"
         >
           {hits.length === 0 ? (
-            <p className="text-muted-foreground px-3 py-8 text-center text-sm">No results for “{query.trim()}”.</p>
+            <p className="text-muted-foreground px-3 py-8 text-center text-sm" role="status">
+              No results for “{query.trim()}”.
+            </p>
           ) : (
             groups.map((group) => (
               <section key={group.section} className="mb-2 last:mb-0">

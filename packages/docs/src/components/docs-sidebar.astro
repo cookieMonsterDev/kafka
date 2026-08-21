@@ -42,7 +42,7 @@ const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pa
                     'block rounded-md px-2 py-1.5 transition-colors',
                     current
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   )}
                 >
                   {navLabel(entry)}

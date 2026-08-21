@@ -68,7 +68,14 @@ const searchIndex = await getSearchIndex()
     </a>
     {
       docs && (
-        <input type="checkbox" id="docs-nav" class="sr-only" />
+        <input
+          type="checkbox"
+          id="docs-nav"
+          class="sr-only"
+          aria-label="Open documentation menu"
+          aria-controls="docs-mobile-nav"
+          aria-expanded="false"
+        />
       )
     }
     <header
@@ -84,8 +91,6 @@ const searchIndex = await getSearchIndex()
               <label
                 for="docs-nav"
                 class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
-                aria-label="Open documentation menu"
-                aria-controls="docs-mobile-nav"
               >
                 <svg
                   class="docs-nav-menu size-6"
@@ -116,27 +121,31 @@ const searchIndex = await getSearchIndex()
             )
           }
 
-          <div class="flex min-w-0 items-center gap-3">
+          <div id="docs-brand" class="flex min-w-0 items-center gap-3">
             <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
               <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
-              <span class="text-foreground text-2xl font-semibold tracking-tight">Kafka</span>
+              <span class="text-foreground text-2xl font-semibold tracking-tight" translate="no">Kafka</span>
             </a>
             <span class="text-border text-xl font-light select-none" aria-hidden="true">/</span>
             <a
               href={withBase('/docs/core/start/introduction/')}
               class="text-muted-foreground hover:text-foreground text-xl font-light no-underline transition-colors"
+              translate="no"
             >
               Core
             </a>
           </div>
         </div>
 
-        <div class="flex shrink-0 items-center gap-1.5">
-          <DocsSearch client:load index={searchIndex} />
+        <div id="docs-header-actions" class="flex shrink-0 items-center gap-1.5">
+          <div role="search">
+            <DocsSearch client:load index={searchIndex} />
+          </div>
           <a
             href="https://github.com/cookieMonsterDev/kafka"
             class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }))}
             aria-label="GitHub repository"
+            rel="noopener noreferrer"
           >
             <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path
@@ -187,26 +196,77 @@ const searchIndex = await getSearchIndex()
           <label
             for="docs-nav"
             class="docs-nav-overlay bg-background/70 fixed inset-0 top-(--header-height) z-40 cursor-pointer backdrop-blur-sm"
-            aria-label="Close documentation menu"
+            aria-hidden="true"
           />
           <div
             id="docs-mobile-nav"
-            class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 w-full overflow-y-auto border-r px-4 py-6"
+            class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 w-full overflow-y-auto overscroll-contain border-r px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Documentation"
           >
             <slot name="mobile-nav" />
           </div>
           <script is:inline>
-            document.addEventListener('keydown', function (event) {
-              if (event.key !== 'Escape') return
+            ;(function () {
               var nav = document.getElementById('docs-nav')
-              if (nav instanceof HTMLInputElement && nav.checked) nav.checked = false
-            })
+              var drawer = document.getElementById('docs-mobile-nav')
+              var brand = document.getElementById('docs-brand')
+              var actions = document.getElementById('docs-header-actions')
+              var content = document.getElementById('docs-content')
+              if (!(nav instanceof HTMLInputElement) || drawer == null) return
+
+              function focusable(root) {
+                return Array.prototype.slice.call(
+                  root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), summary, textarea, select, [tabindex]:not([tabindex="-1"])'),
+                )
+              }
+
+              function sync() {
+                var open = nav.checked
+                nav.setAttribute('aria-expanded', open ? 'true' : 'false')
+                nav.setAttribute('aria-label', open ? 'Close documentation menu' : 'Open documentation menu')
+                if (open) drawer.removeAttribute('aria-hidden')
+                else drawer.setAttribute('aria-hidden', 'true')
+                if (brand) brand.toggleAttribute('inert', open)
+                if (actions) actions.toggleAttribute('inert', open)
+                if (content) content.toggleAttribute('inert', open)
+                if (open) {
+                  var first = focusable(drawer)[0]
+                  if (first) first.focus()
+                }
+              }
+
+              nav.addEventListener('change', sync)
+              sync()
+              document.addEventListener('keydown', function (event) {
+                if (!nav.checked) return
+                if (event.key === 'Escape') {
+                  nav.checked = false
+                  nav.dispatchEvent(new Event('change'))
+                  nav.focus()
+                  return
+                }
+                if (event.key !== 'Tab') return
+                var drawerItems = focusable(drawer)
+                var first = nav
+                var last = drawerItems[drawerItems.length - 1] || nav
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault()
+                  last.focus()
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault()
+                  first.focus()
+                }
+              })
+            })()
           </script>
         </>
       )
     }
 
     <div
+      id="docs-content"
       class={cn(
         !docs && 'contents',
         docs && 'max-lg:contents lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden',

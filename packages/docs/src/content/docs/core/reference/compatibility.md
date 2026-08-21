@@ -77,10 +77,13 @@ keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
-coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
+coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
+fans the request out to every broker, unique-merges by transactional ID, and
+requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
+`transactionalIdPattern`. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. Still missing: the remaining
-transaction administration APIs.
+validate-only and rejects unsafe downgrades. Still missing: abortTransaction
+and FenceProducers.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

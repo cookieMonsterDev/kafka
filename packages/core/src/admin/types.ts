@@ -268,6 +268,50 @@ export interface ClusterDescription {
   clusterId: string | null;
 }
 
+/** Topic to describe via {@link Admin.describeTopicPartitions}. Request is name-based. */
+export interface DescribeTopicPartitionsTopicInput {
+  topic: string;
+  topicId?: Buffer;
+}
+
+/** Cursor for {@link Admin.describeTopicPartitions} pagination. */
+export interface DescribeTopicPartitionsCursor {
+  topic: string;
+  partitionIndex: number;
+}
+
+/** Options for {@link Admin.describeTopicPartitions}. Returns one page plus `nextCursor`. */
+export interface DescribeTopicPartitionsOptions {
+  topics: Array<string | DescribeTopicPartitionsTopicInput>;
+  responsePartitionLimit?: number;
+  cursor?: DescribeTopicPartitionsCursor | null;
+  includeAuthorizedOperations?: boolean;
+}
+
+export interface DescribeTopicPartitionsPartition {
+  partitionIndex: number;
+  leader: number;
+  leaderEpoch: number;
+  replicas: number[];
+  isr: number[];
+  eligibleLeaderReplicas: number[] | null;
+  lastKnownElr: number[] | null;
+  offlineReplicas: number[];
+}
+
+export interface DescribeTopicPartitionsTopic {
+  name: string | null;
+  topicId: Buffer;
+  isInternal: boolean;
+  partitions: DescribeTopicPartitionsPartition[];
+  topicAuthorizedOperations: number;
+}
+
+export interface DescribeTopicPartitionsResult {
+  topics: DescribeTopicPartitionsTopic[];
+  nextCursor: DescribeTopicPartitionsCursor | null;
+}
+
 export interface AdminOptions {
   cluster: Cluster;
   logger: Logger;
@@ -298,6 +342,7 @@ export interface Admin {
   }) => Promise<void>;
   fetchTopicMetadata: (options?: { topics?: string[] }) => Promise<{ topics: TopicMetadata[] }>;
   describeCluster: () => Promise<ClusterDescription>;
+  describeTopicPartitions: (options: DescribeTopicPartitionsOptions) => Promise<DescribeTopicPartitionsResult>;
   describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
   fetchOffsets: (options: {

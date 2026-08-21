@@ -25,9 +25,35 @@ Cluster operations:
 ## Topics
 
 `createTopics`, `deleteTopics`, `listTopics`, `createPartitions`,
-`fetchTopicMetadata`. Offset fields from `fetchTopicOffsets` and
-`fetchOffsets` are `bigint`. On Kafka 2.8+ (Metadata v10+), each topic in
-`fetchTopicMetadata` may include `topicId` as a 16-byte `Buffer`.
+`fetchTopicMetadata`, `describeTopicPartitions`. Offset fields from
+`fetchTopicOffsets` and `fetchOffsets` are `bigint`. On Kafka 2.8+ (Metadata
+v10+), each topic in `fetchTopicMetadata` may include `topicId` as a 16-byte
+`Buffer`. Produce and Fetch still address topics by name.
+
+Kafka 4.0+ can page partition metadata with DescribeTopicPartitions (key 75):
+
+```ts
+const { topics, nextCursor } = await admin.describeTopicPartitions({
+  topics: ['events'],
+  responsePartitionLimit: 2000,
+});
+
+for (const topic of topics) {
+  console.log(topic.name, topic.topicId, topic.partitions.length);
+}
+
+if (nextCursor) {
+  const page = await admin.describeTopicPartitions({
+    topics: ['events'],
+    cursor: nextCursor,
+  });
+  console.log(page.topics);
+}
+```
+
+The method returns **one page**. Pass `nextCursor` back to continue; it does
+not loop internally. Topics are selected by name (optional `topicId` on input
+is accepted and ignored on the wire).
 
 ## Configs
 

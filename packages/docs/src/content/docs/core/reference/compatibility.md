@@ -33,7 +33,8 @@ advertises it and Cluster metadata includes a `topicId`.
 
 Metadata v10–v13 decode KIP-516 topic IDs (`topicId` as a 16-byte `Buffer` on
 each topic). Produce v13 addresses topics by those IDs; earlier Produce
-versions and Fetch still use topic names.
+versions and Fetch still use topic names. `admin.describeTopicPartitions`
+(key 75, Kafka 4.0+) also returns `topicId` on each described topic.
 
 | `KAFKA_VERSION`                | Status                                      |
 | ------------------------------ | ------------------------------------------- |
@@ -87,7 +88,9 @@ and queries partition leaders unless a `brokerId` is supplied.
 coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
 fans the request out to every broker, unique-merges by transactional ID, and
 requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
-`transactionalIdPattern`. `admin.updateFeatures` implements
+`transactionalIdPattern`. `admin.describeTopicPartitions` uses
+key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
+`nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
 validate-only and rejects unsafe downgrades. `admin.listConfigResources`
 implements ListConfigResources (key 74) v0–v1 and targets the active

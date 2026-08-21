@@ -9,7 +9,12 @@ export { Kafka } from './client';
 
 import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
 import { cooperativeSticky, range, roundRobin, sticky } from './consumer/assigners/index';
-import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './producer/partitioners/index';
+import {
+  DefaultPartitioner,
+  JavaCompatiblePartitioner,
+  LegacyPartitioner,
+  StickyPartitioner,
+} from './producer/partitioners/index';
 
 export const PartitionAssigners = Object.freeze({ roundRobin, range, sticky, cooperativeSticky });
 export const AssignerProtocol = Object.freeze({ MemberMetadata, MemberAssignment });
@@ -17,6 +22,7 @@ export const Partitioners = Object.freeze({
   DefaultPartitioner,
   JavaCompatiblePartitioner,
   LegacyPartitioner,
+  StickyPartitioner,
 });
 
 export { LOG_LEVELS as logLevel } from './loggers/index';
@@ -97,7 +103,9 @@ export type {
   OauthbearerProviderResponse,
   PartitionAssigner,
   PartitionMetadata,
+  Partitioner,
   PartitionerArgs,
+  PartitionerBatchArgs,
   Producer,
   ProducerBatch,
   ProducerConfig,

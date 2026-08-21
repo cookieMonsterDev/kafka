@@ -1,7 +1,8 @@
 import { DefaultPartitioner } from './default/index';
 import { LegacyPartitioner } from './legacy/index';
+import { StickyPartitioner } from './sticky/index';
 
-export { DefaultPartitioner, LegacyPartitioner };
+export { DefaultPartitioner, LegacyPartitioner, StickyPartitioner };
 
 /**
  * Alias of {@link DefaultPartitioner} (Java-compatible murmur2).

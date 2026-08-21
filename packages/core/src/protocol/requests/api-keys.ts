@@ -65,6 +65,8 @@ export const API_KEYS = Object.freeze({
   ListTransactions: 66,
   ConsumerGroupHeartbeat: 68,
   ConsumerGroupDescribe: 69,
+  ListConfigResources: 74,
+  DescribeTopicPartitions: 75,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];

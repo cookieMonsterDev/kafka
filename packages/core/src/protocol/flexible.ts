@@ -43,6 +43,10 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.DescribeLogDirs]: 2,
   [API_KEYS.SaslAuthenticate]: 2,
   [API_KEYS.CreatePartitions]: 2,
+  [API_KEYS.CreateDelegationToken]: 2,
+  [API_KEYS.RenewDelegationToken]: 2,
+  [API_KEYS.ExpireDelegationToken]: 2,
+  [API_KEYS.DescribeDelegationToken]: 2,
   [API_KEYS.DeleteGroups]: 2,
   [API_KEYS.ElectLeaders]: 2,
   [API_KEYS.IncrementalAlterConfigs]: 1,
@@ -60,6 +64,8 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.ListTransactions]: 0,
   [API_KEYS.ConsumerGroupHeartbeat]: 0,
   [API_KEYS.ConsumerGroupDescribe]: 0,
+  [API_KEYS.ListConfigResources]: 0,
+  [API_KEYS.DescribeTopicPartitions]: 0,
 });
 
 /**

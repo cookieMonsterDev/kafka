@@ -3,6 +3,21 @@ import { createErrorFromCode, ERROR_CODES, failure } from '../../error-codes';
 import { decodeMessageSet } from '../../message-set/decoder';
 import { decodeRecordBatch, type DecodedRecordBatch } from '../../records/batch';
 import { Decoder } from '../../decoder';
+import { Encoder } from '../../encoder';
+import { ISOLATION_LEVEL } from '../../enums/isolation-level';
+import {
+  compactArray,
+  compactString,
+  field,
+  flexibleObject,
+  int32,
+  int64,
+  int8,
+  uuid,
+  type RequestDefinition,
+} from '../../schema';
+import { API_KEYS } from '../api-keys';
+import { ZERO_TOPIC_ID } from '../metadata/shared';
 
 /** The wire's `topic` field is a non-nullable STRING; every version's response decode uses this. */
 export function readTopicName(decoder: Decoder): string {
@@ -25,11 +40,15 @@ export interface FetchPartitionRequest {
 
 export interface FetchTopicRequest {
   topic: string;
+  /** KIP-516 topic UUID; required on Fetch v13+ and ignored on earlier versions. */
+  topicId?: Buffer;
   partitions: FetchPartitionRequest[];
 }
 
 export interface ForgottenTopic {
   topic: string;
+  /** KIP-516 topic UUID; required on Fetch v13+ and ignored on earlier versions. */
+  topicId?: Buffer;
   partitions: number[];
 }
 
@@ -46,6 +65,32 @@ export interface FetchRequestOptions {
   forgottenTopics?: ForgottenTopic[];
   /** v11+ only (KIP-392 fetch from closest replica); earlier request versions ignore this. */
   rackId?: string;
+}
+
+/** First Fetch version that addresses topics by UUID instead of name (KIP-516). */
+export const FETCH_TOPIC_ID_MIN_VERSION = 13;
+
+/** First Fetch version that moves ReplicaId into tagged ReplicaState (KIP-903). */
+export const FETCH_REPLICA_STATE_MIN_VERSION = 15;
+
+/** True when `topicId` is a non-zero 16-byte UUID the broker can look up. */
+export function isUsableTopicId(topicId: Buffer | undefined): topicId is Buffer {
+  return topicId != null && topicId.length === 16 && !topicId.equals(ZERO_TOPIC_ID);
+}
+
+/** Topics and forgotten topics all carry a usable KIP-516 UUID. */
+export function fetchRequestHasUsableTopicIds(options: FetchRequestOptions): boolean {
+  return (
+    options.topics.every((topic) => isUsableTopicId(topic.topicId)) &&
+    (options.forgottenTopics ?? []).every((topic) => isUsableTopicId(topic.topicId))
+  );
+}
+
+export function resolveFetchTopicName(topicId: Buffer, index: number, topics: readonly FetchTopicRequest[]): string {
+  const byId = topics.find((entry) => entry.topicId != null && entry.topicId.equals(topicId));
+  if (byId) return byId.topic;
+  const byIndex = topics[index];
+  return byIndex?.topic ?? '';
 }
 
 const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSET_OUT_OF_RANGE')?.code;
@@ -145,4 +190,103 @@ async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRec
   }
 
   return records;
+}
+
+const partitionSchemaV13 = flexibleObject([
+  field('partition', int32),
+  field('currentLeaderEpoch', int32),
+  field('fetchOffset', int64),
+  field('lastFetchedEpoch', int32),
+  field('logStartOffset', int64),
+  field('maxBytes', int32),
+]);
+const topicSchemaV13 = flexibleObject([field('topicId', uuid), field('partitions', compactArray(partitionSchemaV13))]);
+const forgottenTopicSchemaV13 = flexibleObject([field('topicId', uuid), field('partitions', compactArray(int32))]);
+
+/** Fetch v13–v14: replicaId is still a top-level INT32; topics are UUIDs. */
+export const requestSchemaV13 = flexibleObject([
+  field('replicaId', int32),
+  field('maxWaitTime', int32),
+  field('minBytes', int32),
+  field('maxBytes', int32),
+  field('isolationLevel', int8),
+  field('sessionId', int32),
+  field('sessionEpoch', int32),
+  field('topics', compactArray(topicSchemaV13)),
+  field('forgottenTopics', compactArray(forgottenTopicSchemaV13)),
+  field('rackId', compactString),
+]);
+
+/** Fetch v15–v18: ReplicaId is a tagged ReplicaState (omitted at consumer defaults). */
+export const requestSchemaV15 = flexibleObject([
+  field('maxWaitTime', int32),
+  field('minBytes', int32),
+  field('maxBytes', int32),
+  field('isolationLevel', int8),
+  field('sessionId', int32),
+  field('sessionEpoch', int32),
+  field('topics', compactArray(topicSchemaV13)),
+  field('forgottenTopics', compactArray(forgottenTopicSchemaV13)),
+  field('rackId', compactString),
+]);
+
+function encodeFetchPartitions(partitions: FetchPartitionRequest[]) {
+  return partitions.map(
+    ({ partition, currentLeaderEpoch, fetchOffset, lastFetchedEpoch, logStartOffset, maxBytes }) => ({
+      partition,
+      currentLeaderEpoch: currentLeaderEpoch ?? -1,
+      fetchOffset,
+      lastFetchedEpoch: lastFetchedEpoch ?? -1,
+      logStartOffset: logStartOffset ?? -1n,
+      maxBytes,
+    }),
+  );
+}
+
+/**
+ * v13 replaces topic names with topic IDs (KIP-516). v14 is the same wire (KIP-405 error).
+ * v15+ drops the ReplicaId INT32; ReplicaState is tagged field 1 and omitted for consumers
+ * (replicaId -1 / replicaEpoch -1). v17–v18 add tagged replica directory id and high-watermark
+ * on partitions, also omitted at consumer defaults.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function createFetchRequest(apiVersion: number, options: FetchRequestOptions): RequestDefinition {
+  return {
+    apiKey: API_KEYS.Fetch,
+    apiVersion,
+    apiName: 'Fetch',
+    encode: async () => {
+      const topics = options.topics.map(({ topic, topicId, partitions }) => {
+        if (!isUsableTopicId(topicId)) {
+          throw new RangeError(`Fetch v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
+        }
+        return { topicId, partitions: encodeFetchPartitions(partitions) };
+      });
+      const forgottenTopics = (options.forgottenTopics ?? []).map(({ topic, topicId, partitions }) => {
+        if (!isUsableTopicId(topicId)) {
+          throw new RangeError(`Fetch v${apiVersion} requires a 16-byte topicId for forgotten topic ${topic}`);
+        }
+        return { topicId, partitions };
+      });
+      const common = {
+        maxWaitTime: options.maxWaitTime,
+        minBytes: options.minBytes,
+        maxBytes: options.maxBytes,
+        isolationLevel: options.isolationLevel ?? ISOLATION_LEVEL.READ_COMMITTED,
+        sessionId: options.sessionId ?? 0,
+        sessionEpoch: options.sessionEpoch ?? -1,
+        topics,
+        forgottenTopics,
+        rackId: options.rackId ?? '',
+      };
+      const encoder = new Encoder();
+      if (apiVersion >= FETCH_REPLICA_STATE_MIN_VERSION) {
+        requestSchemaV15.write(encoder, common);
+      } else {
+        requestSchemaV13.write(encoder, { replicaId: options.replicaId, ...common });
+      }
+      return encoder;
+    },
+  };
 }

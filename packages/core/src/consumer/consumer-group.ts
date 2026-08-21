@@ -730,6 +730,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const requests = topicPartitions
         .map(({ topic, partitions }) => ({
           topic,
+          topicId: this.cluster.findTopicId(topic),
           partitions: partitions
             .filter(
               (partition) =>

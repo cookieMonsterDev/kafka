@@ -309,6 +309,33 @@ export function flexibleObject<const Fields extends readonly FieldSpec<string, u
   );
 }
 
+/**
+ * Nullable nested record in flexible versions: INT8 `-1` for null, INT8 `1` plus the
+ * compact struct (including its TAG_BUFFER) when present. Used by DescribeTopicPartitions
+ * Cursor / NextCursor (API key 75).
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function nullableFlexibleObject<const Fields extends readonly FieldSpec<string, unknown>[]>(
+  fields: Fields,
+): FieldCodec<InferSchema<Fields> | null> {
+  const body = flexibleObject(fields);
+  return codec(
+    (e, value) => {
+      if (value === null) {
+        e.writeInt8(-1);
+        return;
+      }
+      e.writeInt8(1);
+      body.write(e, value);
+    },
+    (d) => {
+      if (d.readInt8() < 0) return null;
+      return body.read(d);
+    },
+  );
+}
+
 export interface RequestDefinition {
   apiKey: number;
   apiVersion: number;

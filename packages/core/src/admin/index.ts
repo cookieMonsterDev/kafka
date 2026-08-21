@@ -4,6 +4,7 @@ import type { InstrumentationEvent } from '../instrumentation/event';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createAclsApi } from './acls';
 import { createConfigsApi } from './configs';
+import { createDelegationTokensApi } from './delegation-tokens';
 import { createFeaturesApi } from './features';
 import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
@@ -23,9 +24,22 @@ export type {
   AdminOptions,
   AclEntry,
   AclFilter,
+  CreateDelegationTokenOptions,
+  CreateDelegationTokenResult,
+  DelegationToken,
+  DescribeDelegationTokenOptions,
   DescribeProducersOptions,
+  DescribeTopicPartitionsCursor,
+  DescribeTopicPartitionsOptions,
+  DescribeTopicPartitionsPartition,
+  DescribeTopicPartitionsResult,
+  DescribeTopicPartitionsTopic,
+  DescribeTopicPartitionsTopicInput,
+  ExpireDelegationTokenOptions,
+  KafkaPrincipal,
   ListTransactionsOptions,
   PartitionProducerState,
+  RenewDelegationTokenOptions,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
@@ -40,7 +54,7 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 /**
- * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, and log dirs.
+ * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, log dirs, and tokens.
  *
  * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
  */
@@ -66,6 +80,7 @@ export function createAdmin({
   const logDirs = createLogDirsApi(context);
   const features = createFeaturesApi(context);
   const transactions = createTransactionsApi(context);
+  const delegationTokens = createDelegationTokensApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -111,6 +126,7 @@ export function createAdmin({
     ...logDirs,
     ...features,
     ...transactions,
+    ...delegationTokens,
     on,
     logger: () => logger,
     events,

@@ -67,6 +67,55 @@ export interface UpdateFeaturesResult {
   errorMessage: string | null;
 }
 
+/**
+ * Kafka principal (`principalType` + `name`), matching `org.apache.kafka.common.security.auth.KafkaPrincipal`.
+ */
+export interface KafkaPrincipal {
+  principalType: string;
+  name: string;
+}
+
+export interface CreateDelegationTokenOptions {
+  renewers?: KafkaPrincipal[];
+  maxLifeTimeMs?: bigint;
+  owner?: KafkaPrincipal;
+}
+
+export interface CreateDelegationTokenResult {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+}
+
+export interface RenewDelegationTokenOptions {
+  hmac: Buffer;
+  renewTimePeriodMs?: bigint;
+}
+
+export interface ExpireDelegationTokenOptions {
+  hmac: Buffer;
+  expiryTimePeriodMs?: bigint;
+}
+
+export interface DescribeDelegationTokenOptions {
+  owners?: KafkaPrincipal[];
+}
+
+export interface DelegationToken {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+  renewers: KafkaPrincipal[];
+}
+
 export interface ReplicaAssignment {
   partition: number;
   replicas: number[];
@@ -219,6 +268,50 @@ export interface ClusterDescription {
   clusterId: string | null;
 }
 
+/** Topic to describe via {@link Admin.describeTopicPartitions}. Request is name-based. */
+export interface DescribeTopicPartitionsTopicInput {
+  topic: string;
+  topicId?: Buffer;
+}
+
+/** Cursor for {@link Admin.describeTopicPartitions} pagination. */
+export interface DescribeTopicPartitionsCursor {
+  topic: string;
+  partitionIndex: number;
+}
+
+/** Options for {@link Admin.describeTopicPartitions}. Returns one page plus `nextCursor`. */
+export interface DescribeTopicPartitionsOptions {
+  topics: Array<string | DescribeTopicPartitionsTopicInput>;
+  responsePartitionLimit?: number;
+  cursor?: DescribeTopicPartitionsCursor | null;
+  includeAuthorizedOperations?: boolean;
+}
+
+export interface DescribeTopicPartitionsPartition {
+  partitionIndex: number;
+  leader: number;
+  leaderEpoch: number;
+  replicas: number[];
+  isr: number[];
+  eligibleLeaderReplicas: number[] | null;
+  lastKnownElr: number[] | null;
+  offlineReplicas: number[];
+}
+
+export interface DescribeTopicPartitionsTopic {
+  name: string | null;
+  topicId: Buffer;
+  isInternal: boolean;
+  partitions: DescribeTopicPartitionsPartition[];
+  topicAuthorizedOperations: number;
+}
+
+export interface DescribeTopicPartitionsResult {
+  topics: DescribeTopicPartitionsTopic[];
+  nextCursor: DescribeTopicPartitionsCursor | null;
+}
+
 export interface AdminOptions {
   cluster: Cluster;
   logger: Logger;
@@ -249,6 +342,7 @@ export interface Admin {
   }) => Promise<void>;
   fetchTopicMetadata: (options?: { topics?: string[] }) => Promise<{ topics: TopicMetadata[] }>;
   describeCluster: () => Promise<ClusterDescription>;
+  describeTopicPartitions: (options: DescribeTopicPartitionsOptions) => Promise<DescribeTopicPartitionsResult>;
   describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
   fetchOffsets: (options: {
@@ -325,8 +419,15 @@ export interface Admin {
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  listConfigResources: (options?: {
+    resourceTypes?: number[];
+  }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
+  createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
+  renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  describeDelegationToken: (options?: DescribeDelegationTokenOptions) => Promise<{ tokens: DelegationToken[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

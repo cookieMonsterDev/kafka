@@ -68,7 +68,11 @@ import { EndTxn } from '../protocol/requests/end-txn/index';
 import type { EndTxnOptions } from '../protocol/requests/end-txn/index';
 import type { EndTxnResponseV1Body } from '../protocol/requests/end-txn/v1/response';
 import { Fetch } from '../protocol/requests/fetch/index';
-import type { FetchRequestOptions } from '../protocol/requests/fetch/shared';
+import {
+  FETCH_TOPIC_ID_MIN_VERSION,
+  fetchRequestHasUsableTopicIds,
+  type FetchRequestOptions,
+} from '../protocol/requests/fetch/shared';
 import type { FetchResponseV11Body } from '../protocol/requests/fetch/v11/response';
 import { FindCoordinator } from '../protocol/requests/find-coordinator/index';
 import type { FindCoordinatorOptions } from '../protocol/requests/find-coordinator/index';
@@ -153,6 +157,12 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { DescribeTopicPartitions } from '../protocol/requests/describe-topic-partitions/index';
+import type { DescribeTopicPartitionsOptions } from '../protocol/requests/describe-topic-partitions/index';
+import type { DescribeTopicPartitionsResponseV0Body } from '../protocol/requests/describe-topic-partitions/v0/response';
+import { ListConfigResources } from '../protocol/requests/list-config-resources/index';
+import type { ListConfigResourcesOptions } from '../protocol/requests/list-config-resources/index';
+import type { ListConfigResourcesResponseV1Body } from '../protocol/requests/list-config-resources/v1/response';
 import { ListTransactions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
@@ -165,6 +175,18 @@ import type { ConsumerGroupDescribeResponseV1Body } from '../protocol/requests/c
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
+import { CreateDelegationToken } from '../protocol/requests/create-delegation-token/index';
+import type { CreateDelegationTokenOptions } from '../protocol/requests/create-delegation-token/index';
+import type { CreateDelegationTokenResponseV3Body } from '../protocol/requests/create-delegation-token/v3/response';
+import { RenewDelegationToken } from '../protocol/requests/renew-delegation-token/index';
+import type { RenewDelegationTokenOptions } from '../protocol/requests/renew-delegation-token/index';
+import type { RenewDelegationTokenResponseV1Body } from '../protocol/requests/renew-delegation-token/v1/response';
+import { ExpireDelegationToken } from '../protocol/requests/expire-delegation-token/index';
+import type { ExpireDelegationTokenOptions } from '../protocol/requests/expire-delegation-token/index';
+import type { ExpireDelegationTokenResponseV1Body } from '../protocol/requests/expire-delegation-token/v1/response';
+import { DescribeDelegationToken } from '../protocol/requests/describe-delegation-token/index';
+import type { DescribeDelegationTokenOptions } from '../protocol/requests/describe-delegation-token/index';
+import type { DescribeDelegationTokenResponseV3Body } from '../protocol/requests/describe-delegation-token/v3/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -372,29 +394,47 @@ export class Broker {
   }
 
   async fetch(options: FetchRequestOptions): Promise<FetchResponseV11Body> {
-    const fetch = this.lookupRequest<FetchRequestOptions>(API_KEYS.Fetch, Fetch);
-
     // Shuffle topic-partitions to ensure fair response allocation across partitions (KIP-74).
-    const flattenedTopicPartitions = options.topics.flatMap(({ topic, partitions }) =>
-      partitions.map((partition) => ({ topic, partition })),
+    const flattenedTopicPartitions = options.topics.flatMap(({ topic, topicId, partitions }) =>
+      partitions.map((partition) => ({ topic, topicId, partition })),
     );
     const shuffledTopicPartitions = shuffle(flattenedTopicPartitions);
 
     // Consecutive partitions for the same topic can be combined into a single `topic` entry.
     const consolidatedTopicPartitions: {
       topic: string;
+      topicId?: Buffer;
       partitions: (typeof shuffledTopicPartitions)[number]['partition'][];
     }[] = [];
-    for (const { topic, partition } of shuffledTopicPartitions) {
+    for (const { topic, topicId, partition } of shuffledTopicPartitions) {
       const last = consolidatedTopicPartitions.at(-1);
       if (last && last.topic === topic) {
         last.partitions.push(partition);
       } else {
-        consolidatedTopicPartitions.push({ topic, partitions: [partition] });
+        consolidatedTopicPartitions.push({ topic, topicId, partitions: [partition] });
       }
     }
 
-    return this.#send(fetch({ ...options, topics: consolidatedTopicPartitions }));
+    const fetchOptions = { ...options, topics: consolidatedTopicPartitions };
+    const fetch = this.lookupRequest<FetchRequestOptions>(API_KEYS.Fetch, Fetch);
+    let protocol = fetch(fetchOptions);
+
+    // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on
+    // the highest mutually supported name-based version (v12 on Kafka 4.0).
+    if (protocol.request.apiVersion >= FETCH_TOPIC_ID_MIN_VERSION && !fetchRequestHasUsableTopicIds(fetchOptions)) {
+      const advertised = this.versions?.[API_KEYS.Fetch];
+      const brokerMin = advertised?.minVersion ?? 0;
+      const brokerMax = advertised?.maxVersion ?? 0;
+      const nameBased = Fetch.versions.filter(
+        (version) => version < FETCH_TOPIC_ID_MIN_VERSION && version >= brokerMin && version <= brokerMax,
+      );
+      if (nameBased.length === 0) {
+        throw new KafkaInvariantViolation('no name-based Fetch protocol for this broker');
+      }
+      protocol = Fetch.protocol({ version: Math.max(...nameBased) })(fetchOptions);
+    }
+
+    return this.#send(protocol);
   }
 
   async heartbeat(options: HeartbeatOptions): Promise<HeartbeatResponseV2Body> {
@@ -531,6 +571,14 @@ export class Broker {
     return this.#send(incrementalAlterConfigs(options));
   }
 
+  async listConfigResources(options: ListConfigResourcesOptions = {}): Promise<ListConfigResourcesResponseV1Body> {
+    const listConfigResources = this.lookupRequest<ListConfigResourcesOptions>(
+      API_KEYS.ListConfigResources,
+      ListConfigResources,
+    );
+    return this.#send(listConfigResources(options));
+  }
+
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {
     const electLeaders = this.lookupRequest<ElectLeadersOptions>(API_KEYS.ElectLeaders, ElectLeaders);
     return this.#send(electLeaders(options));
@@ -627,9 +675,55 @@ export class Broker {
     return this.#send(consumerGroupDescribe(options));
   }
 
+  async describeTopicPartitions(
+    options: DescribeTopicPartitionsOptions,
+  ): Promise<DescribeTopicPartitionsResponseV0Body> {
+    const describeTopicPartitions = this.lookupRequest<DescribeTopicPartitionsOptions>(
+      API_KEYS.DescribeTopicPartitions,
+      DescribeTopicPartitions,
+    );
+    return this.#send(describeTopicPartitions(options));
+  }
+
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {
     const updateFeatures = this.lookupRequest<UpdateFeaturesOptions>(API_KEYS.UpdateFeatures, UpdateFeatures);
     return this.#send(updateFeatures(options));
+  }
+
+  async createDelegationToken(
+    options: CreateDelegationTokenOptions = {},
+  ): Promise<CreateDelegationTokenResponseV3Body> {
+    const createDelegationToken = this.lookupRequest<CreateDelegationTokenOptions>(
+      API_KEYS.CreateDelegationToken,
+      CreateDelegationToken,
+    );
+    return this.#send(createDelegationToken(options));
+  }
+
+  async renewDelegationToken(options: RenewDelegationTokenOptions): Promise<RenewDelegationTokenResponseV1Body> {
+    const renewDelegationToken = this.lookupRequest<RenewDelegationTokenOptions>(
+      API_KEYS.RenewDelegationToken,
+      RenewDelegationToken,
+    );
+    return this.#send(renewDelegationToken(options));
+  }
+
+  async expireDelegationToken(options: ExpireDelegationTokenOptions): Promise<ExpireDelegationTokenResponseV1Body> {
+    const expireDelegationToken = this.lookupRequest<ExpireDelegationTokenOptions>(
+      API_KEYS.ExpireDelegationToken,
+      ExpireDelegationToken,
+    );
+    return this.#send(expireDelegationToken(options));
+  }
+
+  async describeDelegationToken(
+    options: DescribeDelegationTokenOptions = {},
+  ): Promise<DescribeDelegationTokenResponseV3Body> {
+    const describeDelegationToken = this.lookupRequest<DescribeDelegationTokenOptions>(
+      API_KEYS.DescribeDelegationToken,
+      DescribeDelegationToken,
+    );
+    return this.#send(describeDelegationToken(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

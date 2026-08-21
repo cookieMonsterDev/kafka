@@ -41,6 +41,10 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.DescribeLogDirs)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.SaslAuthenticate)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.CreatePartitions)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.CreateDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.RenewDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.ExpireDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.DescribeDelegationToken)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.DeleteGroups)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.ElectLeaders)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.IncrementalAlterConfigs)).toBe(1);
@@ -56,6 +60,8 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.ListTransactions)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ConsumerGroupHeartbeat)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ConsumerGroupDescribe)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.ListConfigResources)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.DescribeTopicPartitions)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });
@@ -79,6 +85,14 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.ListTransactions, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ConsumerGroupHeartbeat, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ConsumerGroupDescribe, 1)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ListConfigResources, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ListConfigResources, 1)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.DescribeTopicPartitions, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.RenewDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ExpireDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.DescribeDelegationToken, 3)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 0)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 3)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 4)).toBe(true);
@@ -95,6 +109,12 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.ListTransactions, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ConsumerGroupHeartbeat, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ConsumerGroupDescribe, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ListConfigResources, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ListConfigResources, 1)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.DescribeTopicPartitions, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
+    expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.DescribeDelegationToken, 3)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 2)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 3)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 4)).toBe(false);

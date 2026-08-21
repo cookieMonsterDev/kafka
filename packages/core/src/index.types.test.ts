@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { describe, expectTypeOf, it } from 'vitest';
 import {
@@ -26,6 +27,31 @@ describe('public types', () => {
       mechanism: 'plain' as const,
       username: 'u',
       password: 'p',
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-256' as const,
+      username: 'u',
+      password: 'p',
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-256' as const,
+      tokenId: `token-${randomUUID()}`,
+      tokenHmac: randomBytes(16),
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-512' as const,
+      tokenId: `token-${randomUUID()}`,
+      tokenHmac: randomBytes(24).toString('base64'),
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'gssapi' as const,
+      serviceName: 'kafka',
+      principal: 'user@EXAMPLE.COM',
+      gssProvider: async () => ({ token: Buffer.alloc(0), complete: true }),
     }).toMatchTypeOf<SaslOptions>();
   });
 

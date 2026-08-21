@@ -24,9 +24,12 @@ export interface ConfigsApi {
     resources: IncrementalResourceConfig[];
     validateOnly?: boolean;
   }) => Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }>;
+  listConfigResources: (options?: {
+    resourceTypes?: number[];
+  }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
 }
 
-const VALID_RESOURCE_TYPES = Object.values(CONFIG_RESOURCE_TYPES);
+const VALID_RESOURCE_TYPES: readonly number[] = Object.values(CONFIG_RESOURCE_TYPES);
 const VALID_CONFIG_OPERATIONS: readonly number[] = Object.values(INCREMENTAL_ALTER_CONFIGS_OPERATIONS);
 
 export function createConfigsApi({ cluster, logger, retry }: AdminContext): ConfigsApi {
@@ -255,5 +258,42 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
     });
   };
 
-  return { describeConfigs, alterConfigs, incrementalAlterConfigs };
+  const listConfigResources = async ({
+    resourceTypes,
+  }: {
+    resourceTypes?: number[];
+  } = {}): Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }> => {
+    if (resourceTypes != null) {
+      if (!Array.isArray(resourceTypes)) {
+        throw new KafkaNonRetriableError(`Invalid resourceTypes array ${formatUnknown(resourceTypes)}`);
+      }
+      const invalidType = resourceTypes.find((type) => !VALID_RESOURCE_TYPES.includes(type));
+      if (invalidType != null) {
+        throw new KafkaNonRetriableError(`Invalid resource type ${invalidType}`);
+      }
+    }
+
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        await cluster.refreshMetadata();
+        const broker = await cluster.findControllerBroker();
+        const { configResources } = await broker.listConfigResources({ resourceTypes });
+        return { resources: configResources };
+      } catch (error) {
+        if (protocolType(error) === 'NOT_CONTROLLER') {
+          logger.warn('Could not list config resources', {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            retryTime,
+          });
+          await cluster.refreshMetadata();
+          throw error;
+        }
+        bail(error as Error);
+        throw error;
+      }
+    });
+  };
+
+  return { describeConfigs, alterConfigs, incrementalAlterConfigs, listConfigResources };
 }

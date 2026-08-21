@@ -41,6 +41,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | -------------------------------------------------------------- | ---------------------------------------- |
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
+| `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults       |
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
 | `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+   |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
@@ -97,8 +98,9 @@ are `bigint`. Owner and renewer principals are `{ principalType, name }`
 `expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately
 (Java default). Brokers must set `delegation.token.secret.key` and accept the
 request over SASL; PLAINTEXT returns `DELEGATION_TOKEN_REQUEST_NOT_ALLOWED`.
-Default integration compose files do not enable tokens. SASL login _with_ a
-delegation token is not implemented — see [Compatibility](./compatibility/).
+Default integration compose files do not enable tokens. Pass the returned
+`tokenId` and `hmac` as `sasl.tokenId` / `sasl.tokenHmac` on a SCRAM client to
+authenticate with the token — see [Security](../guides/security/).
 
 Also `connect`, `disconnect`, `logger()`, `Symbol.asyncDispose`. Missing
 methods: [Compatibility](./compatibility/).

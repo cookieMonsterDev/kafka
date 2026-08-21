@@ -89,15 +89,23 @@ fans the request out to every broker, unique-merges by transactional ID, and
 requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
 `transactionalIdPattern`. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. `admin.createDelegationToken`,
+validate-only and rejects unsafe downgrades. `admin.listConfigResources`
+implements ListConfigResources (key 74) v0–v1 and targets the active
+controller. v0 lists client metrics names only (Kafka 4.0); filtering by
+`resourceTypes` needs v1 (Kafka 4.1+ / KIP-1142). An empty `resourceTypes`
+list is valid: v1 returns the broker's default supported types, v0 returns
+all client metrics. `admin.createDelegationToken`,
 `admin.renewDelegationToken`, `admin.expireDelegationToken`, and
 `admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
 missing: abortTransaction and FenceProducers.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). Admin can
-create, describe, renew, and expire delegation tokens; SASL authentication
-_using_ a delegation token is not implemented. See
+create, describe, renew, and expire delegation tokens. SASL login with a
+delegation token is opt-in: set `sasl.mechanism` to `scram-sha-256` or
+`scram-sha-512` and pass `tokenId` / `tokenHmac` (see
+[Security](../guides/security/)). The broker still needs
+`delegation.token.secret.key` and SASL/SCRAM. See
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See

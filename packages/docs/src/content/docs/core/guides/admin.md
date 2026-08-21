@@ -57,8 +57,9 @@ await admin.renewDelegationToken({ hmac: created.hmac, renewTimePeriodMs: 1_800_
 await admin.expireDelegationToken({ hmac: created.hmac, expiryTimePeriodMs: -1n });
 ```
 
-HMAC is `Buffer`; timestamps are `bigint`. SASL login with the token itself
-is not implemented — see [Compatibility](../reference/compatibility/).
+HMAC is `Buffer`; timestamps are `bigint`. Connect a producer or consumer
+with the same token by passing `tokenId` and `tokenHmac` on
+`scram-sha-256` / `scram-sha-512` — see [Security](./security/).
 
 ## Transactions
 

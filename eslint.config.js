@@ -66,6 +66,7 @@ export default tseslint.config(
             'testIfKafkaAtLeast_2_1',
             'testIfKafkaAtLeast_2_2',
             'testIfKafkaAtLeast_2_4',
+            'testIfKafkaAtLeast_2_8',
             'testIfKafkaAtLeast_3_0',
             'testIfKafkaAtLeast_3_6',
             'testIfKafkaAtLeast_4_0',

@@ -149,6 +149,9 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { UpdateFeatures } from '../protocol/requests/update-features/index';
+import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
+import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -569,6 +572,11 @@ export class Broker {
       DescribeTransactions,
     );
     return this.#send(describeTransactions(options));
+  }
+
+  async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {
+    const updateFeatures = this.lookupRequest<UpdateFeaturesOptions>(API_KEYS.UpdateFeatures, UpdateFeatures);
+    return this.#send(updateFeatures(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

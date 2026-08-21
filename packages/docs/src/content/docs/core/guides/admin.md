@@ -68,5 +68,31 @@ for (const state of producerStates) {
 }
 ```
 
-Pass `brokerId` to query a specific replica instead. Remaining transaction
-administration APIs are listed under [Compatibility](../reference/compatibility/).
+Pass `brokerId` to query a specific replica instead.
+
+## Finalized features
+
+`updateFeatures` targets the active controller. Prefer `validateOnly: true`
+before changing a feature level, especially for `metadata.version`:
+
+```ts
+import { FeatureUpdateUpgradeTypes } from '@cookiemonsterdev/kafka-core';
+
+await admin.updateFeatures({
+  featureUpdates: [
+    {
+      feature: 'metadata.version',
+      maxVersionLevel: 20,
+      upgradeType: FeatureUpdateUpgradeTypes.SAFE_DOWNGRADE,
+    },
+  ],
+  validateOnly: true,
+});
+```
+
+Upgrade types are `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
+UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
+downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
+
+Remaining transaction administration APIs are listed under
+[Compatibility](../reference/compatibility/).

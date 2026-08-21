@@ -37,6 +37,32 @@ export type OffsetInput = bigint | number | string;
 export type TransactionDescription = DescribeTransactionsState;
 export type TransactionTopic = DescribeTransactionsTopic;
 
+export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
+  UPGRADE: 1,
+  SAFE_DOWNGRADE: 2,
+  UNSAFE_DOWNGRADE: 3,
+} as const);
+
+export type FeatureUpdateUpgradeType = (typeof FEATURE_UPDATE_UPGRADE_TYPES)[keyof typeof FEATURE_UPDATE_UPGRADE_TYPES];
+
+export interface FeatureUpdate {
+  feature: string;
+  maxVersionLevel: number;
+  upgradeType?: FeatureUpdateUpgradeType;
+}
+
+export interface UpdateFeaturesOptions {
+  featureUpdates: FeatureUpdate[];
+  timeout?: number;
+  validateOnly?: boolean;
+}
+
+export interface UpdateFeaturesResult {
+  feature: string;
+  errorCode: number;
+  errorMessage: string | null;
+}
+
 export interface ReplicaAssignment {
   partition: number;
   replicas: number[];
@@ -293,6 +319,7 @@ export interface Admin {
     dirs: { path: string; topics: { topic: string; partitions: number[] }[] }[];
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
+  updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   on: (
     eventName: AdminEventName,

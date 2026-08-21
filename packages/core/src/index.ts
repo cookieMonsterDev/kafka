@@ -37,6 +37,7 @@ export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-o
 export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types';
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
+export { FEATURE_UPDATE_UPGRADE_TYPES as FeatureUpdateUpgradeTypes } from './admin/types';
 
 export {
   KafkaError,
@@ -70,6 +71,7 @@ export {
   KafkaFetcherRebalanceError,
   KafkaNoBrokerAvailableError,
   KafkaAlterPartitionReassignmentsError,
+  KafkaUpdateFeaturesError,
 } from './errors';
 
 export type {
@@ -130,10 +132,14 @@ export type {
   AclEntry,
   AclFilter,
   DescribeProducersOptions,
+  FeatureUpdate,
+  FeatureUpdateUpgradeType,
   PartitionProducerState,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
   TransactionTopic,
+  UpdateFeaturesOptions,
+  UpdateFeaturesResult,
 } from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';

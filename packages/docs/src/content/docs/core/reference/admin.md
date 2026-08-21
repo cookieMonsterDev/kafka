@@ -45,6 +45,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+   |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
+| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
 
 `describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
 specific replica. It returns one entry per partition with `activeProducers`; producer IDs,

@@ -79,11 +79,15 @@ and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
 coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. Still missing: the remaining
-transaction administration APIs.
+validate-only and rejects unsafe downgrades. `admin.createDelegationToken`,
+`admin.renewDelegationToken`, `admin.expireDelegationToken`, and
+`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
+missing: the remaining transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
-Kerberos is not. The `aws` SASL helper is extra (non-Apache). See
+Kerberos is not. The `aws` SASL helper is extra (non-Apache). Admin can
+create, describe, renew, and expire delegation tokens; SASL authentication
+_using_ a delegation token is not implemented. See
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See

@@ -63,6 +63,55 @@ export interface UpdateFeaturesResult {
   errorMessage: string | null;
 }
 
+/**
+ * Kafka principal (`principalType` + `name`), matching `org.apache.kafka.common.security.auth.KafkaPrincipal`.
+ */
+export interface KafkaPrincipal {
+  principalType: string;
+  name: string;
+}
+
+export interface CreateDelegationTokenOptions {
+  renewers?: KafkaPrincipal[];
+  maxLifeTimeMs?: bigint;
+  owner?: KafkaPrincipal;
+}
+
+export interface CreateDelegationTokenResult {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+}
+
+export interface RenewDelegationTokenOptions {
+  hmac: Buffer;
+  renewTimePeriodMs?: bigint;
+}
+
+export interface ExpireDelegationTokenOptions {
+  hmac: Buffer;
+  expiryTimePeriodMs?: bigint;
+}
+
+export interface DescribeDelegationTokenOptions {
+  owners?: KafkaPrincipal[];
+}
+
+export interface DelegationToken {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+  renewers: KafkaPrincipal[];
+}
+
 export interface ReplicaAssignment {
   partition: number;
   replicas: number[];
@@ -321,6 +370,10 @@ export interface Admin {
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
+  createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
+  renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  describeDelegationToken: (options?: DescribeDelegationTokenOptions) => Promise<{ tokens: DelegationToken[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

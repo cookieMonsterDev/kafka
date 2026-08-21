@@ -60,7 +60,7 @@ transactional ID, state, timeout, start time, producer ID and epoch, and active
 topic partitions. Producer IDs and transaction start times are `bigint`.
 DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
 
-## ACLs, SCRAM, quotas, log dirs
+## ACLs, SCRAM, quotas, log dirs, tokens
 
 | Method                                                       | Notes                                     |
 | ------------------------------------------------------------ | ----------------------------------------- |
@@ -68,6 +68,21 @@ DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
 | `describeUserScramCredentials` / `alterUserScramCredentials` | Keys 50–51                                |
 | `describeClientQuotas` / `alterClientQuotas`                 | Keys 48–49                                |
 | `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35                                |
+
+## Tokens
+
+`createDelegationToken`, `describeDelegationToken`, `renewDelegationToken`,
+and `expireDelegationToken` are keys 38–41 (Kafka 1.1+). They target the
+active controller. HMAC values are `Buffer`; issue, expiry, and max timestamps
+are `bigint`. Owner and renewer principals are `{ principalType, name }`
+(`User` + name, matching Java `KafkaPrincipal`).
+
+`createDelegationToken({ owner })` needs CreateDelegationToken v3 (Kafka 3.3+).
+`expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately
+(Java default). Brokers must set `delegation.token.secret.key` and accept the
+request over SASL; PLAINTEXT returns `DELEGATION_TOKEN_REQUEST_NOT_ALLOWED`.
+Default integration compose files do not enable tokens. SASL login _with_ a
+delegation token is not implemented — see [Compatibility](./compatibility/).
 
 Also `connect`, `disconnect`, `logger()`, `Symbol.asyncDispose`. Missing
 methods: [Compatibility](./compatibility/).

@@ -19,6 +19,8 @@ import type {
   DescribeTransactionsState,
   DescribeTransactionsTopic,
 } from '../protocol/requests/describe-transactions/v0/response';
+import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsState } from '../protocol/requests/list-transactions/v0/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
@@ -36,6 +38,8 @@ import { events } from './instrumentation-events';
 export type OffsetInput = bigint | number | string;
 export type TransactionDescription = DescribeTransactionsState;
 export type TransactionTopic = DescribeTransactionsTopic;
+export type TransactionListing = ListTransactionsState;
+export type { ListTransactionsOptions };
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
   UPGRADE: 1,
@@ -61,6 +65,55 @@ export interface UpdateFeaturesResult {
   feature: string;
   errorCode: number;
   errorMessage: string | null;
+}
+
+/**
+ * Kafka principal (`principalType` + `name`), matching `org.apache.kafka.common.security.auth.KafkaPrincipal`.
+ */
+export interface KafkaPrincipal {
+  principalType: string;
+  name: string;
+}
+
+export interface CreateDelegationTokenOptions {
+  renewers?: KafkaPrincipal[];
+  maxLifeTimeMs?: bigint;
+  owner?: KafkaPrincipal;
+}
+
+export interface CreateDelegationTokenResult {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+}
+
+export interface RenewDelegationTokenOptions {
+  hmac: Buffer;
+  renewTimePeriodMs?: bigint;
+}
+
+export interface ExpireDelegationTokenOptions {
+  hmac: Buffer;
+  expiryTimePeriodMs?: bigint;
+}
+
+export interface DescribeDelegationTokenOptions {
+  owners?: KafkaPrincipal[];
+}
+
+export interface DelegationToken {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+  renewers: KafkaPrincipal[];
 }
 
 export interface ReplicaAssignment {
@@ -94,6 +147,7 @@ export interface TopicPartitionConfig {
 
 export interface TopicMetadata {
   name: string;
+  topicId?: Buffer;
   partitions: PartitionMetadata[];
 }
 
@@ -324,6 +378,11 @@ export interface Admin {
     resourceTypes?: number[];
   }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
+  listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
+  createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
+  renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  describeDelegationToken: (options?: DescribeDelegationTokenOptions) => Promise<{ tokens: DelegationToken[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

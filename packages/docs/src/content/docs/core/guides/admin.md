@@ -26,7 +26,8 @@ Cluster operations:
 
 `createTopics`, `deleteTopics`, `listTopics`, `createPartitions`,
 `fetchTopicMetadata`. Offset fields from `fetchTopicOffsets` and
-`fetchOffsets` are `bigint`.
+`fetchOffsets` are `bigint`. On Kafka 2.8+ (Metadata v10+), each topic in
+`fetchTopicMetadata` may include `topicId` as a 16-byte `Buffer`.
 
 ## Configs
 
@@ -39,6 +40,25 @@ brokers. See [topic configs](https://kafka.apache.org/43/configuration/topic-con
 ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
+
+## Delegation tokens
+
+Kafka 1.1+ can mint HMAC delegation tokens through the Admin API when the
+broker has `delegation.token.secret.key` and the connection is SASL:
+
+```ts
+const created = await admin.createDelegationToken({
+  renewers: [{ principalType: 'User', name: 'alice' }],
+  maxLifeTimeMs: 3_600_000n,
+});
+
+const { tokens } = await admin.describeDelegationToken();
+await admin.renewDelegationToken({ hmac: created.hmac, renewTimePeriodMs: 1_800_000n });
+await admin.expireDelegationToken({ hmac: created.hmac, expiryTimePeriodMs: -1n });
+```
+
+HMAC is `Buffer`; timestamps are `bigint`. SASL login with the token itself
+is not implemented — see [Compatibility](../reference/compatibility/).
 
 ## Transactions
 

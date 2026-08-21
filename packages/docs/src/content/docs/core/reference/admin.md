@@ -42,9 +42,23 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
+| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+   |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
+
+`describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
+specific replica. It returns one entry per partition with `activeProducers`; producer IDs,
+timestamps, and transaction start offsets use `bigint`, and
+`currentTransactionStartOffset` is `null` when no transaction is open.
+
+## Transactions
+
+`describeTransactions(transactionalIds)` discovers each transaction coordinator
+and returns `{ transactionStates }`. Each transaction state includes its
+transactional ID, state, timeout, start time, producer ID and epoch, and active
+topic partitions. Producer IDs and transaction start times are `bigint`.
+DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
 
 ## ACLs, SCRAM, quotas, log dirs
 

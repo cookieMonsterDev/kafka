@@ -40,7 +40,7 @@ Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 | `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                          |
 | `lingerMs`               | `0`                           | Java 4.0+ `linger.ms=5`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)                               |
 | `batchSize`              | unset                         | [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                      |
-| `createPartitioner`      | murmur2                       | Not Java 4.x sticky. `Partitioners.LegacyPartitioner` opt-in                                                                              |
+| `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing                                                                       |
 | `metadataMaxAge`         | `300000`                      |                                                                                                                                           |
 | `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                          |
 | `maxInFlightRequests`    |                               |                                                                                                                                           |

@@ -33,6 +33,7 @@ describe('public surface', () => {
   it('exports partitioners, assigners, and the assigner protocol', () => {
     expect(Partitioners.DefaultPartitioner).toBeTypeOf('function');
     expect(Partitioners.LegacyPartitioner).toBeTypeOf('function');
+    expect(Partitioners.StickyPartitioner).toBeTypeOf('function');
     expect(Partitioners.JavaCompatiblePartitioner).toBe(Partitioners.DefaultPartitioner);
     expect(PartitionAssigners.roundRobin).toBeTypeOf('function');
     expect(PartitionAssigners.range).toBeTypeOf('function');

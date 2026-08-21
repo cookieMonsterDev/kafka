@@ -40,9 +40,35 @@ ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
+## Transactions
+
+Kafka 3.0+ supports transaction inspection through API key 65:
+
+```ts
+const { transactionStates } = await admin.describeTransactions(['payments-writer']);
+for (const transaction of transactionStates) {
+  console.log(transaction.transactionalId, transaction.transactionState);
+}
+```
+
+The client discovers and groups requests by transaction coordinator. Producer
+IDs and transaction start times are returned as `bigint`.
+
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
-Missing APIs (describeProducers, transaction describe) are listed under
-[Compatibility](../reference/compatibility/).
+
+Kafka 3.0+ can report the producer state retained by partition leaders:
+
+```ts
+const producerStates = await admin.describeProducers({
+  topicPartitions: [{ topic: 'events', partitions: [0, 1] }],
+});
+
+for (const state of producerStates) {
+  console.log(state.topic, state.partition, state.activeProducers);
+}
+```
+
+Pass `brokerId` to query a specific replica instead.
 
 ## Finalized features
 
@@ -67,3 +93,6 @@ await admin.updateFeatures({
 Upgrade types are `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
 UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
 downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
+
+Remaining transaction administration APIs are listed under
+[Compatibility](../reference/compatibility/).

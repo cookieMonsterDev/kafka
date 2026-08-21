@@ -15,6 +15,10 @@ import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/de
 import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import type {
+  DescribeTransactionsState,
+  DescribeTransactionsTopic,
+} from '../protocol/requests/describe-transactions/v0/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
@@ -30,6 +34,8 @@ import type { AdminEventName } from './instrumentation-events';
 import { events } from './instrumentation-events';
 
 export type OffsetInput = bigint | number | string;
+export type TransactionDescription = DescribeTransactionsState;
+export type TransactionTopic = DescribeTransactionsTopic;
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
   UPGRADE: 1,
@@ -177,6 +183,31 @@ export interface TopicPartitions {
   partitions: number[];
 }
 
+/** Options for {@link Admin.describeProducers}. Defaults to querying each partition leader. */
+export interface DescribeProducersOptions {
+  topicPartitions: TopicPartitions[];
+  /** Query a specific replica broker instead of the partition leaders. */
+  brokerId?: string | number;
+}
+
+/** Producer state retained by a broker for a topic partition. */
+export interface ActiveProducerState {
+  producerId: bigint;
+  producerEpoch: number;
+  lastSequence: number;
+  lastTimestamp: bigint;
+  coordinatorEpoch: number;
+  /** First offset of the open transaction, or `null` when the producer is not in a transaction. */
+  currentTransactionStartOffset: bigint | null;
+}
+
+/** Active producers for one requested topic partition. */
+export interface PartitionProducerState {
+  topic: string;
+  partition: number;
+  activeProducers: ActiveProducerState[];
+}
+
 export interface ClusterDescription {
   brokers: { nodeId: number; host: string; port: number }[];
   controller: number | null;
@@ -213,6 +244,7 @@ export interface Admin {
   }) => Promise<void>;
   fetchTopicMetadata: (options?: { topics?: string[] }) => Promise<{ topics: TopicMetadata[] }>;
   describeCluster: () => Promise<ClusterDescription>;
+  describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
   fetchOffsets: (options: {
     groupId: string;
@@ -288,6 +320,7 @@ export interface Admin {
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

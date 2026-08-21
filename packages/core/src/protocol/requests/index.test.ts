@@ -145,7 +145,7 @@ describe('protocol/requests', () => {
   });
 
   it('throws when the broker minVersion is above every implemented version', () => {
-    expect(() => lookup({ [API_KEYS.Produce]: { minVersion: 11, maxVersion: 12 } })(API_KEYS.Produce, Produce)).toThrow(
+    expect(() => lookup({ [API_KEYS.Produce]: { minVersion: 14, maxVersion: 15 } })(API_KEYS.Produce, Produce)).toThrow(
       KafkaServerDoesNotSupportApiKey,
     );
   });

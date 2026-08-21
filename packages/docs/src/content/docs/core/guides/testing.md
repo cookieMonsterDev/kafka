@@ -20,3 +20,5 @@ cluster with `KAFKA_EXTERNAL=1`. The mapping lives in
 [`packages/core/test/assets/README.md`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/test/assets/README.md).
 
 The tested broker matrix is on [Compatibility](../reference/compatibility/).
+SASL/GSSAPI is covered by unit tests only; there is no Kerberos compose stack
+in CI.

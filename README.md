@@ -29,11 +29,11 @@ Docs: [https://cookiemonsterdev.github.io/kafka/](https://cookiemonsterdev.githu
 
 ## Features
 
-- **Producer** — `send` / `sendBatch`, optional idempotence, transactions, headers, GZIP and ZSTD (Snappy and LZ4 are pluggable)
+- **Producer** — `send` / `sendBatch`, optional idempotence, transactions, headers, GZIP, Snappy, LZ4, and ZSTD
 - **Consumer groups** — pause, resume, seek, `eachMessage` / `eachBatch`, `consumer.stream()`, classic group protocol
 - **Partition assigners** — range, round-robin (default), sticky, cooperative-sticky
 - **Admin** — topics, configs, ACLs, offsets, groups, SCRAM credentials, leader election
-- **Security** — SSL/TLS, SASL PLAIN, SCRAM-SHA-256/512, OAUTHBEARER, AWS IAM helper
+- **Security** — SSL/TLS, SASL PLAIN, SCRAM-SHA-256/512, OAUTHBEARER, GSSAPI / Kerberos, AWS IAM helper
 - **Compatibility** — Kafka **0.10+** via `ApiVersions` (not Java-client 4.x parity)
 - **TypeScript-first** — generated `.d.ts`, `AbortSignal` on connect/send/run, `await using` via `Symbol.asyncDispose`
 

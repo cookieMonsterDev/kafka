@@ -18,11 +18,11 @@ This package is the library in the [kafka](https://github.com/cookieMonsterDev/k
 | Consumer    | Groups with pause/resume/seek, `run()`, `stream()`, classic protocol            |
 | Assigners   | Range, round-robin (default), sticky, cooperative-sticky                        |
 | Admin       | Topics, configs, ACLs, offsets, groups, SCRAM, leader election                  |
-| Compression | GZIP and ZSTD built in; Snappy and LZ4 via `CompressionCodecs`                  |
-| Security    | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER, AWS IAM helper                       |
+| Compression | GZIP, Snappy, LZ4, and ZSTD built in (overridable via `CompressionCodecs`)      |
+| Security    | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER / GSSAPI, AWS IAM helper              |
 | DX          | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`         |
 
-Not in scope: Kafka Streams, Kafka Connect, GSSAPI/Kerberos, Java-client 4.x parity. See [compatibility](../docs/src/content/docs/core/reference/compatibility.md).
+Not in scope: Kafka Streams, Kafka Connect, Java-client 4.x parity. See [compatibility](../docs/src/content/docs/core/reference/compatibility.md).
 
 ## Usage
 
@@ -67,6 +67,14 @@ The `exports` field points at `dist/`, so **`dist/` must exist** before a depend
 pnpm --filter @cookiemonsterdev/kafka-docs... build   # "..." includes dependencies
 ```
 
+SASL/GSSAPI (Kerberos) is opt-in. Install the optional `kerberos` package if you are not supplying `sasl.gssProvider`:
+
+```sh
+npm install kerberos
+```
+
+See [Security](../docs/src/content/docs/core/guides/security.md). CI does not run a KDC.
+
 `await using` works because producer, consumer, and admin implement `Symbol.asyncDispose` (it calls `disconnect()`).
 
 To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartitioner`. The default is murmur2 (`Partitioners.DefaultPartitioner`), not the Java 4.x sticky partitioner.
@@ -80,6 +88,7 @@ To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartiti
 | [Producer API](../docs/src/content/docs/core/reference/producer.md)             | `send`, `Message`, `RecordMetadata`              |
 | [Consumer API](../docs/src/content/docs/core/reference/consumer.md)             | `run`, `stream`, `KafkaMessage`                  |
 | [Errors](../docs/src/content/docs/core/reference/errors.md)                     | Public classes and protocol codes                |
+| [Security](../docs/src/content/docs/core/guides/security.md)                    | TLS and SASL, including GSSAPI                   |
 | [Compatibility](../docs/src/content/docs/core/reference/compatibility.md)       | Defaults vs the Java client, missing APIs        |
 | [Breaking changes](../docs/src/content/docs/core/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars              |
 

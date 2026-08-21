@@ -43,6 +43,7 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [] }),
     alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [] }),
     describeCluster: vi.fn().mockResolvedValue({ brokers: [], clusterId: 'c', controllerId: 1 }),
+    listConfigResources: vi.fn().mockResolvedValue({ configResources: [] }),
     ...overrides,
   };
 }

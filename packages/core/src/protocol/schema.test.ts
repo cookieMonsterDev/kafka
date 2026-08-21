@@ -13,6 +13,7 @@ import {
   field,
   flexibleObject,
   float64,
+  nullableFlexibleObject,
   int16,
   int32,
   int64,
@@ -173,6 +174,23 @@ describe('protocol/schema', () => {
     const expected = new Encoder().writeUVarIntString('topic').writeInt32(2).writeUVarInt(0);
     expect(encoder.buffer).toEqual(expected.buffer);
     expect(shape.read(new Decoder(encoder.buffer))).toEqual({ name: 'topic', count: 2 });
+  });
+
+  it('round-trips a nullable flexible struct, including null', () => {
+    const cursor = nullableFlexibleObject([field('topic', compactString), field('partitionIndex', int32)]);
+    const present = { topic: 'orders', partitionIndex: 3 };
+
+    const encoded = new Encoder();
+    cursor.write(encoded, present);
+    expect(encoded.buffer).toEqual(
+      new Encoder().writeInt8(1).writeUVarIntString('orders').writeInt32(3).writeUVarInt(0).buffer,
+    );
+    expect(cursor.read(new Decoder(encoded.buffer))).toEqual(present);
+
+    const nullable = new Encoder();
+    cursor.write(nullable, null);
+    expect(nullable.buffer).toEqual(new Encoder().writeInt8(-1).buffer);
+    expect(cursor.read(new Decoder(nullable.buffer))).toBeNull();
   });
 
   it('round-trips a 16-byte UUID', () => {

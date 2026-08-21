@@ -21,7 +21,7 @@ export async function decompressZstd(buffer: Buffer, maxOutputLength = MAX_DECOM
   }
 }
 
-/** Node 24 ships zstd natively (`node:zlib`), so unlike Snappy/LZ4 this needs no extra package. */
+/** Node 24 ships zstd natively (`node:zlib`), so unlike LZ4 this needs no extra package. */
 export const zstdCodec: CompressionCodec = {
   async compress(encoder) {
     return compress(encoder.buffer);

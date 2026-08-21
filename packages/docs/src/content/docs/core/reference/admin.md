@@ -45,6 +45,14 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
 
+## Transactions
+
+`describeTransactions(transactionalIds)` discovers each transaction coordinator
+and returns `{ transactionStates }`. Each transaction state includes its
+transactional ID, state, timeout, start time, producer ID and epoch, and active
+topic partitions. Producer IDs and transaction start times are `bigint`.
+DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
+
 ## ACLs, SCRAM, quotas, log dirs
 
 | Method                                                       | Notes                                     |

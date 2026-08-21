@@ -40,6 +40,20 @@ ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
+## Transactions
+
+Kafka 3.0+ supports transaction inspection through API key 65:
+
+```ts
+const { transactionStates } = await admin.describeTransactions(['payments-writer']);
+for (const transaction of transactionStates) {
+  console.log(transaction.transactionalId, transaction.transactionState);
+}
+```
+
+The client discovers and groups requests by transaction coordinator. Producer
+IDs and transaction start times are returned as `bigint`.
+
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
-Missing APIs (describeProducers, transaction describe) are listed under
+Missing APIs such as `describeProducers` are listed under
 [Compatibility](../reference/compatibility/).

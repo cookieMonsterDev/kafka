@@ -40,7 +40,7 @@ or **N/A** with a one-line reason. Do not skip silently.
    - New or changed broker behavior: integration tests in `packages/core/test/suites/**`, version-gated with helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …). Do not parse `KAFKA_VERSION` in the test file.
    - Unit tests never start Docker. Integration tests need Docker unless `KAFKA_EXTERNAL=1`.
 4. **Docs**
-   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
+   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/core/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
    - Workflow, commands, or package usage: the relevant package README and/or [CONTRIBUTING.md](CONTRIBUTING.md).
    - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
 5. **Exports** — New public surface is re-exported from `packages/core/src/index.ts` only. Types come from `tsc --emitDeclarationOnly`.
@@ -105,7 +105,7 @@ Layered roughly bottom-up:
 - **`instrumentation/`** — event emitter for internal lifecycle events (connect, request, etc.).
 - **`retry/`, `utils/`, `types/`, `loggers/`** — cross-cutting helpers; `errors.ts` at `src/` root defines all public `Kafka*Error` classes.
 
-Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, `lingerMs: 0` (one Produce per `send()`), murmur2 partitioner. Offsets are `bigint` everywhere, not strings.
+Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/core/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, `lingerMs: 0` (one Produce per `send()`), murmur2 partitioner. Offsets are `bigint` everywhere, not strings.
 
 ## Code conventions
 
@@ -118,7 +118,7 @@ TypeScript is strict (`noUncheckedIndexedAccess`, `noImplicitOverride`), `verbat
 
 ## Documentation
 
-Markdown under `packages/docs/src/content/docs/<section>/` becomes a page (`/docs/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
+Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page (`/docs/core/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
 
 ## Commits and branches
 

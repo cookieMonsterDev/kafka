@@ -1,14 +1,14 @@
 ---
 import { getCollection } from 'astro:content'
-import { groupDocs, hrefFor, isCurrentPath, navLabel } from '@/lib/docs'
+import { docsPackageFromPathname, groupDocs, hrefFor, isCurrentPath, navLabel } from '@/lib/docs'
 import { cn } from '@/lib/utils'
 
 interface Props {
   class?: string
 }
 
-const groups = groupDocs(await getCollection('docs'))
 const pathname = Astro.url.pathname
+const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pathname))
 ---
 
 <nav class={cn('text-sm', Astro.props.class)} aria-label="Documentation">

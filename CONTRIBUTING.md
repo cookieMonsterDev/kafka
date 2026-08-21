@@ -185,8 +185,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 ## Documentation site
 
-Markdown under `packages/docs/src/content/docs/<section>/` becomes a page
-(`/docs/start/introduction/`, and so on). After `pnpm clean`, build core first:
+Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page
+(`/docs/core/start/introduction/`, and so on). After `pnpm clean`, build core first:
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-docs... build

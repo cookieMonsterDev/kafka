@@ -278,6 +278,45 @@ describe('broker/Broker', () => {
       expect(pool.send).toHaveBeenCalledOnce();
     });
 
+    it('falls back to Produce v12 when the broker advertises v13 but topicId is missing', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 13 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
+
+      await broker.produce({
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(12);
+    });
+
+    it('uses Produce v13 when topicIds are supplied', async () => {
+      const pool = createFakeConnectionPool();
+      const topicId = Buffer.from('0123456789abcdef');
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 13 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
+
+      await broker.produce({
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', topicId, partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(13);
+    });
+
     it('listGroups sends an empty options object', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);

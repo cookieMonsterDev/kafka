@@ -285,6 +285,7 @@ export function createConsumer({
       if (entry instanceof RegExp) {
         const matchedTopics = (metadata?.topicMetadata ?? [])
           .map(({ topic: topicName }) => topicName)
+          .filter((topicName): topicName is string => topicName != null)
           .filter((topicName) => {
             // `RegExp.test` with the global flag advances `lastIndex` and skips later matches.
             const matcher = entry.flags.includes('g')

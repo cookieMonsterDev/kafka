@@ -98,7 +98,7 @@ Everything public is re-exported from `packages/core/src/index.ts`; `src/client.
 
 Layered roughly bottom-up:
 
-- **`protocol/`** — wire format. `protocol/requests/<api-name>/v<N>/{request,response}.ts` encode/decode one Kafka API at one version; `protocol/message`, `message-set`, `records` handle the record batch formats (legacy MessageSet v0/v1 and modern RecordBatch v2); `protocol/compression` holds codecs (GZIP/LZ4/ZSTD built-in, Snappy pluggable via `CompressionCodecs`); `protocol/sasl` handles SASL mechanism framing.
+- **`protocol/`** — wire format. `protocol/requests/<api-name>/v<N>/{request,response}.ts` encode/decode one Kafka API at one version; `protocol/message`, `message-set`, `records` handle the record batch formats (legacy MessageSet v0/v1 and modern RecordBatch v2); `protocol/compression` holds codecs (GZIP/Snappy/LZ4/ZSTD built-in, overridable via `CompressionCodecs`); `protocol/sasl` handles SASL mechanism framing.
 - **`network/`** — `socket.ts`/`socket-factory.ts` wrap `net`/`tls` sockets; `connection.ts` frames one broker connection (correlation IDs, request/response matching); `connection-pool.ts` and `request-queue/` manage concurrent in-flight requests per broker.
 - **`broker/`** — one `Broker` per connection: version negotiation (`capabilities.ts` picks the highest mutually-supported API version), SASL handshake (`sasl-authenticator/`), and typed request/response methods built on `network/`.
 - **`cluster/`** — `Cluster` (`cluster/index.ts`) owns broker discovery/metadata and a `BrokerPool` (`broker-pool.ts`) of live `Broker` connections, keyed by node id; `connection-pool-builder.ts` and `parse-broker-address.ts` turn the `brokers` config into pooled connections.

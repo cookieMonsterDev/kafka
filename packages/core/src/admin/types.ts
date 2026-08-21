@@ -19,6 +19,8 @@ import type {
   DescribeTransactionsState,
   DescribeTransactionsTopic,
 } from '../protocol/requests/describe-transactions/v0/response';
+import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsState } from '../protocol/requests/list-transactions/v0/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
@@ -36,6 +38,8 @@ import { events } from './instrumentation-events';
 export type OffsetInput = bigint | number | string;
 export type TransactionDescription = DescribeTransactionsState;
 export type TransactionTopic = DescribeTransactionsTopic;
+export type TransactionListing = ListTransactionsState;
+export type { ListTransactionsOptions };
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
   UPGRADE: 1,
@@ -94,6 +98,7 @@ export interface TopicPartitionConfig {
 
 export interface TopicMetadata {
   name: string;
+  topicId?: Buffer;
   partitions: PartitionMetadata[];
 }
 
@@ -321,6 +326,7 @@ export interface Admin {
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
+  listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

@@ -60,6 +60,7 @@ function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findTopicPartitionMetadata: vi.fn().mockReturnValue([fakePartitionMetadata()]),
+    findTopicId: vi.fn().mockReturnValue(undefined),
     findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
     findBroker: vi.fn().mockResolvedValue(broker),
     removeBroker: vi.fn(),

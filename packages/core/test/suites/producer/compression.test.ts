@@ -68,20 +68,17 @@ describe('producer.compression', () => {
     await roundTrip(COMPRESSION_TYPES.GZIP);
   });
 
+  it('round-trips snappy-compressed messages', async () => {
+    expect.assertions(1);
+    await roundTrip(COMPRESSION_TYPES.Snappy);
+  });
+
   testIfKafkaAtLeast_2_1('round-trips zstd-compressed messages', async () => {
     expect.assertions(1);
     await roundTrip(COMPRESSION_TYPES.ZSTD);
   });
 
-  it('throws for unconfigured snappy and lz4', async () => {
-    await expect(
-      producer!.send({
-        acks: 1,
-        topic: topicName,
-        compression: COMPRESSION_TYPES.Snappy,
-        messages: [{ key: 'k', value: 'v' }],
-      }),
-    ).rejects.toThrow(KafkaNotImplemented);
+  it('throws for unconfigured lz4', async () => {
     await expect(
       producer!.send({
         acks: 1,

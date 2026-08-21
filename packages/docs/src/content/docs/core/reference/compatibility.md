@@ -51,7 +51,7 @@ These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 | `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
 | `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
 | Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP and ZSTD are built in; Snappy and LZ4 are pluggable stubs                             |
+| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, and ZSTD are built in; LZ4 is a pluggable stub                               |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
@@ -84,10 +84,13 @@ keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
-coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
+coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
+fans the request out to every broker, unique-merges by transactional ID, and
+requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
+`transactionalIdPattern`. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. Still missing: the remaining
-transaction administration APIs.
+validate-only and rejects unsafe downgrades. Still missing: abortTransaction
+and FenceProducers.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

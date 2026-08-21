@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { PartitionMetadata } from '../cluster/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
 import type { Message } from './types';
@@ -33,5 +33,19 @@ describe('producer/groupMessagesPerPartition', () => {
 
     expect(result.get(0)).toEqual([messages[0], messages[2]]);
     expect(result.get(1)).toEqual([messages[1]]);
+  });
+
+  it('notifies lifecycle-aware partitioners once per grouped batch', () => {
+    const partitioner = Object.assign(() => 0, { onNewBatch: vi.fn() });
+    const partitionMetadata = [fakePartitionMetadata(0)];
+
+    groupMessagesPerPartition({
+      topic: 'topic',
+      partitionMetadata,
+      messages: [{ value: 'a' }, { value: 'b' }],
+      partitioner,
+    });
+
+    expect(partitioner.onNewBatch).toHaveBeenCalledExactlyOnceWith({ topic: 'topic', partitionMetadata });
   });
 });

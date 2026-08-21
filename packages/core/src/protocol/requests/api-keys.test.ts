@@ -15,6 +15,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.AlterUserScramCredentials).toBe(51);
     expect(API_KEYS.DescribeCluster).toBe(60);
     expect(API_KEYS.DescribeProducers).toBe(61);
+    expect(API_KEYS.DescribeTransactions).toBe(65);
   });
 
   it('is frozen', () => {

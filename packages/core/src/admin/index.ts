@@ -13,6 +13,7 @@ import { createQuotasApi } from './quotas';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createTopicsApi } from './topics';
+import { createTransactionsApi } from './transactions';
 import type { Admin, AdminOptions } from './types';
 
 export type {
@@ -25,6 +26,8 @@ export type {
   PartitionProducerState,
   TopicConfig,
   TopicOffset,
+  TransactionDescription,
+  TransactionTopic,
 } from './types';
 export { events };
 
@@ -58,6 +61,7 @@ export function createAdmin({
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
+  const transactions = createTransactionsApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -101,6 +105,7 @@ export function createAdmin({
     ...scram,
     ...quotas,
     ...logDirs,
+    ...transactions,
     on,
     logger: () => logger,
     events,

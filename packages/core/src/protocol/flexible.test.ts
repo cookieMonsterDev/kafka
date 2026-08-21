@@ -41,6 +41,10 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.DescribeLogDirs)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.SaslAuthenticate)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.CreatePartitions)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.CreateDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.RenewDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.ExpireDelegationToken)).toBe(2);
+    expect(firstFlexibleVersion(API_KEYS.DescribeDelegationToken)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.DeleteGroups)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.ElectLeaders)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.IncrementalAlterConfigs)).toBe(1);
@@ -75,6 +79,11 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ListTransactions, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.RenewDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ExpireDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.DescribeDelegationToken, 3)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 0)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 3)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 4)).toBe(true);
@@ -89,6 +98,9 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ListTransactions, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
+    expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.DescribeDelegationToken, 3)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 2)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 3)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 4)).toBe(false);

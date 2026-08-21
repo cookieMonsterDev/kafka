@@ -35,6 +35,7 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
 `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
+`ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 and SASL types. Field-by-field:
 [Configuration](./configuration/),
 [Producer API](./producer/),

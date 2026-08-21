@@ -152,6 +152,18 @@ import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/de
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
+import { CreateDelegationToken } from '../protocol/requests/create-delegation-token/index';
+import type { CreateDelegationTokenOptions } from '../protocol/requests/create-delegation-token/index';
+import type { CreateDelegationTokenResponseV3Body } from '../protocol/requests/create-delegation-token/v3/response';
+import { RenewDelegationToken } from '../protocol/requests/renew-delegation-token/index';
+import type { RenewDelegationTokenOptions } from '../protocol/requests/renew-delegation-token/index';
+import type { RenewDelegationTokenResponseV1Body } from '../protocol/requests/renew-delegation-token/v1/response';
+import { ExpireDelegationToken } from '../protocol/requests/expire-delegation-token/index';
+import type { ExpireDelegationTokenOptions } from '../protocol/requests/expire-delegation-token/index';
+import type { ExpireDelegationTokenResponseV1Body } from '../protocol/requests/expire-delegation-token/v1/response';
+import { DescribeDelegationToken } from '../protocol/requests/describe-delegation-token/index';
+import type { DescribeDelegationTokenOptions } from '../protocol/requests/describe-delegation-token/index';
+import type { DescribeDelegationTokenResponseV3Body } from '../protocol/requests/describe-delegation-token/v3/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -577,6 +589,42 @@ export class Broker {
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {
     const updateFeatures = this.lookupRequest<UpdateFeaturesOptions>(API_KEYS.UpdateFeatures, UpdateFeatures);
     return this.#send(updateFeatures(options));
+  }
+
+  async createDelegationToken(
+    options: CreateDelegationTokenOptions = {},
+  ): Promise<CreateDelegationTokenResponseV3Body> {
+    const createDelegationToken = this.lookupRequest<CreateDelegationTokenOptions>(
+      API_KEYS.CreateDelegationToken,
+      CreateDelegationToken,
+    );
+    return this.#send(createDelegationToken(options));
+  }
+
+  async renewDelegationToken(options: RenewDelegationTokenOptions): Promise<RenewDelegationTokenResponseV1Body> {
+    const renewDelegationToken = this.lookupRequest<RenewDelegationTokenOptions>(
+      API_KEYS.RenewDelegationToken,
+      RenewDelegationToken,
+    );
+    return this.#send(renewDelegationToken(options));
+  }
+
+  async expireDelegationToken(options: ExpireDelegationTokenOptions): Promise<ExpireDelegationTokenResponseV1Body> {
+    const expireDelegationToken = this.lookupRequest<ExpireDelegationTokenOptions>(
+      API_KEYS.ExpireDelegationToken,
+      ExpireDelegationToken,
+    );
+    return this.#send(expireDelegationToken(options));
+  }
+
+  async describeDelegationToken(
+    options: DescribeDelegationTokenOptions = {},
+  ): Promise<DescribeDelegationTokenResponseV3Body> {
+    const describeDelegationToken = this.lookupRequest<DescribeDelegationTokenOptions>(
+      API_KEYS.DescribeDelegationToken,
+      DescribeDelegationToken,
+    );
+    return this.#send(describeDelegationToken(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

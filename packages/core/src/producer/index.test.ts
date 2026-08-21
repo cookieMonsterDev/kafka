@@ -283,6 +283,7 @@ describe('producer', () => {
         .mockReturnValue([
           { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
         ]),
+      findTopicId: vi.fn().mockReturnValue(undefined),
       findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
       findBroker: vi.fn().mockResolvedValue(broker),
       removeBroker: vi.fn(),

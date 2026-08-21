@@ -16,6 +16,8 @@ import {
   testIfKafkaAtMost_0_10,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_0,
+  testIfKafkaAtLeast_4_3,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
 
@@ -272,5 +274,44 @@ describe('broker.produceFetch', () => {
       topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
     });
     expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('v');
+  });
+
+  testIfKafkaAtLeast_4_0('Kafka 4.0+ negotiates Produce v11+', async () => {
+    const target = await connectToLeader();
+    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [],
+    }).request.apiVersion;
+    expect(produceVersion).toBeGreaterThanOrEqual(11);
+  });
+
+  testIfKafkaAtLeast_4_3('Kafka 4.3+ Produce v13 uses topic IDs from metadata', async () => {
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([topicName]));
+    const topicId = metadata.topicMetadata[0]?.topicId;
+    expect(topicId).toBeInstanceOf(Buffer);
+    expect(topicId?.length).toBe(16);
+
+    const target = await connectToLeader();
+    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [{ topic: topicName, topicId, partitions: [] }],
+    }).request.apiVersion;
+    expect(produceVersion).toBeGreaterThanOrEqual(13);
+
+    const produced = await target.produce({
+      acks: 1,
+      timeout: 30_000,
+      topicData: [
+        {
+          topic: topicName,
+          topicId,
+          partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v13', timestamp }] }],
+        },
+      ],
+    });
+    expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
+    expect(produced?.topics[0]?.topicName).toBe(topicName);
   });
 });

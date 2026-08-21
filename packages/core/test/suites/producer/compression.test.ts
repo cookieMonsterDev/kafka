@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
 import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index';
-import { KafkaNotImplemented } from '../../../src/errors';
 import {
   createCluster,
   createModPartitioner,
@@ -68,6 +67,11 @@ describe('producer.compression', () => {
     await roundTrip(COMPRESSION_TYPES.GZIP);
   });
 
+  it('round-trips snappy-compressed messages', async () => {
+    expect.assertions(1);
+    await roundTrip(COMPRESSION_TYPES.Snappy);
+  });
+
   it('round-trips lz4-compressed messages', async () => {
     expect.assertions(1);
     await roundTrip(COMPRESSION_TYPES.LZ4);
@@ -76,16 +80,5 @@ describe('producer.compression', () => {
   testIfKafkaAtLeast_2_1('round-trips zstd-compressed messages', async () => {
     expect.assertions(1);
     await roundTrip(COMPRESSION_TYPES.ZSTD);
-  });
-
-  it('throws for unconfigured snappy', async () => {
-    await expect(
-      producer!.send({
-        acks: 1,
-        topic: topicName,
-        compression: COMPRESSION_TYPES.Snappy,
-        messages: [{ key: 'k', value: 'v' }],
-      }),
-    ).rejects.toThrow(KafkaNotImplemented);
   });
 });

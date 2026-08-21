@@ -42,8 +42,14 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
+| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+   |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
+
+`describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
+specific replica. It returns one entry per partition with `activeProducers`; producer IDs,
+timestamps, and transaction start offsets use `bigint`, and
+`currentTransactionStartOffset` is `null` when no transaction is open.
 
 ## ACLs, SCRAM, quotas, log dirs
 

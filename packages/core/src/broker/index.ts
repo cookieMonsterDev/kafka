@@ -143,6 +143,9 @@ import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alt
 import { DescribeCluster } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterOptions } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterResponseV2Body } from '../protocol/requests/describe-cluster/v2/response';
+import { DescribeProducers } from '../protocol/requests/describe-producers/index';
+import type { DescribeProducersRequestV0Options } from '../protocol/requests/describe-producers/v0/request';
+import type { DescribeProducersResponseV0Body } from '../protocol/requests/describe-producers/v0/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -547,6 +550,14 @@ export class Broker {
   async describeCluster(options: DescribeClusterOptions = {}): Promise<DescribeClusterResponseV2Body> {
     const describeCluster = this.lookupRequest<DescribeClusterOptions>(API_KEYS.DescribeCluster, DescribeCluster);
     return this.#send(describeCluster(options));
+  }
+
+  async describeProducers(options: DescribeProducersRequestV0Options): Promise<DescribeProducersResponseV0Body> {
+    const describeProducers = this.lookupRequest<DescribeProducersRequestV0Options>(
+      API_KEYS.DescribeProducers,
+      DescribeProducers,
+    );
+    return this.#send(describeProducers(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

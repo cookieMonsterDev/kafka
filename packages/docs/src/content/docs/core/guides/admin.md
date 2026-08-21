@@ -41,5 +41,18 @@ and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
-Missing APIs (describeProducers, transaction describe) are listed under
-[Compatibility](../reference/compatibility/).
+
+Kafka 3.0+ can report the producer state retained by partition leaders:
+
+```ts
+const producerStates = await admin.describeProducers({
+  topicPartitions: [{ topic: 'events', partitions: [0, 1] }],
+});
+
+for (const state of producerStates) {
+  console.log(state.topic, state.partition, state.activeProducers);
+}
+```
+
+Pass `brokerId` to query a specific replica instead. Transaction describe APIs that are
+not implemented are listed under [Compatibility](../reference/compatibility/).

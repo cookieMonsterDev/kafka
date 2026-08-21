@@ -10,3 +10,8 @@ coverage/
 .env
 .env.*
 !.env.example
+
+skills-lock.json
+.agents
+.claude
+

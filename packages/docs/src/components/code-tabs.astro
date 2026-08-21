@@ -24,23 +24,23 @@ const group = `tabs-${crypto.randomUUID()}`
 {
   available.length > 0 && (
     <div class={cn('code-tabs not-prose my-4 overflow-hidden rounded-lg border border-border', Astro.props.class)}>
-      {available.map((tab) => (
-        <input
-          type="radio"
-          name={group}
-          id={`${group}-${tab.id}`}
-          class="code-tabs-input sr-only"
-          data-tab={tab.id}
-          checked={tab.id === defaultTab}
-        />
-      ))}
-      <div class="bg-muted/50 flex gap-1 overflow-x-auto border-b border-border p-1" role="tablist">
+      <div
+        class="bg-muted/50 flex gap-1 overflow-x-auto border-b border-border p-1"
+        role="radiogroup"
+        aria-label="Code sample"
+      >
         {available.map((tab) => (
           <label
-            for={`${group}-${tab.id}`}
             data-tab={tab.id}
-            class="code-tabs-label text-muted-foreground hover:text-foreground cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium"
+            class="code-tabs-label text-muted-foreground hover:text-foreground focus-within:ring-ring cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium outline-none focus-within:ring-3"
           >
+            <input
+              type="radio"
+              name={group}
+              class="code-tabs-input sr-only"
+              data-tab={tab.id}
+              checked={tab.id === defaultTab}
+            />
             {tab.label}
           </label>
         ))}

@@ -11,7 +11,7 @@ const groups = groupDocs(await getCollection('docs'))
 const pathname = Astro.url.pathname
 ---
 
-<nav class={cn('text-sm', Astro.props.class)} aria-label="Core">
+<nav class={cn('text-sm', Astro.props.class)} aria-label="Documentation">
   {
     groups.map((group) => (
       <details open class="group/section mb-2">

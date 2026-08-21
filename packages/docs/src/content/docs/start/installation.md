@@ -5,15 +5,22 @@ order: 2
 section: start
 ---
 
+Node.js **24** is required (`zlib.zstd*` is used for ZSTD). Click a block to
+copy.
+
 ```sh
 npm install @cookiemonsterdev/kafka-core
 ```
 
-Click the block to copy. Node.js **24** is required (`zlib.zstd*` is used for ZSTD).
-
 ```sh
 pnpm add @cookiemonsterdev/kafka-core
+```
+
+```sh
 yarn add @cookiemonsterdev/kafka-core
+```
+
+```sh
 bun add @cookiemonsterdev/kafka-core
 ```
 

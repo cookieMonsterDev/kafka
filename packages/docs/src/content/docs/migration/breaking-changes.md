@@ -1,0 +1,56 @@
+---
+title: Breaking changes
+description: Offsets as bigint, MessageSet, built-in ZSTD, and environment variables
+order: 1
+section: migration
+---
+
+`@cookiemonsterdev/kafka-core` is a TypeScript client, not a drop-in for the
+Java client or for KafkaJS. This page lists the differences that break copy-paste.
+Defaults vs Java are tabulated under [Compatibility](../reference/compatibility/).
+
+## Offsets are `bigint`
+
+Every offset, watermark, and producer id is `bigint` (`42n`), not a string.
+`JSON.stringify` cannot serialize `bigint`; convert at the boundary
+(`offset.toString()`) or keep the value as `bigint` through your app.
+
+`consumer.seek()` still accepts `bigint | number | string` and coerces to
+`bigint`. Committed offsets and fetch payloads always return `bigint`.
+
+## MessageSet on Kafka 0.10
+
+Kafka 0.10 brokers speak MessageSet (magic 0/1). The client encodes that format
+when `ApiVersions` advertises Produce v0–v2 / Fetch v0–v3.
+
+MessageSet has no headers, no transactions, and no idempotence. Sending headers
+or enabling `idempotent` / `transactionalId` against a 0.10 broker throws a
+non-retriable error. See [Public API](../reference/public-api/#capability-errors).
+
+Kafka 0.11+ negotiates RecordBatch (magic 2).
+
+## ZSTD is built in
+
+`CompressionTypes.ZSTD` uses Node’s `zlib.zstd*` APIs. There is no extra
+native addon. That is why the runtime floor is **Node.js 24**.
+
+ZSTD on the wire needs Produce v7+ / Fetch v10+ (Kafka 2.1+). An older broker
+throws. GZIP is built in for every supported broker. Snappy and LZ4 are
+pluggable stubs via `CompressionCodecs`.
+
+## Environment variables
+
+These names are `KAFKA_*`, not `KAFKAJS_*`.
+
+| Variable                                  | Effect                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------ |
+| `KAFKA_LOG_LEVEL`                         | Overrides `logLevel` (`NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`) |
+| `KAFKA_NO_PARTITIONER_WARNING=1`          | Silences the default-partitioner change warning                    |
+| `KAFKA_DEBUG_PROTOCOL_BUFFERS=1`          | Logs request/response buffers                                      |
+| `KAFKA_DEBUG_EXTENDED_PROTOCOL_BUFFERS=1` | Also logs fetch bodies (requires the previous flag)                |
+| `KAFKA_VERSION`                           | Integration-test compose stack (default `4.0`)                     |
+| `KAFKA_EXTERNAL=1`                        | Skip compose up/down in integration tests                          |
+| `DO_NOT_STOP=1`                           | Leave the integration cluster running                              |
+
+`KAFKA_VERSION` / `KAFKA_EXTERNAL` / `DO_NOT_STOP` are test runner flags, not
+client config. See [Testing](../guides/testing/).

@@ -67,8 +67,9 @@ partitions; the runtime does not yet do incremental revoke).
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
-and Metadata otherwise. Still missing: describeProducers and transaction
-describe APIs.
+and Metadata otherwise. `admin.describeTransactions` uses key 65, dynamically
+discovers transaction coordinators, and requires Kafka 3.0+. Still missing:
+describeProducers and the remaining transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

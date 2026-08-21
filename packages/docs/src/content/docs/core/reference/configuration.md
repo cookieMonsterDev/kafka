@@ -11,20 +11,20 @@ Defaults that differ from the Java client are listed once on
 
 ## `KafkaConfig`
 
-| Field                       | Default         | Java / Apache                                                                                                           |
-| --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `brokers`                   | required        | Bootstrap `host:port`, or `() => string[] \| Promise<string[]>`                                                         |
-| `ssl`                       | off             | `true` or `tls.ConnectionOptions`. [SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/) |
-| `sasl`                      | off             | [SASL](https://kafka.apache.org/43/security/authentication-using-sasl/)                                                 |
-| `clientId`                  | `''`            | [client.id](https://kafka.apache.org/43/configuration/producer-configs/#client.id)                                      |
-| `connectionTimeout`         | `1000`          | Socket connect, ms                                                                                                      |
-| `authenticationTimeout`     |                 | SASL handshake, ms                                                                                                      |
-| `reauthenticationThreshold` |                 | Reauth before session expiry, ms                                                                                        |
-| `requestTimeout`            |                 | Per-request, ms                                                                                                         |
-| `enforceRequestTimeout`     | `true`          |                                                                                                                         |
-| `retry`                     | see below       |                                                                                                                         |
-| `logLevel`                  | `logLevel.INFO` | Override with `KAFKA_LOG_LEVEL`                                                                                         |
-| `logCreator`                | console         | Custom sink                                                                                                             |
+| Field                       | Default         | Java / Apache                                                                                                                                                         |
+| --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brokers`                   | required        | Bootstrap `host:port`, or `() => string[] \| Promise<string[]>`                                                                                                       |
+| `ssl`                       | off             | `true` or `tls.ConnectionOptions`. [SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/)                                               |
+| `sasl`                      | off             | [SASL](https://kafka.apache.org/43/security/authentication-using-sasl/). SCRAM also accepts `tokenId` / `tokenHmac` for [delegation-token login](../guides/security/) |
+| `clientId`                  | `''`            | [client.id](https://kafka.apache.org/43/configuration/producer-configs/#client.id)                                                                                    |
+| `connectionTimeout`         | `1000`          | Socket connect, ms                                                                                                                                                    |
+| `authenticationTimeout`     |                 | SASL handshake, ms                                                                                                                                                    |
+| `reauthenticationThreshold` |                 | Reauth before session expiry, ms                                                                                                                                      |
+| `requestTimeout`            |                 | Per-request, ms                                                                                                                                                       |
+| `enforceRequestTimeout`     | `true`          |                                                                                                                                                                       |
+| `retry`                     | see below       |                                                                                                                                                                       |
+| `logLevel`                  | `logLevel.INFO` | Override with `KAFKA_LOG_LEVEL`                                                                                                                                       |
+| `logCreator`                | console         | Custom sink                                                                                                                                                           |
 
 Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 `initialRetryTime: 300`, `maxRetryTime: 30000`, `multiplier: 2`, `factor: 0.2`.

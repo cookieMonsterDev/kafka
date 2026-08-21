@@ -18,7 +18,7 @@ This package is the library in the [kafka](https://github.com/cookieMonsterDev/k
 | Consumer    | Groups with pause/resume/seek, `run()`, `stream()`, classic protocol            |
 | Assigners   | Range, round-robin (default), sticky, cooperative-sticky                        |
 | Admin       | Topics, configs, ACLs, offsets, groups, SCRAM, leader election                  |
-| Compression | GZIP and ZSTD built in; Snappy and LZ4 via `CompressionCodecs`                  |
+| Compression | GZIP, Snappy, LZ4, and ZSTD built in (overridable via `CompressionCodecs`)      |
 | Security    | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER / GSSAPI, AWS IAM helper              |
 | DX          | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`         |
 

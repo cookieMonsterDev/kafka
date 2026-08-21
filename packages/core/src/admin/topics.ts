@@ -6,11 +6,21 @@ import {
 } from '../errors';
 import { staleMetadata } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
+import { DEFAULT_RESPONSE_PARTITION_LIMIT } from '../protocol/requests/describe-topic-partitions/index';
 import { retrier } from '../retry/index';
 import { parseOffset } from '../consumer/types';
 import type { AdminContext } from './helpers';
 import { protocolType, requireMetadata, retryOnLeaderNotAvailable, formatUnknown } from './helpers';
-import type { SeekInput, TopicConfig, TopicMetadata, TopicOffset, TopicPartitionConfig } from './types';
+import type {
+  DescribeTopicPartitionsOptions,
+  DescribeTopicPartitionsResult,
+  DescribeTopicPartitionsTopic,
+  SeekInput,
+  TopicConfig,
+  TopicMetadata,
+  TopicOffset,
+  TopicPartitionConfig,
+} from './types';
 
 const NO_CONTROLLER_ID = -1;
 
@@ -34,6 +44,7 @@ export interface TopicsApi {
     controller: number | null;
     clusterId: string | null;
   }>;
+  describeTopicPartitions: (options: DescribeTopicPartitionsOptions) => Promise<DescribeTopicPartitionsResult>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
 }
 
@@ -43,7 +54,7 @@ export function createTopicsApi(
 ): TopicsApi {
   const listTopics = async (): Promise<string[]> => {
     const { topicMetadata } = await requireMetadata(cluster);
-    return topicMetadata.map((topic) => topic.topic);
+    return topicMetadata.flatMap((topic) => (topic.topic == null ? [] : [topic.topic]));
   };
 
   const createTopics = async ({
@@ -243,10 +254,16 @@ export function createTopicsApi(
     const metadata = await requireMetadata(cluster, { topics });
 
     return {
-      topics: metadata.topicMetadata.map((topicMetadata) => ({
-        name: topicMetadata.topic,
-        partitions: topicMetadata.partitionMetadata,
-      })),
+      topics: metadata.topicMetadata.flatMap((topicMetadata) => {
+        if (topicMetadata.topic == null) return [];
+        return [
+          {
+            name: topicMetadata.topic,
+            ...(topicMetadata.topicId != null ? { topicId: topicMetadata.topicId } : {}),
+            partitions: topicMetadata.partitionMetadata,
+          },
+        ];
+      }),
     };
   };
 
@@ -269,6 +286,100 @@ export function createTopicsApi(
     const controller = controllerId == null || controllerId === NO_CONTROLLER_ID ? null : controllerId;
 
     return { brokers, controller, clusterId };
+  };
+
+  const describeTopicPartitions = async ({
+    topics,
+    responsePartitionLimit = DEFAULT_RESPONSE_PARTITION_LIMIT,
+    cursor,
+  }: DescribeTopicPartitionsOptions): Promise<DescribeTopicPartitionsResult> => {
+    if (!Array.isArray(topics)) {
+      throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
+    }
+
+    const names = topics.map((entry, index) => {
+      if (typeof entry === 'string') {
+        if (entry.length === 0) {
+          throw new KafkaNonRetriableError(`Invalid topic name ${formatUnknown(entry)}`);
+        }
+        return entry;
+      }
+      if (typeof entry !== 'object' || entry == null || typeof entry.topic !== 'string' || entry.topic.length === 0) {
+        throw new KafkaNonRetriableError(`Invalid topics array entry at index ${index}`);
+      }
+      if (entry.topicId != null && (!Buffer.isBuffer(entry.topicId) || entry.topicId.length !== 16)) {
+        throw new KafkaNonRetriableError(`Invalid topicId for topic "${entry.topic}", must be a 16-byte Buffer`);
+      }
+      return entry.topic;
+    });
+
+    if (responsePartitionLimit != null && (!Number.isInteger(responsePartitionLimit) || responsePartitionLimit < 1)) {
+      throw new KafkaNonRetriableError(`Invalid responsePartitionLimit ${formatUnknown(responsePartitionLimit)}`);
+    }
+
+    if (cursor != null) {
+      if (typeof cursor.topic !== 'string' || cursor.topic.length === 0) {
+        throw new KafkaNonRetriableError(`Invalid cursor topic ${formatUnknown(cursor.topic)}`);
+      }
+      if (!Number.isInteger(cursor.partitionIndex) || cursor.partitionIndex < 0) {
+        throw new KafkaNonRetriableError(`Invalid cursor partitionIndex ${formatUnknown(cursor.partitionIndex)}`);
+      }
+    }
+
+    return retrier(retry)(async (bail) => {
+      try {
+        await cluster.refreshMetadata();
+        const broker = await cluster.findControllerBroker();
+        const body = await broker.describeTopicPartitions({
+          topics: names.map((topic) => ({ topic })),
+          responsePartitionLimit,
+          cursor: cursor ?? null,
+        });
+
+        return {
+          topics: body.topics.map(
+            ({ topic, topicId, isInternal, partitions, topicAuthorizedOperations }): DescribeTopicPartitionsTopic => ({
+              name: topic,
+              topicId,
+              isInternal,
+              topicAuthorizedOperations,
+              partitions: partitions.map(
+                ({
+                  partitionIndex,
+                  leader,
+                  leaderEpoch,
+                  replicas,
+                  isr,
+                  eligibleLeaderReplicas,
+                  lastKnownElr,
+                  offlineReplicas,
+                }) => ({
+                  partitionIndex,
+                  leader,
+                  leaderEpoch,
+                  replicas,
+                  isr,
+                  eligibleLeaderReplicas,
+                  lastKnownElr,
+                  offlineReplicas,
+                }),
+              ),
+            }),
+          ),
+          nextCursor: body.nextCursor,
+        };
+      } catch (error) {
+        if (protocolType(error) === 'NOT_CONTROLLER') {
+          logger.warn('Could not describe topic partitions', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          await cluster.refreshMetadata();
+          throw error;
+        }
+        bail(error as Error);
+        throw error;
+      }
+    });
   };
 
   const deleteTopicRecords = async ({
@@ -396,6 +507,7 @@ export function createTopicsApi(
     createPartitions,
     fetchTopicMetadata,
     describeCluster,
+    describeTopicPartitions,
     deleteTopicRecords,
   };
 }

@@ -27,9 +27,64 @@ export const DIGESTS = Object.freeze({
   SHA512: Object.freeze({ length: 64, type: 'sha512', minIterations: 4096 }),
 });
 
+/**
+ * Kafka's `ScramLoginModule` tokenauth JAAS option. When true, the client-first
+ * SCRAM message includes the `tokenauth=true` extension so the broker looks up a
+ * delegation token instead of a stored SCRAM user.
+ *
+ * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ */
+export const TOKEN_AUTH_EXTENSION = 'tokenauth=true';
+
+/** Public SASL SCRAM fields before mapping token credentials onto username/password. */
+export interface ScramSaslInput {
+  username?: string;
+  password?: string;
+  tokenId?: string;
+  tokenHmac?: Buffer | string;
+}
+
 export interface ScramSaslConfig {
   username: string;
   password: string;
+  /**
+   * When true, append `tokenauth=true` to the client-first message (KIP-48).
+   * Username is the token id; password is the token HMAC as a base64 string.
+   */
+  tokenAuth?: boolean;
+}
+
+function hasTokenHmac(hmac: unknown): hmac is Buffer | string {
+  if (typeof hmac === 'string') return hmac.length > 0;
+  return Buffer.isBuffer(hmac) && hmac.length > 0;
+}
+
+function encodeTokenHmac(hmac: Buffer | string): string {
+  return Buffer.isBuffer(hmac) ? hmac.toString('base64') : hmac;
+}
+
+/**
+ * Map first-class delegation-token fields onto SCRAM username/password.
+ * `tokenId` is the username and `tokenHmac` is the password (Buffer values are
+ * encoded as standard base64, matching Java `DelegationToken#hmacAsBase64String`).
+ */
+export function resolveScramSaslConfig(sasl: ScramSaslInput): ScramSaslConfig {
+  const hasTokenId = sasl.tokenId != null && sasl.tokenId.length > 0;
+  const hmacPresent = hasTokenHmac(sasl.tokenHmac);
+
+  if (hasTokenId || hmacPresent) {
+    if (sasl.tokenId == null || sasl.tokenId.length === 0 || !hasTokenHmac(sasl.tokenHmac)) {
+      throw new KafkaSASLAuthenticationError('SASL SCRAM: token authentication requires both tokenId and tokenHmac');
+    }
+
+    return {
+      username: sasl.tokenId,
+      password: encodeTokenHmac(sasl.tokenHmac),
+      tokenAuth: true,
+    };
+  }
+
+  return { username: sasl.username as string, password: sasl.password as string };
 }
 
 export type SaslAuthenticateFn = <Decoded, ParseResult = Decoded>(args: {
@@ -224,7 +279,8 @@ export class SCRAM {
   }
 
   private firstMessageBare(): string {
-    return `n=${this.encodedUsername()},r=${this.currentNonce}`;
+    const bare = `n=${this.encodedUsername()},r=${this.currentNonce}`;
+    return this.#sasl.tokenAuth ? `${bare},${TOKEN_AUTH_EXTENSION}` : bare;
   }
 
   private finalMessageWithoutProof(clientMessageResponse: ScramServerMessage): string {

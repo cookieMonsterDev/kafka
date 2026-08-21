@@ -53,10 +53,20 @@ export interface OauthbearerProviderResponse {
   value: string;
 }
 
+/**
+ * SASL/SCRAM password login, or delegation-token login (KIP-48). Token auth
+ * reuses SCRAM-SHA-256 / SCRAM-SHA-512 on the wire: `tokenId` is the username,
+ * `tokenHmac` is the password (Buffer values are sent as standard base64), and
+ * the client-first message includes `tokenauth=true`.
+ *
+ * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ */
+export type ScramSaslOptions = { username: string; password: string } | { tokenId: string; tokenHmac: Buffer | string };
+
 type SaslMechanismOptionsMap = {
   plain: { username: string; password: string };
-  'scram-sha-256': { username: string; password: string };
-  'scram-sha-512': { username: string; password: string };
+  'scram-sha-256': ScramSaslOptions;
+  'scram-sha-512': ScramSaslOptions;
   aws: {
     authorizationIdentity: string;
     accessKeyId: string;
@@ -106,7 +116,8 @@ export interface KafkaConfig {
    */
   ssl?: TlsConnectionOptions | boolean;
   /**
-   * SASL credentials or a custom mechanism provider.
+   * SASL credentials or a custom mechanism provider. SCRAM mechanisms accept
+   * either `username`/`password` or delegation-token `tokenId`/`tokenHmac`.
    * @see https://kafka.apache.org/43/security/authentication-using-sasl/
    */
   sasl?: SaslOptions | SaslMechanismProvider;

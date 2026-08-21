@@ -1,10 +1,11 @@
 import { KafkaNotImplemented } from '../../errors';
 import type { Encoder } from '../encoder';
 import { gzipCodec } from './gzip';
+import { snappyCodec } from './snappy';
 import { zstdCodec } from './zstd';
 
 /**
- * Record-batch compression codecs. GZIP and ZSTD are built in; Snappy and LZ4 are pluggable.
+ * Record-batch compression codecs. GZIP, Snappy, and ZSTD are built in; LZ4 is pluggable.
  * @see https://kafka.apache.org/43/implementation/messages/
  */
 export const COMPRESSION_TYPES = Object.freeze({
@@ -33,13 +34,14 @@ function notImplemented(name: string): CompressionCodecFactory {
 }
 
 /**
- * GZIP and ZSTD are built in; Snappy and LZ4 stay pluggable so a user can install a codec
- * package and register it: `CompressionCodecs[CompressionTypes.Snappy] = () => mySnappyCodec`.
+ * GZIP, Snappy, and ZSTD are built in. LZ4 stays a pluggable stub so a user can install a
+ * codec package and register it: `CompressionCodecs[CompressionTypes.LZ4] = () => myLz4Codec`.
+ * Built-in entries remain overridable through this mutable registry.
  */
 export const CompressionCodecs: Record<number, CompressionCodecFactory> = {
   [COMPRESSION_TYPES.GZIP]: () => gzipCodec,
+  [COMPRESSION_TYPES.Snappy]: () => snappyCodec,
   [COMPRESSION_TYPES.ZSTD]: () => zstdCodec,
-  [COMPRESSION_TYPES.Snappy]: notImplemented('Snappy'),
   [COMPRESSION_TYPES.LZ4]: notImplemented('LZ4'),
 };
 

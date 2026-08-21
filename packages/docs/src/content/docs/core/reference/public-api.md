@@ -20,14 +20,14 @@ there is no hand-maintained `types/index.d.ts`.
 | `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                         |
 | `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                 | [Configuration](./configuration/)                       |
 | `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                                     |                                                         |
-| `CompressionCodecs`                                                                   | Codec registry; GZIP, Snappy, and ZSTD built in                                             |                                                         |
+| `CompressionCodecs`                                                                   | Codec registry; GZIP, Snappy, LZ4, and ZSTD built in                                        |                                                         |
 | `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                 | [Admin](./admin/)                                       |
 | `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                    | [Admin](./admin/)                                       |
 | `ScramMechanisms`                                                                     | SCRAM                                                                                       | [Admin](./admin/)                                       |
 | `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                     |                                                         |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
-LZ4 is a pluggable stub, not built in. Snappy is built in (xerial snappy-java framing).
+Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
 
 ## Types
 
@@ -47,7 +47,7 @@ and SASL types. Field-by-field:
 - `AbortSignal` on `connect` / `disconnect` / `send` / `sendBatch` / `run`
 - `consumer.stream()` — async iteration over batches
 - `Symbol.asyncDispose` on producer, consumer, and admin (`await using`)
-- Built-in ZSTD (`CompressionTypes.ZSTD`) and Snappy (`CompressionTypes.Snappy`)
+- Built-in Snappy (`CompressionTypes.Snappy`), LZ4 (`CompressionTypes.LZ4`), and ZSTD (`CompressionTypes.ZSTD`)
 
 ## Capability errors
 

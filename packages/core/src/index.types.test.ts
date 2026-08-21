@@ -46,6 +46,13 @@ describe('public types', () => {
       tokenId: `token-${randomUUID()}`,
       tokenHmac: randomBytes(24).toString('base64'),
     }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'gssapi' as const,
+      serviceName: 'kafka',
+      principal: 'user@EXAMPLE.COM',
+      gssProvider: async () => ({ token: Buffer.alloc(0), complete: true }),
+    }).toMatchTypeOf<SaslOptions>();
   });
 
   it('types producer/consumer/admin factories and bigint offsets', () => {

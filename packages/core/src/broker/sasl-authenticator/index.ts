@@ -15,6 +15,7 @@ import type { SaslAuthenticateOptions } from '../../protocol/requests/sasl-authe
 import { SaslHandshake } from '../../protocol/requests/sasl-handshake/index';
 import type { SaslHandshakeOptions } from '../../protocol/requests/sasl-handshake/index';
 import { awsIamAuthenticatorProvider } from './aws-iam';
+import { gssapiAuthenticatorProvider } from './gssapi';
 import { oauthBearerAuthenticatorProvider } from './oauth-bearer';
 import { plainAuthenticatorProvider } from './plain';
 import { scram256AuthenticatorProvider } from './scram256';
@@ -37,6 +38,7 @@ type BuiltInAuthenticatorProvider = (sasl: never) => (args: AuthenticationProvid
 
 const BUILT_IN_AUTHENTICATION_PROVIDERS: Readonly<Record<string, BuiltInAuthenticatorProvider>> = {
   AWS: awsIamAuthenticatorProvider,
+  GSSAPI: gssapiAuthenticatorProvider,
   PLAIN: plainAuthenticatorProvider,
   OAUTHBEARER: oauthBearerAuthenticatorProvider,
   'SCRAM-SHA-256': scram256AuthenticatorProvider,

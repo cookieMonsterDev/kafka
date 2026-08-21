@@ -102,14 +102,17 @@ all client metrics. `admin.createDelegationToken`,
 `admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
 missing: abortTransaction and FenceProducers.
 
-**Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
-Kerberos is not. The `aws` SASL helper is extra (non-Apache). Admin can
-create, describe, renew, and expire delegation tokens. SASL login with a
-delegation token is opt-in: set `sasl.mechanism` to `scram-sha-256` or
-`scram-sha-512` and pass `tokenId` / `tokenHmac` (see
+**Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
+implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or
+install the optional `kerberos` package; you still need a KDC and a ticket or
+keytab. CI does not run a Kerberos stack. The `aws` SASL helper is extra
+(non-Apache). Admin can create, describe, renew, and expire delegation tokens.
+SASL login with a delegation token is opt-in: set `sasl.mechanism` to
+`scram-sha-256` or `scram-sha-512` and pass `tokenId` / `tokenHmac` (see
 [Security](../guides/security/)). The broker still needs
 `delegation.token.secret.key` and SASL/SCRAM. See
-[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
+[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
+and the [security guide](../guides/security/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and

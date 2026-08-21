@@ -78,4 +78,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs:
 - Integration jobs: one per matrix version, with `TEST_RETRIES=2`
 - OAUTHBEARER as a separate 4.0 job (`OAUTHBEARER_ENABLED=1`)
 
+There is no Kerberos / GSSAPI compose stack. GSSAPI is unit-tested with a
+mock token exchange; a live KDC harness is documented on the
+[security guide](../../../docs/src/content/docs/core/guides/security.md).
+
 PRs cover `0.10`, `2.4`, `3.6`, `4.0`, and `4.3` (MessageSet end, last ZK line, KRaft LTS, current default, current docs line). Pushes to the default branch run the full table above, including `4.1`, `4.2`, and `4.3`. Docker images are cached per `KAFKA_VERSION`.

@@ -26,6 +26,7 @@ import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
+import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
 import type {
@@ -73,6 +74,18 @@ type SaslMechanismOptionsMap = {
     sessionToken?: string;
   };
   oauthbearer: { oauthBearerProvider: () => Promise<OauthbearerProviderResponse> };
+  /**
+   * SASL/GSSAPI (Kerberos). Handshake name is `GSSAPI`. Supply `gssProvider` or
+   * install the optional `kerberos` package. `serviceName` defaults to `kafka`.
+   */
+  gssapi: {
+    serviceName?: string;
+    principal?: string;
+    keytab?: string;
+    krb5?: string;
+    authorizationIdentity?: string;
+    gssProvider?: GssTokenProvider;
+  };
 };
 
 export type SaslMechanism = keyof SaslMechanismOptionsMap;
@@ -284,6 +297,9 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  GssTokenChallenge,
+  GssTokenProvider,
+  GssTokenStep,
   KafkaMessage,
   LogCreator,
   LogEntry,

@@ -54,7 +54,7 @@ describeIfOauthbearerDisabled('security.sasl', () => {
           .catch(() => undefined);
       });
       await join;
-      await producer.send({ acks: 1, topic, messages: [{ key: 'k', value: entry.name }] });
+      await producer.send({ acks: 1, topic, messages: [{ key: `key-${secureRandom()}`, value: entry.name }] });
       await expect(received).resolves.toBe(entry.name);
     } finally {
       await consumer.disconnect();

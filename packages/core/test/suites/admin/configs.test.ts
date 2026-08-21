@@ -10,6 +10,8 @@ import {
   testIfKafkaAtLeast_0_11,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_0,
+  testIfKafkaAtLeast_4_1,
   waitFor,
 } from '../../helpers/index';
 
@@ -122,5 +124,28 @@ describe('admin.configs', () => {
       return entry?.configValue === 'compact' ? entry : false;
     });
     expect(updated.configValue).toBe('compact');
+  });
+
+  testIfKafkaAtLeast_4_0('lists config resources from the controller', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const listed = await admin.listConfigResources();
+    expect(Array.isArray(listed.resources)).toBe(true);
+    for (const resource of listed.resources) {
+      expect(typeof resource.resourceName).toBe('string');
+      expect(typeof resource.resourceType).toBe('number');
+    }
+  });
+
+  testIfKafkaAtLeast_4_1('lists topic config resources by type', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const listed = await admin.listConfigResources({
+      resourceTypes: [CONFIG_RESOURCE_TYPES.TOPIC],
+    });
+    expect(listed.resources.every((resource) => resource.resourceType === CONFIG_RESOURCE_TYPES.TOPIC)).toBe(true);
+    expect(listed.resources.some((resource) => resource.resourceName === topicName)).toBe(true);
   });
 });

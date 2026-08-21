@@ -21,6 +21,12 @@ import { produceRequestV9 } from './v9/request';
 import { produceResponseV9 } from './v9/response';
 import { produceRequestV10 } from './v10/request';
 import { produceResponseV10 } from './v10/response';
+import { produceRequestV11 } from './v11/request';
+import { produceResponseV11 } from './v11/response';
+import { produceRequestV12 } from './v12/request';
+import { produceResponseV12 } from './v12/response';
+import { produceRequestV13 } from './v13/request';
+import { produceResponseV13 } from './v13/response';
 import type { ProduceRequestOptions } from './shared';
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>> = {
@@ -35,13 +41,18 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>>
   8: (options) => ({ request: produceRequestV8(options), response: produceResponseV8 }),
   9: (options) => ({ request: produceRequestV9(options), response: produceResponseV9 }),
   10: (options) => ({ request: produceRequestV10(options), response: produceResponseV10 }),
+  11: (options) => ({ request: produceRequestV11(options), response: produceResponseV11 }),
+  12: (options) => ({ request: produceRequestV12(options), response: produceResponseV12 }),
+  13: (options) => ({ request: produceRequestV13(options), response: produceResponseV13(options) }),
 };
 
 /**
  * v0–v2 send MessageSet (magic 0/1, Kafka 0.10). v3+ send RecordBatch v2 (KIP-98).
- * v8 adds record-level errors (KIP-467). v9+ is flexible (KIP-482). Lookup picks the highest
- * overlapping version, so Kafka 4.0 brokers that still advertise `minVersion: 0`
- * (`KAFKA-18659`) negotiate v10, not v2.
+ * v8 adds record-level errors (KIP-467). v9+ is flexible (KIP-482). v11–v12 add
+ * TRANSACTION_ABORTABLE (KIP-890) with the same request body as v10. v13 replaces
+ * topic names with topic IDs (KIP-516). Lookup picks the highest overlapping version,
+ * so Kafka 4.0 brokers that still advertise `minVersion: 0` (`KAFKA-18659`) negotiate
+ * v12, not v2.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/

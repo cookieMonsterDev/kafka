@@ -71,6 +71,30 @@ describe('cluster/Cluster', () => {
     });
   });
 
+  describe('findTopicId', () => {
+    it('throws KafkaTopicMetadataNotLoaded when metadata has never been fetched', () => {
+      const cluster = createCluster();
+      expect(() => cluster.findTopicId('my-topic')).toThrow(KafkaTopicMetadataNotLoaded);
+    });
+
+    it('returns undefined when the topic has no usable topicId', () => {
+      const cluster = createCluster();
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [{ topicErrorCode: 0, topic: 'my-topic', isInternal: false, partitionMetadata: [] }],
+      });
+      expect(cluster.findTopicId('my-topic')).toBeUndefined();
+    });
+
+    it('returns the 16-byte topicId from metadata', () => {
+      const cluster = createCluster();
+      const topicId = Buffer.from('0123456789abcdef');
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [{ topicErrorCode: 0, topic: 'my-topic', topicId, isInternal: false, partitionMetadata: [] }],
+      });
+      expect(cluster.findTopicId('my-topic')).toEqual(topicId);
+    });
+  });
+
   describe('findLeaderForPartitions', () => {
     it('groups requested partitions by their leader nodeId', () => {
       const cluster = createCluster();

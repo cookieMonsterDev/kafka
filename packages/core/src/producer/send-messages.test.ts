@@ -75,6 +75,7 @@ describe('producer/sendMessages', () => {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
+      findTopicId: vi.fn().mockReturnValue(undefined),
       findLeaderForPartitions: vi.fn().mockReturnValue(partitionsPerLeader),
       findBroker: vi
         .fn()
@@ -390,5 +391,32 @@ describe('producer/sendMessages', () => {
     ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
 
     expect(eosManager.initProducerId).not.toHaveBeenCalled();
+  });
+
+  it('plumbs topicId from cluster metadata onto Produce topicData', async () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const cluster = fakeCluster(brokers);
+    cluster.findTopicId.mockReturnValue(topicId);
+
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
+
+    expect(brokers[1].produce).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topicData: [expect.objectContaining({ topic, topicId })],
+      }),
+    );
   });
 });

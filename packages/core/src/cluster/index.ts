@@ -16,7 +16,7 @@ import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
 import { staleMetadata } from '../protocol/error-codes';
 import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
-import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
+import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import { Lock } from '../utils/lock';
@@ -312,6 +312,20 @@ export class Cluster {
 
     const topicMetadata = metadata.topicMetadata.find((t) => t.topic === topic);
     return topicMetadata ? topicMetadata.partitionMetadata : [];
+  }
+
+  /** KIP-516 topic UUID from the last metadata fetch, or `undefined` on older brokers. */
+  findTopicId(topic: string): Buffer | undefined {
+    const { metadata } = this.brokerPool;
+    if (!metadata) {
+      throw new KafkaTopicMetadataNotLoaded('Topic metadata not loaded', { topic });
+    }
+
+    const topicId = metadata.topicMetadata.find((entry) => entry.topic === topic)?.topicId;
+    if (topicId == null || topicId.length !== 16 || topicId.equals(ZERO_TOPIC_ID)) {
+      return undefined;
+    }
+    return topicId;
   }
 
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {

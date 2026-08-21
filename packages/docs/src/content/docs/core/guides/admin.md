@@ -67,6 +67,26 @@ ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
+## Delegation tokens
+
+Kafka 1.1+ can mint HMAC delegation tokens through the Admin API when the
+broker has `delegation.token.secret.key` and the connection is SASL:
+
+```ts
+const created = await admin.createDelegationToken({
+  renewers: [{ principalType: 'User', name: 'alice' }],
+  maxLifeTimeMs: 3_600_000n,
+});
+
+const { tokens } = await admin.describeDelegationToken();
+await admin.renewDelegationToken({ hmac: created.hmac, renewTimePeriodMs: 1_800_000n });
+await admin.expireDelegationToken({ hmac: created.hmac, expiryTimePeriodMs: -1n });
+```
+
+HMAC is `Buffer`; timestamps are `bigint`. Connect a producer or consumer
+with the same token by passing `tokenId` and `tokenHmac` on
+`scram-sha-256` / `scram-sha-512` — see [Security](./security/).
+
 ## Transactions
 
 Kafka 3.0+ supports transaction inspection through API key 65:

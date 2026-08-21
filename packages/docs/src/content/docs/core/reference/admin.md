@@ -44,6 +44,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
+| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
 
 ## ACLs, SCRAM, quotas, log dirs
 

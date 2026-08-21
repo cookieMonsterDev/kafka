@@ -53,6 +53,7 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.AlterClientQuotas]: 1,
   [API_KEYS.DescribeUserScramCredentials]: 0,
   [API_KEYS.AlterUserScramCredentials]: 0,
+  [API_KEYS.UpdateFeatures]: 0,
   [API_KEYS.DescribeCluster]: 0,
 });
 

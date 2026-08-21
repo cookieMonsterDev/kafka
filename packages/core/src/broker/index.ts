@@ -149,6 +149,9 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { ListTransactions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
@@ -572,6 +575,11 @@ export class Broker {
       DescribeTransactions,
     );
     return this.#send(describeTransactions(options));
+  }
+
+  async listTransactions(options: ListTransactionsOptions = {}): Promise<ListTransactionsResponseV0Body> {
+    const listTransactions = this.lookupRequest<ListTransactionsOptions>(API_KEYS.ListTransactions, ListTransactions);
+    return this.#send(listTransactions(options));
   }
 
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {

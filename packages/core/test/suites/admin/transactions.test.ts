@@ -45,4 +45,29 @@ describe('admin.transactions', () => {
 
     await transaction.abort();
   });
+
+  testIfKafkaAtLeast_3_0('lists an active transaction from every coordinator', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    producer = createProducer({
+      cluster: createCluster(),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    await admin.connect();
+    await producer.connect();
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'key', value: 'value' }] });
+
+    const { transactionStates } = await admin.listTransactions();
+    const listing = transactionStates.find((state) => state.transactionalId === transactionalId);
+    expect(listing).toMatchObject({
+      transactionalId,
+      transactionState: 'Ongoing',
+    });
+    expect(listing?.producerId).toEqual(expect.any(BigInt));
+
+    await transaction.abort();
+  });
 });

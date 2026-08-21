@@ -22,11 +22,16 @@ Default `KAFKA_VERSION` remains **4.0**. Compose files also exist for 4.1 and
 4.2 (`apache/kafka:4.1.2` / `4.2.1` / `4.3.1`); CI PRs run 4.3 and default-branch
 pushes run the full matrix.
 
-The client talks to **4.0 and 4.3** via overlap (Produce 3–10, Fetch 4–12). Kafka
-4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896; see
+The client talks to **4.0 and 4.3** via overlap (Produce 3–10, Fetch 4–12,
+Metadata 0–13). Kafka 4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896;
+see
 [Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/));
 the client still encodes those versions for 0.10 clusters and will not send
 them to 4.0 because the broker does not advertise them.
+
+Metadata v10–v13 decode KIP-516 topic IDs (`topicId` as a 16-byte `Buffer` on
+each topic). Produce and Fetch still address topics by name until later
+protocol work.
 
 | `KAFKA_VERSION`                | Status                                      |
 | ------------------------------ | ------------------------------------------- |

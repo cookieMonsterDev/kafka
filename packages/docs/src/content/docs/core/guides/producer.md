@@ -50,6 +50,13 @@ honored, keyed records continue to use Java-compatible murmur2, and unkeyed
 records share a partition for each producer batch before rotating uniformly.
 The default remains unchanged. See [Compatibility](../reference/compatibility/).
 
+## Compression
+
+GZIP, LZ4, and ZSTD are built in (`CompressionTypes`). Snappy is still a
+pluggable stub: register a codec on `CompressionCodecs` before producing.
+ZSTD needs Kafka 2.1+ (Produce v7). LZ4 uses the LZ4 Frame format (LZ4F) that
+Apache Kafka writes for magic-2 record batches.
+
 ## Idempotence and abort
 
 `idempotent` defaults to `false` (Java 3.0+ defaults `enable.idempotence` to

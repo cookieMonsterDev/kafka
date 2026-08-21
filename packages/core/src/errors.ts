@@ -29,7 +29,8 @@ export type KafkaErrorName =
   | 'KafkaAggregateError'
   | 'KafkaFetcherRebalanceError'
   | 'KafkaNoBrokerAvailableError'
-  | 'KafkaAlterPartitionReassignmentsError';
+  | 'KafkaAlterPartitionReassignmentsError'
+  | 'KafkaUpdateFeaturesError';
 
 export interface KafkaErrorOptions {
   retriable?: boolean;
@@ -362,6 +363,17 @@ export class KafkaAlterPartitionReassignmentsError extends KafkaProtocolError {
     super(e);
     this.topic = topicName;
     this.partition = partition;
+  }
+}
+
+/** Error for one named feature in an UpdateFeatures v0/v1 response. */
+export class KafkaUpdateFeaturesError extends KafkaProtocolError {
+  override readonly name: KafkaErrorName = 'KafkaUpdateFeaturesError';
+  readonly feature: string;
+
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], feature: string) {
+    super(e);
+    this.feature = feature;
   }
 }
 

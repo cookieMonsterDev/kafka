@@ -149,6 +149,9 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { DescribeTopicPartitions } from '../protocol/requests/describe-topic-partitions/index';
+import type { DescribeTopicPartitionsOptions } from '../protocol/requests/describe-topic-partitions/index';
+import type { DescribeTopicPartitionsResponseV0Body } from '../protocol/requests/describe-topic-partitions/v0/response';
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
@@ -572,6 +575,16 @@ export class Broker {
       DescribeTransactions,
     );
     return this.#send(describeTransactions(options));
+  }
+
+  async describeTopicPartitions(
+    options: DescribeTopicPartitionsOptions,
+  ): Promise<DescribeTopicPartitionsResponseV0Body> {
+    const describeTopicPartitions = this.lookupRequest<DescribeTopicPartitionsOptions>(
+      API_KEYS.DescribeTopicPartitions,
+      DescribeTopicPartitions,
+    );
+    return this.#send(describeTopicPartitions(options));
   }
 
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {

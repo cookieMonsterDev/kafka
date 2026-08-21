@@ -57,6 +57,7 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.DescribeCluster]: 0,
   [API_KEYS.DescribeProducers]: 0,
   [API_KEYS.DescribeTransactions]: 0,
+  [API_KEYS.DescribeTopicPartitions]: 0,
 });
 
 /**

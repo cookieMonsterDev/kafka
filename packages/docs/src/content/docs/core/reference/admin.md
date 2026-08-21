@@ -15,14 +15,15 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Topics
 
-| Method                                                               | Notes                                            |
-| -------------------------------------------------------------------- | ------------------------------------------------ |
-| `listTopics()`                                                       |                                                  |
-| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })` | `validateOnly` needs CreateTopics v1 (0.11+)     |
-| `deleteTopics({ topics, timeout? })`                                 |                                                  |
-| `createPartitions({ topicPartitions, validateOnly?, timeout? })`     |                                                  |
-| `fetchTopicMetadata({ topics? })`                                    | Optional `topicId` (`Buffer`) when Metadata v10+ |
-| `deleteTopicRecords({ topic, partitions })`                          |                                                  |
+| Method                                                                  | Notes                                            |
+| ----------------------------------------------------------------------- | ------------------------------------------------ |
+| `listTopics()`                                                          |                                                  |
+| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })`    | `validateOnly` needs CreateTopics v1 (0.11+)     |
+| `deleteTopics({ topics, timeout? })`                                    |                                                  |
+| `createPartitions({ topicPartitions, validateOnly?, timeout? })`        |                                                  |
+| `fetchTopicMetadata({ topics? })`                                       | Optional `topicId` (`Buffer`) when Metadata v10+ |
+| `describeTopicPartitions({ topics, responsePartitionLimit?, cursor? })` | DescribeTopicPartitions (key 75), Kafka 4.0+     |
+| `deleteTopicRecords({ topic, partitions })`                             |                                                  |
 
 ## Offsets
 
@@ -51,6 +52,10 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 specific replica. It returns one entry per partition with `activeProducers`; producer IDs,
 timestamps, and transaction start offsets use `bigint`, and
 `currentTransactionStartOffset` is `null` when no transaction is open.
+
+`describeTopicPartitions` is name-based (optional `topicId` on input is accepted). It
+returns `{ topics, nextCursor }` for a single page; pass `nextCursor` to continue.
+Each topic includes `topicId` as a 16-byte `Buffer`. Produce and Fetch still use names.
 
 ## Transactions
 

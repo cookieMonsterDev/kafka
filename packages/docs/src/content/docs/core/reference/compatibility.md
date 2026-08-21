@@ -30,8 +30,9 @@ the client still encodes those versions for 0.10 clusters and will not send
 them to 4.0 because the broker does not advertise them.
 
 Metadata v10–v13 decode KIP-516 topic IDs (`topicId` as a 16-byte `Buffer` on
-each topic). Produce and Fetch still address topics by name until later
-protocol work.
+each topic). `admin.describeTopicPartitions` (key 75, Kafka 4.0+) also returns
+`topicId` on each described topic. Produce and Fetch still address topics by
+name until later protocol work.
 
 | `KAFKA_VERSION`                | Status                                      |
 | ------------------------------ | ------------------------------------------- |
@@ -82,7 +83,9 @@ keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
-coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
+coordinators, and requires Kafka 3.0+. `admin.describeTopicPartitions` uses
+key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
+`nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
 validate-only and rejects unsafe downgrades. Still missing: the remaining
 transaction administration APIs.

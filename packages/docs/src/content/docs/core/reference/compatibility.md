@@ -43,11 +43,16 @@ These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 | `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                        |
 | `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
 | `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
-| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 (`Partitioners.DefaultPartitioner` / `JavaCompatiblePartitioner`)                  |
+| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
 | Compression          | gzip, snappy, lz4, zstd                   | GZIP and ZSTD are built in; Snappy and LZ4 are pluggable stubs                             |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+
+The opt-in sticky partitioner keeps unkeyed records on one partition for each
+Produce batch formed by this client's `lingerMs` / `batchSize` model, then
+rotates uniformly to a different available partition. Explicit partitions and
+keyed murmur2 routing are unchanged.
 
 ## Not yet at the Java 4.3 surface
 
@@ -56,9 +61,11 @@ and [consumer configs](https://kafka.apache.org/43/configuration/consumer-config
 the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
 `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative rebalance
-still uses eager join/sync on this client (the assignor withholds moving
-partitions; the runtime does not yet do incremental revoke).
+is supported and throws if there is no committed offset. Cooperative-sticky
+uses KIP-429 incremental revoke semantics and performs the follow-up generation
+needed to settle partitions that move between members. This support applies to
+the classic group protocol; the KIP-848 consumer group protocol remains
+unsupported.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
@@ -67,10 +74,13 @@ partitions; the runtime does not yet do incremental revoke).
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
-and Metadata otherwise. `admin.updateFeatures` implements UpdateFeatures
-(key 57) v0–v2 and targets the active controller; v0 cannot validate-only and
-rejects unsafe downgrades. Still missing: describeProducers and transaction
-describe APIs.
+and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
+and queries partition leaders unless a `brokerId` is supplied.
+`admin.describeTransactions` uses key 65, dynamically discovers transaction
+coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
+UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
+validate-only and rejects unsafe downgrades. Still missing: the remaining
+transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

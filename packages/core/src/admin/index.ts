@@ -9,13 +9,27 @@ import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createLogDirsApi } from './log-dirs';
 import { createOffsetsApi } from './offsets';
+import { createProducersApi } from './producers';
 import { createQuotasApi } from './quotas';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createTopicsApi } from './topics';
+import { createTransactionsApi } from './transactions';
 import type { Admin, AdminOptions } from './types';
 
-export type { Admin, AdminOptions, AclEntry, AclFilter, TopicConfig, TopicOffset } from './types';
+export type {
+  ActiveProducerState,
+  Admin,
+  AdminOptions,
+  AclEntry,
+  AclFilter,
+  DescribeProducersOptions,
+  PartitionProducerState,
+  TopicConfig,
+  TopicOffset,
+  TransactionDescription,
+  TransactionTopic,
+} from './types';
 export { events };
 
 const EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(events));
@@ -40,6 +54,7 @@ export function createAdmin({
 
   const offsets = createOffsetsApi(context);
   const topics = createTopicsApi(context, { fetchTopicOffsets: offsets.fetchTopicOffsets });
+  const producers = createProducersApi(context);
   const configs = createConfigsApi(context);
   const groups = createGroupsApi(context);
   const acls = createAclsApi(context);
@@ -48,6 +63,7 @@ export function createAdmin({
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
   const features = createFeaturesApi(context);
+  const transactions = createTransactionsApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -82,6 +98,7 @@ export function createAdmin({
     connect,
     disconnect,
     ...topics,
+    ...producers,
     ...offsets,
     ...configs,
     ...groups,
@@ -91,6 +108,7 @@ export function createAdmin({
     ...quotas,
     ...logDirs,
     ...features,
+    ...transactions,
     on,
     logger: () => logger,
     events,

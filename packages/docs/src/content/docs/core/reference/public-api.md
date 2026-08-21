@@ -12,19 +12,19 @@ there is no hand-maintained `types/index.d.ts`.
 
 ## Runtime exports
 
-| Export                                                                                | Kind                                                                   | Page                                                    |
-| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------- |
-| `Kafka`                                                                               | `producer()` / `consumer()` / `admin()` / `logger()`                   | [Kafka client](./kafka/)                                |
-| `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner` | [Producer](../guides/producer/#partitioners)            |
-| `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                   | [Consumer](../guides/consumer/#assigners-and-isolation) |
-| `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                     |                                                         |
-| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                            | [Configuration](./configuration/)                       |
-| `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                |                                                         |
-| `CompressionCodecs`                                                                   | Codec registry; GZIP and ZSTD built in                                 |                                                         |
-| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                            | [Admin](./admin/)                                       |
-| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                               | [Admin](./admin/)                                       |
-| `ScramMechanisms`                                                                     | SCRAM                                                                  | [Admin](./admin/)                                       |
-| `Kafka*` error classes                                                                | See [Errors](./errors/)                                                |                                                         |
+| Export                                                                                | Kind                                                                                        | Page                                                    |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `Kafka`                                                                               | `producer()` / `consumer()` / `admin()` / `logger()`                                        | [Kafka client](./kafka/)                                |
+| `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner`, `StickyPartitioner` | [Producer](../guides/producer/#partitioners)            |
+| `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                        | [Consumer](../guides/consumer/#assigners-and-isolation) |
+| `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                         |
+| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                 | [Configuration](./configuration/)                       |
+| `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                                     |                                                         |
+| `CompressionCodecs`                                                                   | Codec registry; GZIP and ZSTD built in                                                      |                                                         |
+| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                 | [Admin](./admin/)                                       |
+| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                    | [Admin](./admin/)                                       |
+| `ScramMechanisms`                                                                     | SCRAM                                                                                       | [Admin](./admin/)                                       |
+| `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                     |                                                         |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
 Snappy and LZ4 are pluggable stubs, not built in.
@@ -34,6 +34,7 @@ Snappy and LZ4 are pluggable stubs, not built in.
 Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
+`DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 and SASL types. Field-by-field:
 [Configuration](./configuration/),
 [Producer API](./producer/),

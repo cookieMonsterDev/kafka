@@ -2,17 +2,40 @@
 import { getCollection, render } from 'astro:content'
 import type { GetStaticPaths } from 'astro'
 import DocsLayout from '@/layouts/docs-layout.astro'
-import { hrefFor, navLabel, neighbors } from '@/lib/docs'
+import { DEFAULT_DOCS_PACKAGE, docsPackageOf, hrefFor, navLabel, neighbors, pathFor } from '@/lib/docs'
 
 export const getStaticPaths = (async () => {
   const entries = await getCollection('docs')
-  return entries.map((entry) => ({
+  const pages = entries.map((entry) => ({
     params: { slug: entry.id },
-    props: { entry },
+    props: { entry, redirectTo: undefined },
   }))
+  const legacy = entries.flatMap((entry) => {
+    if (docsPackageOf(entry.id) !== DEFAULT_DOCS_PACKAGE) {
+      return []
+    }
+    const rest = entry.id.split('/').slice(1).join('/')
+    if (rest.length === 0) {
+      return []
+    }
+    return [
+      {
+        params: { slug: rest },
+        props: { entry: undefined, redirectTo: pathFor(entry) },
+      },
+    ]
+  })
+  return [...pages, ...legacy]
 }) satisfies GetStaticPaths
 
-const { entry } = Astro.props
+const { entry, redirectTo } = Astro.props
+if (redirectTo != null) {
+  return Astro.redirect(redirectTo, 301)
+}
+if (entry == null) {
+  return Astro.redirect('/docs/core/start/introduction/', 302)
+}
+
 const { Content, headings } = await render(entry)
 const entries = await getCollection('docs')
 const { prev, next } = neighbors(entries, entry.id)

@@ -131,7 +131,7 @@
   html {
     @apply font-sans;
     color-scheme: light;
-    --header-height: calc(4rem + env(safe-area-inset-top, 0px));
+    --header-height: calc(4rem + 1px + env(safe-area-inset-top, 0px));
   }
   html.dark {
     color-scheme: dark;
@@ -150,7 +150,13 @@
     @apply bg-background text-foreground;
   }
   .prose :where(h1, h2, h3, h4, h5, h6) {
-    scroll-margin-top: 5rem;
+    scroll-margin-top: 1.5rem;
+  }
+
+  @media (max-width: 1023px) {
+    .prose :where(h1, h2, h3, h4, h5, h6) {
+      scroll-margin-top: 5rem;
+    }
   }
   .prose :where(table) {
     display: block;

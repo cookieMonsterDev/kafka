@@ -54,7 +54,12 @@ const searchIndex = await getSearchIndex()
     <link rel="icon" href={withBase('/favicon.ico')} sizes="48x48" />
     <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />
   </head>
-  <body class="bg-background text-foreground min-h-screen font-sans antialiased">
+  <body
+    class={cn(
+      'bg-background text-foreground min-h-screen font-sans antialiased',
+      docs && 'lg:flex lg:h-dvh lg:flex-col lg:overflow-hidden',
+    )}
+  >
     <a
       href="#main-content"
       class="bg-background text-foreground focus-visible:ring-ring sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-60 focus-visible:rounded-md focus-visible:px-3 focus-visible:py-2 focus-visible:ring-3"
@@ -66,9 +71,11 @@ const searchIndex = await getSearchIndex()
         <input type="checkbox" id="docs-nav" class="sr-only" />
       )
     }
-    <header class="border-border bg-background/95 sticky top-0 z-50 border-b pt-[env(safe-area-inset-top)] backdrop-blur">
+    <header
+      class="border-border bg-background/95 sticky top-0 z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
+    >
       <nav
-        class="flex h-16 w-full items-center justify-between gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:px-6"
+        class="flex h-full w-full items-center justify-between gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:px-6"
         aria-label="Site"
       >
         <div class="flex min-w-0 items-center gap-1">
@@ -116,7 +123,7 @@ const searchIndex = await getSearchIndex()
             </a>
             <span class="text-border text-xl font-light select-none" aria-hidden="true">/</span>
             <a
-              href={withBase('/docs/start/introduction/')}
+              href={withBase('/docs/core/start/introduction/')}
               class="text-muted-foreground hover:text-foreground text-xl font-light no-underline transition-colors"
             >
               Core
@@ -199,6 +206,13 @@ const searchIndex = await getSearchIndex()
       )
     }
 
-    <slot />
+    <div
+      class={cn(
+        !docs && 'contents',
+        docs && 'max-lg:contents lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden',
+      )}
+    >
+      <slot />
+    </div>
   </body>
 </html>

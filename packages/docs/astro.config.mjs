@@ -12,11 +12,13 @@ export default defineConfig({
   base: githubPages ? '/kafka' : '/',
 
   redirects: {
-    '/docs/introduction': '/docs/start/introduction',
-    '/docs/getting-started': '/docs/start/getting-started',
-    '/docs/compatibility': '/docs/reference/compatibility',
-    '/docs/public-api': '/docs/reference/public-api',
-    '/docs/migration': '/docs/migration/breaking-changes',
+    '/docs': '/docs/core/start/introduction',
+    '/docs/core': '/docs/core/start/introduction',
+    '/docs/introduction': '/docs/core/start/introduction',
+    '/docs/getting-started': '/docs/core/start/getting-started',
+    '/docs/compatibility': '/docs/core/reference/compatibility',
+    '/docs/public-api': '/docs/core/reference/public-api',
+    '/docs/migration': '/docs/core/migration/breaking-changes',
   },
 
   markdown: {

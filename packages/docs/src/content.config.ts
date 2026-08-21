@@ -3,7 +3,7 @@ import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
 // Nested folders under src/content/docs become URL segments:
-// start/introduction.md → /docs/start/introduction/
+// core/start/introduction.md → /docs/core/start/introduction/
 const docs = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/docs' }),
   schema: z.object({

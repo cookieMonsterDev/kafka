@@ -35,6 +35,7 @@ Metadata v10–v13 decode KIP-516 topic IDs (`topicId` as a 16-byte `Buffer` on
 each topic). Produce v13 addresses topics by those IDs; earlier Produce
 versions and Fetch still use topic names. `admin.describeTopicPartitions`
 (key 75, Kafka 4.0+) also returns `topicId` on each described topic.
+
 | `KAFKA_VERSION`                | Status                                      |
 | ------------------------------ | ------------------------------------------- |
 | 0.10, 0.11, 1.1, 2.4, 3.6, 4.0 | Covered by integration tests                |

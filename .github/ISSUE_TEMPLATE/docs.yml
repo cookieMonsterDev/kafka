@@ -36,3 +36,4 @@ body:
           required: true
         - label: I read the [contributing guide](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md).
           required: true
+        - label: This is an accessibility issue (keyboard, screen reader, contrast, motion, or zoom).

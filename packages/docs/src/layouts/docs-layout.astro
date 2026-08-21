@@ -23,6 +23,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
     <a
       href="https://github.com/cookieMonsterDev/kafka"
       class="text-muted-foreground hover:text-foreground mt-8 px-2 text-sm"
+      rel="noopener noreferrer"
     >
       GitHub
     </a>
@@ -36,30 +37,95 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
     </aside>
 
     <div
-      class="flex min-w-0 flex-1 justify-center lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
+      id="docs-scroll"
+      class="min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
     >
-      <main id="main-content" tabindex="-1" class="w-full max-w-3xl px-6 py-10">
-        {
-          tocHeadings.length > 0 && (
-            <details class="border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">
-              <summary class="focus-visible:ring-ring cursor-pointer list-none rounded-sm text-sm font-medium outline-none focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
-                On this page
-              </summary>
-              <div class="pt-3 pb-2">
-                <TableOfContents headings={headings} showHeading={false} />
-              </div>
-            </details>
-          )
-        }
-        <slot />
-        <PrevNext prev={prev} next={next} />
-      </main>
+      {/* Padding on an inner wrapper so lg scrollport includes space below prev/next */}
+      <div class="flex justify-center pb-12 lg:pb-16">
+        <main id="main-content" tabindex="-1" class="w-full max-w-3xl px-6 pt-10">
+          {
+            tocHeadings.length > 0 && (
+              <details class="border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">
+                <summary class="focus-visible:ring-ring flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
+                  On this page
+                  <svg
+                    class="text-muted-foreground size-3.5 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </summary>
+                <div class="pt-3 pb-2">
+                  <TableOfContents headings={headings} showHeading={false} />
+                </div>
+              </details>
+            )
+          }
+          <slot />
+          <PrevNext prev={prev} next={next} />
+        </main>
 
-      <aside
-        class="sticky top-0 hidden max-h-[calc(100dvh-var(--header-height))] w-52 shrink-0 self-start overflow-y-auto py-8 pr-6 xl:block"
-      >
-        <TableOfContents headings={headings} />
-      </aside>
+        <aside
+          class="sticky top-0 hidden max-h-[calc(100dvh-var(--header-height))] w-52 shrink-0 self-start overflow-y-auto py-8 pr-6 xl:block"
+        >
+          <TableOfContents headings={headings} />
+        </aside>
+      </div>
     </div>
   </div>
+  <script is:inline>
+    ;(function () {
+      var headingNodes = document.querySelectorAll('.prose h2[id], .prose h3[id]')
+      var links = document.querySelectorAll('nav[aria-label="On this page"] a')
+      if (headingNodes.length === 0 || links.length === 0) return
+
+      var scrollRoot = document.getElementById('docs-scroll')
+      var wide = window.matchMedia('(min-width: 1024px)')
+
+      function setCurrent(id) {
+        links.forEach(function (link) {
+          var hash = decodeURIComponent(link.hash.slice(1))
+          if (hash === id) link.setAttribute('aria-current', 'location')
+          else link.removeAttribute('aria-current')
+        })
+      }
+
+      function closestHeading() {
+        var root = wide.matches && scrollRoot ? scrollRoot : null
+        var top = root ? root.getBoundingClientRect().top : 0
+        var current = headingNodes[0]
+        headingNodes.forEach(function (heading) {
+          if (heading.getBoundingClientRect().top - top <= 96) current = heading
+        })
+        if (current && current.id) setCurrent(current.id)
+      }
+
+      var observer = new IntersectionObserver(
+        function () {
+          closestHeading()
+        },
+        {
+          root: wide.matches && scrollRoot ? scrollRoot : null,
+          rootMargin: '0px 0px -70% 0px',
+          threshold: [0, 1],
+        },
+      )
+      headingNodes.forEach(function (heading) {
+        observer.observe(heading)
+      })
+      closestHeading()
+
+      document.querySelectorAll('details a[href^="#"]').forEach(function (link) {
+        link.addEventListener('click', function () {
+          var details = link.closest('details')
+          if (details) details.open = false
+        })
+      })
+    })()
+  </script>
 </BaseLayout>

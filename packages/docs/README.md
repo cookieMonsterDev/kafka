@@ -136,6 +136,20 @@ import { buttonVariants } from '@/components/ui/button'
 
 `asChild` works normally _inside_ `.tsx` components, where children are real React elements.
 
+### Accessibility
+
+Target **WCAG 2.2 AA** for anything in `src/layouts`, `src/components`, `src/pages`, and
+`src/styles`. Details and the PR expectation: [CONTRIBUTING.md](../../CONTRIBUTING.md#accessibility).
+
+When you add or change UI:
+
+- Prefer semantic HTML and named landmarks over extra ARIA
+- Icon-only controls need `aria-label`; decorative icons `aria-hidden="true"`
+- Keep a visible `:focus-visible` style; honor `prefers-reduced-motion`
+- Announce copy / search / theme updates with `aria-live="polite"`
+- Do not weaken `--muted-foreground` or `--ring` in `src/styles/global.css` below AA contrast
+- Markdown images need `alt`; tables need header cells
+
 ### Theming
 
 Design tokens live as CSS variables in `src/styles/global.css` (base color `olive`,

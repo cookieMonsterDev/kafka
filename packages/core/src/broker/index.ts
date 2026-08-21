@@ -146,6 +146,9 @@ import type { DescribeClusterResponseV2Body } from '../protocol/requests/describ
 import { DescribeProducers } from '../protocol/requests/describe-producers/index';
 import type { DescribeProducersRequestV0Options } from '../protocol/requests/describe-producers/v0/request';
 import type { DescribeProducersResponseV0Body } from '../protocol/requests/describe-producers/v0/response';
+import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
+import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
+import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -558,6 +561,14 @@ export class Broker {
       DescribeProducers,
     );
     return this.#send(describeProducers(options));
+  }
+
+  async describeTransactions(options: DescribeTransactionsOptions): Promise<DescribeTransactionsResponseV0Body> {
+    const describeTransactions = this.lookupRequest<DescribeTransactionsOptions>(
+      API_KEYS.DescribeTransactions,
+      DescribeTransactions,
+    );
+    return this.#send(describeTransactions(options));
   }
 
   /** Fetches a PID and bumps the producer epoch. Request should be made to the transaction coordinator. */

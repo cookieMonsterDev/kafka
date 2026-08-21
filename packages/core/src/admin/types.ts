@@ -15,6 +15,10 @@ import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/de
 import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import type {
+  DescribeTransactionsState,
+  DescribeTransactionsTopic,
+} from '../protocol/requests/describe-transactions/v0/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
@@ -30,6 +34,8 @@ import type { AdminEventName } from './instrumentation-events';
 import { events } from './instrumentation-events';
 
 export type OffsetInput = bigint | number | string;
+export type TransactionDescription = DescribeTransactionsState;
+export type TransactionTopic = DescribeTransactionsTopic;
 
 export interface ReplicaAssignment {
   partition: number;
@@ -287,6 +293,7 @@ export interface Admin {
     dirs: { path: string; topics: { topic: string; partitions: number[] }[] }[];
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
+  describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

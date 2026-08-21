@@ -62,4 +62,18 @@ export interface PartitionerArgs {
   message: Message;
 }
 
-export type CustomPartitioner = () => (args: PartitionerArgs) => number;
+export interface PartitionerBatchArgs {
+  topic: string;
+  partitionMetadata: readonly PartitionMetadata[];
+}
+
+export interface Partitioner {
+  (args: PartitionerArgs): number;
+  /**
+   * Called when the producer starts grouping a new batch for a topic.
+   * Custom partitioners may use this to rotate batch-local state.
+   */
+  onNewBatch?: (args: PartitionerBatchArgs) => void;
+}
+
+export type CustomPartitioner = () => Partitioner;

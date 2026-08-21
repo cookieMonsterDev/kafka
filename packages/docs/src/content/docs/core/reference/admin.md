@@ -51,6 +51,14 @@ specific replica. It returns one entry per partition with `activeProducers`; pro
 timestamps, and transaction start offsets use `bigint`, and
 `currentTransactionStartOffset` is `null` when no transaction is open.
 
+## Transactions
+
+`describeTransactions(transactionalIds)` discovers each transaction coordinator
+and returns `{ transactionStates }`. Each transaction state includes its
+transactional ID, state, timeout, start time, producer ID and epoch, and active
+topic partitions. Producer IDs and transaction start times are `bigint`.
+DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
+
 ## ACLs, SCRAM, quotas, log dirs
 
 | Method                                                       | Notes                                     |

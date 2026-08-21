@@ -40,6 +40,20 @@ ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
+## Transactions
+
+Kafka 3.0+ supports transaction inspection through API key 65:
+
+```ts
+const { transactionStates } = await admin.describeTransactions(['payments-writer']);
+for (const transaction of transactionStates) {
+  console.log(transaction.transactionalId, transaction.transactionState);
+}
+```
+
+The client discovers and groups requests by transaction coordinator. Producer
+IDs and transaction start times are returned as `bigint`.
+
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
 
 Kafka 3.0+ can report the producer state retained by partition leaders:
@@ -54,5 +68,5 @@ for (const state of producerStates) {
 }
 ```
 
-Pass `brokerId` to query a specific replica instead. Transaction describe APIs that are
-not implemented are listed under [Compatibility](../reference/compatibility/).
+Pass `brokerId` to query a specific replica instead. Remaining transaction
+administration APIs are listed under [Compatibility](../reference/compatibility/).

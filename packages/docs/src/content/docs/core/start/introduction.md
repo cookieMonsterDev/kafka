@@ -24,7 +24,8 @@ this Astro site is `packages/docs`.
 Next: [Installation](./installation/),
 [Getting started](./getting-started/),
 [Kafka client](../reference/kafka/),
-[Errors](../guides/errors/).
+[Errors](../guides/errors/),
+[Breaking changes](../migration/breaking-changes/).
 
 ## Supported brokers
 

@@ -77,3 +77,6 @@ Kerberos is not. The `aws` SASL helper is extra (non-Apache). See
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and
 [Kafka Connect](https://kafka.apache.org/43/kafka-connect/overview/).
+
+Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
+[Breaking changes](../migration/breaking-changes/).

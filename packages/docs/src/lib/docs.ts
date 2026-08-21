@@ -1,6 +1,12 @@
 import type { CollectionEntry } from 'astro:content';
 import { withBase } from '@/lib/base';
 
+export const DOCS_PACKAGES = ['core'] as const;
+
+export type DocsPackage = (typeof DOCS_PACKAGES)[number];
+
+export const DEFAULT_DOCS_PACKAGE: DocsPackage = 'core';
+
 export const SECTION_ORDER = ['start', 'guides', 'reference', 'integrations', 'migration'] as const;
 
 export type DocsSection = (typeof SECTION_ORDER)[number];
@@ -15,12 +21,33 @@ export const SECTION_LABELS: Record<DocsSection, string> = {
 
 export type DocsEntry = CollectionEntry<'docs'>;
 
+export function pathFor(entry: DocsEntry): string {
+  return `/docs/${entry.id}/`;
+}
+
 export function hrefFor(entry: DocsEntry): string {
-  return withBase(`/docs/${entry.id}/`);
+  return withBase(pathFor(entry));
 }
 
 export function navLabel(entry: DocsEntry): string {
   return entry.data.sidebarLabel ?? entry.data.title;
+}
+
+export function docsPackageOf(id: string): string {
+  return id.split('/')[0] ?? DEFAULT_DOCS_PACKAGE;
+}
+
+export function inDocsPackage(entry: DocsEntry, pkg: string): boolean {
+  return entry.id === pkg || entry.id.startsWith(`${pkg}/`);
+}
+
+export function docsPackageFromPathname(pathname: string): string {
+  const parts = pathname.split('/').filter(Boolean);
+  const docsIndex = parts.indexOf('docs');
+  const candidate = docsIndex >= 0 ? parts[docsIndex + 1] : undefined;
+  return candidate != null && (DOCS_PACKAGES as readonly string[]).includes(candidate)
+    ? candidate
+    : DEFAULT_DOCS_PACKAGE;
 }
 
 export function sortDocs(entries: DocsEntry[]): DocsEntry[] {
@@ -37,8 +64,8 @@ export function sortDocs(entries: DocsEntry[]): DocsEntry[] {
   });
 }
 
-export function groupDocs(entries: DocsEntry[]) {
-  const sorted = sortDocs(entries);
+export function groupDocs(entries: DocsEntry[], pkg: string = DEFAULT_DOCS_PACKAGE) {
+  const sorted = sortDocs(entries.filter((entry) => inDocsPackage(entry, pkg)));
   return SECTION_ORDER.map((section) => ({
     section,
     label: SECTION_LABELS[section],
@@ -47,7 +74,7 @@ export function groupDocs(entries: DocsEntry[]) {
 }
 
 export function neighbors(entries: DocsEntry[], id: string) {
-  const sorted = sortDocs(entries);
+  const sorted = sortDocs(entries.filter((entry) => inDocsPackage(entry, docsPackageOf(id))));
   const index = sorted.findIndex((entry) => entry.id === id);
   return {
     prev: index > 0 ? sorted[index - 1] : undefined,

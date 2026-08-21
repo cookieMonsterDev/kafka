@@ -128,7 +128,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
     <>
       <button
         type="button"
-        className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'text-muted-foreground md:hidden')}
+        className={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'text-muted-foreground md:hidden')}
         aria-label="Search documentation"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -138,7 +138,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
       </button>
       <button
         type="button"
-        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-9 w-56 items-center gap-2 rounded-lg border px-3 text-sm transition-colors outline-none focus-visible:ring-3 md:inline-flex lg:w-64"
+        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-10 w-64 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3 md:inline-flex lg:w-72"
         aria-label="Search documentation"
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -146,7 +146,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
       >
         <SearchIcon />
         <span className="min-w-0 flex-1 truncate text-left">Search documentation...</span>
-        <kbd className="border-border bg-background pointer-events-none rounded-md border px-1.5 py-0.5 font-sans text-[11px] font-medium">
+        <kbd className="border-border bg-background pointer-events-none rounded-md border px-2 py-0.5 font-sans text-xs font-medium">
           {modKey}K
         </kbd>
       </button>
@@ -162,7 +162,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
           Search documentation
         </h2>
         <div className="border-border flex items-center gap-2 border-b px-3">
-          <SearchIcon className="text-muted-foreground size-4 shrink-0" />
+          <SearchIcon className="text-muted-foreground size-5 shrink-0" />
           <input
             ref={inputRef}
             type="search"
@@ -240,7 +240,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
 function SearchIcon({ className }: { className?: string }) {
   return (
     <svg
-      className={cn('size-4 shrink-0', className)}
+      className={cn('size-5 shrink-0', className)}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

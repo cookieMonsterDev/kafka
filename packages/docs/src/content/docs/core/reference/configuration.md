@@ -29,6 +29,11 @@ Defaults that differ from the Java client are listed once on
 Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 `initialRetryTime: 300`, `maxRetryTime: 30000`, `multiplier: 2`, `factor: 0.2`.
 
+`sasl.mechanism` is `plain`, `scram-sha-256`, `scram-sha-512`, `oauthbearer`,
+or `gssapi`. GSSAPI fields: `serviceName` (default `kafka`), optional
+`principal`, `keytab`, `krb5`, `authorizationIdentity`, and `gssProvider`.
+See [Security](../guides/security/).
+
 ## `ProducerConfig`
 
 | Field                    | Default                       | Java / Apache                                                                                                                             |

@@ -82,9 +82,13 @@ UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
 validate-only and rejects unsafe downgrades. Still missing: the remaining
 transaction administration APIs.
 
-**Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
-Kerberos is not. The `aws` SASL helper is extra (non-Apache). See
-[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
+**Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
+implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or
+install the optional `kerberos` package; you still need a KDC and a ticket or
+keytab. CI does not run a Kerberos stack. The `aws` SASL helper is extra
+(non-Apache). See
+[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
+and the [security guide](../guides/security/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and

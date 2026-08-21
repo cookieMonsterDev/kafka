@@ -35,11 +35,13 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
 `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
-and SASL types. Field-by-field:
+and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
+`GssTokenStep`. Field-by-field:
 [Configuration](./configuration/),
 [Producer API](./producer/),
 [Consumer API](./consumer/),
-[Admin API](./admin/).
+[Admin API](./admin/),
+[Security](../guides/security/).
 
 ## Extra APIs
 

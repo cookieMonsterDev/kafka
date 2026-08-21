@@ -3,6 +3,7 @@ import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { Connection } from '../../network/connection';
 import type { SaslConfig } from '../../network/connection';
 import { createDefaultSocketFactory } from '../../network/socket-factory';
+import { Encoder } from '../../protocol/encoder';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createSaslAuthenticator, SASLAuthenticator } from './index';
 
@@ -75,6 +76,29 @@ describe('broker/sasl-authenticator/SASLAuthenticator', () => {
 
     expect(authenticationProvider).toHaveBeenCalledOnce();
     expect(authenticate).toHaveBeenCalledOnce();
+  });
+
+  it('authenticates GSSAPI via a gssProvider after SaslHandshake', async () => {
+    const connection = createConnection({
+      mechanism: 'gssapi',
+      gssProvider: async ({ serverToken }: { serverToken: Buffer | null }) => ({
+        token: serverToken == null ? Buffer.from('client-1') : Buffer.from('client-wrap'),
+        complete: serverToken != null,
+      }),
+    });
+    const sendSpy = vi.spyOn(connection, 'send');
+    sendSpy.mockResolvedValueOnce({ errorCode: 0, enabledMechanisms: ['GSSAPI'] });
+    sendSpy.mockResolvedValue({
+      errorCode: 0,
+      errorMessage: null,
+      authBytes: new Encoder().writeBytes(Buffer.from('server')).buffer,
+      sessionLifetimeMs: 0n,
+    });
+
+    const authenticator = new SASLAuthenticator(connection, silentLogger, HANDSHAKE_AND_AUTHENTICATE_VERSIONS, true);
+    await authenticator.authenticate();
+
+    expect(sendSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('throws for an unknown mechanism with no authenticationProvider', async () => {

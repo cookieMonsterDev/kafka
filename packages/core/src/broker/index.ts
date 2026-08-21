@@ -149,6 +149,9 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { ListConfigResources } from '../protocol/requests/list-config-resources/index';
+import type { ListConfigResourcesOptions } from '../protocol/requests/list-config-resources/index';
+import type { ListConfigResourcesResponseV1Body } from '../protocol/requests/list-config-resources/v1/response';
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
@@ -497,6 +500,14 @@ export class Broker {
       IncrementalAlterConfigs,
     );
     return this.#send(incrementalAlterConfigs(options));
+  }
+
+  async listConfigResources(options: ListConfigResourcesOptions = {}): Promise<ListConfigResourcesResponseV1Body> {
+    const listConfigResources = this.lookupRequest<ListConfigResourcesOptions>(
+      API_KEYS.ListConfigResources,
+      ListConfigResources,
+    );
+    return this.#send(listConfigResources(options));
   }
 
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {

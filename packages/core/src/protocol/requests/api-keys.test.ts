@@ -17,6 +17,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.DescribeCluster).toBe(60);
     expect(API_KEYS.DescribeProducers).toBe(61);
     expect(API_KEYS.DescribeTransactions).toBe(65);
+    expect(API_KEYS.ListConfigResources).toBe(74);
   });
 
   it('is frozen', () => {

@@ -79,7 +79,12 @@ and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
 coordinators, and requires Kafka 3.0+. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. Still missing: the remaining
+validate-only and rejects unsafe downgrades. `admin.listConfigResources`
+implements ListConfigResources (key 74) v0–v1 and targets the active
+controller. v0 lists client metrics names only (Kafka 4.0); filtering by
+`resourceTypes` needs v1 (Kafka 4.1+ / KIP-1142). An empty `resourceTypes`
+list is valid: v1 returns the broker's default supported types, v0 returns
+all client metrics. Still missing: the remaining
 transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /

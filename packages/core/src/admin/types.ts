@@ -320,6 +320,9 @@ export interface Admin {
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  listConfigResources: (options?: {
+    resourceTypes?: number[];
+  }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   on: (
     eventName: AdminEventName,

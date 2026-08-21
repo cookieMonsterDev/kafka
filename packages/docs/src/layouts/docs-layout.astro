@@ -30,7 +30,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
 
   <div class="flex w-full">
     <aside
-      class="border-sidebar-border bg-sidebar sticky top-[var(--header-height)] hidden h-[calc(100vh-var(--header-height))] w-60 shrink-0 overflow-y-auto overscroll-contain border-r px-3 py-8 lg:block"
+      class="border-sidebar-border bg-sidebar sticky top-(--header-height) hidden h-[calc(100vh-var(--header-height))] w-60 shrink-0 overflow-y-auto overscroll-contain border-r px-3 py-8 lg:block"
     >
       <DocsSidebar />
     </aside>
@@ -53,7 +53,7 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
         <PrevNext prev={prev} next={next} />
       </main>
 
-      <aside class="sticky top-[var(--header-height)] hidden h-[calc(100vh-var(--header-height))] w-52 shrink-0 overflow-y-auto overscroll-contain py-8 pr-6 xl:block">
+      <aside class="sticky top-(--header-height) hidden h-[calc(100vh-var(--header-height))] w-52 shrink-0 overflow-y-auto overscroll-contain py-8 pr-6 xl:block">
         <TableOfContents headings={headings} />
       </aside>
     </div>

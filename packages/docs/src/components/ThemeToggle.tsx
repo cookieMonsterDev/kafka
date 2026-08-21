@@ -24,9 +24,9 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button type="button" variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
+    <Button type="button" variant="ghost" size="icon-lg" onClick={toggle} aria-label="Toggle theme">
       <svg
-        className="hidden size-4 dark:block"
+        className="hidden size-5 dark:block"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -45,7 +45,7 @@ export function ThemeToggle() {
         <path d="m19.07 4.93-1.41 1.41"></path>
       </svg>
       <svg
-        className="size-4 dark:hidden"
+        className="size-5 dark:hidden"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

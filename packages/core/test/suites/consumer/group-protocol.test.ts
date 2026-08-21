@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
-import type { EachMessagePayload } from '../../../src/consumer/types';
+import type { EachMessagePayload, MemberAssignment } from '../../../src/consumer/types';
 import {
   createCluster,
   createTopic,
@@ -9,9 +9,32 @@ import {
   newLogger,
   secureRandom,
   testIfKafkaAtLeast_4_0,
-  waitForConsumerToJoinGroup,
   waitForMessages,
 } from '../../helpers/index';
+
+function waitForAssignedPartitions(
+  consumer: ReturnType<typeof createConsumer>,
+  { maxWait = 20_000, label = '' }: { maxWait?: number; label?: string } = {},
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Timeout ${label}`.trim()));
+      void consumer.disconnect();
+    }, maxWait);
+    consumer.on(consumer.events.GROUP_JOIN, (event) => {
+      const assignment = (event.payload as { memberAssignment?: MemberAssignment }).memberAssignment ?? {};
+      if (Object.values(assignment).flat().length > 0) {
+        clearTimeout(timeoutId);
+        resolve(event);
+      }
+    });
+    consumer.on(consumer.events.CRASH, (event) => {
+      clearTimeout(timeoutId);
+      reject((event.payload as { error: Error }).error);
+      void consumer.disconnect();
+    });
+  });
+}
 
 describe('consumer.groupProtocol', () => {
   let topicName: string;
@@ -55,7 +78,7 @@ describe('consumer.groupProtocol', () => {
     await first.subscribe({ topic: topicName, fromBeginning: true });
     const consumed: EachMessagePayload[] = [];
     const firstPartitions = new Set<number>();
-    const firstJoin = waitForConsumerToJoinGroup(first, { label: 'first' });
+    const firstJoin = waitForAssignedPartitions(first, { label: 'first' });
     await first.run({
       eachMessage: async (event) => {
         firstPartitions.add(event.partition);
@@ -64,17 +87,18 @@ describe('consumer.groupProtocol', () => {
     });
     await firstJoin;
 
+    const firstRebalance = waitForAssignedPartitions(first, { label: 'first-rebalance', maxWait: 20_000 });
     await second.connect();
     await second.subscribe({ topic: topicName, fromBeginning: true });
     const secondPartitions = new Set<number>();
-    const secondJoin = waitForConsumerToJoinGroup(second, { label: 'second', maxWait: 20_000 });
+    const secondJoin = waitForAssignedPartitions(second, { label: 'second', maxWait: 20_000 });
     await second.run({
       eachMessage: async (event) => {
         secondPartitions.add(event.partition);
         consumed.push(event);
       },
     });
-    await secondJoin;
+    await Promise.all([firstRebalance, secondJoin]);
 
     await producer!.connect();
     await producer!.send({

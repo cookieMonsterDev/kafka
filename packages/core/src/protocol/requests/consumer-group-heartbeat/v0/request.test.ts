@@ -36,6 +36,36 @@ describe('protocol/requests/consumer-group-heartbeat/v0/request', () => {
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(payload);
   });
 
+  it('encodes an empty owned-partitions list distinctly from null', async () => {
+    const payload = {
+      groupId: 'g',
+      memberId: 'm',
+      memberEpoch: 0,
+      instanceId: null as string | null,
+      rackId: null as string | null,
+      rebalanceTimeoutMs: 60_000,
+      subscribedTopicNames: ['events'] as string[] | null,
+      serverAssignor: null as string | null,
+      topicPartitions: [] as { topicId: Buffer; partitions: number[] }[] | null,
+    };
+    const encoder = await consumerGroupHeartbeatRequestV0(payload).encode();
+    const expected = new Encoder()
+      .writeUVarIntString('g')
+      .writeUVarIntString('m')
+      .writeInt32(0)
+      .writeUVarIntString(null)
+      .writeUVarIntString(null)
+      .writeInt32(60_000)
+      .writeUVarInt(2)
+      .writeUVarIntString('events')
+      .writeUVarIntString(null)
+      .writeUVarInt(1)
+      .writeUVarInt(0);
+
+    expect(encoder.buffer).toEqual(expected.buffer);
+    expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(payload);
+  });
+
   it('encodes owned topic partitions when they changed', async () => {
     const payload = {
       groupId: 'g',

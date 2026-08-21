@@ -505,7 +505,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
   }
 
-  async #heartbeatConsumerProtocol({ interval, force = false }: { interval: number; force?: boolean }): Promise<void> {
+  async #heartbeatConsumerProtocol({
+    interval,
+    force = false,
+    ackDepth = 0,
+  }: {
+    interval: number;
+    force?: boolean;
+    ackDepth?: number;
+  }): Promise<void> {
     const { groupId, coordinator } = this;
     if (!coordinator) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
@@ -516,17 +524,22 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     const now = Date.now();
     if (!force && now < this.lastRequest + heartbeatInterval) return;
 
-    const includeJoinFields = this.#includeJoinFields;
+    const memberEpoch = this.generationId ?? CONSUMER_GROUP_JOIN_EPOCH;
+    // Epoch 0 is a (re)join. The broker returns INVALID_REQUEST unless rebalanceTimeoutMs is
+    // set, subscribedTopicNames (or regex) is non-null, and TopicPartitions is an empty list —
+    // null means "unchanged", which is illegal before the member exists.
+    const isJoining = memberEpoch === CONSUMER_GROUP_JOIN_EPOCH;
+    const includeJoinFields = this.#includeJoinFields || isJoining;
     const includeOwnedPartitions = this.#ownedPartitionsDirty;
     const response = await coordinator.consumerGroupHeartbeat({
       groupId,
       memberId,
-      memberEpoch: this.generationId ?? CONSUMER_GROUP_JOIN_EPOCH,
+      memberEpoch,
       instanceId: includeJoinFields ? this.groupInstanceId : null,
       rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
       rebalanceTimeoutMs: includeJoinFields ? this.rebalanceTimeout : -1,
       subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
-      topicPartitions: includeOwnedPartitions ? this.#ownedTopicPartitions : null,
+      topicPartitions: isJoining ? [] : includeOwnedPartitions ? this.#ownedTopicPartitions : null,
     });
 
     this.#includeJoinFields = false;
@@ -540,6 +553,12 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     });
 
     await this.#applyHeartbeatResponse(response);
+
+    // Ack the new assignment on the next heartbeat immediately. The broker will not give
+    // revoked partitions to other members until this member reports the updated owned set.
+    if (this.#ownedPartitionsDirty && ackDepth < 8) {
+      await this.#heartbeatConsumerProtocol({ interval: 0, force: true, ackDepth: ackDepth + 1 });
+    }
   }
 
   async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body): Promise<void> {
@@ -548,6 +567,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.heartbeatIntervalMs = response.heartbeatIntervalMs;
     this.leaderId = null;
     this.groupProtocol = 'consumer';
+    const wasJoined = this.#consumerProtocolJoined;
     if (response.memberEpoch > CONSUMER_GROUP_JOIN_EPOCH) {
       this.#consumerProtocolJoined = true;
     }
@@ -572,6 +592,24 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     await this.#installAssignment(currentMemberAssignment);
     this.#ownedTopicPartitions = owned;
     this.#ownedPartitionsDirty = true;
+
+    if (wasJoined) this.#emitGroupJoin(0);
+  }
+
+  #emitGroupJoin(duration: number): void {
+    const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
+      result[topic] = partitions;
+      return result;
+    }, {});
+    this.instrumentationEmitter.emit(GROUP_JOIN, {
+      groupId: this.groupId,
+      memberId: this.memberId,
+      leaderId: this.leaderId,
+      isLeader: this.isLeader(),
+      memberAssignment,
+      groupProtocol: this.groupProtocol,
+      duration,
+    });
   }
 
   async #joinConsumerProtocol(): Promise<void> {
@@ -617,23 +655,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
         if (this.shuttingDown) return;
 
-        const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
-          result[topic] = partitions;
-          return result;
-        }, {});
-
-        const payload = {
+        this.#emitGroupJoin(Date.now() - startJoin);
+        this.logger.info('Consumer has joined the group', {
           groupId: this.groupId,
           memberId: this.memberId,
           leaderId: this.leaderId,
-          isLeader: this.isLeader(),
-          memberAssignment,
           groupProtocol: this.groupProtocol,
           duration: Date.now() - startJoin,
-        };
-
-        this.instrumentationEmitter.emit(GROUP_JOIN, payload);
-        this.logger.info('Consumer has joined the group', payload);
+        });
       } catch (e) {
         const error = e as Error & { type?: string };
         if (isRebalancing(error)) {

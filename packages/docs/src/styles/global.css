@@ -122,10 +122,27 @@
 }
 
 @layer base {
+  html {
+    @apply font-sans;
+    color-scheme: light;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
+    --header-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   * {
     @apply border-border outline-ring/50;
     scrollbar-width: thin;
     scrollbar-color: var(--muted-foreground) transparent;
+  }
+  a,
+  button,
+  summary,
+  label,
+  [role='button'] {
+    touch-action: manipulation;
   }
   *::-webkit-scrollbar {
     width: 8px;
@@ -149,13 +166,16 @@
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
-  }
   .prose :where(h1, h2, h3, h4, h5, h6) {
     scroll-margin-top: 5rem;
+  }
+  .prose :where(table) {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .prose :where(th, td) {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -173,6 +193,11 @@ html.dark .astro-code span {
   position: relative;
   cursor: copy;
   border: 1px solid var(--border);
+}
+
+.prose pre.astro-code:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
 .prose pre.astro-code[data-copied='true']::after {
@@ -225,6 +250,7 @@ html.dark .astro-code span {
   isolation: isolate;
 }
 
+/* Three partition lanes with offset ticks — the log, not a generic grid. */
 .landing-hero::before {
   content: '';
   pointer-events: none;
@@ -232,10 +258,23 @@ html.dark .astro-code span {
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, var(--border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-  background-size: 4rem 4rem;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+    repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 3.5rem),
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - 2.5rem),
+      var(--border) calc(50% - 2.5rem),
+      var(--border) calc(50% - 2.5rem + 1px),
+      transparent calc(50% - 2.5rem + 1px),
+      transparent calc(50% - 0.2rem),
+      var(--border) calc(50% - 0.2rem),
+      var(--border) calc(50% - 0.2rem + 1px),
+      transparent calc(50% - 0.2rem + 1px),
+      transparent calc(50% + 2.1rem),
+      var(--border) calc(50% + 2.1rem),
+      var(--border) calc(50% + 2.1rem + 1px),
+      transparent calc(50% + 2.1rem + 1px)
+    );
+  mask-image: radial-gradient(ellipse 75% 50% at 50% 42%, black 18%, transparent 72%);
 }
 
 .docs-nav-close {
@@ -256,10 +295,12 @@ html.dark .astro-code span {
     display: block;
     pointer-events: none;
     visibility: hidden;
+    overscroll-behavior: contain;
     transform: translateX(-100%);
     transition:
       transform 200ms ease,
       visibility 200ms ease;
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
 
   #docs-nav:checked ~ .docs-nav-overlay {
@@ -282,5 +323,11 @@ html.dark .astro-code span {
 
   body:has(#docs-nav:checked) {
     overflow: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-nav-drawer {
+    transition: none;
   }
 }

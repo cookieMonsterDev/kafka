@@ -18,12 +18,14 @@ const { title, description, code, type, heading, lede } = Astro.props
 
 <BaseLayout title={title} description={description}>
   <main
-    class="landing-hero relative isolate flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center px-6 py-20 text-center"
+    id="main-content"
+    tabindex="-1"
+    class="landing-hero relative isolate flex min-h-[calc(100vh-var(--header-height))] flex-col items-center justify-center px-6 py-20 text-center"
   >
     <p class="text-muted-foreground font-mono text-sm tracking-wide">
       {code} · {type}
     </p>
-    <h1 class="mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
+    <h1 class="mt-4 max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
       {heading}
     </h1>
     <p class="text-muted-foreground mt-6 max-w-md text-base leading-relaxed sm:text-lg">

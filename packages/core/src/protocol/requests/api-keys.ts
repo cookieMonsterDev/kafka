@@ -59,6 +59,7 @@ export const API_KEYS = Object.freeze({
   DescribeUserScramCredentials: 50,
   AlterUserScramCredentials: 51,
   DescribeCluster: 60,
+  DescribeProducers: 61,
   DescribeTransactions: 65,
 });
 

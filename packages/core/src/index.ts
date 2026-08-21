@@ -126,8 +126,11 @@ export type {
 } from './types/index';
 
 export type {
+  ActiveProducerState,
   AclEntry,
   AclFilter,
+  DescribeProducersOptions,
+  PartitionProducerState,
   TopicConfig,
   TopicOffset,
   TransactionDescription,

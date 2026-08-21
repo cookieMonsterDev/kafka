@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/brand/logo-256.png" width="160" height="160" alt="kafka">
+  <img src="packages/docs/public/logo-icon.svg" width="96" height="96" alt="kafka">
 </p>
 
 <h1 align="center">kafka</h1>

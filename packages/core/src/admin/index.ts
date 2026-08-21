@@ -4,6 +4,7 @@ import type { InstrumentationEvent } from '../instrumentation/event';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createAclsApi } from './acls';
 import { createConfigsApi } from './configs';
+import { createFeaturesApi } from './features';
 import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createLogDirsApi } from './log-dirs';
@@ -46,6 +47,7 @@ export function createAdmin({
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
+  const features = createFeaturesApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -88,6 +90,7 @@ export function createAdmin({
     ...scram,
     ...quotas,
     ...logDirs,
+    ...features,
     on,
     logger: () => logger,
     events,

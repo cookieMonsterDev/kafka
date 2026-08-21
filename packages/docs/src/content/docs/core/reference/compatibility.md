@@ -67,7 +67,9 @@ partitions; the runtime does not yet do incremental revoke).
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
-and Metadata otherwise. Still missing: describeProducers and transaction
+and Metadata otherwise. `admin.updateFeatures` implements UpdateFeatures
+(key 57) v0–v2 and targets the active controller; v0 cannot validate-only and
+rejects unsafe downgrades. Still missing: describeProducers and transaction
 describe APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /

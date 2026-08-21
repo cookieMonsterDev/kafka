@@ -60,8 +60,14 @@ consumer.seek({ topic: 'events', partition: 0, offset: 42n });
 ## Assigners and isolation
 
 Range, round-robin (default), sticky, and cooperative-sticky are built in
-(`PartitionAssigners`). Groups use the classic protocol only — there is no
-KIP-848 `group.protocol=consumer`. Isolation defaults to `read_committed`
-(`readUncommitted: false`); Java default `isolation.level` is
-`read_uncommitted`. See [Compatibility](../reference/compatibility/) and
-[consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+(`PartitionAssigners`). Cooperative-sticky follows KIP-429: members retain
+unchanged partitions, revoke only partitions that move, and automatically run
+the follow-up generation needed to assign revoked partitions safely. The
+round-robin default and the other eager assigners still revoke their full
+assignment during a rebalance.
+
+Groups use the classic protocol only — there is no KIP-848
+`group.protocol=consumer`. Isolation defaults to `read_committed`
+(`readUncommitted: false`); Java default `isolation.level` is `read_uncommitted`.
+See [Compatibility](../reference/compatibility/), [KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
+and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

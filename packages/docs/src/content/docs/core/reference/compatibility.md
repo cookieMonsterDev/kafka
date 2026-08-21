@@ -61,9 +61,11 @@ keyed murmur2 routing are unchanged.
 the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
 `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative rebalance
-still uses eager join/sync on this client (the assignor withholds moving
-partitions; the runtime does not yet do incremental revoke).
+is supported and throws if there is no committed offset. Cooperative-sticky
+uses KIP-429 incremental revoke semantics and performs the follow-up generation
+needed to settle partitions that move between members. This support applies to
+the classic group protocol; the KIP-848 consumer group protocol remains
+unsupported.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
@@ -72,8 +74,9 @@ partitions; the runtime does not yet do incremental revoke).
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
-and Metadata otherwise. Still missing: describeProducers and transaction
-describe APIs.
+and Metadata otherwise. `admin.describeTransactions` uses key 65, dynamically
+discovers transaction coordinators, and requires Kafka 3.0+. Still missing:
+describeProducers and the remaining transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). See

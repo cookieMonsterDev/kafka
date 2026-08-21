@@ -99,7 +99,7 @@ import type { ListPartitionReassignmentsRequestV0Options } from '../protocol/req
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import { Metadata } from '../protocol/requests/metadata/index';
 import type { MetadataOptions } from '../protocol/requests/metadata/index';
-import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { OffsetCommit } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response';
@@ -113,7 +113,11 @@ import { OffsetForLeaderEpoch } from '../protocol/requests/offset-for-leader-epo
 import type { OffsetForLeaderEpochOptions } from '../protocol/requests/offset-for-leader-epoch/index';
 import type { OffsetForLeaderEpochResponseV4Body } from '../protocol/requests/offset-for-leader-epoch/v4/response';
 import { Produce } from '../protocol/requests/produce/index';
-import type { ProduceRequestOptions } from '../protocol/requests/produce/shared';
+import {
+  isUsableTopicId,
+  PRODUCE_TOPIC_ID_MIN_VERSION,
+  type ProduceRequestOptions,
+} from '../protocol/requests/produce/shared';
 import type { ProduceResponseV6Body } from '../protocol/requests/produce/v6/response';
 import { SaslAuthenticate } from '../protocol/requests/sasl-authenticate/index';
 import { SyncGroup } from '../protocol/requests/sync-group/index';
@@ -149,6 +153,9 @@ import type { DescribeProducersResponseV0Body } from '../protocol/requests/descr
 import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
+import { ListTransactions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
@@ -314,7 +321,7 @@ export class Broker {
     return versions;
   }
 
-  async metadata(topics: string[] = []): Promise<MetadataResponseV9Body> {
+  async metadata(topics: string[] = []): Promise<ClusterMetadata> {
     const metadata = this.lookupRequest<MetadataOptions>(API_KEYS.Metadata, Metadata);
     const shuffledTopics = shuffle(topics);
     const protocol = metadata({ topics: shuffledTopics, allowAutoTopicCreation: this.allowAutoTopicCreation });
@@ -331,7 +338,7 @@ export class Broker {
       response: {
         decode: (rawData: Buffer) => protocol.response.decode(rawData),
         parse: async (data: unknown) => {
-          const body = data as MetadataResponseV9Body;
+          const body = data as ClusterMetadata;
           const topicMetadata = body.topicMetadata.filter(
             (topic) =>
               !failure(topic.topicErrorCode) &&
@@ -345,10 +352,29 @@ export class Broker {
 
   /** Resolves `undefined` only for `acks: 0`, where the broker never writes a response to the wire. */
   async produce(options: ProduceRequestOptions): Promise<ProduceResponseV6Body | undefined> {
+    const opts = { ...options, compression: options.compression ?? COMPRESSION_TYPES.None };
     const produce = this.lookupRequest<ProduceRequestOptions>(API_KEYS.Produce, Produce);
-    return this.#sendRequest<ProduceResponseV6Body>(
-      produce({ ...options, compression: options.compression ?? COMPRESSION_TYPES.None }),
-    );
+    let protocol = produce(opts);
+
+    // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on
+    // the highest mutually supported name-based version (v12 on Kafka 4.0).
+    if (
+      protocol.request.apiVersion >= PRODUCE_TOPIC_ID_MIN_VERSION &&
+      !opts.topicData.every((topic) => isUsableTopicId(topic.topicId))
+    ) {
+      const advertised = this.versions?.[API_KEYS.Produce];
+      const brokerMin = advertised?.minVersion ?? 0;
+      const brokerMax = advertised?.maxVersion ?? 0;
+      const nameBased = Produce.versions.filter(
+        (version) => version < PRODUCE_TOPIC_ID_MIN_VERSION && version >= brokerMin && version <= brokerMax,
+      );
+      if (nameBased.length === 0) {
+        throw new KafkaInvariantViolation('no name-based Produce protocol for this broker');
+      }
+      protocol = Produce.protocol({ version: Math.max(...nameBased) })(opts);
+    }
+
+    return this.#sendRequest<ProduceResponseV6Body>(protocol);
   }
 
   async fetch(options: FetchRequestOptions): Promise<FetchResponseV11Body> {
@@ -584,6 +610,11 @@ export class Broker {
       DescribeTransactions,
     );
     return this.#send(describeTransactions(options));
+  }
+
+  async listTransactions(options: ListTransactionsOptions = {}): Promise<ListTransactionsResponseV0Body> {
+    const listTransactions = this.lookupRequest<ListTransactionsOptions>(API_KEYS.ListTransactions, ListTransactions);
+    return this.#send(listTransactions(options));
   }
 
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {

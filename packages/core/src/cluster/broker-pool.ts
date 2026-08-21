@@ -3,7 +3,7 @@ import { KafkaBrokerNotFound, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { staleMetadata } from '../protocol/error-codes';
 import type { BrokerVersions } from '../protocol/requests/index';
-import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { arrayDiff } from '../utils/array-diff';
 import { shuffle } from '../utils/shuffle';
 import type { RetryOptions } from '../retry/index';
@@ -43,7 +43,7 @@ export class BrokerPool {
 
   brokers: Record<string, Broker> = {};
   seedBroker: Broker | undefined;
-  metadata: MetadataResponseV9Body | null = null;
+  metadata: ClusterMetadata | null = null;
   metadataExpireAt: number | null = null;
   versions: BrokerVersions | null = null;
 

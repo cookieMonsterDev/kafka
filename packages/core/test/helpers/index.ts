@@ -474,6 +474,7 @@ export const testIfKafkaEquals_3_6 = testIfKafkaVersion('3.6', kafkaVersionEqual
 export const testIfKafkaAtLeast_2_1 = testIfKafkaVersion('2.1', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_2 = testIfKafkaVersion('2.2', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_2_4 = testIfKafkaVersion('2.4', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_2_8 = testIfKafkaVersion('2.8', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_3_0 = testIfKafkaVersion('3.0', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_3_6 = testIfKafkaVersion('3.6', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_4_0 = testIfKafkaVersion('4.0', kafkaVersionAtLeast);

@@ -35,8 +35,8 @@ Kafka 0.11+ negotiates RecordBatch (magic 2).
 native addon. That is why the runtime floor is **Node.js 24**.
 
 ZSTD on the wire needs Produce v7+ / Fetch v10+ (Kafka 2.1+). An older broker
-throws. GZIP is built in for every supported broker. Snappy and LZ4 are
-pluggable stubs via `CompressionCodecs`.
+throws. GZIP, Snappy, LZ4, and ZSTD are built in; codecs remain overridable via
+`CompressionCodecs`.
 
 ## Environment variables
 

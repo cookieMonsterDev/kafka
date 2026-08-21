@@ -30,6 +30,7 @@ export interface SendMessagesRequest {
 interface TopicRequestMetadata {
   partitionsPerLeader: Record<number, number[]>;
   messagesPerPartition: Map<number, Message[]>;
+  topicId?: Buffer;
 }
 
 export function createSendMessages({ logger, cluster, partitioner, eosManager, retrier }: SendMessagesOptions) {
@@ -51,8 +52,9 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
 
         const messagesPerPartition = groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner });
         const partitionsPerLeader = cluster.findLeaderForPartitions(topic, [...messagesPerPartition.keys()]);
+        const topicId = cluster.findTopicId(topic);
 
-        topicMetadata.set(topic, { partitionsPerLeader, messagesPerPartition });
+        topicMetadata.set(topic, { partitionsPerLeader, messagesPerPartition, topicId });
 
         for (const nodeId of Object.keys(partitionsPerLeader)) {
           const broker = await cluster.findBroker({ nodeId });
@@ -67,8 +69,9 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
       return brokersWithoutResponse.map(async (broker) => {
         const topicDataForBroker = [...topicMetadata.entries()]
           .filter(([, { partitionsPerLeader }]) => broker.nodeId != null && partitionsPerLeader[broker.nodeId])
-          .map(([topic, { partitionsPerLeader, messagesPerPartition }]) => ({
+          .map(([topic, { partitionsPerLeader, messagesPerPartition, topicId }]) => ({
             topic,
+            topicId,
             partitions: (broker.nodeId != null ? partitionsPerLeader[broker.nodeId] : undefined) ?? [],
             messagesPerPartition,
           }));

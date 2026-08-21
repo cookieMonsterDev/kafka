@@ -15,14 +15,14 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Topics
 
-| Method                                                               | Notes                                        |
-| -------------------------------------------------------------------- | -------------------------------------------- |
-| `listTopics()`                                                       |                                              |
-| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })` | `validateOnly` needs CreateTopics v1 (0.11+) |
-| `deleteTopics({ topics, timeout? })`                                 |                                              |
-| `createPartitions({ topicPartitions, validateOnly?, timeout? })`     |                                              |
-| `fetchTopicMetadata({ topics? })`                                    |                                              |
-| `deleteTopicRecords({ topic, partitions })`                          |                                              |
+| Method                                                               | Notes                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------ |
+| `listTopics()`                                                       |                                                  |
+| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })` | `validateOnly` needs CreateTopics v1 (0.11+)     |
+| `deleteTopics({ topics, timeout? })`                                 |                                                  |
+| `createPartitions({ topicPartitions, validateOnly?, timeout? })`     |                                                  |
+| `fetchTopicMetadata({ topics? })`                                    | Optional `topicId` (`Buffer`) when Metadata v10+ |
+| `deleteTopicRecords({ topic, partitions })`                          |                                                  |
 
 ## Offsets
 
@@ -60,7 +60,23 @@ transactional ID, state, timeout, start time, producer ID and epoch, and active
 topic partitions. Producer IDs and transaction start times are `bigint`.
 DescribeTransactions is API key 65 and requires Kafka 3.0 or newer.
 
-## ACLs, SCRAM, quotas, log dirs, tokens
+`listTransactions(options?)` sends ListTransactions (API key 66) to every broker
+and unique-merges listings by transactional ID. Each listing is
+`{ transactionalId, producerId, transactionState }`; producer IDs are `bigint`.
+Omit filters (or pass empty arrays) to list all transactions the coordinators
+know about. Optional filters:
+
+| Option                   | Notes                                                                  |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `stateFilters`           | Transaction states such as `Ongoing` or `Empty`                        |
+| `producerIdFilters`      | `bigint[]`; empty means all producers                                  |
+| `durationFilter`         | v1+ (Kafka 3.5+). Milliseconds; omit or `-1n` means no duration filter |
+| `transactionalIdPattern` | v2+ regex. `null` or omitted means no pattern filter                   |
+
+On brokers that only speak v0, the client omits v1/v2 fields rather than
+sending them. ListTransactions requires Kafka 3.0 or newer.
+
+## ACLs, SCRAM, quotas, log dirs
 
 | Method                                                       | Notes                                     |
 | ------------------------------------------------------------ | ----------------------------------------- |

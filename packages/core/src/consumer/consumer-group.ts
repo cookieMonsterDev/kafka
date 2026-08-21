@@ -1,9 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
+import {
+  CONSUMER_GROUP_JOIN_EPOCH,
+  CONSUMER_GROUP_LEAVE_EPOCH,
+} from '../protocol/requests/consumer-group-heartbeat/index';
+import type { ConsumerGroupHeartbeatTopicPartitions } from '../protocol/requests/consumer-group-heartbeat/index';
+import type { ConsumerGroupHeartbeatResponseV1Body } from '../protocol/requests/consumer-group-heartbeat/v1/response';
 import { retrier, type RetryOptions } from '../retry/index';
 import { arrayDiff } from '../utils/array-diff';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
@@ -80,6 +87,12 @@ export interface ConsumerGroupOptions {
   rackId: string;
   metadataMaxAge: number;
   groupInstanceId?: string;
+  /**
+   * Group membership protocol. `'classic'` uses JoinGroup/SyncGroup; `'consumer'` uses
+   * ConsumerGroupHeartbeat (KIP-848). Default `'classic'`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   */
+  groupProtocol?: 'classic' | 'consumer';
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
@@ -126,6 +139,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   rackId: string;
   metadataMaxAge: number;
   groupInstanceId: string | null;
+  /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
+  useConsumerProtocol: boolean;
   shuttingDown = false;
 
   seekOffset = new SeekOffsets();
@@ -140,8 +155,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   offsetManager: OffsetManager | null = null;
   subscriptionState = new SubscriptionState();
   lastRequest = Date.now();
+  heartbeatIntervalMs: number | null = null;
 
   readonly #sharedHeartbeat: (options: { interval: number }) => Promise<void>;
+  #includeJoinFields = true;
+  #ownedTopicPartitions: ConsumerGroupHeartbeatTopicPartitions[] = [];
+  #ownedPartitionsDirty = false;
+  #consumerProtocolJoined = false;
+  readonly #topicNameById = new Map<string, string>();
 
   constructor({
     retry,
@@ -165,6 +186,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     rackId,
     metadataMaxAge,
     groupInstanceId,
+    groupProtocol = 'classic',
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
@@ -188,8 +210,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
+    this.useConsumerProtocol = groupProtocol === 'consumer';
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
+      if (this.useConsumerProtocol) {
+        await this.#heartbeatConsumerProtocol({ interval });
+        return;
+      }
+
       const { groupId: id, generationId, memberId } = this;
       const now = Date.now();
 
@@ -244,10 +272,27 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async leave(): Promise<void> {
     const { groupId, memberId, coordinator } = this;
-    if (memberId && coordinator) {
-      await coordinator.leaveGroup({ groupId, memberId, groupInstanceId: this.groupInstanceId });
-      this.memberId = null;
+    if (!memberId || !coordinator) return;
+
+    if (this.useConsumerProtocol) {
+      if (this.#consumerProtocolJoined) {
+        await coordinator.consumerGroupHeartbeat({
+          groupId,
+          memberId,
+          memberEpoch: CONSUMER_GROUP_LEAVE_EPOCH,
+          instanceId: this.groupInstanceId,
+        });
+      }
+      this.#consumerProtocolJoined = false;
+      this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
+      this.#includeJoinFields = true;
+      this.#ownedTopicPartitions = [];
+      this.#ownedPartitionsDirty = false;
+      return;
     }
+
+    await coordinator.leaveGroup({ groupId, memberId, groupInstanceId: this.groupInstanceId });
+    this.memberId = null;
   }
 
   async #sync(): Promise<boolean> {
@@ -324,6 +369,44 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       partitions: decodedAssignment[topic] ?? [],
     }));
 
+    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
+    const partitionsToRevoke =
+      selectedAssigner?.protocolType === 'cooperative'
+        ? revokedPartitions(this.assigned(), currentMemberAssignment)
+        : [];
+
+    await this.#installAssignment(currentMemberAssignment);
+
+    selectedAssigner?.onAssignment?.(
+      currentMemberAssignment.reduce<MemberAssignmentMap>(
+        (partitionsByTopic, { topic, partitions }) => {
+          partitionsByTopic[topic] = partitions;
+          return partitionsByTopic;
+        },
+        Object.create(null) as MemberAssignmentMap,
+      ),
+    );
+
+    if (partitionsToRevoke.length > 0) {
+      this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
+        groupId,
+        generationId,
+        memberId,
+        partitionsToRevoke,
+      });
+    }
+
+    return partitionsToRevoke.length > 0;
+  }
+
+  async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
+    const { groupId, generationId, memberId, coordinator } = this;
+    if (!coordinator || generationId == null || memberId == null) {
+      throw new KafkaNonRetriableError('Consumer group has not joined');
+    }
+
+    this.partitionsPerSubscribedTopic = this.generatePartitionsPerSubscribedTopic();
+
     for (const { topic, partitions: assignedPartitions } of currentMemberAssignment) {
       const knownPartitions = this.partitionsPerSubscribedTopic.get(topic) ?? [];
       const isAwareOfAllAssignedPartitions = assignedPartitions.every((partition) =>
@@ -346,24 +429,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       }
     }
 
-    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
-    const partitionsToRevoke =
-      selectedAssigner?.protocolType === 'cooperative'
-        ? revokedPartitions(this.assigned(), currentMemberAssignment)
-        : [];
-
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
-
-    selectedAssigner?.onAssignment?.(
-      currentMemberAssignment.reduce<MemberAssignmentMap>(
-        (partitionsByTopic, { topic, partitions }) => {
-          partitionsByTopic[topic] = partitions;
-          return partitionsByTopic;
-        },
-        Object.create(null) as MemberAssignmentMap,
-      ),
-    );
 
     this.offsetManager = new OffsetManager({
       cluster: this.cluster,
@@ -384,17 +451,151 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       generationId,
       memberId,
     });
+  }
 
-    if (partitionsToRevoke.length > 0) {
-      this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
-        groupId,
-        generationId,
-        memberId,
-        partitionsToRevoke,
-      });
+  #ensureMemberId(): string {
+    if (!this.memberId) {
+      this.memberId = randomUUID();
+    }
+    return this.memberId;
+  }
+
+  #topicIdKey(topicId: Buffer): string {
+    return topicId.toString('hex');
+  }
+
+  async #resolveTopicName(topicId: Buffer): Promise<string> {
+    const key = this.#topicIdKey(topicId);
+    const cached = this.#topicNameById.get(key);
+    if (cached) return cached;
+
+    if (this.topicsSubscribed.length === 1) {
+      const name = this.topicsSubscribed[0];
+      if (name != null) {
+        this.#topicNameById.set(key, name);
+        return name;
+      }
     }
 
-    return partitionsToRevoke.length > 0;
+    await this.#refreshTopicIdMapFromDescribe();
+    const resolved = this.#topicNameById.get(key);
+    if (resolved) return resolved;
+
+    throw new KafkaNonRetriableError(`Unable to resolve topic id ${key} to a subscribed topic name`);
+  }
+
+  async #refreshTopicIdMapFromDescribe(): Promise<void> {
+    const { coordinator, groupId, memberId } = this;
+    if (!coordinator) return;
+
+    const { groups } = await coordinator.consumerGroupDescribe({
+      groupIds: [groupId],
+      includeAuthorizedOperations: false,
+    });
+    const group = groups.find((entry) => entry.groupId === groupId);
+    if (!group) return;
+
+    const members = memberId ? group.members.filter((member) => member.memberId === memberId) : group.members;
+    for (const member of members) {
+      for (const assignment of [member.assignment, member.targetAssignment]) {
+        for (const { topicId, topicName } of assignment.topicPartitions) {
+          if (topicName) this.#topicNameById.set(this.#topicIdKey(topicId), topicName);
+        }
+      }
+    }
+  }
+
+  async #heartbeatConsumerProtocol({ interval, force = false }: { interval: number; force?: boolean }): Promise<void> {
+    const { groupId, coordinator } = this;
+    if (!coordinator) {
+      throw new KafkaNonRetriableError('Consumer group has not joined');
+    }
+
+    const memberId = this.#ensureMemberId();
+    const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
+    const now = Date.now();
+    if (!force && now < this.lastRequest + heartbeatInterval) return;
+
+    const includeJoinFields = this.#includeJoinFields;
+    const includeOwnedPartitions = this.#ownedPartitionsDirty;
+    const response = await coordinator.consumerGroupHeartbeat({
+      groupId,
+      memberId,
+      memberEpoch: this.generationId ?? CONSUMER_GROUP_JOIN_EPOCH,
+      instanceId: includeJoinFields ? this.groupInstanceId : null,
+      rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
+      rebalanceTimeoutMs: includeJoinFields ? this.rebalanceTimeout : -1,
+      subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+      topicPartitions: includeOwnedPartitions ? this.#ownedTopicPartitions : null,
+    });
+
+    this.#includeJoinFields = false;
+    this.#ownedPartitionsDirty = false;
+    this.lastRequest = Date.now();
+    this.instrumentationEmitter.emit(HEARTBEAT, {
+      groupId,
+      memberId,
+      groupGenerationId: response.memberEpoch,
+      groupInstanceId: this.groupInstanceId,
+    });
+
+    await this.#applyHeartbeatResponse(response);
+  }
+
+  async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body): Promise<void> {
+    if (response.memberId) this.memberId = response.memberId;
+    this.generationId = response.memberEpoch;
+    this.heartbeatIntervalMs = response.heartbeatIntervalMs;
+    this.leaderId = null;
+    this.groupProtocol = 'consumer';
+    if (response.memberEpoch > CONSUMER_GROUP_JOIN_EPOCH) {
+      this.#consumerProtocolJoined = true;
+    }
+
+    if (!response.assignment) return;
+
+    const currentMemberAssignment: TopicPartitions[] = [];
+    const owned: ConsumerGroupHeartbeatTopicPartitions[] = [];
+    for (const { topicId, partitions } of response.assignment.topicPartitions) {
+      const topic = await this.#resolveTopicName(topicId);
+      currentMemberAssignment.push({ topic, partitions });
+      owned.push({ topicId, partitions });
+    }
+
+    this.logger.debug('Received consumer-protocol assignment', {
+      groupId: this.groupId,
+      memberId: this.memberId,
+      memberEpoch: this.generationId,
+      memberAssignment: currentMemberAssignment,
+    });
+
+    await this.#installAssignment(currentMemberAssignment);
+    this.#ownedTopicPartitions = owned;
+    this.#ownedPartitionsDirty = true;
+  }
+
+  async #joinConsumerProtocol(): Promise<void> {
+    this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
+    this.#includeJoinFields = true;
+    this.#ownedPartitionsDirty = false;
+    this.#ownedTopicPartitions = [];
+    this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
+    this.#ensureMemberId();
+    await this.cluster.refreshMetadata();
+
+    await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
+
+    let attempts = 0;
+    while (!this.#consumerProtocolJoined && !this.shuttingDown && attempts < 8) {
+      attempts += 1;
+      await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
+    }
+
+    attempts = 0;
+    while (this.#ownedPartitionsDirty && !this.shuttingDown && attempts < 8) {
+      attempts += 1;
+      await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
+    }
   }
 
   joinAndSync(): Promise<void> {
@@ -403,12 +604,18 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (this.shuttingDown) return;
 
       try {
-        let requiresFollowupRebalance: boolean;
-        do {
-          await this.#join();
-          if (this.shuttingDown) return;
-          requiresFollowupRebalance = await this.#sync();
-        } while (requiresFollowupRebalance && !this.shuttingDown);
+        if (this.useConsumerProtocol) {
+          await this.#joinConsumerProtocol();
+        } else {
+          let requiresFollowupRebalance: boolean;
+          do {
+            await this.#join();
+            if (this.shuttingDown) return;
+            requiresFollowupRebalance = await this.#sync();
+          } while (requiresFollowupRebalance && !this.shuttingDown);
+        }
+
+        if (this.shuttingDown) return;
 
         const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
           result[topic] = partitions;
@@ -436,8 +643,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           throw new KafkaError(error);
         }
 
-        if (error.type === 'UNKNOWN_MEMBER_ID') {
-          this.memberId = null;
+        if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
+          if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
+          this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
+          this.#includeJoinFields = true;
+          this.#consumerProtocolJoined = false;
           throw new KafkaError(error);
         }
 

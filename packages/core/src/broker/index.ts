@@ -152,6 +152,12 @@ import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/de
 import { ListTransactions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
+import { ConsumerGroupHeartbeat } from '../protocol/requests/consumer-group-heartbeat/index';
+import type { ConsumerGroupHeartbeatOptions } from '../protocol/requests/consumer-group-heartbeat/index';
+import type { ConsumerGroupHeartbeatResponseV1Body } from '../protocol/requests/consumer-group-heartbeat/v1/response';
+import { ConsumerGroupDescribe } from '../protocol/requests/consumer-group-describe/index';
+import type { ConsumerGroupDescribeOptions } from '../protocol/requests/consumer-group-describe/index';
+import type { ConsumerGroupDescribeResponseV1Body } from '../protocol/requests/consumer-group-describe/v1/response';
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
@@ -580,6 +586,22 @@ export class Broker {
   async listTransactions(options: ListTransactionsOptions = {}): Promise<ListTransactionsResponseV0Body> {
     const listTransactions = this.lookupRequest<ListTransactionsOptions>(API_KEYS.ListTransactions, ListTransactions);
     return this.#send(listTransactions(options));
+  }
+
+  async consumerGroupHeartbeat(options: ConsumerGroupHeartbeatOptions): Promise<ConsumerGroupHeartbeatResponseV1Body> {
+    const consumerGroupHeartbeat = this.lookupRequest<ConsumerGroupHeartbeatOptions>(
+      API_KEYS.ConsumerGroupHeartbeat,
+      ConsumerGroupHeartbeat,
+    );
+    return this.#send(consumerGroupHeartbeat(options));
+  }
+
+  async consumerGroupDescribe(options: ConsumerGroupDescribeOptions): Promise<ConsumerGroupDescribeResponseV1Body> {
+    const consumerGroupDescribe = this.lookupRequest<ConsumerGroupDescribeOptions>(
+      API_KEYS.ConsumerGroupDescribe,
+      ConsumerGroupDescribe,
+    );
+    return this.#send(consumerGroupDescribe(options));
   }
 
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {

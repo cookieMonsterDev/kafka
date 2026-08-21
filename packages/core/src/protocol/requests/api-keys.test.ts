@@ -18,6 +18,8 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.DescribeProducers).toBe(61);
     expect(API_KEYS.DescribeTransactions).toBe(65);
     expect(API_KEYS.ListTransactions).toBe(66);
+    expect(API_KEYS.ConsumerGroupHeartbeat).toBe(68);
+    expect(API_KEYS.ConsumerGroupDescribe).toBe(69);
   });
 
   it('is frozen', () => {

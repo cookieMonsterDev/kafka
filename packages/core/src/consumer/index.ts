@@ -109,6 +109,13 @@ export interface ConsumerOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
+  /**
+   * Group membership protocol. `'classic'` (default) uses JoinGroup/SyncGroup.
+   * `'consumer'` opts into KIP-848 ConsumerGroupHeartbeat (Kafka 4.0+). Java name:
+   * `group.protocol`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   */
+  groupProtocol?: 'classic' | 'consumer';
 }
 
 /**
@@ -169,6 +176,7 @@ export function createConsumer({
   metadataMaxAge = 300_000,
   groupInstanceId,
   autoOffsetReset,
+  groupProtocol = 'classic',
 }: ConsumerOptions): Consumer {
   if (!groupId) {
     throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
@@ -185,7 +193,7 @@ export function createConsumer({
   let consumerGroup: ConsumerGroup | null = null;
   let restartTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  if (heartbeatInterval >= sessionTimeout) {
+  if (groupProtocol !== 'consumer' && heartbeatInterval >= sessionTimeout) {
     throw new KafkaNonRetriableError(
       `Consumer heartbeatInterval (${heartbeatInterval}) must be lower than sessionTimeout (${sessionTimeout}). It is recommended to set heartbeatInterval to approximately a third of the sessionTimeout.`,
     );
@@ -348,6 +356,7 @@ export function createConsumer({
         autoCommit,
         autoCommitInterval,
         autoCommitThreshold,
+        groupProtocol,
       });
 
       runner = new Runner({

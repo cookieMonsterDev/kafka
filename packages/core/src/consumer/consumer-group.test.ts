@@ -145,4 +145,106 @@ describe('consumer/consumer-group', () => {
     expect(syncGroup).toHaveBeenCalledTimes(1);
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [2] }]);
   });
+
+  it('uses JoinGroup when groupProtocol is omitted', async () => {
+    const joinGroup = vi.fn(async () => ({
+      generationId: 1,
+      leaderId: 'other-member',
+      memberId: 'member-1',
+      members: [],
+      groupProtocol: 'eager',
+    }));
+    const syncGroup = vi.fn(async () => ({
+      memberAssignment: MemberAssignment.encode({
+        version: 0,
+        assignment: { topic1: [0] },
+      }),
+    }));
+    const consumerGroupHeartbeat = vi.fn();
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, syncGroup, consumerGroupHeartbeat })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.assigners = [
+      {
+        name: 'eager',
+        version: 0,
+        protocolType: 'eager',
+        assign: vi.fn(async () => []),
+        protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
+      },
+    ];
+
+    await consumerGroup.joinAndSync();
+
+    expect(joinGroup).toHaveBeenCalled();
+    expect(consumerGroupHeartbeat).not.toHaveBeenCalled();
+  });
+
+  it('joins with ConsumerGroupHeartbeat when groupProtocol is consumer', async () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const consumerGroupHeartbeat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        memberId: 'generated-member',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: { topicPartitions: [{ topicId, partitions: [0, 1] }] },
+      })
+      .mockResolvedValueOnce({
+        memberId: 'generated-member',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: null,
+      });
+    const joinGroup = vi.fn();
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, consumerGroupHeartbeat })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+      committedOffsets: vi.fn(() => ({})),
+      refreshMetadata: vi.fn(async () => undefined),
+    } as unknown as Cluster;
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      groupProtocol: 'consumer',
+    });
+
+    await consumerGroup.joinAndSync();
+
+    expect(joinGroup).not.toHaveBeenCalled();
+    expect(consumerGroupHeartbeat).toHaveBeenCalled();
+    expect(consumerGroupHeartbeat.mock.calls[0]?.[0]).toMatchObject({
+      groupId: 'group',
+      memberEpoch: 0,
+      subscribedTopicNames: ['topic1'],
+    });
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
+    expect(consumerGroup.groupProtocol).toBe('consumer');
+    expect(consumerGroupHeartbeat.mock.calls[1]?.[0]).toMatchObject({
+      memberEpoch: 1,
+      subscribedTopicNames: null,
+    });
+    expect(consumerGroupHeartbeat.mock.calls[1]?.[0].topicPartitions).toEqual([{ topicId, partitions: [0, 1] }]);
+  });
 });

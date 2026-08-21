@@ -54,6 +54,8 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.DescribeProducers)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeTransactions)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ListTransactions)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.ConsumerGroupHeartbeat)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.ConsumerGroupDescribe)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });
@@ -75,6 +77,8 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ListTransactions, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ConsumerGroupHeartbeat, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ConsumerGroupDescribe, 1)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 0)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 3)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ApiVersions, 4)).toBe(true);
@@ -89,6 +93,8 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ListTransactions, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ConsumerGroupHeartbeat, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ConsumerGroupDescribe, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 2)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 3)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.ApiVersions, 4)).toBe(false);

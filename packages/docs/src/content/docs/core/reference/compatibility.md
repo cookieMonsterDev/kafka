@@ -57,15 +57,16 @@ keyed murmur2 routing are unchanged.
 ## Not yet at the Java 4.3 surface
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
-(`PartitionAssigners`). The default assigner is still round-robin. Groups use
-the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
-[consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
+(`PartitionAssigners`). The default assigner is still round-robin. Classic
+JoinGroup/SyncGroup remains the default membership protocol. Set
+`groupProtocol: 'consumer'` (Java `group.protocol`) to opt into KIP-848
+ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
+incremental. Admin describe of `consumer` protocol groups is a follow-up.
 `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
 is supported and throws if there is no committed offset. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
-needed to settle partitions that move between members. This support applies to
-the classic group protocol; the KIP-848 consumer group protocol remains
-unsupported.
+needed to settle partitions that move between members. This assignor support
+applies to the classic group protocol.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43

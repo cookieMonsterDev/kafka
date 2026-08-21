@@ -43,7 +43,7 @@ export function createTopicsApi(
 ): TopicsApi {
   const listTopics = async (): Promise<string[]> => {
     const { topicMetadata } = await requireMetadata(cluster);
-    return topicMetadata.map((topic) => topic.topic);
+    return topicMetadata.flatMap((topic) => (topic.topic == null ? [] : [topic.topic]));
   };
 
   const createTopics = async ({
@@ -243,10 +243,16 @@ export function createTopicsApi(
     const metadata = await requireMetadata(cluster, { topics });
 
     return {
-      topics: metadata.topicMetadata.map((topicMetadata) => ({
-        name: topicMetadata.topic,
-        partitions: topicMetadata.partitionMetadata,
-      })),
+      topics: metadata.topicMetadata.flatMap((topicMetadata) => {
+        if (topicMetadata.topic == null) return [];
+        return [
+          {
+            name: topicMetadata.topic,
+            ...(topicMetadata.topicId != null ? { topicId: topicMetadata.topicId } : {}),
+            partitions: topicMetadata.partitionMetadata,
+          },
+        ];
+      }),
     };
   };
 

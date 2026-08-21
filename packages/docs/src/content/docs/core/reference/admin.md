@@ -15,14 +15,14 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Topics
 
-| Method                                                               | Notes                                        |
-| -------------------------------------------------------------------- | -------------------------------------------- |
-| `listTopics()`                                                       |                                              |
-| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })` | `validateOnly` needs CreateTopics v1 (0.11+) |
-| `deleteTopics({ topics, timeout? })`                                 |                                              |
-| `createPartitions({ topicPartitions, validateOnly?, timeout? })`     |                                              |
-| `fetchTopicMetadata({ topics? })`                                    |                                              |
-| `deleteTopicRecords({ topic, partitions })`                          |                                              |
+| Method                                                               | Notes                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------ |
+| `listTopics()`                                                       |                                                  |
+| `createTopics({ topics, validateOnly?, timeout?, waitForLeaders? })` | `validateOnly` needs CreateTopics v1 (0.11+)     |
+| `deleteTopics({ topics, timeout? })`                                 |                                                  |
+| `createPartitions({ topicPartitions, validateOnly?, timeout? })`     |                                                  |
+| `fetchTopicMetadata({ topics? })`                                    | Optional `topicId` (`Buffer`) when Metadata v10+ |
+| `deleteTopicRecords({ topic, partitions })`                          |                                                  |
 
 ## Offsets
 

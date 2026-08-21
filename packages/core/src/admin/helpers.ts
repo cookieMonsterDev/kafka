@@ -4,7 +4,7 @@ import { KafkaMetadataNotLoaded } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import { staleMetadata } from '../protocol/error-codes';
-import type { MetadataResponseV6Body } from '../protocol/requests/metadata/v6/response';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import type { RetryOptions } from '../retry/index';
 import { groupBy } from '../utils/group-by';
 import { waitFor, type WaitForOptions } from '../utils/wait';
@@ -54,7 +54,7 @@ export async function findTopicPartitions(cluster: Cluster, topic: string): Prom
 export async function requireMetadata(
   cluster: Cluster,
   options: { topics?: readonly string[] } = {},
-): Promise<MetadataResponseV6Body> {
+): Promise<ClusterMetadata> {
   const metadata = await cluster.metadata(options);
   if (!metadata) {
     throw new KafkaMetadataNotLoaded('Topic metadata not loaded');

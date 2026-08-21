@@ -119,6 +119,7 @@ export type {
   SaslMechanism,
   SaslMechanismProvider,
   SaslOptions,
+  ScramSaslOptions,
   SocketFactory,
   TopicMessages,
   TopicPartitionOffset,

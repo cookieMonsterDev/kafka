@@ -86,8 +86,11 @@ missing: the remaining transaction administration APIs.
 
 **Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
 Kerberos is not. The `aws` SASL helper is extra (non-Apache). Admin can
-create, describe, renew, and expire delegation tokens; SASL authentication
-_using_ a delegation token is not implemented. See
+create, describe, renew, and expire delegation tokens. SASL login with a
+delegation token is opt-in: set `sasl.mechanism` to `scram-sha-256` or
+`scram-sha-512` and pass `tokenId` / `tokenHmac` (see
+[Security](../guides/security/)). The broker still needs
+`delegation.token.secret.key` and SASL/SCRAM. See
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See

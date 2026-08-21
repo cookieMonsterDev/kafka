@@ -27,6 +27,24 @@ describe('public types', () => {
       username: 'u',
       password: 'p',
     }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-256' as const,
+      username: 'u',
+      password: 'p',
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-256' as const,
+      tokenId: 'tokenID123',
+      tokenHmac: Buffer.from('hmac'),
+    }).toMatchTypeOf<SaslOptions>();
+
+    expectTypeOf({
+      mechanism: 'scram-sha-512' as const,
+      tokenId: 'tokenID123',
+      tokenHmac: 'lAYYSFmLs4bTjf+lTZ1LCHR/ZZFNA==',
+    }).toMatchTypeOf<SaslOptions>();
   });
 
   it('types producer/consumer/admin factories and bigint offsets', () => {

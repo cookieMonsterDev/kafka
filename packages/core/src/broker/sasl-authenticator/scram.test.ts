@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { Decoder } from '../../protocol/decoder';
 import { scram256AuthenticatorProvider } from './scram256';
-import { DIGESTS, SCRAM } from './scram';
+import { DIGESTS, resolveScramSaslConfig, SCRAM } from './scram';
 import type { ScramServerMessage } from '../../protocol/sasl/scram';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -20,7 +20,7 @@ const internals = (scram: SCRAM): ScramInternals => scram as unknown as ScramInt
 
 describe('broker/sasl-authenticator/SCRAM', () => {
   it('throws for a missing username', async () => {
-    const scram = scram256AuthenticatorProvider({ username: undefined as never, password: 'pencil' })({
+    const scram = scram256AuthenticatorProvider({ username: undefined, password: 'pencil' })({
       host: '',
       port: 0,
       logger: silentLogger,
@@ -30,7 +30,7 @@ describe('broker/sasl-authenticator/SCRAM', () => {
   });
 
   it('throws for a missing password', async () => {
-    const scram = scram256AuthenticatorProvider({ username: 'user', password: undefined as never })({
+    const scram = scram256AuthenticatorProvider({ username: 'user', password: undefined })({
       host: '',
       port: 0,
       logger: silentLogger,
@@ -135,6 +135,101 @@ describe('broker/sasl-authenticator/SCRAM', () => {
         const buffer = await request.encode();
         const decoder = new Decoder(buffer);
         expect(decoder.readBytes()!.toString()).toBe(`n,,n=bob=3D,r=${scram.currentNonce}`);
+      });
+    });
+
+    describe('delegation token', () => {
+      it('maps tokenId and a Buffer hmac onto username, base64 password, and tokenAuth', () => {
+        const hmac = Buffer.from('hmac-bytes');
+        expect(resolveScramSaslConfig({ tokenId: 'tokenID123', tokenHmac: hmac })).toEqual({
+          username: 'tokenID123',
+          password: hmac.toString('base64'),
+          tokenAuth: true,
+        });
+      });
+
+      it('uses a string hmac as the SCRAM password without re-encoding', () => {
+        expect(
+          resolveScramSaslConfig({
+            tokenId: 'tokenID123',
+            tokenHmac: 'lAYYSFmLs4bTjf+lTZ1LCHR/ZZFNA==',
+          }),
+        ).toEqual({
+          username: 'tokenID123',
+          password: 'lAYYSFmLs4bTjf+lTZ1LCHR/ZZFNA==',
+          tokenAuth: true,
+        });
+      });
+
+      it('leaves username/password SCRAM without tokenAuth', () => {
+        expect(resolveScramSaslConfig({ username: 'alice', password: 'secret' })).toEqual({
+          username: 'alice',
+          password: 'secret',
+        });
+      });
+
+      it('throws when tokenId is missing', () => {
+        expect(() => resolveScramSaslConfig({ tokenHmac: 'abc' })).toThrow(
+          'token authentication requires both tokenId and tokenHmac',
+        );
+      });
+
+      it('throws when tokenHmac is missing', () => {
+        expect(() => resolveScramSaslConfig({ tokenId: 'tokenID123' })).toThrow(
+          'token authentication requires both tokenId and tokenHmac',
+        );
+      });
+
+      it('throws when tokenHmac is an empty Buffer', () => {
+        expect(() => resolveScramSaslConfig({ tokenId: 'tokenID123', tokenHmac: Buffer.alloc(0) })).toThrow(
+          'token authentication requires both tokenId and tokenHmac',
+        );
+      });
+
+      it('encodes tokenauth=true on the client-first message', async () => {
+        const hmac = Buffer.from('hmac-bytes');
+        const scram = new SCRAM(
+          resolveScramSaslConfig({ tokenId: 'tokenID123', tokenHmac: hmac }),
+          'host',
+          9094,
+          silentLogger,
+          saslAuthenticate,
+          DIGESTS.SHA256,
+        );
+        scram.currentNonce = 'rOprNGfwEbeRWgbNEkqO';
+        saslAuthenticate.mockResolvedValueOnce({ original: '' });
+
+        await internals(scram).sendClientFirstMessage();
+
+        const { request } = saslAuthenticate.mock.calls[0]![0] as { request: { encode(): Promise<Buffer> } };
+        const buffer = await request.encode();
+        const decoder = new Decoder(buffer);
+        expect(decoder.readBytes()!.toString()).toBe(`n,,n=tokenID123,r=${scram.currentNonce},tokenauth=true`);
+      });
+
+      it('sends the mapped token first message through the SCRAM provider', async () => {
+        const hmac = Buffer.from('hmac-bytes');
+        const authenticate = scram256AuthenticatorProvider({ tokenId: 'tokenID123', tokenHmac: hmac })({
+          host: 'host',
+          port: 9094,
+          logger: silentLogger,
+          saslAuthenticate,
+        });
+        saslAuthenticate.mockResolvedValueOnce({
+          original: 'r=nonce,s=W22ZaJ0SNY7soEsUEjb6gQ==,i=4096',
+          r: 'nonce',
+          s: 'W22ZaJ0SNY7soEsUEjb6gQ==',
+          i: '4096',
+        });
+
+        await expect(authenticate.authenticate()).rejects.toThrow('Invalid server nonce');
+
+        const { request } = saslAuthenticate.mock.calls[0]![0] as { request: { encode(): Promise<Buffer> } };
+        const buffer = await request.encode();
+        const decoder = new Decoder(buffer);
+        const firstMessage = decoder.readBytes()!.toString();
+        expect(firstMessage.startsWith('n,,n=tokenID123,r=')).toBe(true);
+        expect(firstMessage.endsWith(',tokenauth=true')).toBe(true);
       });
     });
 

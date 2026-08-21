@@ -44,6 +44,20 @@ interface PreferredReadReplica {
   expireAt: number;
 }
 
+function revokedPartitions(
+  previousAssignment: readonly TopicPartitions[],
+  nextAssignment: readonly TopicPartitions[],
+): TopicPartitions[] {
+  const nextPartitionsByTopic = new Map(nextAssignment.map(({ topic, partitions }) => [topic, new Set(partitions)]));
+
+  return previousAssignment
+    .map(({ topic, partitions }) => ({
+      topic,
+      partitions: partitions.filter((partition) => !nextPartitionsByTopic.get(topic)?.has(partition)),
+    }))
+    .filter(({ partitions }) => partitions.length > 0);
+}
+
 export interface ConsumerGroupOptions {
   retry?: RetryOptions;
   cluster: Cluster;
@@ -236,7 +250,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
   }
 
-  async #sync(): Promise<void> {
+  async #sync(): Promise<boolean> {
     let assignment: { memberId: string; memberAssignment: Buffer }[] = [];
     const { groupId, generationId, memberId, members, groupProtocol, topicsSubscribed, coordinator } = this;
 
@@ -332,10 +346,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       }
     }
 
+    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
+    const partitionsToRevoke =
+      selectedAssigner?.protocolType === 'cooperative'
+        ? revokedPartitions(this.assigned(), currentMemberAssignment)
+        : [];
+
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
 
-    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
     selectedAssigner?.onAssignment?.(
       currentMemberAssignment.reduce<MemberAssignmentMap>(
         (partitionsByTopic, { topic, partitions }) => {
@@ -365,6 +384,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       generationId,
       memberId,
     });
+
+    if (partitionsToRevoke.length > 0) {
+      this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
+        groupId,
+        generationId,
+        memberId,
+        partitionsToRevoke,
+      });
+    }
+
+    return partitionsToRevoke.length > 0;
   }
 
   joinAndSync(): Promise<void> {
@@ -373,9 +403,12 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (this.shuttingDown) return;
 
       try {
-        await this.#join();
-        if (this.shuttingDown) return;
-        await this.#sync();
+        let requiresFollowupRebalance: boolean;
+        do {
+          await this.#join();
+          if (this.shuttingDown) return;
+          requiresFollowupRebalance = await this.#sync();
+        } while (requiresFollowupRebalance && !this.shuttingDown);
 
         const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
           result[topic] = partitions;

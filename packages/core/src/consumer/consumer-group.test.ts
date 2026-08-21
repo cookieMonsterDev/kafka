@@ -3,8 +3,11 @@ import type { Cluster } from '../cluster/index';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
+import { MemberAssignment } from './assigner-protocol';
 import { ConsumerGroup } from './consumer-group';
+import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetManager } from './offset-manager/index';
+import type { Assigner } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -52,5 +55,94 @@ describe('consumer/consumer-group', () => {
     await consumerGroup.commitOffsets(offsets);
     expect(commitOffsets).toHaveBeenCalledTimes(1);
     expect(commitOffsets).toHaveBeenCalledWith(offsets);
+  });
+
+  it('settles a cooperative revoke with a second join and sync generation', async () => {
+    const firstAssignment = MemberAssignment.encode({
+      version: 1,
+      assignment: { topic1: [0] },
+    });
+    const settledAssignment = MemberAssignment.encode({
+      version: 1,
+      assignment: { topic1: [0, 2] },
+    });
+    const joinGroup = vi.fn(async () => ({
+      generationId: joinGroup.mock.calls.length,
+      leaderId: 'other-member',
+      memberId: 'member-1',
+      members: [],
+      groupProtocol: 'cooperative',
+    }));
+    const syncGroup = vi
+      .fn()
+      .mockResolvedValueOnce({ memberAssignment: firstAssignment })
+      .mockResolvedValueOnce({ memberAssignment: settledAssignment });
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, syncGroup })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }, { partitionId: 2 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const onAssignment = vi.fn();
+    const assigner: Assigner = {
+      name: 'cooperative',
+      version: 1,
+      protocolType: 'cooperative',
+      assign: vi.fn(async () => []),
+      protocol: vi.fn(() => ({ name: 'cooperative', metadata: Buffer.alloc(0) })),
+      onAssignment,
+    };
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.assigners = [assigner];
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    const groupJoins: unknown[] = [];
+    consumerGroup.instrumentationEmitter.addListener(GROUP_JOIN, (event) => groupJoins.push(event));
+
+    await consumerGroup.joinAndSync();
+
+    expect(joinGroup).toHaveBeenCalledTimes(2);
+    expect(syncGroup).toHaveBeenCalledTimes(2);
+    expect(onAssignment).toHaveBeenNthCalledWith(1, { topic1: [0] });
+    expect(onAssignment).toHaveBeenNthCalledWith(2, { topic1: [0, 2] });
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 2] }]);
+    expect(groupJoins).toHaveLength(1);
+  });
+
+  it('keeps eager assignment changes to one join and sync generation', async () => {
+    const joinGroup = vi.fn(async () => ({
+      generationId: 1,
+      leaderId: 'other-member',
+      memberId: 'member-1',
+      members: [],
+      groupProtocol: 'eager',
+    }));
+    const syncGroup = vi.fn(async () => ({
+      memberAssignment: MemberAssignment.encode({
+        version: 0,
+        assignment: { topic1: [2] },
+      }),
+    }));
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, syncGroup })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }, { partitionId: 2 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const assigner: Assigner = {
+      name: 'eager',
+      version: 0,
+      protocolType: 'eager',
+      assign: vi.fn(async () => []),
+      protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
+    };
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.assigners = [assigner];
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+
+    await consumerGroup.joinAndSync();
+
+    expect(joinGroup).toHaveBeenCalledTimes(1);
+    expect(syncGroup).toHaveBeenCalledTimes(1);
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [2] }]);
   });
 });

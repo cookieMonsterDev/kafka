@@ -270,7 +270,16 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
+  /**
+   * Group membership protocol. `'classic'` (default) uses JoinGroup/SyncGroup.
+   * `'consumer'` opts into KIP-848 ConsumerGroupHeartbeat (Kafka 4.0+). Java name:
+   * `group.protocol`. Classic remains the default.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   */
+  groupProtocol?: GroupProtocol;
 }
+
+export type GroupProtocol = 'classic' | 'consumer';
 
 /**
  * Options for {@link Kafka.admin}.

@@ -34,7 +34,7 @@ Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
 Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
-`DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
+`GroupProtocol`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /

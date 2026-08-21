@@ -19,6 +19,7 @@ import {
   int64,
   nullableArray,
   nullableString,
+  nullableStruct,
   object,
   string,
   taggedFields,
@@ -157,6 +158,19 @@ describe('protocol/schema', () => {
       expect(encoded.buffer).toEqual(new Encoder().writeDouble(value).buffer);
       expect(float64.read(new Decoder(encoded.buffer))).toBe(value);
     }
+  });
+
+  it('nullableStruct encodes null as INT8 -1 and present as INT8 1 plus the body', () => {
+    const shape = nullableStruct(flexibleObject([field('count', int32)]));
+    const nullEncoder = new Encoder();
+    shape.write(nullEncoder, null);
+    expect(nullEncoder.buffer).toEqual(new Encoder().writeInt8(-1).buffer);
+    expect(shape.read(new Decoder(nullEncoder.buffer))).toBeNull();
+
+    const present = new Encoder();
+    shape.write(present, { count: 3 });
+    expect(present.buffer).toEqual(new Encoder().writeInt8(1).writeInt32(3).writeUVarInt(0).buffer);
+    expect(shape.read(new Decoder(present.buffer))).toEqual({ count: 3 });
   });
 
   it('round-trips an empty tagged-fields buffer', () => {

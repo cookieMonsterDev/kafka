@@ -204,6 +204,30 @@ describe('broker/Broker', () => {
       expect(sent.request.apiKey).toBe(API_KEYS.Heartbeat);
     });
 
+    it('consumerGroupHeartbeat sends through the negotiated version and returns the parsed response', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        memberId: 'm',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: null,
+      });
+
+      const result = await broker.consumerGroupHeartbeat({
+        groupId: 'g',
+        memberId: 'm',
+        memberEpoch: 0,
+        subscribedTopicNames: ['events'],
+      });
+
+      expect(result).toMatchObject({ memberId: 'm', memberEpoch: 1 });
+      expect(pool.send).toHaveBeenCalledOnce();
+      const [sent] = pool.send.mock.calls[0] as [{ request: { apiKey: number } }];
+      expect(sent.request.apiKey).toBe(API_KEYS.ConsumerGroupHeartbeat);
+    });
+
     it('joinGroup retries with the assigned memberId on KafkaMemberIdRequired', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);

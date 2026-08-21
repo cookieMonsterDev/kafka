@@ -95,6 +95,7 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  GroupProtocol,
   GssTokenChallenge,
   GssTokenProvider,
   GssTokenStep,

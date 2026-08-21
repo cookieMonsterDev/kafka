@@ -226,6 +226,31 @@ export function compactNullableArray<T>(element: FieldCodec<T>): FieldCodec<T[] 
   );
 }
 
+/**
+ * Nullable struct (Kafka `NULLABLE_STRUCT`): a leading INT8 marker of `-1` (null) or `1`
+ * (present), then the struct body. Used by ConsumerGroupHeartbeat's Assignment field.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function nullableStruct<T>(element: FieldCodec<T>): FieldCodec<T | null> {
+  return codec(
+    (e, value) => {
+      if (value === null) {
+        e.writeInt8(-1);
+        return;
+      }
+      e.writeInt8(1);
+      element.write(e, value);
+    },
+    (d) => {
+      const marker = d.readInt8();
+      if (marker === -1) return null;
+      if (marker === 1) return element.read(d);
+      throw new RangeError(`Expected nullable struct marker -1 or 1, got ${marker}`);
+    },
+  );
+}
+
 export interface FieldSpec<Name extends string, T> {
   name: Name;
   codec: FieldCodec<T>;

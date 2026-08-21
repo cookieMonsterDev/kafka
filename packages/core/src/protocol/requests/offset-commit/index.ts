@@ -23,6 +23,8 @@ import { offsetCommitRequestV7 } from './v7/request';
 import { offsetCommitResponseV7 } from './v7/response';
 import { offsetCommitRequestV8 } from './v8/request';
 import { offsetCommitResponseV8 } from './v8/response';
+import { offsetCommitRequestV9 } from './v9/request';
+import { offsetCommitResponseV9 } from './v9/response';
 
 export interface OffsetCommitOptions {
   groupId: string;
@@ -104,6 +106,16 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetCommitOptions>>> =
       topics: withDefaultMetadata(topics),
     }),
     response: offsetCommitResponseV8,
+  }),
+  9: ({ groupId, groupGenerationId, memberId, groupInstanceId = null, topics }) => ({
+    request: offsetCommitRequestV9({
+      groupId,
+      groupGenerationId,
+      memberId,
+      groupInstanceId,
+      topics: withDefaultMetadata(topics),
+    }),
+    response: offsetCommitResponseV9,
   }),
 };
 

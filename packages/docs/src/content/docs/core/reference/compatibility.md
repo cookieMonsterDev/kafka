@@ -56,9 +56,11 @@ and [consumer configs](https://kafka.apache.org/43/configuration/consumer-config
 the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
 [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
 `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative rebalance
-still uses eager join/sync on this client (the assignor withholds moving
-partitions; the runtime does not yet do incremental revoke).
+is supported and throws if there is no committed offset. Cooperative-sticky
+uses KIP-429 incremental revoke semantics and performs the follow-up generation
+needed to settle partitions that move between members. This support applies to
+the classic group protocol; the KIP-848 consumer group protocol remains
+unsupported.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43

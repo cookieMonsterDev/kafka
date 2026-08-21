@@ -143,6 +143,7 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 
 - Protocol and public API changes need tests.
 - New broker behavior should use the version helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …) instead of parsing `KAFKA_VERSION` in the test file.
+- Docs UI changes must keep [accessibility](#accessibility) (keyboard, names, focus, contrast, reduced motion).
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
 
 ## Code style
@@ -185,8 +186,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 ## Documentation site
 
-Markdown under `packages/docs/src/content/docs/<section>/` becomes a page
-(`/docs/start/introduction/`, and so on). After `pnpm clean`, build core first:
+Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page
+(`/docs/core/start/introduction/`, and so on). After `pnpm clean`, build core first:
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-docs... build
@@ -195,6 +196,41 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev
 ```
 
 How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](packages/docs/README.md).
+
+### Accessibility
+
+The docs site should meet **WCAG 2.2 Level AA**. Treat that as in-scope whenever you change
+`packages/docs` UI (layouts, components, pages, CSS) or Markdown that introduces images,
+tables, or interactive examples. Do not land a visual change and “fix a11y later”.
+
+Required for UI changes:
+
+- **Structure** — Use semantic HTML (`header`, `nav` with an accessible name, `main#main-content`,
+  `article`) before ARIA. Keep the skip link in `BaseLayout.astro`. Headings stay hierarchical
+  (`h1` then `h2` / `h3`); do not skip levels. Heading anchors need enough `scroll-margin-top`
+  that the sticky header does not cover them.
+- **Names** — Icon-only buttons and links have `aria-label`. Decorative images use `alt=""`;
+  decorative SVGs use `aria-hidden="true"`. Brand names and code samples that must not be
+  auto-translated use `translate="no"`.
+- **Keyboard** — Every control is reachable and operable without a pointer. Visible
+  `:focus-visible` (ring or outline) is required; never `outline: none` without a replacement.
+  The mobile docs menu keeps `aria-expanded`, closes on Escape, and does not leave focus
+  trapped after it closes. Overflowing code blocks and tables must be focusable so they can
+  be scrolled from the keyboard.
+- **Motion and zoom** — Honor `prefers-reduced-motion`. Do not set `user-scalable=no` or
+  `maximum-scale=1` on the viewport.
+- **Status** — Copy, search results, and theme changes announce through `aria-live="polite"`.
+  Do not use color as the only indicator (current page, warning callouts, copied state).
+- **Contrast and targets** — Text meets 4.5:1 (AA); UI focus indicators meet 3:1. Prefer at
+  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). Light
+  `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not lighten them
+  for aesthetics.
+
+Markdown-only edits: every page keeps a meaningful `title` and `description`. Images need
+`alt`. Tables need header cells. Do not convey meaning with color or emoji alone.
+
+When opening a PR that touches docs UI, check the accessibility box on the PR template and
+note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reader).
 
 ## Releasing
 

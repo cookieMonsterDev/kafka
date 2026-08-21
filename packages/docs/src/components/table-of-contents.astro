@@ -16,7 +16,7 @@ const showHeading = Astro.props.showHeading ?? true
   headings.length > 0 && (
     <nav class={cn('text-sm', Astro.props.class)} aria-label="On this page">
       {showHeading && (
-        <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">On this page</p>
+        <h2 class="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">On this page</h2>
       )}
       <ul class="border-border flex flex-col gap-1 border-l">
         {headings.map((heading) => (
@@ -24,7 +24,7 @@ const showHeading = Astro.props.showHeading ?? true
             <a
               href={`#${heading.slug}`}
               class={cn(
-                'text-muted-foreground hover:text-foreground block py-1 transition-colors',
+                'text-muted-foreground hover:text-foreground aria-[current=location]:text-foreground block py-1 font-normal transition-colors aria-[current=location]:font-medium',
                 heading.depth === 2 ? 'pl-3' : 'pl-6',
               )}
             >

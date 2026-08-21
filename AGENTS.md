@@ -22,7 +22,7 @@ parallel workflow. In particular:
 - Conventional Commits (commitlint on `commit-msg` and in CI)
 - One concern per branch and per PR; no mixed refactors or formatting-only noise
 - Public API only from `packages/core/src/index.ts`; generated types, never a hand-written `index.d.ts`
-- Tests and docs expectations under **Pull requests**, **Review expectations**, **Tests**, and **Documentation site**
+- Tests and docs expectations under **Pull requests**, **Review expectations**, **Tests**, and **Documentation site** (including **Accessibility** for docs UI)
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets
 
 The PR template (`.github/pull_request_template.md`) is the human-facing
@@ -40,9 +40,10 @@ or **N/A** with a one-line reason. Do not skip silently.
    - New or changed broker behavior: integration tests in `packages/core/test/suites/**`, version-gated with helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …). Do not parse `KAFKA_VERSION` in the test file.
    - Unit tests never start Docker. Integration tests need Docker unless `KAFKA_EXTERNAL=1`.
 4. **Docs**
-   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
+   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/core/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
    - Workflow, commands, or package usage: the relevant package README and/or [CONTRIBUTING.md](CONTRIBUTING.md).
    - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
+   - UI change in `packages/docs` (layout, component, or CSS): follow **Documentation site → Accessibility** in [CONTRIBUTING.md](CONTRIBUTING.md). Keyboard, names, focus, contrast, and `prefers-reduced-motion` are in scope for the PR, not a follow-up.
 5. **Exports** — New public surface is re-exported from `packages/core/src/index.ts` only. Types come from `tsc --emitDeclarationOnly`.
 6. **Verification** — Run what the change needs from the repo root:
    - `pnpm lint`, `pnpm format:check`, `pnpm typecheck`
@@ -105,7 +106,7 @@ Layered roughly bottom-up:
 - **`instrumentation/`** — event emitter for internal lifecycle events (connect, request, etc.).
 - **`retry/`, `utils/`, `types/`, `loggers/`** — cross-cutting helpers; `errors.ts` at `src/` root defines all public `Kafka*Error` classes.
 
-Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, `lingerMs: 0` (one Produce per `send()`), murmur2 partitioner. Offsets are `bigint` everywhere, not strings.
+Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/core/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, `lingerMs: 0` (one Produce per `send()`), murmur2 partitioner. Offsets are `bigint` everywhere, not strings.
 
 ## Code conventions
 
@@ -118,7 +119,18 @@ TypeScript is strict (`noUncheckedIndexedAccess`, `noImplicitOverride`), `verbat
 
 ## Documentation
 
-Markdown under `packages/docs/src/content/docs/<section>/` becomes a page (`/docs/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
+Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page (`/docs/core/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
+
+When the change touches docs **UI** (`packages/docs/src/{layouts,components,pages,styles}`), accessibility is part of the change, not optional polish. Match [CONTRIBUTING.md](CONTRIBUTING.md) **Documentation site → Accessibility**. In particular:
+
+- Semantic HTML and landmarks first (`header`, `nav`, `main`, `article`); keep the skip link pointing at `#main-content`
+- Icon-only controls need `aria-label`; decorative images/icons use `alt=""` / `aria-hidden="true"`
+- Every control is keyboard-reachable with a visible `:focus-visible` ring; do not use `outline: none` without a replacement
+- Honor `prefers-reduced-motion`; do not disable zoom (`user-scalable=no` / `maximum-scale=1`)
+- Async status (copy, search, theme) uses `aria-live="polite"`; do not rely on color alone
+- Text and UI contrast meet WCAG 2.2 AA; light `--muted-foreground` and `--ring` are sized for that
+
+Markdown-only page edits still need a real `title` / `description` and should not introduce inaccessible patterns (images without `alt`, tables without headers).
 
 ## Commits and branches
 

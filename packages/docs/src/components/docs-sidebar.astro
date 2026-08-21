@@ -1,17 +1,17 @@
 ---
 import { getCollection } from 'astro:content'
-import { groupDocs, hrefFor, isCurrentPath, navLabel } from '@/lib/docs'
+import { docsPackageFromPathname, groupDocs, hrefFor, isCurrentPath, navLabel } from '@/lib/docs'
 import { cn } from '@/lib/utils'
 
 interface Props {
   class?: string
 }
 
-const groups = groupDocs(await getCollection('docs'))
 const pathname = Astro.url.pathname
+const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pathname))
 ---
 
-<nav class={cn('text-sm', Astro.props.class)} aria-label="Core">
+<nav class={cn('text-sm', Astro.props.class)} aria-label="Documentation">
   {
     groups.map((group) => (
       <details open class="group/section mb-2">
@@ -42,7 +42,7 @@ const pathname = Astro.url.pathname
                     'block rounded-md px-2 py-1.5 transition-colors',
                     current
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                      : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                   )}
                 >
                   {navLabel(entry)}

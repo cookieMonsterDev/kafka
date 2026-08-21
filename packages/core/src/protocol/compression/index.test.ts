@@ -13,17 +13,17 @@ describe('protocol/compression', () => {
     expect(lookupCodec(COMPRESSION_TYPES.None)).toBeNull();
   });
 
-  it('resolves the GZIP and ZSTD codecs', () => {
+  it('resolves the GZIP, LZ4, and ZSTD codecs', () => {
     expect(lookupCodec(COMPRESSION_TYPES.GZIP)).not.toBeNull();
+    expect(lookupCodec(COMPRESSION_TYPES.LZ4)).not.toBeNull();
     expect(lookupCodec(COMPRESSION_TYPES.ZSTD)).not.toBeNull();
   });
 
-  it('throws KafkaNotImplemented for Snappy and LZ4 out of the box', () => {
+  it('throws KafkaNotImplemented for Snappy out of the box', () => {
     expect(() => lookupCodec(COMPRESSION_TYPES.Snappy)).toThrow('Snappy compression not implemented');
-    expect(() => lookupCodec(COMPRESSION_TYPES.LZ4)).toThrow('LZ4 compression not implemented');
   });
 
-  it('lets a user register a codec for Snappy/LZ4', () => {
+  it('lets a user register a codec for Snappy', () => {
     const original = CompressionCodecs[COMPRESSION_TYPES.Snappy];
     const fakeCodec = { compress: async (e: Encoder) => e.buffer, decompress: async (b: Buffer) => b };
     CompressionCodecs[COMPRESSION_TYPES.Snappy] = () => fakeCodec;

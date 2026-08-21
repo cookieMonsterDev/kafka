@@ -40,6 +40,10 @@ call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
 request. Set `lingerMs` / `batchSize` to batch; Java 4.0 default `linger.ms` is
 5 ms. See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
+GZIP, Snappy, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /
+`.ZSTD`). Kafka Snappy uses xerial snappy-java framing. LZ4 is still a
+pluggable stub via `CompressionCodecs`.
+
 ## Partitioners
 
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass

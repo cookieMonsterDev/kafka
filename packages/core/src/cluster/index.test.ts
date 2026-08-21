@@ -3,7 +3,7 @@ import { Broker } from '../broker/index';
 import { KafkaTopicMetadataNotLoaded } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
-import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { Cluster } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -19,7 +19,7 @@ function createCluster(overrides: Partial<ConstructorParameters<typeof Cluster>[
   });
 }
 
-function fakeMetadata(overrides: Partial<MetadataResponseV9Body> = {}): MetadataResponseV9Body {
+function fakeMetadata(overrides: Partial<ClusterMetadata> = {}): ClusterMetadata {
   return {
     brokers: [],
     topicMetadata: [],
@@ -52,6 +52,19 @@ describe('cluster/Cluster', () => {
       ];
       cluster.brokerPool.metadata = fakeMetadata({
         topicMetadata: [{ topicErrorCode: 0, topic: 'my-topic', isInternal: false, partitionMetadata }],
+      });
+
+      expect(cluster.findTopicPartitionMetadata('my-topic')).toBe(partitionMetadata);
+    });
+
+    it('looks up partitions by topic name when topicId is present', () => {
+      const cluster = createCluster();
+      const partitionMetadata = [
+        { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+      ];
+      const topicId = Buffer.from('0123456789abcdef');
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [{ topicErrorCode: 0, topic: 'my-topic', topicId, isInternal: false, partitionMetadata }],
       });
 
       expect(cluster.findTopicPartitionMetadata('my-topic')).toBe(partitionMetadata);

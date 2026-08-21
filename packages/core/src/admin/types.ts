@@ -98,6 +98,7 @@ export interface TopicPartitionConfig {
 
 export interface TopicMetadata {
   name: string;
+  topicId?: Buffer;
   partitions: PartitionMetadata[];
 }
 

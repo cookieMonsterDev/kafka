@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/brand/logo-256.png" width="160" height="160" alt="kafka">
+  <img src="packages/docs/public/logo-icon.svg" width="96" height="96" alt="kafka">
 </p>
 
 <h1 align="center">kafka</h1>
@@ -66,7 +66,7 @@ await consumer.run({
 });
 ```
 
-Offsets are `bigint` (`42n`), not strings. More examples: [Getting started](packages/docs/src/content/docs/start/getting-started.md), [public API](packages/docs/src/content/docs/reference/public-api.md), [compatibility](packages/docs/src/content/docs/reference/compatibility.md).
+Offsets are `bigint` (`42n`), not strings. More examples: [Getting started](packages/docs/src/content/docs/core/start/getting-started.md), [public API](packages/docs/src/content/docs/core/reference/public-api.md), [compatibility](packages/docs/src/content/docs/core/reference/compatibility.md).
 
 Run the site locally after `pnpm install`:
 

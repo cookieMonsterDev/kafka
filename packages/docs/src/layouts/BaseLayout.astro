@@ -2,8 +2,11 @@
 import '@/styles/global.css'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
+import { DocsSearch } from '@/components/docs-search'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
+import { getSearchIndex } from '@/lib/search-index'
+import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, THEME_STORAGE_KEY } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -14,89 +17,137 @@ interface Props {
 
 const { title, description, docs = false } = Astro.props
 const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
+const canonicalUrl = Astro.url.href
+const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
+const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
+const searchIndex = await getSearchIndex()
 ---
 
 <!doctype html>
 <html lang="en" class="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script is:inline define:vars={{ THEME_STORAGE_KEY, THEME_COLOR_DARK, THEME_COLOR_LIGHT }}>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem(THEME_STORAGE_KEY)
+          var dark = stored ? stored === 'dark' : true
+          document.documentElement.classList.toggle('dark', dark)
+          var meta = document.querySelector('meta[name="theme-color"]')
+          if (meta) meta.setAttribute('content', dark ? THEME_COLOR_DARK : THEME_COLOR_LIGHT)
+        } catch (e) {}
+      })()
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content={THEME_COLOR_DARK} />
+    <meta name="color-scheme" content="dark light" />
     <title>{documentTitle}</title>
-    {description && <meta name="description" content={description} />}
+    <meta name="description" content={description ?? fallbackDescription} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={documentTitle} />
+    <meta property="og:description" content={description ?? fallbackDescription} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
     <link rel="icon" href={withBase('/favicon.ico')} sizes="48x48" />
     <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />
   </head>
-  <body class="bg-background text-foreground min-h-screen font-sans antialiased">
+  <body
+    class={cn(
+      'bg-background text-foreground min-h-screen font-sans antialiased',
+      docs && 'lg:flex lg:h-dvh lg:flex-col lg:overflow-hidden',
+    )}
+  >
+    <a
+      href="#main-content"
+      class="bg-background text-foreground focus-visible:ring-ring sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-60 focus-visible:rounded-md focus-visible:px-3 focus-visible:py-2 focus-visible:ring-3"
+    >
+      Skip to content
+    </a>
     {
       docs && (
-        <input type="checkbox" id="docs-nav" class="peer sr-only" />
+        <input
+          type="checkbox"
+          id="docs-nav"
+          class="sr-only"
+          aria-label="Open documentation menu"
+          aria-controls="docs-mobile-nav"
+          aria-expanded="false"
+        />
       )
     }
-    <header class="border-border bg-background/80 sticky top-0 z-50 border-b backdrop-blur">
-      <nav class="relative flex h-14 w-full items-center px-4 lg:px-6">
-        {
-          docs && (
-            <label
-              for="docs-nav"
-              class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'z-10 lg:hidden')}
-              aria-label="Toggle Core menu"
-            >
-              <svg
-                class="docs-nav-menu size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
+    <header
+      class="border-border bg-background/95 sticky top-0 z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
+    >
+      <nav
+        class="flex h-full w-full items-center justify-between gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:px-6"
+        aria-label="Site"
+      >
+        <div class="flex min-w-0 items-center gap-1">
+          {
+            docs && (
+              <label
+                for="docs-nav"
+                class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
               >
-                <path d="M4 5h16"></path>
-                <path d="M4 12h16"></path>
-                <path d="M4 19h16"></path>
-              </svg>
-              <svg
-                class="docs-nav-close size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M18 6 6 18"></path>
-                <path d="m6 6 12 12"></path>
-              </svg>
-            </label>
-          )
-        }
+                <svg
+                  class="docs-nav-menu size-6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 5h16"></path>
+                  <path d="M4 12h16"></path>
+                  <path d="M4 19h16"></path>
+                </svg>
+                <svg
+                  class="docs-nav-close size-6"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </label>
+            )
+          }
 
-        <div
-          class={cn(
-            'flex items-center gap-6',
-            docs && 'max-lg:absolute max-lg:left-1/2 max-lg:-translate-x-1/2',
-            !docs && 'mr-auto',
-          )}
-        >
-          <a href={withBase('/')} class="flex items-center gap-2.5 font-semibold tracking-tight">
-            <img src={withBase('/logo-icon.svg')} alt="" width="28" height="28" class="size-7" />
-            Kafka
-          </a>
-          <a
-            href={withBase('/docs/start/getting-started/')}
-            class="text-muted-foreground hover:text-foreground hidden text-sm lg:inline"
-          >
-            Core
-          </a>
+          <div id="docs-brand" class="flex min-w-0 items-center gap-3">
+            <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
+              <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
+              <span class="text-foreground text-2xl font-semibold tracking-tight" translate="no">Kafka</span>
+            </a>
+            <span class="text-border text-xl font-light select-none" aria-hidden="true">/</span>
+            <a
+              href={withBase('/docs/core/start/introduction/')}
+              class="text-muted-foreground hover:text-foreground text-xl font-light no-underline transition-colors"
+              translate="no"
+            >
+              Core
+            </a>
+          </div>
         </div>
 
-        <div class={cn('flex items-center gap-1', docs && 'ml-auto')}>
+        <div id="docs-header-actions" class="flex shrink-0 items-center gap-1.5">
+          <div role="search">
+            <DocsSearch client:load index={searchIndex} />
+          </div>
           <a
             href="https://github.com/cookieMonsterDev/kafka"
-            class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), docs && 'max-lg:hidden')}
+            class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }))}
             aria-label="GitHub repository"
+            rel="noopener noreferrer"
           >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path
                 d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
               ></path>
@@ -109,25 +160,119 @@ const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
     </header>
 
     <CopyCode client:load />
+    <script is:inline>
+      ;(function () {
+        var timers = new WeakMap()
+        function mark(el) {
+          el.setAttribute('data-scrolling', '')
+          var prev = timers.get(el)
+          if (prev) window.clearTimeout(prev)
+          timers.set(
+            el,
+            window.setTimeout(function () {
+              el.removeAttribute('data-scrolling')
+              timers.delete(el)
+            }, 200),
+          )
+        }
+        document.addEventListener(
+          'scroll',
+          function (event) {
+            var target = event.target
+            if (target === document || target === document.documentElement || target === document.body) {
+              mark(document.documentElement)
+              return
+            }
+            if (target instanceof Element) mark(target)
+          },
+          { capture: true, passive: true },
+        )
+      })()
+    </script>
 
     {
       docs && (
         <>
           <label
             for="docs-nav"
-            class="docs-nav-overlay bg-background/70 fixed inset-0 top-14 z-40 cursor-pointer backdrop-blur-sm"
-            aria-label="Close Core menu"
+            class="docs-nav-overlay bg-background/70 fixed inset-0 top-(--header-height) z-40 cursor-pointer backdrop-blur-sm"
+            aria-hidden="true"
           />
           <div
             id="docs-mobile-nav"
-            class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-14 z-40 w-full overflow-y-auto border-r px-4 py-6"
+            class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 w-full overflow-y-auto overscroll-contain border-r px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Documentation"
           >
             <slot name="mobile-nav" />
           </div>
+          <script is:inline>
+            ;(function () {
+              var nav = document.getElementById('docs-nav')
+              var drawer = document.getElementById('docs-mobile-nav')
+              var brand = document.getElementById('docs-brand')
+              var actions = document.getElementById('docs-header-actions')
+              var content = document.getElementById('docs-content')
+              if (!(nav instanceof HTMLInputElement) || drawer == null) return
+
+              function focusable(root) {
+                return Array.prototype.slice.call(
+                  root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), summary, textarea, select, [tabindex]:not([tabindex="-1"])'),
+                )
+              }
+
+              function sync() {
+                var open = nav.checked
+                nav.setAttribute('aria-expanded', open ? 'true' : 'false')
+                nav.setAttribute('aria-label', open ? 'Close documentation menu' : 'Open documentation menu')
+                if (open) drawer.removeAttribute('aria-hidden')
+                else drawer.setAttribute('aria-hidden', 'true')
+                if (brand) brand.toggleAttribute('inert', open)
+                if (actions) actions.toggleAttribute('inert', open)
+                if (content) content.toggleAttribute('inert', open)
+                if (open) {
+                  var first = focusable(drawer)[0]
+                  if (first) first.focus()
+                }
+              }
+
+              nav.addEventListener('change', sync)
+              sync()
+              document.addEventListener('keydown', function (event) {
+                if (!nav.checked) return
+                if (event.key === 'Escape') {
+                  nav.checked = false
+                  nav.dispatchEvent(new Event('change'))
+                  nav.focus()
+                  return
+                }
+                if (event.key !== 'Tab') return
+                var drawerItems = focusable(drawer)
+                var first = nav
+                var last = drawerItems[drawerItems.length - 1] || nav
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault()
+                  last.focus()
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault()
+                  first.focus()
+                }
+              })
+            })()
+          </script>
         </>
       )
     }
 
-    <slot />
+    <div
+      id="docs-content"
+      class={cn(
+        !docs && 'contents',
+        docs && 'max-lg:contents lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden',
+      )}
+    >
+      <slot />
+    </div>
   </body>
 </html>

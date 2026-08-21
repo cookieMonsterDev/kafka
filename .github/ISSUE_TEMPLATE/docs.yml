@@ -18,8 +18,8 @@ body:
     id: location
     attributes:
       label: Where
-      description: URL, Markdown path, or README (for example `packages/docs/src/content/docs/start/getting-started.md`).
-      placeholder: /docs/start/getting-started/ or packages/core/README.md
+      description: URL, Markdown path, or README (for example `packages/docs/src/content/docs/core/start/getting-started.md`).
+      placeholder: /docs/core/start/getting-started/ or packages/core/README.md
     validations:
       required: true
   - type: textarea
@@ -36,3 +36,4 @@ body:
           required: true
         - label: I read the [contributing guide](https://github.com/cookieMonsterDev/kafka/blob/master/CONTRIBUTING.md).
           required: true
+        - label: This is an accessibility issue (keyboard, screen reader, contrast, motion, or zoom).

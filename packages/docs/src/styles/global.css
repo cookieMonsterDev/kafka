@@ -9,6 +9,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@property --scrollbar-alpha {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
@@ -64,27 +70,27 @@
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.966 0.005 106.5);
-  --muted-foreground: oklch(0.58 0.031 107.3);
+  --muted-foreground: oklch(0.45 0.031 107.3);
   --accent: oklch(0.966 0.005 106.5);
   --accent-foreground: oklch(0.228 0.013 107.4);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.93 0.007 106.5);
   --input: oklch(0.93 0.007 106.5);
-  --ring: oklch(0.737 0.021 106.9);
+  --ring: oklch(0.45 0.02 107);
   --chart-1: oklch(0.845 0.143 164.978);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.596 0.145 163.225);
   --chart-4: oklch(0.508 0.118 165.612);
   --chart-5: oklch(0.432 0.095 166.913);
   --radius: 0.625rem;
-  --sidebar: oklch(0.988 0.003 106.5);
+  --sidebar: var(--background);
   --sidebar-foreground: oklch(0.153 0.006 107.1);
   --sidebar-primary: oklch(0.596 0.145 163.225);
   --sidebar-primary-foreground: oklch(0.979 0.021 166.113);
   --sidebar-accent: oklch(0.966 0.005 106.5);
   --sidebar-accent-foreground: oklch(0.228 0.013 107.4);
   --sidebar-border: oklch(0.93 0.007 106.5);
-  --sidebar-ring: oklch(0.737 0.021 106.9);
+  --sidebar-ring: oklch(0.45 0.02 107);
 }
 
 .dark {
@@ -111,7 +117,7 @@
   --chart-3: oklch(0.596 0.145 163.225);
   --chart-4: oklch(0.508 0.118 165.612);
   --chart-5: oklch(0.432 0.095 166.913);
-  --sidebar: oklch(0.228 0.013 107.4);
+  --sidebar: var(--background);
   --sidebar-foreground: oklch(0.988 0.003 106.5);
   --sidebar-primary: oklch(0.696 0.17 162.48);
   --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
@@ -122,40 +128,95 @@
 }
 
 @layer base {
+  html {
+    @apply font-sans;
+    color-scheme: light;
+    --header-height: calc(4rem + 1px + env(safe-area-inset-top, 0px));
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   * {
     @apply border-border outline-ring/50;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
   }
-  *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  *::-webkit-scrollbar-thumb {
-    background-color: var(--muted-foreground);
-    border: 2px solid transparent;
-    border-radius: 9999px;
-    background-clip: padding-box;
-  }
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: var(--foreground);
-  }
-  *::-webkit-scrollbar-corner {
-    background: transparent;
+  a,
+  button,
+  summary,
+  label,
+  [role='button'] {
+    touch-action: manipulation;
   }
   body {
     @apply bg-background text-foreground;
   }
-  html {
-    @apply font-sans;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
+  #main-content {
+    scroll-margin-top: 1.5rem;
   }
   .prose :where(h1, h2, h3, h4, h5, h6) {
-    scroll-margin-top: 5rem;
+    scroll-margin-top: 1.5rem;
+  }
+  :where(a, summary, [role='button']):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  pre.astro-code:focus-visible,
+  .prose table:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 1023px) {
+    #main-content,
+    .prose :where(h1, h2, h3, h4, h5, h6) {
+      scroll-margin-top: 5rem;
+    }
+  }
+  .prose :where(table) {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .prose :where(th, td) {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table) {
+    --scrollbar-alpha: 0;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent)
+      transparent;
+    transition-property: --scrollbar-alpha;
+    transition-duration: 0.35s;
+    transition-timing-function: ease;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)[data-scrolling] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0.15s;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar-track,
+  :is(
+    html,
+    .overflow-auto,
+    .overflow-x-auto,
+    .overflow-y-auto,
+    pre.astro-code,
+    .prose table
+  )::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
   }
 }
 
@@ -171,30 +232,118 @@ html.dark .astro-code span {
 
 .prose pre.astro-code {
   position: relative;
-  cursor: copy;
   border: 1px solid var(--border);
 }
 
-.prose pre.astro-code[data-copied='true']::after {
-  content: 'Copied';
+.copy-block {
+  position: relative;
+}
+
+.copy-block > .copy-btn {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 1;
+}
+
+.prose .copy-block {
+  margin-block: 1.25em;
+}
+
+.prose .copy-block > pre.astro-code {
+  margin: 0;
+  padding-right: 2.75rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
   border-radius: var(--radius);
-  background: var(--muted);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.copy-command {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  padding: 0 0.25rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.copy-command:hover {
   color: var(--foreground);
-  padding: 0.15rem 0.5rem;
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  font-weight: 500;
 }
 
-[data-copy] {
-  cursor: copy;
+.copy-block > .copy-btn,
+.copy-command .copy-icon {
+  opacity: 0;
 }
 
-[data-copy][data-copied='true'] .copy-label::after {
-  content: ' — copied';
+.copy-block:hover > .copy-btn,
+.copy-block:focus-within > .copy-btn,
+.copy-command:hover .copy-icon,
+.copy-command:focus-visible .copy-icon,
+.copy-btn[data-copied],
+.copy-command[data-copied] .copy-check,
+.copy-btn:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .copy-block > .copy-btn,
+  .copy-command .copy-icon {
+    opacity: 1;
+  }
+}
+
+.copy-btn:hover {
+  color: var(--foreground);
+}
+
+.copy-btn:focus-visible,
+.copy-command:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+}
+
+.copy-btn svg,
+.copy-command svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.copy-btn .copy-check,
+.copy-command .copy-check {
+  display: none;
+}
+
+.copy-btn[data-copied] .copy-icon,
+.copy-command[data-copied] .copy-icon {
+  display: none;
+}
+
+.copy-btn[data-copied] .copy-check,
+.copy-command[data-copied] .copy-check {
+  display: block;
+}
+
+.code-tabs .copy-block > pre.astro-code {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 /* CSS-only package-manager / language tabs. Hydration is not required. */
@@ -225,6 +374,7 @@ html.dark .astro-code span {
   isolation: isolate;
 }
 
+/* Three partition lanes with offset ticks — the log, not a generic grid. */
 .landing-hero::before {
   content: '';
   pointer-events: none;
@@ -232,10 +382,23 @@ html.dark .astro-code span {
   inset: 0;
   z-index: -1;
   background-image:
-    linear-gradient(to right, var(--border) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
-  background-size: 4rem 4rem;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+    repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 3.5rem),
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - 2.5rem),
+      var(--border) calc(50% - 2.5rem),
+      var(--border) calc(50% - 2.5rem + 1px),
+      transparent calc(50% - 2.5rem + 1px),
+      transparent calc(50% - 0.2rem),
+      var(--border) calc(50% - 0.2rem),
+      var(--border) calc(50% - 0.2rem + 1px),
+      transparent calc(50% - 0.2rem + 1px),
+      transparent calc(50% + 2.1rem),
+      var(--border) calc(50% + 2.1rem),
+      var(--border) calc(50% + 2.1rem + 1px),
+      transparent calc(50% + 2.1rem + 1px)
+    );
+  mask-image: radial-gradient(ellipse 75% 50% at 50% 42%, black 18%, transparent 72%);
 }
 
 .docs-nav-close {
@@ -256,10 +419,12 @@ html.dark .astro-code span {
     display: block;
     pointer-events: none;
     visibility: hidden;
+    overscroll-behavior: contain;
     transform: translateX(-100%);
     transition:
       transform 200ms ease,
       visibility 200ms ease;
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
 
   #docs-nav:checked ~ .docs-nav-overlay {
@@ -280,7 +445,56 @@ html.dark .astro-code span {
     display: block;
   }
 
+  #docs-nav:focus-visible ~ header [for='docs-nav'] {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
   body:has(#docs-nav:checked) {
     overflow: hidden;
   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .docs-nav-drawer {
+    transition: none;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table) {
+    transition-duration: 0s;
+  }
+
+  .docs-search-dialog::backdrop {
+    backdrop-filter: none;
+  }
+}
+
+.docs-search-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: min(32rem, calc(100dvh - 2rem));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 24px 48px rgb(0 0 0 / 0.28);
+}
+
+.docs-search-dialog::backdrop {
+  background: color-mix(in oklch, var(--background) 45%, transparent);
+  backdrop-filter: blur(4px);
 }

@@ -55,5 +55,18 @@ The client discovers and groups requests by transaction coordinator. Producer
 IDs and transaction start times are returned as `bigint`.
 
 `electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
-Missing APIs such as `describeProducers` are listed under
-[Compatibility](../reference/compatibility/).
+
+Kafka 3.0+ can report the producer state retained by partition leaders:
+
+```ts
+const producerStates = await admin.describeProducers({
+  topicPartitions: [{ topic: 'events', partitions: [0, 1] }],
+});
+
+for (const state of producerStates) {
+  console.log(state.topic, state.partition, state.activeProducers);
+}
+```
+
+Pass `brokerId` to query a specific replica instead. Remaining transaction
+administration APIs are listed under [Compatibility](../reference/compatibility/).

@@ -157,6 +157,31 @@ export interface TopicPartitions {
   partitions: number[];
 }
 
+/** Options for {@link Admin.describeProducers}. Defaults to querying each partition leader. */
+export interface DescribeProducersOptions {
+  topicPartitions: TopicPartitions[];
+  /** Query a specific replica broker instead of the partition leaders. */
+  brokerId?: string | number;
+}
+
+/** Producer state retained by a broker for a topic partition. */
+export interface ActiveProducerState {
+  producerId: bigint;
+  producerEpoch: number;
+  lastSequence: number;
+  lastTimestamp: bigint;
+  coordinatorEpoch: number;
+  /** First offset of the open transaction, or `null` when the producer is not in a transaction. */
+  currentTransactionStartOffset: bigint | null;
+}
+
+/** Active producers for one requested topic partition. */
+export interface PartitionProducerState {
+  topic: string;
+  partition: number;
+  activeProducers: ActiveProducerState[];
+}
+
 export interface ClusterDescription {
   brokers: { nodeId: number; host: string; port: number }[];
   controller: number | null;
@@ -193,6 +218,7 @@ export interface Admin {
   }) => Promise<void>;
   fetchTopicMetadata: (options?: { topics?: string[] }) => Promise<{ topics: TopicMetadata[] }>;
   describeCluster: () => Promise<ClusterDescription>;
+  describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
   fetchOffsets: (options: {
     groupId: string;

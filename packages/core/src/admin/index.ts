@@ -8,6 +8,7 @@ import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createLogDirsApi } from './log-dirs';
 import { createOffsetsApi } from './offsets';
+import { createProducersApi } from './producers';
 import { createQuotasApi } from './quotas';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
@@ -16,10 +17,13 @@ import { createTransactionsApi } from './transactions';
 import type { Admin, AdminOptions } from './types';
 
 export type {
+  ActiveProducerState,
   Admin,
   AdminOptions,
   AclEntry,
   AclFilter,
+  DescribeProducersOptions,
+  PartitionProducerState,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
@@ -49,6 +53,7 @@ export function createAdmin({
 
   const offsets = createOffsetsApi(context);
   const topics = createTopicsApi(context, { fetchTopicOffsets: offsets.fetchTopicOffsets });
+  const producers = createProducersApi(context);
   const configs = createConfigsApi(context);
   const groups = createGroupsApi(context);
   const acls = createAclsApi(context);
@@ -91,6 +96,7 @@ export function createAdmin({
     connect,
     disconnect,
     ...topics,
+    ...producers,
     ...offsets,
     ...configs,
     ...groups,

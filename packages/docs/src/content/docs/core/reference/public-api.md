@@ -34,6 +34,7 @@ Snappy and LZ4 are pluggable stubs, not built in.
 Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
+`DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 and SASL types. Field-by-field:
 [Configuration](./configuration/),
 [Producer API](./producer/),

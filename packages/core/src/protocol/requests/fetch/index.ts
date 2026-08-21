@@ -25,6 +25,18 @@ import { fetchRequestV11 } from './v11/request';
 import { fetchResponseV11 } from './v11/response';
 import { fetchRequestV12 } from './v12/request';
 import { fetchResponseV12 } from './v12/response';
+import { fetchRequestV13 } from './v13/request';
+import { fetchResponseV13 } from './v13/response';
+import { fetchRequestV14 } from './v14/request';
+import { fetchResponseV14 } from './v14/response';
+import { fetchRequestV15 } from './v15/request';
+import { fetchResponseV15 } from './v15/response';
+import { fetchRequestV16 } from './v16/request';
+import { fetchResponseV16 } from './v16/response';
+import { fetchRequestV17 } from './v17/request';
+import { fetchResponseV17 } from './v17/response';
+import { fetchRequestV18 } from './v18/request';
+import { fetchResponseV18 } from './v18/response';
 import type { FetchRequestOptions } from './shared';
 
 /**
@@ -63,12 +75,20 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> =
   10: (options) => fetchProtocol(fetchRequestV10(options), fetchResponseV10, options.maxWaitTime),
   11: (options) => fetchProtocol(fetchRequestV11(options), fetchResponseV11, options.maxWaitTime),
   12: (options) => fetchProtocol(fetchRequestV12(options), fetchResponseV12, options.maxWaitTime),
+  13: (options) => fetchProtocol(fetchRequestV13(options), fetchResponseV13(options), options.maxWaitTime),
+  14: (options) => fetchProtocol(fetchRequestV14(options), fetchResponseV14(options), options.maxWaitTime),
+  15: (options) => fetchProtocol(fetchRequestV15(options), fetchResponseV15(options), options.maxWaitTime),
+  16: (options) => fetchProtocol(fetchRequestV16(options), fetchResponseV16(options), options.maxWaitTime),
+  17: (options) => fetchProtocol(fetchRequestV17(options), fetchResponseV17(options), options.maxWaitTime),
+  18: (options) => fetchProtocol(fetchRequestV18(options), fetchResponseV18(options), options.maxWaitTime),
 };
 
 /**
  * v0–v3 decode MessageSet only. v4+ probes the magic byte and dispatches to MessageSet
  * (magic 0/1) or RecordBatch (magic 2), including mixed-format responses during a cluster
- * upgrade from 0.10 to 0.11.
+ * upgrade from 0.10 to 0.11. v13+ addresses topics by UUID (KIP-516); lookup still picks
+ * the highest overlapping version, and Broker.fetch falls back to ≤12 when metadata has
+ * no topic IDs.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/

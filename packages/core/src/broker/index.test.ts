@@ -345,5 +345,60 @@ describe('broker/Broker', () => {
         leaderEpoch: 4,
       });
     });
+
+    it('falls back to Fetch v12 when the broker advertises v13+ but topicIds are missing', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Fetch]: { minVersion: 4, maxVersion: 18 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 0,
+        sessionId: 0,
+        responses: [],
+      });
+
+      await broker.fetch({
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [{ topic: 't', partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1024 }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(12);
+    });
+
+    it('uses Fetch v18 when topicIds are supplied', async () => {
+      const pool = createFakeConnectionPool();
+      const topicId = Buffer.from('0123456789abcdef');
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Fetch]: { minVersion: 4, maxVersion: 18 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 0,
+        sessionId: 0,
+        responses: [],
+      });
+
+      await broker.fetch({
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [{ topic: 't', topicId, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1024 }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(18);
+    });
   });
 });

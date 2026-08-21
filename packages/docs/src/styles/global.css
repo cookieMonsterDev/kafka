@@ -9,6 +9,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@property --scrollbar-alpha {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
@@ -77,7 +83,7 @@
   --chart-4: oklch(0.508 0.118 165.612);
   --chart-5: oklch(0.432 0.095 166.913);
   --radius: 0.625rem;
-  --sidebar: oklch(0.988 0.003 106.5);
+  --sidebar: var(--background);
   --sidebar-foreground: oklch(0.153 0.006 107.1);
   --sidebar-primary: oklch(0.596 0.145 163.225);
   --sidebar-primary-foreground: oklch(0.979 0.021 166.113);
@@ -111,7 +117,7 @@
   --chart-3: oklch(0.596 0.145 163.225);
   --chart-4: oklch(0.508 0.118 165.612);
   --chart-5: oklch(0.432 0.095 166.913);
-  --sidebar: oklch(0.228 0.013 107.4);
+  --sidebar: var(--background);
   --sidebar-foreground: oklch(0.988 0.003 106.5);
   --sidebar-primary: oklch(0.696 0.17 162.48);
   --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
@@ -125,8 +131,6 @@
   html {
     @apply font-sans;
     color-scheme: light;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
     --header-height: calc(4rem + env(safe-area-inset-top, 0px));
   }
   html.dark {
@@ -134,8 +138,6 @@
   }
   * {
     @apply border-border outline-ring/50;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted-foreground) transparent;
   }
   a,
   button,
@@ -143,25 +145,6 @@
   label,
   [role='button'] {
     touch-action: manipulation;
-  }
-  *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  *::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  *::-webkit-scrollbar-thumb {
-    background-color: var(--muted-foreground);
-    border: 2px solid transparent;
-    border-radius: 9999px;
-    background-clip: padding-box;
-  }
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: var(--foreground);
-  }
-  *::-webkit-scrollbar-corner {
-    background: transparent;
   }
   body {
     @apply bg-background text-foreground;
@@ -176,6 +159,45 @@
   }
   .prose :where(th, td) {
     font-variant-numeric: tabular-nums;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table) {
+    --scrollbar-alpha: 0;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent)
+      transparent;
+    transition-property: --scrollbar-alpha;
+    transition-duration: 0.35s;
+    transition-timing-function: ease;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)[data-scrolling] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0.15s;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar-track,
+  :is(
+    html,
+    .overflow-auto,
+    .overflow-x-auto,
+    .overflow-y-auto,
+    pre.astro-code,
+    .prose table
+  )::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table)::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
   }
 }
 
@@ -411,6 +433,10 @@ html.dark .astro-code span {
 @media (prefers-reduced-motion: reduce) {
   .docs-nav-drawer {
     transition: none;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto, pre.astro-code, .prose table) {
+    transition-duration: 0s;
   }
 }
 

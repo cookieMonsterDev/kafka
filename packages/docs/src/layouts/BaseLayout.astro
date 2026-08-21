@@ -109,16 +109,19 @@ const searchIndex = await getSearchIndex()
             )
           }
 
-          <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
-            <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
-            <span class="flex items-baseline gap-2.5 whitespace-nowrap">
+          <div class="flex min-w-0 items-center gap-3">
+            <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
+              <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
               <span class="text-foreground text-2xl font-semibold tracking-tight">Kafka</span>
-              <span class="text-border text-xl font-light select-none" aria-hidden="true">
-                /
-              </span>
-              <span class="text-muted-foreground text-xl font-light">Core</span>
-            </span>
-          </a>
+            </a>
+            <span class="text-border text-xl font-light select-none" aria-hidden="true">/</span>
+            <a
+              href={withBase('/docs/start/introduction/')}
+              class="text-muted-foreground hover:text-foreground text-xl font-light no-underline transition-colors"
+            >
+              Core
+            </a>
+          </div>
         </div>
 
         <div class="flex shrink-0 items-center gap-1.5">
@@ -141,6 +144,35 @@ const searchIndex = await getSearchIndex()
     </header>
 
     <CopyCode client:load />
+    <script is:inline>
+      ;(function () {
+        var timers = new WeakMap()
+        function mark(el) {
+          el.setAttribute('data-scrolling', '')
+          var prev = timers.get(el)
+          if (prev) window.clearTimeout(prev)
+          timers.set(
+            el,
+            window.setTimeout(function () {
+              el.removeAttribute('data-scrolling')
+              timers.delete(el)
+            }, 200),
+          )
+        }
+        document.addEventListener(
+          'scroll',
+          function (event) {
+            var target = event.target
+            if (target === document || target === document.documentElement || target === document.body) {
+              mark(document.documentElement)
+              return
+            }
+            if (target instanceof Element) mark(target)
+          },
+          { capture: true, passive: true },
+        )
+      })()
+    </script>
 
     {
       docs && (

@@ -2,8 +2,10 @@
 import '@/styles/global.css'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
+import { DocsSearch } from '@/components/docs-search'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
+import { getSearchIndex } from '@/lib/search-index'
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, THEME_STORAGE_KEY } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +20,7 @@ const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
 const canonicalUrl = Astro.url.href
 const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
 const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
+const searchIndex = await getSearchIndex()
 ---
 
 <!doctype html>
@@ -63,71 +66,66 @@ const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+
         <input type="checkbox" id="docs-nav" class="sr-only" />
       )
     }
-    <header class="border-border bg-background/80 sticky top-0 z-50 border-b pt-[env(safe-area-inset-top)] backdrop-blur">
+    <header class="border-border bg-background/95 sticky top-0 z-50 border-b pt-[env(safe-area-inset-top)] backdrop-blur">
       <nav
-        class="relative flex h-14 w-full items-center pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:pr-6 lg:pl-6"
+        class="flex h-16 w-full items-center justify-between gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:px-6"
         aria-label="Site"
       >
-        {
-          docs && (
-            <label
-              for="docs-nav"
-              class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'z-10 lg:hidden')}
-              aria-label="Open documentation menu"
-              aria-controls="docs-mobile-nav"
-            >
-              <svg
-                class="docs-nav-menu size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
+        <div class="flex min-w-0 items-center gap-1">
+          {
+            docs && (
+              <label
+                for="docs-nav"
+                class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'shrink-0 lg:hidden')}
+                aria-label="Open documentation menu"
+                aria-controls="docs-mobile-nav"
               >
-                <path d="M4 5h16"></path>
-                <path d="M4 12h16"></path>
-                <path d="M4 19h16"></path>
-              </svg>
-              <svg
-                class="docs-nav-close size-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                aria-hidden="true"
-              >
-                <path d="M18 6 6 18"></path>
-                <path d="m6 6 12 12"></path>
-              </svg>
-            </label>
-          )
-        }
+                <svg
+                  class="docs-nav-menu size-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M4 5h16"></path>
+                  <path d="M4 12h16"></path>
+                  <path d="M4 19h16"></path>
+                </svg>
+                <svg
+                  class="docs-nav-close size-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </label>
+            )
+          }
 
-        <div
-          class={cn(
-            'flex items-center gap-6',
-            docs && 'max-lg:absolute max-lg:left-1/2 max-lg:-translate-x-1/2',
-            !docs && 'mr-auto',
-          )}
-        >
-          <a href={withBase('/')} class="flex items-center gap-2.5 font-semibold tracking-tight">
-            <img src={withBase('/logo-icon.svg')} alt="" width="28" height="28" class="size-7" />
-            Kafka
-          </a>
-          <a
-            href={withBase('/docs/start/getting-started/')}
-            class="text-muted-foreground hover:text-foreground hidden text-sm lg:inline"
-          >
-            Core
+          <a href={withBase('/')} class="flex min-w-0 items-center gap-2.5 no-underline">
+            <img src={withBase('/logo-icon.svg')} alt="" width="32" height="32" class="size-8 shrink-0" />
+            <span class="flex items-baseline gap-2 whitespace-nowrap">
+              <span class="text-foreground text-xl font-semibold tracking-tight">Kafka</span>
+              <span class="text-border text-lg font-light select-none" aria-hidden="true">
+                /
+              </span>
+              <span class="text-muted-foreground text-sm font-medium">core</span>
+            </span>
           </a>
         </div>
 
-        <div class={cn('flex items-center gap-1', docs && 'ml-auto')}>
+        <div class="flex shrink-0 items-center gap-1">
+          <DocsSearch client:load index={searchIndex} />
           <a
             href="https://github.com/cookieMonsterDev/kafka"
-            class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), docs && 'max-lg:hidden')}
+            class={cn(buttonVariants({ variant: 'ghost', size: 'icon' }))}
             aria-label="GitHub repository"
           >
             <svg class="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

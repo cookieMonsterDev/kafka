@@ -150,7 +150,8 @@ src/content.config.ts            collection schema + glob loader
 src/content/docs/<section>/*.md  the content, grouped by sidebar section
 src/pages/index.astro            landing hero (Get Started, Learn more, install)
 src/pages/docs/[...slug].astro   one page per Markdown file
-src/layouts/BaseLayout.astro     HTML shell, header, GitHub link, theme toggle
+src/layouts/BaseLayout.astro     HTML shell, header, docs search, GitHub link, theme toggle
+src/components/docs-search.tsx   ⌘K documentation search dialog
 src/layouts/docs-layout.astro    sidebar + article + on-this-page TOC
 src/components/docs-sidebar.astro
 src/components/table-of-contents.astro

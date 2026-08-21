@@ -127,7 +127,7 @@
     color-scheme: light;
     scrollbar-width: thin;
     scrollbar-color: var(--muted-foreground) transparent;
-    --header-height: calc(3.5rem + env(safe-area-inset-top, 0px));
+    --header-height: calc(4rem + env(safe-area-inset-top, 0px));
   }
   html.dark {
     color-scheme: dark;
@@ -411,5 +411,29 @@ html.dark .astro-code span {
 @media (prefers-reduced-motion: reduce) {
   .docs-nav-drawer {
     transition: none;
+  }
+}
+
+.docs-search-dialog {
+  width: min(36rem, calc(100% - 2rem));
+  max-height: min(32rem, calc(100dvh - 2rem));
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 24px 48px rgb(0 0 0 / 0.28);
+}
+
+.docs-search-dialog::backdrop {
+  background: color-mix(in oklch, var(--background) 45%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-search-dialog::backdrop {
+    backdrop-filter: none;
   }
 }

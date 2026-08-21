@@ -191,35 +191,117 @@ html.dark .astro-code span {
 
 .prose pre.astro-code {
   position: relative;
-  cursor: copy;
   border: 1px solid var(--border);
 }
 
-.prose pre.astro-code:focus-visible {
+.copy-block {
+  position: relative;
+}
+
+.copy-block > .copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 1;
+}
+
+.prose .copy-block {
+  margin-block: 1.25em;
+}
+
+.prose .copy-block > pre.astro-code {
+  margin: 0;
+  padding-right: 2.75rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.copy-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  padding: 0;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.copy-command:hover {
+  color: var(--foreground);
+}
+
+.copy-block > .copy-btn,
+.copy-command .copy-icon {
+  opacity: 0;
+}
+
+.copy-block:hover > .copy-btn,
+.copy-block:focus-within > .copy-btn,
+.copy-command:hover .copy-icon,
+.copy-command:focus-visible .copy-icon,
+.copy-btn[data-copied],
+.copy-command[data-copied] .copy-check,
+.copy-btn:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .copy-block > .copy-btn,
+  .copy-command .copy-icon {
+    opacity: 1;
+  }
+}
+
+.copy-btn:hover {
+  color: var(--foreground);
+}
+
+.copy-btn:focus-visible,
+.copy-command:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
 }
 
-.prose pre.astro-code[data-copied='true']::after {
-  content: 'Copied';
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  border-radius: var(--radius);
-  background: var(--muted);
-  color: var(--foreground);
-  padding: 0.15rem 0.5rem;
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  font-weight: 500;
+.copy-btn svg,
+.copy-command svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
 }
 
-[data-copy] {
-  cursor: copy;
+.copy-btn .copy-check,
+.copy-command .copy-check {
+  display: none;
 }
 
-[data-copy][data-copied='true'] .copy-label::after {
-  content: ' — copied';
+.copy-btn[data-copied] .copy-icon,
+.copy-command[data-copied] .copy-icon {
+  display: none;
+}
+
+.copy-btn[data-copied] .copy-check,
+.copy-command[data-copied] .copy-check {
+  display: block;
+}
+
+.code-tabs .copy-block > pre.astro-code {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
 }
 
 /* CSS-only package-manager / language tabs. Hydration is not required. */

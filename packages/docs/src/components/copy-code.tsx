@@ -1,34 +1,53 @@
 import { useEffect, useState } from 'react';
 
+const COPY_ICON = `<svg class="copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><svg class="copy-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>`;
+
 /**
- * Click-to-copy for the landing install chip (`[data-copy]`) and Markdown
- * `pre.astro-code` blocks. Hydrated once from BaseLayout.
+ * Click-to-copy for `.copy-btn` (landing install + Markdown `pre.astro-code`).
+ * Hydrated once from BaseLayout. Injects an icon button into each code block.
  */
 export function CopyCode() {
   const [status, setStatus] = useState('');
 
   useEffect(() => {
+    const wraps: HTMLElement[] = [];
     let timer = 0;
 
-    function markCopied(el: HTMLElement) {
-      el.dataset.copied = 'true';
+    function markCopied(button: HTMLElement) {
+      if (button.dataset.copyLabel == null) {
+        button.dataset.copyLabel = button.getAttribute('aria-label') ?? 'Copy';
+      }
+      button.dataset.copied = 'true';
+      button.setAttribute('aria-label', 'Copied');
       setStatus('Copied');
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        delete el.dataset.copied;
+        delete button.dataset.copied;
+        button.setAttribute('aria-label', button.dataset.copyLabel ?? 'Copy');
         setStatus('');
       }, 1500);
     }
 
-    function copyFrom(el: HTMLElement) {
-      const code = el.tagName === 'PRE' ? el.querySelector('code') : null;
-      const text = (el.getAttribute('data-copy') ?? code?.innerText ?? el.innerText).trim();
+    function textFrom(button: HTMLElement): string {
+      const explicit = button.getAttribute('data-copy');
+      if (explicit != null && explicit.length > 0) {
+        return explicit.trim();
+      }
+      const pre = button.closest('.copy-block')?.querySelector('pre.astro-code');
+      if (!(pre instanceof HTMLElement)) {
+        return '';
+      }
+      return (pre.querySelector('code')?.innerText ?? pre.innerText).trim();
+    }
+
+    function copyFrom(button: HTMLElement) {
+      const text = textFrom(button);
       if (text.length === 0) {
         return;
       }
       void navigator.clipboard.writeText(text).then(
         () => {
-          markCopied(el);
+          markCopied(button);
         },
         () => {
           setStatus('Copy failed');
@@ -41,44 +60,43 @@ export function CopyCode() {
       if (!(target instanceof Element)) {
         return;
       }
-      const el = target.closest<HTMLElement>('[data-copy], pre.astro-code');
-      if (el == null) {
-        return;
-      }
-      const selection = window.getSelection();
-      if (selection != null && selection.toString().length > 0 && el.contains(selection.anchorNode)) {
-        return;
-      }
-      copyFrom(el);
-    }
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        return;
-      }
-      const el = event.target;
-      if (!(el instanceof HTMLElement) || !el.matches('pre.astro-code')) {
+      const trigger = target.closest<HTMLElement>('.copy-command, .copy-btn');
+      if (trigger == null) {
         return;
       }
       event.preventDefault();
-      copyFrom(el);
+      event.stopPropagation();
+      copyFrom(trigger);
     }
 
     document.querySelectorAll('pre.astro-code').forEach((pre) => {
-      if (!(pre instanceof HTMLElement)) {
+      if (!(pre instanceof HTMLElement) || pre.closest('.copy-block') != null) {
         return;
       }
-      pre.tabIndex = 0;
-      pre.setAttribute('role', 'button');
-      pre.setAttribute('aria-label', 'Copy code');
+      const wrap = document.createElement('div');
+      wrap.className = 'copy-block';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'copy-btn';
+      button.setAttribute('aria-label', 'Copy');
+      button.innerHTML = COPY_ICON;
+      pre.replaceWith(wrap);
+      wrap.append(pre, button);
+      wraps.push(wrap);
     });
 
     document.addEventListener('click', onClick);
-    document.addEventListener('keydown', onKeyDown);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener('click', onClick);
-      document.removeEventListener('keydown', onKeyDown);
+      wraps.forEach((wrap) => {
+        const pre = wrap.querySelector('pre.astro-code');
+        if (pre != null) {
+          wrap.replaceWith(pre);
+        } else {
+          wrap.remove();
+        }
+      });
     };
   }, []);
 

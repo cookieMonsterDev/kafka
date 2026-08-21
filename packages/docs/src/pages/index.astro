@@ -1,46 +1,26 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro'
+import CopyButton from '@/components/copy-button.astro'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
 import { cn } from '@/lib/utils'
 
-const apis = [
-  {
-    href: '/docs/guides/producer/',
-    label: 'Producer',
-    methods: 'send · sendBatch · transactions',
-  },
-  {
-    href: '/docs/guides/consumer/',
-    label: 'Consumer',
-    methods: 'run · stream · seek',
-  },
-  {
-    href: '/docs/guides/admin/',
-    label: 'Admin',
-    methods: 'topics · ACLs · configs',
-  },
-] as const
+const install = 'npm install @cookiemonsterdev/kafka-core'
 ---
 
 <BaseLayout
-  description="TypeScript Kafka client for Node.js — Kafka 0.10+, bigint offsets, generated types."
+  description="TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source."
 >
   <main
     id="main-content"
     tabindex="-1"
     class="landing-hero relative flex min-h-[calc(100vh-var(--header-height))] flex-col items-center justify-center px-6 py-20 text-center"
   >
-    <p class="text-muted-foreground font-mono text-sm tracking-tight" translate="no">
-      @cookiemonsterdev/kafka-core
-    </p>
-    <h1 class="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
+    <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
       The TypeScript Kafka client for Node.js
     </h1>
     <p class="text-muted-foreground mt-6 max-w-2xl text-lg text-pretty">
-      Talk to brokers from Kafka 0.10 onward. Produce, consume, and administer
-      with <span class="text-foreground">bigint offsets</span> and types generated
-      from source.
+      Talk to brokers from Kafka 0.10 onward. Produce, consume, and administer.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
       <a
@@ -56,32 +36,8 @@ const apis = [
         Introduction
       </a>
     </div>
-    <button
-      type="button"
-      data-copy="npm install @cookiemonsterdev/kafka-core"
-      class="text-muted-foreground hover:text-foreground focus-visible:ring-ring mt-10 inline-flex items-center gap-2 rounded-md border-0 bg-transparent p-1.5 font-mono text-sm outline-none focus-visible:ring-3"
-      aria-label="Copy install command"
-      translate="no"
-    >
-      <img src={withBase('/logo-icon.svg')} alt="" width="14" height="14" class="size-3.5 opacity-70" />
-      <span class="copy-label">npm install @cookiemonsterdev/kafka-core</span>
-    </button>
-    <dl class="mt-16 grid w-full max-w-xl grid-cols-1 gap-6 text-left sm:grid-cols-3 sm:gap-8">
-      {
-        apis.map((api) => (
-          <div>
-            <dt>
-              <a
-                href={withBase(api.href)}
-                class="text-foreground hover:text-muted-foreground text-sm font-medium underline-offset-4 hover:underline"
-              >
-                {api.label}
-              </a>
-            </dt>
-            <dd class="text-muted-foreground mt-1 font-mono text-xs">{api.methods}</dd>
-          </div>
-        ))
-      }
-    </dl>
+    <CopyButton text={install} label="Copy install command" class="mt-10 font-mono text-sm">
+      {install}
+    </CopyButton>
   </main>
 </BaseLayout>

@@ -17,7 +17,7 @@ const { title, description, docs = false } = Astro.props
 const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
 const canonicalUrl = Astro.url.href
 const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
-const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, bigint offsets, generated types.'
+const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
 ---
 
 <!doctype html>
@@ -142,7 +142,7 @@ const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+
       </nav>
     </header>
 
-    <CopyCode client:idle />
+    <CopyCode client:load />
 
     {
       docs && (

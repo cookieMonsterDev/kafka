@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { describe, expectTypeOf, it } from 'vitest';
 import {
@@ -36,14 +37,14 @@ describe('public types', () => {
 
     expectTypeOf({
       mechanism: 'scram-sha-256' as const,
-      tokenId: 'tokenID123',
-      tokenHmac: Buffer.from('hmac'),
+      tokenId: `token-${randomUUID()}`,
+      tokenHmac: randomBytes(16),
     }).toMatchTypeOf<SaslOptions>();
 
     expectTypeOf({
       mechanism: 'scram-sha-512' as const,
-      tokenId: 'tokenID123',
-      tokenHmac: 'lAYYSFmLs4bTjf+lTZ1LCHR/ZZFNA==',
+      tokenId: `token-${randomUUID()}`,
+      tokenHmac: randomBytes(24).toString('base64'),
     }).toMatchTypeOf<SaslOptions>();
   });
 

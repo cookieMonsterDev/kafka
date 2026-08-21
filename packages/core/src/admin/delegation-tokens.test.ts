@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
@@ -6,16 +7,20 @@ import { createDelegationTokensApi } from './delegation-tokens';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-const hmac = Buffer.from([1, 2, 3, 4]);
+const hmac = randomBytes(16);
+const tokenId = `token-${randomUUID()}`;
+const ownerName = `user-${randomUUID()}`;
+const requesterName = `user-${randomUUID()}`;
+const renewerName = `user-${randomUUID()}`;
 const created = {
   principalType: 'User',
-  principalName: 'alice',
+  principalName: ownerName,
   tokenRequesterPrincipalType: 'User',
-  tokenRequesterPrincipalName: 'admin',
+  tokenRequesterPrincipalName: requesterName,
   issueTimestampMs: 1_700_000_000_000n,
   expiryTimestampMs: 1_700_003_600_000n,
   maxTimestampMs: 1_700_007_200_000n,
-  tokenId: 'token-id',
+  tokenId,
   hmac,
 };
 
@@ -52,21 +57,21 @@ describe('admin/delegation-tokens', () => {
   it('creates a token on the controller and maps principals and bigint timestamps', async () => {
     const cluster = fakeCluster();
     const api = apiFor(cluster);
-    const renewers = [{ principalType: 'User', name: 'bob' }];
+    const renewers = [{ principalType: 'User', name: renewerName }];
 
     await expect(
       api.createDelegationToken({
         renewers,
         maxLifeTimeMs: 3_600_000n,
-        owner: { principalType: 'User', name: 'alice' },
+        owner: { principalType: 'User', name: ownerName },
       }),
     ).resolves.toEqual({
-      owner: { principalType: 'User', name: 'alice' },
-      tokenRequester: { principalType: 'User', name: 'admin' },
+      owner: { principalType: 'User', name: ownerName },
+      tokenRequester: { principalType: 'User', name: requesterName },
       issueTimestamp: 1_700_000_000_000n,
       expiryTimestamp: 1_700_003_600_000n,
       maxTimestamp: 1_700_007_200_000n,
-      tokenId: 'token-id',
+      tokenId,
       hmac,
     });
 
@@ -75,7 +80,7 @@ describe('admin/delegation-tokens', () => {
     expect(cluster.broker.createDelegationToken).toHaveBeenCalledWith({
       renewers,
       maxLifetimeMs: 3_600_000n,
-      owner: { principalType: 'User', name: 'alice' },
+      owner: { principalType: 'User', name: ownerName },
     });
   });
 
@@ -98,32 +103,34 @@ describe('admin/delegation-tokens', () => {
         tokens: [
           {
             principalType: 'User',
-            principalName: 'alice',
+            principalName: ownerName,
             tokenRequesterPrincipalType: 'User',
-            tokenRequesterPrincipalName: 'admin',
+            tokenRequesterPrincipalName: requesterName,
             issueTimestamp: 1n,
             expiryTimestamp: 2n,
             maxTimestamp: 3n,
-            tokenId: 'token-id',
+            tokenId,
             hmac,
-            renewers: [{ principalType: 'User', name: 'bob' }],
+            renewers: [{ principalType: 'User', name: renewerName }],
           },
         ],
       }),
     });
     const api = apiFor(cluster);
 
-    await expect(api.describeDelegationToken({ owners: [{ principalType: 'User', name: 'alice' }] })).resolves.toEqual({
+    await expect(
+      api.describeDelegationToken({ owners: [{ principalType: 'User', name: ownerName }] }),
+    ).resolves.toEqual({
       tokens: [
         {
-          owner: { principalType: 'User', name: 'alice' },
-          tokenRequester: { principalType: 'User', name: 'admin' },
+          owner: { principalType: 'User', name: ownerName },
+          tokenRequester: { principalType: 'User', name: requesterName },
           issueTimestamp: 1n,
           expiryTimestamp: 2n,
           maxTimestamp: 3n,
-          tokenId: 'token-id',
+          tokenId,
           hmac,
-          renewers: [{ principalType: 'User', name: 'bob' }],
+          renewers: [{ principalType: 'User', name: renewerName }],
         },
       ],
     });
@@ -133,7 +140,7 @@ describe('admin/delegation-tokens', () => {
     const cluster = fakeCluster();
     const api = apiFor(cluster);
 
-    await expect(api.createDelegationToken({ renewers: [{ principalType: '', name: 'alice' }] })).rejects.toThrow(
+    await expect(api.createDelegationToken({ renewers: [{ principalType: '', name: ownerName }] })).rejects.toThrow(
       KafkaNonRetriableError,
     );
     await expect(api.renewDelegationToken({ hmac: Buffer.alloc(0) })).rejects.toThrow(KafkaNonRetriableError);

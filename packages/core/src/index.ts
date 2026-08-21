@@ -117,5 +117,13 @@ export type {
   Transaction,
 } from './types/index';
 
-export type { AclEntry, AclFilter, TopicConfig, TopicOffset } from './admin/types';
+export type {
+  ActiveProducerState,
+  AclEntry,
+  AclFilter,
+  DescribeProducersOptions,
+  PartitionProducerState,
+  TopicConfig,
+  TopicOffset,
+} from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';

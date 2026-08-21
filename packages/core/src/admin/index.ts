@@ -31,11 +31,13 @@ export type {
   DescribeProducersOptions,
   ExpireDelegationTokenOptions,
   KafkaPrincipal,
+  ListTransactionsOptions,
   PartitionProducerState,
   RenewDelegationTokenOptions,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
+  TransactionListing,
   TransactionTopic,
 } from './types';
 export { events };

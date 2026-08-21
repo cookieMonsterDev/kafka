@@ -19,9 +19,20 @@ import {
   nullableString,
   object,
   string,
+  uuid,
   type RequestDefinition,
 } from '../../schema';
 import { API_KEYS } from '../api-keys';
+
+/** First Produce version that addresses topics by UUID instead of name (KIP-516). */
+export const PRODUCE_TOPIC_ID_MIN_VERSION = 13;
+
+const ZERO_TOPIC_ID = Buffer.alloc(16);
+
+/** True when `topicId` is a non-zero 16-byte UUID the broker can look up. */
+export function isUsableTopicId(topicId: Buffer | undefined): topicId is Buffer {
+  return topicId != null && topicId.length === 16 && !topicId.equals(ZERO_TOPIC_ID);
+}
 
 export interface ProduceMessage {
   key?: Buffer | string | null;
@@ -39,6 +50,8 @@ export interface ProducePartitionData {
 
 export interface ProduceTopicData {
   topic: string;
+  /** KIP-516 topic UUID; required on Produce v13+ and ignored on earlier versions. */
+  topicId?: Buffer;
   partitions: ProducePartitionData[];
 }
 
@@ -127,15 +140,47 @@ const flexibleRequestBodySchema = flexibleObject([
   ),
 ]);
 
+const flexibleRequestBodySchemaV13 = flexibleObject([
+  field('transactionalId', compactNullableString),
+  field('acks', int16),
+  field('timeout', int32),
+  field(
+    'topicData',
+    compactArray(
+      flexibleObject([
+        field('topicId', uuid),
+        field(
+          'partitions',
+          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactBytes)])),
+        ),
+      ]),
+    ),
+  ),
+]);
+
+async function encodeTopicPartitions(
+  partitions: ProducePartitionData[],
+  options: {
+    compression: CompressionType;
+    transactionalId?: string | null;
+    producerId?: bigint;
+    producerEpoch?: number;
+  },
+): Promise<{ partition: number; recordSet: Buffer }[]> {
+  return Promise.all(partitions.map((partition) => encodePartition(partition, options)));
+}
+
 /**
  * Every version from 3 through 8 shares this exact request wire shape (KIP-98's RecordBatch v2
  * became mandatory at v3; each later version bump only signals a client capability — quota
  * timing in v6, ZSTD in v7, record-level errors in v8 — with no request field changes at all).
- * v9+ uses the same fields with compact types and tagged fields (KIP-482).
+ * v9–v12 use the same fields with compact types and tagged fields (KIP-482). v13 replaces the
+ * topic name with a topic UUID (KIP-516).
  */
 export function createProduceRequest(apiVersion: number, options: ProduceRequestOptions): RequestDefinition {
   const { acks, timeout, transactionalId = null, producerId, producerEpoch, topicData } = options;
   const compression = options.compression ?? COMPRESSION_TYPES.None;
+  const partitionOptions = { compression, transactionalId, producerId, producerEpoch };
   const schema = apiVersion >= 9 ? flexibleRequestBodySchema : requestBodySchema;
 
   return {
@@ -146,18 +191,27 @@ export function createProduceRequest(apiVersion: number, options: ProduceRequest
     // wire, so the network layer must know not to wait for one.
     expectResponse: () => acks !== 0,
     encode: async () => {
+      const encoder = new Encoder();
+
+      if (apiVersion >= PRODUCE_TOPIC_ID_MIN_VERSION) {
+        const encodedTopicData = await Promise.all(
+          topicData.map(async ({ topic, topicId, partitions }) => {
+            if (!isUsableTopicId(topicId)) {
+              throw new RangeError(`Produce v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
+            }
+            return { topicId, partitions: await encodeTopicPartitions(partitions, partitionOptions) };
+          }),
+        );
+        flexibleRequestBodySchemaV13.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
+        return encoder;
+      }
+
       const encodedTopicData = await Promise.all(
         topicData.map(async ({ topic, partitions }) => ({
           topic,
-          partitions: await Promise.all(
-            partitions.map((partition) =>
-              encodePartition(partition, { compression, transactionalId, producerId, producerEpoch }),
-            ),
-          ),
+          partitions: await encodeTopicPartitions(partitions, partitionOptions),
         })),
       );
-
-      const encoder = new Encoder();
       schema.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
       return encoder;
     },
@@ -173,7 +227,23 @@ export interface ProducePartitionResult {
 
 export interface ProduceTopicResult {
   topicName: string;
+  topicId?: Buffer;
   partitions: ProducePartitionResult[];
+}
+
+/**
+ * Produce v13 responses carry a topic UUID, not a name. Map back to the name from the request
+ * (by id, then by index) so `RecordMetadata.topicName` stays populated.
+ */
+export function resolveProduceTopicName(
+  topicId: Buffer,
+  index: number,
+  topicData: readonly ProduceTopicData[],
+): string {
+  const byId = topicData.find((entry) => entry.topicId != null && entry.topicId.equals(topicId));
+  if (byId) return byId.topic;
+  const byIndex = topicData[index];
+  return byIndex?.topic ?? '';
 }
 
 export interface ProduceResponseV3Body {

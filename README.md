@@ -29,7 +29,7 @@ Docs: [https://cookiemonsterdev.github.io/kafka/](https://cookiemonsterdev.githu
 
 ## Features
 
-- **Producer** — `send` / `sendBatch`, optional idempotence, transactions, headers, GZIP and ZSTD (Snappy and LZ4 are pluggable)
+- **Producer** — `send` / `sendBatch`, optional idempotence, transactions, headers, GZIP, Snappy, LZ4, and ZSTD
 - **Consumer groups** — pause, resume, seek, `eachMessage` / `eachBatch`, `consumer.stream()`, classic group protocol
 - **Partition assigners** — range, round-robin (default), sticky, cooperative-sticky
 - **Admin** — topics, configs, ACLs, offsets, groups, SCRAM credentials, leader election

@@ -57,6 +57,7 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.DescribeCluster)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeProducers)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeTransactions)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.ListTransactions)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });
@@ -77,6 +78,7 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.ListTransactions, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.RenewDelegationToken, 2)).toBe(true);
@@ -95,6 +97,7 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.ListTransactions, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 1)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.CreateDelegationToken, 2)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeDelegationToken, 3)).toBe(true);

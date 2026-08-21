@@ -26,7 +26,8 @@ Cluster operations:
 
 `createTopics`, `deleteTopics`, `listTopics`, `createPartitions`,
 `fetchTopicMetadata`. Offset fields from `fetchTopicOffsets` and
-`fetchOffsets` are `bigint`.
+`fetchOffsets` are `bigint`. On Kafka 2.8+ (Metadata v10+), each topic in
+`fetchTopicMetadata` may include `topicId` as a 16-byte `Buffer`.
 
 ## Configs
 

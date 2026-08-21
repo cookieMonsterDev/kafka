@@ -19,9 +19,18 @@ import { metadataRequestV8 } from './v8/request';
 import { metadataResponseV8 } from './v8/response';
 import { metadataRequestV9 } from './v9/request';
 import { metadataResponseV9 } from './v9/response';
+import { metadataRequestV10 } from './v10/request';
+import { metadataResponseV10 } from './v10/response';
+import { metadataRequestV11 } from './v11/request';
+import { metadataResponseV11 } from './v11/response';
+import { metadataRequestV12 } from './v12/request';
+import { metadataResponseV12 } from './v12/response';
+import { metadataRequestV13 } from './v13/request';
+import { metadataResponseV13 } from './v13/response';
 
 export interface MetadataOptions {
   topics?: string[];
+  topicIds?: Buffer[];
   allowAutoTopicCreation?: boolean;
   includeClusterAuthorizedOperations?: boolean;
   includeTopicAuthorizedOperations?: boolean;
@@ -75,6 +84,49 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
       includeTopicAuthorizedOperations,
     }),
     response: metadataResponseV9,
+  }),
+  10: ({
+    topics = [],
+    topicIds,
+    allowAutoTopicCreation = true,
+    includeClusterAuthorizedOperations = false,
+    includeTopicAuthorizedOperations = false,
+  }) => ({
+    request: metadataRequestV10({
+      topics,
+      topicIds,
+      allowAutoTopicCreation,
+      includeClusterAuthorizedOperations,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV10,
+  }),
+  11: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+    request: metadataRequestV11({
+      topics,
+      topicIds,
+      allowAutoTopicCreation,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV11,
+  }),
+  12: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+    request: metadataRequestV12({
+      topics,
+      topicIds,
+      allowAutoTopicCreation,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV12,
+  }),
+  13: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+    request: metadataRequestV13({
+      topics,
+      topicIds,
+      allowAutoTopicCreation,
+      includeTopicAuthorizedOperations,
+    }),
+    response: metadataResponseV13,
   }),
 };
 

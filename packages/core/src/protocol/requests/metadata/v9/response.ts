@@ -14,9 +14,10 @@ import type { MetadataResponseV6Body } from '../v6/response';
 import { checkTopicMetadataErrors } from '../shared';
 
 /**
- * Latest Metadata body used by `Broker.metadata()` / `Cluster`. Extra v7–v9 fields
- * (`leaderEpoch`, `topicAuthorizedOperations`) are present at runtime when those versions
- * are negotiated; `clusterAuthorizedOperations` is always on the v8+ wire.
+ * Metadata body for v9. Extra v7–v9 fields (`leaderEpoch`, `topicAuthorizedOperations`)
+ * are present at runtime when those versions are negotiated; `clusterAuthorizedOperations`
+ * is always on the v8–v10 wire. Topic IDs arrive in v10; Cluster stores a wider
+ * `ClusterMetadata` shape so older bodies remain assignable.
  */
 export type MetadataResponseV9Body = MetadataResponseV6Body & {
   clusterAuthorizedOperations: number;

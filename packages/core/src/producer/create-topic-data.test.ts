@@ -39,4 +39,12 @@ describe('producer/createTopicData', () => {
     const result = createTopicData([{ topic: 'test-topic', partitions: [0], messagesPerPartition: new Map() }]);
     expect(result).toEqual([{ topic: 'test-topic', partitions: [{ partition: 0, messages: [] }] }]);
   });
+
+  it('forwards an optional topicId onto Produce topicData', () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const result = createTopicData([
+      { topic: 'test-topic', topicId, partitions: [0], messagesPerPartition: new Map() },
+    ]);
+    expect(result).toEqual([{ topic: 'test-topic', topicId, partitions: [{ partition: 0, messages: [] }] }]);
+  });
 });

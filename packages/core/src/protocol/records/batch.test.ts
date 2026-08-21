@@ -66,6 +66,15 @@ describe('protocol/records/batch', () => {
     expect(decoded.records[0]?.value?.toString()).toBe('v'.repeat(100));
   });
 
+  it('round-trips an lz4-compressed batch', async () => {
+    const records = [encodeRecord({ key: 'k', value: 'v'.repeat(100) })];
+    const encoded = await encodeRecordBatch({ compression: COMPRESSION_TYPES.LZ4, records });
+
+    const decoded = await decodeRecordBatch(new Decoder(encoded.buffer));
+    expect(decoded.records).toHaveLength(1);
+    expect(decoded.records[0]?.value?.toString()).toBe('v'.repeat(100));
+  });
+
   it('round-trips a zstd-compressed batch', async () => {
     const records = [encodeRecord({ key: 'k', value: 'v'.repeat(100) })];
     const encoded = await encodeRecordBatch({ compression: COMPRESSION_TYPES.ZSTD, records });

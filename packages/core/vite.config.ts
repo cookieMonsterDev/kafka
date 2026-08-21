@@ -7,7 +7,7 @@ export default defineConfig({
     minify: false,
     lib: { entry: 'src/index.ts', formats: ['es'] },
     rollupOptions: {
-      external: [/^node:/, 'snappyjs'],
+      external: [/^node:/, 'lz4-lite', 'snappyjs'],
       output: {
         // 1:1 with src, so the emitted .js tree matches the tsc-emitted .d.ts tree
         preserveModules: true,

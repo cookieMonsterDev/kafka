@@ -44,7 +44,7 @@ These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 | `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
 | `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
 | Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP and ZSTD are built in; Snappy and LZ4 are pluggable stubs                             |
+| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, and ZSTD are built in; LZ4 is a pluggable stub                               |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

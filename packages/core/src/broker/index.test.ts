@@ -204,6 +204,30 @@ describe('broker/Broker', () => {
       expect(sent.request.apiKey).toBe(API_KEYS.Heartbeat);
     });
 
+    it('consumerGroupHeartbeat sends through the negotiated version and returns the parsed response', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        memberId: 'm',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: null,
+      });
+
+      const result = await broker.consumerGroupHeartbeat({
+        groupId: 'g',
+        memberId: 'm',
+        memberEpoch: 0,
+        subscribedTopicNames: ['events'],
+      });
+
+      expect(result).toMatchObject({ memberId: 'm', memberEpoch: 1 });
+      expect(pool.send).toHaveBeenCalledOnce();
+      const [sent] = pool.send.mock.calls[0] as [{ request: { apiKey: number } }];
+      expect(sent.request.apiKey).toBe(API_KEYS.ConsumerGroupHeartbeat);
+    });
+
     it('joinGroup retries with the assigned memberId on KafkaMemberIdRequired', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);
@@ -252,6 +276,45 @@ describe('broker/Broker', () => {
         topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
       });
       expect(pool.send).toHaveBeenCalledOnce();
+    });
+
+    it('falls back to Produce v12 when the broker advertises v13 but topicId is missing', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 13 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
+
+      await broker.produce({
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(12);
+    });
+
+    it('uses Produce v13 when topicIds are supplied', async () => {
+      const pool = createFakeConnectionPool();
+      const topicId = Buffer.from('0123456789abcdef');
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Produce]: { minVersion: 0, maxVersion: 13 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
+
+      await broker.produce({
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', topicId, partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(13);
     });
 
     it('listGroups sends an empty options object', async () => {
@@ -305,6 +368,61 @@ describe('broker/Broker', () => {
         offset: 9n,
         leaderEpoch: 4,
       });
+    });
+
+    it('falls back to Fetch v12 when the broker advertises v13+ but topicIds are missing', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Fetch]: { minVersion: 4, maxVersion: 18 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 0,
+        sessionId: 0,
+        responses: [],
+      });
+
+      await broker.fetch({
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [{ topic: 't', partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1024 }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(12);
+    });
+
+    it('uses Fetch v18 when topicIds are supplied', async () => {
+      const pool = createFakeConnectionPool();
+      const topicId = Buffer.from('0123456789abcdef');
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Fetch]: { minVersion: 4, maxVersion: 18 } },
+      });
+
+      await broker.connect();
+      pool.send.mockResolvedValueOnce({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 0,
+        sessionId: 0,
+        responses: [],
+      });
+
+      await broker.fetch({
+        replicaId: -1,
+        maxWaitTime: 100,
+        minBytes: 1,
+        maxBytes: 1024,
+        topics: [{ topic: 't', topicId, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1024 }] }],
+      });
+      expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(18);
     });
   });
 });

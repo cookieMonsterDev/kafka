@@ -26,12 +26,15 @@ import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
+import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
 import type {
   CustomPartitioner,
   Message,
+  Partitioner,
   PartitionerArgs,
+  PartitionerBatchArgs,
   ProducerBatch,
   ProducerRecord,
   RecordMetadata,
@@ -50,10 +53,20 @@ export interface OauthbearerProviderResponse {
   value: string;
 }
 
+/**
+ * SASL/SCRAM password login, or delegation-token login (KIP-48). Token auth
+ * reuses SCRAM-SHA-256 / SCRAM-SHA-512 on the wire: `tokenId` is the username,
+ * `tokenHmac` is the password (Buffer values are sent as standard base64), and
+ * the client-first message includes `tokenauth=true`.
+ *
+ * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ */
+export type ScramSaslOptions = { username: string; password: string } | { tokenId: string; tokenHmac: Buffer | string };
+
 type SaslMechanismOptionsMap = {
   plain: { username: string; password: string };
-  'scram-sha-256': { username: string; password: string };
-  'scram-sha-512': { username: string; password: string };
+  'scram-sha-256': ScramSaslOptions;
+  'scram-sha-512': ScramSaslOptions;
   aws: {
     authorizationIdentity: string;
     accessKeyId: string;
@@ -61,6 +74,18 @@ type SaslMechanismOptionsMap = {
     sessionToken?: string;
   };
   oauthbearer: { oauthBearerProvider: () => Promise<OauthbearerProviderResponse> };
+  /**
+   * SASL/GSSAPI (Kerberos). Handshake name is `GSSAPI`. Supply `gssProvider` or
+   * install the optional `kerberos` package. `serviceName` defaults to `kafka`.
+   */
+  gssapi: {
+    serviceName?: string;
+    principal?: string;
+    keytab?: string;
+    krb5?: string;
+    authorizationIdentity?: string;
+    gssProvider?: GssTokenProvider;
+  };
 };
 
 export type SaslMechanism = keyof SaslMechanismOptionsMap;
@@ -91,7 +116,8 @@ export interface KafkaConfig {
    */
   ssl?: TlsConnectionOptions | boolean;
   /**
-   * SASL credentials or a custom mechanism provider.
+   * SASL credentials or a custom mechanism provider. SCRAM mechanisms accept
+   * either `username`/`password` or delegation-token `tokenId`/`tokenHmac`.
    * @see https://kafka.apache.org/43/security/authentication-using-sasl/
    */
   sasl?: SaslOptions | SaslMechanismProvider;
@@ -244,7 +270,16 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
+  /**
+   * Group membership protocol. `'classic'` (default) uses JoinGroup/SyncGroup.
+   * `'consumer'` opts into KIP-848 ConsumerGroupHeartbeat (Kafka 4.0+). Java name:
+   * `group.protocol`. Classic remains the default.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   */
+  groupProtocol?: GroupProtocol;
 }
+
+export type GroupProtocol = 'classic' | 'consumer';
 
 /**
  * Options for {@link Kafka.admin}.
@@ -271,6 +306,9 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  GssTokenChallenge,
+  GssTokenProvider,
+  GssTokenStep,
   KafkaMessage,
   LogCreator,
   LogEntry,
@@ -279,7 +317,9 @@ export type {
   Message,
   PartitionAssigner,
   PartitionMetadata,
+  Partitioner,
   PartitionerArgs,
+  PartitionerBatchArgs,
   Producer,
   ProducerBatch,
   ProducerRecord,

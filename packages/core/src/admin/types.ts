@@ -15,6 +15,12 @@ import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/de
 import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
+import type {
+  DescribeTransactionsState,
+  DescribeTransactionsTopic,
+} from '../protocol/requests/describe-transactions/v0/response';
+import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
+import type { ListTransactionsState } from '../protocol/requests/list-transactions/v0/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
@@ -30,6 +36,85 @@ import type { AdminEventName } from './instrumentation-events';
 import { events } from './instrumentation-events';
 
 export type OffsetInput = bigint | number | string;
+export type TransactionDescription = DescribeTransactionsState;
+export type TransactionTopic = DescribeTransactionsTopic;
+export type TransactionListing = ListTransactionsState;
+export type { ListTransactionsOptions };
+
+export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
+  UPGRADE: 1,
+  SAFE_DOWNGRADE: 2,
+  UNSAFE_DOWNGRADE: 3,
+} as const);
+
+export type FeatureUpdateUpgradeType = (typeof FEATURE_UPDATE_UPGRADE_TYPES)[keyof typeof FEATURE_UPDATE_UPGRADE_TYPES];
+
+export interface FeatureUpdate {
+  feature: string;
+  maxVersionLevel: number;
+  upgradeType?: FeatureUpdateUpgradeType;
+}
+
+export interface UpdateFeaturesOptions {
+  featureUpdates: FeatureUpdate[];
+  timeout?: number;
+  validateOnly?: boolean;
+}
+
+export interface UpdateFeaturesResult {
+  feature: string;
+  errorCode: number;
+  errorMessage: string | null;
+}
+
+/**
+ * Kafka principal (`principalType` + `name`), matching `org.apache.kafka.common.security.auth.KafkaPrincipal`.
+ */
+export interface KafkaPrincipal {
+  principalType: string;
+  name: string;
+}
+
+export interface CreateDelegationTokenOptions {
+  renewers?: KafkaPrincipal[];
+  maxLifeTimeMs?: bigint;
+  owner?: KafkaPrincipal;
+}
+
+export interface CreateDelegationTokenResult {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+}
+
+export interface RenewDelegationTokenOptions {
+  hmac: Buffer;
+  renewTimePeriodMs?: bigint;
+}
+
+export interface ExpireDelegationTokenOptions {
+  hmac: Buffer;
+  expiryTimePeriodMs?: bigint;
+}
+
+export interface DescribeDelegationTokenOptions {
+  owners?: KafkaPrincipal[];
+}
+
+export interface DelegationToken {
+  owner: KafkaPrincipal;
+  tokenRequester?: KafkaPrincipal;
+  issueTimestamp: bigint;
+  expiryTimestamp: bigint;
+  maxTimestamp: bigint;
+  tokenId: string;
+  hmac: Buffer;
+  renewers: KafkaPrincipal[];
+}
 
 export interface ReplicaAssignment {
   partition: number;
@@ -62,6 +147,7 @@ export interface TopicPartitionConfig {
 
 export interface TopicMetadata {
   name: string;
+  topicId?: Buffer;
   partitions: PartitionMetadata[];
 }
 
@@ -151,10 +237,79 @@ export interface TopicPartitions {
   partitions: number[];
 }
 
+/** Options for {@link Admin.describeProducers}. Defaults to querying each partition leader. */
+export interface DescribeProducersOptions {
+  topicPartitions: TopicPartitions[];
+  /** Query a specific replica broker instead of the partition leaders. */
+  brokerId?: string | number;
+}
+
+/** Producer state retained by a broker for a topic partition. */
+export interface ActiveProducerState {
+  producerId: bigint;
+  producerEpoch: number;
+  lastSequence: number;
+  lastTimestamp: bigint;
+  coordinatorEpoch: number;
+  /** First offset of the open transaction, or `null` when the producer is not in a transaction. */
+  currentTransactionStartOffset: bigint | null;
+}
+
+/** Active producers for one requested topic partition. */
+export interface PartitionProducerState {
+  topic: string;
+  partition: number;
+  activeProducers: ActiveProducerState[];
+}
+
 export interface ClusterDescription {
   brokers: { nodeId: number; host: string; port: number }[];
   controller: number | null;
   clusterId: string | null;
+}
+
+/** Topic to describe via {@link Admin.describeTopicPartitions}. Request is name-based. */
+export interface DescribeTopicPartitionsTopicInput {
+  topic: string;
+  topicId?: Buffer;
+}
+
+/** Cursor for {@link Admin.describeTopicPartitions} pagination. */
+export interface DescribeTopicPartitionsCursor {
+  topic: string;
+  partitionIndex: number;
+}
+
+/** Options for {@link Admin.describeTopicPartitions}. Returns one page plus `nextCursor`. */
+export interface DescribeTopicPartitionsOptions {
+  topics: Array<string | DescribeTopicPartitionsTopicInput>;
+  responsePartitionLimit?: number;
+  cursor?: DescribeTopicPartitionsCursor | null;
+  includeAuthorizedOperations?: boolean;
+}
+
+export interface DescribeTopicPartitionsPartition {
+  partitionIndex: number;
+  leader: number;
+  leaderEpoch: number;
+  replicas: number[];
+  isr: number[];
+  eligibleLeaderReplicas: number[] | null;
+  lastKnownElr: number[] | null;
+  offlineReplicas: number[];
+}
+
+export interface DescribeTopicPartitionsTopic {
+  name: string | null;
+  topicId: Buffer;
+  isInternal: boolean;
+  partitions: DescribeTopicPartitionsPartition[];
+  topicAuthorizedOperations: number;
+}
+
+export interface DescribeTopicPartitionsResult {
+  topics: DescribeTopicPartitionsTopic[];
+  nextCursor: DescribeTopicPartitionsCursor | null;
 }
 
 export interface AdminOptions {
@@ -187,6 +342,8 @@ export interface Admin {
   }) => Promise<void>;
   fetchTopicMetadata: (options?: { topics?: string[] }) => Promise<{ topics: TopicMetadata[] }>;
   describeCluster: () => Promise<ClusterDescription>;
+  describeTopicPartitions: (options: DescribeTopicPartitionsOptions) => Promise<DescribeTopicPartitionsResult>;
+  describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
   deleteTopicRecords: (options: { topic: string; partitions: SeekInput[] }) => Promise<void>;
   fetchOffsets: (options: {
     groupId: string;
@@ -261,6 +418,16 @@ export interface Admin {
     dirs: { path: string; topics: { topic: string; partitions: number[] }[] }[];
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
+  updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  listConfigResources: (options?: {
+    resourceTypes?: number[];
+  }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
+  describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
+  listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
+  createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
+  renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
+  describeDelegationToken: (options?: DescribeDelegationTokenOptions) => Promise<{ tokens: DelegationToken[] }>;
   on: (
     eventName: AdminEventName,
     listener: (event: InstrumentationEvent<unknown>) => void | Promise<void>,

@@ -60,9 +60,14 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/snappyjs": "^0.7.1",
     "@vitest/coverage-v8": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "lz4-lite": "^1.1.2",
+    "snappyjs": "^0.7.0"
   }
 }

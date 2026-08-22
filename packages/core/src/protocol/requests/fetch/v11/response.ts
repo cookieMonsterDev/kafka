@@ -16,6 +16,8 @@ export interface FetchPartitionResponseV11 {
 
 export interface FetchTopicResponseV11 {
   topicName: string;
+  /** KIP-516 topic UUID; present on Fetch v13+ responses. */
+  topicId?: Buffer;
   partitions: FetchPartitionResponseV11[];
 }
 

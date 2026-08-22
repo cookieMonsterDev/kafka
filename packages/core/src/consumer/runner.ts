@@ -149,7 +149,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (error.type === 'UNKNOWN_MEMBER_ID') {
+        if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
           if (!this.running || this.shuttingDown) return;
 
           this.logger.error('The coordinator is not aware of this member, re-joining the group', {
@@ -158,7 +158,7 @@ export class Runner extends EventEmitter {
             error: error.message,
           });
 
-          this.consumerGroup.memberId = null;
+          if (error.type === 'UNKNOWN_MEMBER_ID') this.consumerGroup.memberId = null;
           await this.consumerGroup.joinAndSync();
           return;
         }

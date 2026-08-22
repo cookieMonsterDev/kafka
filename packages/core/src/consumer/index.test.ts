@@ -30,6 +30,19 @@ describe('consumer', () => {
     ).toThrow(KafkaNonRetriableError);
   });
 
+  it('allows heartbeatInterval >= sessionTimeout when groupProtocol is consumer', () => {
+    expect(() =>
+      createConsumer({
+        cluster: fakeCluster(),
+        logger: silentLogger,
+        groupId: 'test-group-id',
+        heartbeatInterval: 10_000,
+        sessionTimeout: 10_000,
+        groupProtocol: 'consumer',
+      }),
+    ).not.toThrow();
+  });
+
   it('throws when groupId is missing', () => {
     expect(() =>
       createConsumer({

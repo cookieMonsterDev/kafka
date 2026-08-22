@@ -40,12 +40,21 @@ call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
 request. Set `lingerMs` / `batchSize` to batch; Java 4.0 default `linger.ms` is
 5 ms. See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
+GZIP, Snappy, LZ4, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /
+`.LZ4` / `.ZSTD`). Kafka Snappy uses xerial snappy-java framing. LZ4 uses the
+LZ4 Frame format (LZ4F) that Apache Kafka writes for magic-2 record batches.
+ZSTD needs Kafka 2.1+ (Produce v7). Built-in codecs remain overridable via
+`CompressionCodecs`.
+
 ## Partitioners
 
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass
 `createPartitioner: Partitioners.LegacyPartitioner` for pre-2.0 key routing.
-This is not the Java 4.x sticky-until-batch-size partitioner. See
-[Compatibility](../reference/compatibility/).
+For KIP-794 uniform sticky routing, opt in with
+`createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
+honored, keyed records continue to use Java-compatible murmur2, and unkeyed
+records share a partition for each producer batch before rotating uniformly.
+The default remains unchanged. See [Compatibility](../reference/compatibility/).
 
 ## Idempotence and abort
 

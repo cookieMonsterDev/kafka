@@ -4,17 +4,48 @@ import type { InstrumentationEvent } from '../instrumentation/event';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createAclsApi } from './acls';
 import { createConfigsApi } from './configs';
+import { createDelegationTokensApi } from './delegation-tokens';
+import { createFeaturesApi } from './features';
 import { createGroupsApi } from './groups';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createLogDirsApi } from './log-dirs';
 import { createOffsetsApi } from './offsets';
+import { createProducersApi } from './producers';
 import { createQuotasApi } from './quotas';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createTopicsApi } from './topics';
+import { createTransactionsApi } from './transactions';
 import type { Admin, AdminOptions } from './types';
 
-export type { Admin, AdminOptions, AclEntry, AclFilter, TopicConfig, TopicOffset } from './types';
+export type {
+  ActiveProducerState,
+  Admin,
+  AdminOptions,
+  AclEntry,
+  AclFilter,
+  CreateDelegationTokenOptions,
+  CreateDelegationTokenResult,
+  DelegationToken,
+  DescribeDelegationTokenOptions,
+  DescribeProducersOptions,
+  DescribeTopicPartitionsCursor,
+  DescribeTopicPartitionsOptions,
+  DescribeTopicPartitionsPartition,
+  DescribeTopicPartitionsResult,
+  DescribeTopicPartitionsTopic,
+  DescribeTopicPartitionsTopicInput,
+  ExpireDelegationTokenOptions,
+  KafkaPrincipal,
+  ListTransactionsOptions,
+  PartitionProducerState,
+  RenewDelegationTokenOptions,
+  TopicConfig,
+  TopicOffset,
+  TransactionDescription,
+  TransactionListing,
+  TransactionTopic,
+} from './types';
 export { events };
 
 const EVENT_NAMES: ReadonlySet<string> = new Set(Object.values(events));
@@ -23,7 +54,7 @@ const EVENT_KEYS = Object.keys(events)
   .join(', ');
 
 /**
- * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, and log dirs.
+ * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, log dirs, and tokens.
  *
  * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
  */
@@ -39,6 +70,7 @@ export function createAdmin({
 
   const offsets = createOffsetsApi(context);
   const topics = createTopicsApi(context, { fetchTopicOffsets: offsets.fetchTopicOffsets });
+  const producers = createProducersApi(context);
   const configs = createConfigsApi(context);
   const groups = createGroupsApi(context);
   const acls = createAclsApi(context);
@@ -46,6 +78,9 @@ export function createAdmin({
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
+  const features = createFeaturesApi(context);
+  const transactions = createTransactionsApi(context);
+  const delegationTokens = createDelegationTokensApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -80,6 +115,7 @@ export function createAdmin({
     connect,
     disconnect,
     ...topics,
+    ...producers,
     ...offsets,
     ...configs,
     ...groups,
@@ -88,6 +124,9 @@ export function createAdmin({
     ...scram,
     ...quotas,
     ...logDirs,
+    ...features,
+    ...transactions,
+    ...delegationTokens,
     on,
     logger: () => logger,
     events,

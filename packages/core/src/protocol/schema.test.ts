@@ -13,11 +13,13 @@ import {
   field,
   flexibleObject,
   float64,
+  nullableFlexibleObject,
   int16,
   int32,
   int64,
   nullableArray,
   nullableString,
+  nullableStruct,
   object,
   string,
   taggedFields,
@@ -158,6 +160,19 @@ describe('protocol/schema', () => {
     }
   });
 
+  it('nullableStruct encodes null as INT8 -1 and present as INT8 1 plus the body', () => {
+    const shape = nullableStruct(flexibleObject([field('count', int32)]));
+    const nullEncoder = new Encoder();
+    shape.write(nullEncoder, null);
+    expect(nullEncoder.buffer).toEqual(new Encoder().writeInt8(-1).buffer);
+    expect(shape.read(new Decoder(nullEncoder.buffer))).toBeNull();
+
+    const present = new Encoder();
+    shape.write(present, { count: 3 });
+    expect(present.buffer).toEqual(new Encoder().writeInt8(1).writeInt32(3).writeUVarInt(0).buffer);
+    expect(shape.read(new Decoder(present.buffer))).toEqual({ count: 3 });
+  });
+
   it('round-trips an empty tagged-fields buffer', () => {
     const encoder = new Encoder();
     taggedFields.write(encoder, null);
@@ -173,6 +188,23 @@ describe('protocol/schema', () => {
     const expected = new Encoder().writeUVarIntString('topic').writeInt32(2).writeUVarInt(0);
     expect(encoder.buffer).toEqual(expected.buffer);
     expect(shape.read(new Decoder(encoder.buffer))).toEqual({ name: 'topic', count: 2 });
+  });
+
+  it('round-trips a nullable flexible struct, including null', () => {
+    const cursor = nullableFlexibleObject([field('topic', compactString), field('partitionIndex', int32)]);
+    const present = { topic: 'orders', partitionIndex: 3 };
+
+    const encoded = new Encoder();
+    cursor.write(encoded, present);
+    expect(encoded.buffer).toEqual(
+      new Encoder().writeInt8(1).writeUVarIntString('orders').writeInt32(3).writeUVarInt(0).buffer,
+    );
+    expect(cursor.read(new Decoder(encoded.buffer))).toEqual(present);
+
+    const nullable = new Encoder();
+    cursor.write(nullable, null);
+    expect(nullable.buffer).toEqual(new Encoder().writeInt8(-1).buffer);
+    expect(cursor.read(new Decoder(nullable.buffer))).toBeNull();
   });
 
   it('round-trips a 16-byte UUID', () => {

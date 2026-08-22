@@ -58,7 +58,15 @@ export const API_KEYS = Object.freeze({
   AlterClientQuotas: 49,
   DescribeUserScramCredentials: 50,
   AlterUserScramCredentials: 51,
+  UpdateFeatures: 57,
   DescribeCluster: 60,
+  DescribeProducers: 61,
+  DescribeTransactions: 65,
+  ListTransactions: 66,
+  ConsumerGroupHeartbeat: 68,
+  ConsumerGroupDescribe: 69,
+  ListConfigResources: 74,
+  DescribeTopicPartitions: 75,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];

@@ -11,23 +11,28 @@ Defaults that differ from the Java client are listed once on
 
 ## `KafkaConfig`
 
-| Field                       | Default         | Java / Apache                                                                                                           |
-| --------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `brokers`                   | required        | Bootstrap `host:port`, or `() => string[] \| Promise<string[]>`                                                         |
-| `ssl`                       | off             | `true` or `tls.ConnectionOptions`. [SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/) |
-| `sasl`                      | off             | [SASL](https://kafka.apache.org/43/security/authentication-using-sasl/)                                                 |
-| `clientId`                  | `''`            | [client.id](https://kafka.apache.org/43/configuration/producer-configs/#client.id)                                      |
-| `connectionTimeout`         | `1000`          | Socket connect, ms                                                                                                      |
-| `authenticationTimeout`     |                 | SASL handshake, ms                                                                                                      |
-| `reauthenticationThreshold` |                 | Reauth before session expiry, ms                                                                                        |
-| `requestTimeout`            |                 | Per-request, ms                                                                                                         |
-| `enforceRequestTimeout`     | `true`          |                                                                                                                         |
-| `retry`                     | see below       |                                                                                                                         |
-| `logLevel`                  | `logLevel.INFO` | Override with `KAFKA_LOG_LEVEL`                                                                                         |
-| `logCreator`                | console         | Custom sink                                                                                                             |
+| Field                       | Default         | Java / Apache                                                                                                                                                         |
+| --------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `brokers`                   | required        | Bootstrap `host:port`, or `() => string[] \| Promise<string[]>`                                                                                                       |
+| `ssl`                       | off             | `true` or `tls.ConnectionOptions`. [SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/)                                               |
+| `sasl`                      | off             | [SASL](https://kafka.apache.org/43/security/authentication-using-sasl/). SCRAM also accepts `tokenId` / `tokenHmac` for [delegation-token login](../guides/security/) |
+| `clientId`                  | `''`            | [client.id](https://kafka.apache.org/43/configuration/producer-configs/#client.id)                                                                                    |
+| `connectionTimeout`         | `1000`          | Socket connect, ms                                                                                                                                                    |
+| `authenticationTimeout`     |                 | SASL handshake, ms                                                                                                                                                    |
+| `reauthenticationThreshold` |                 | Reauth before session expiry, ms                                                                                                                                      |
+| `requestTimeout`            |                 | Per-request, ms                                                                                                                                                       |
+| `enforceRequestTimeout`     | `true`          |                                                                                                                                                                       |
+| `retry`                     | see below       |                                                                                                                                                                       |
+| `logLevel`                  | `logLevel.INFO` | Override with `KAFKA_LOG_LEVEL`                                                                                                                                       |
+| `logCreator`                | console         | Custom sink                                                                                                                                                           |
 
 Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 `initialRetryTime: 300`, `maxRetryTime: 30000`, `multiplier: 2`, `factor: 0.2`.
+
+`sasl.mechanism` is `plain`, `scram-sha-256`, `scram-sha-512`, `oauthbearer`,
+or `gssapi`. GSSAPI fields: `serviceName` (default `kafka`), optional
+`principal`, `keytab`, `krb5`, `authorizationIdentity`, and `gssProvider`.
+See [Security](../guides/security/).
 
 ## `ProducerConfig`
 
@@ -40,7 +45,7 @@ Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 | `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                          |
 | `lingerMs`               | `0`                           | Java 4.0+ `linger.ms=5`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)                               |
 | `batchSize`              | unset                         | [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                      |
-| `createPartitioner`      | murmur2                       | Not Java 4.x sticky. `Partitioners.LegacyPartitioner` opt-in                                                                              |
+| `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing                                                                       |
 | `metadataMaxAge`         | `300000`                      |                                                                                                                                           |
 | `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                          |
 | `maxInFlightRequests`    |                               |                                                                                                                                           |
@@ -48,22 +53,23 @@ Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 
 ## `ConsumerConfig`
 
-| Field                  | Default          | Java / Apache                                                                                                                           |
-| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `groupId`              | required         | [group.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.id)                                                        |
-| `sessionTimeout`       | `30000`          | [session.timeout.ms](https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms)                                    |
-| `rebalanceTimeout`     | `60000`          | [max.poll.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms)                                |
-| `heartbeatInterval`    | `3000`           | [heartbeat.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms)                              |
-| `partitionAssigners`   | `[roundRobin]`   | Classic protocol only                                                                                                                   |
-| `readUncommitted`      | `false`          | Java `isolation.level=read_uncommitted`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level) |
-| `autoOffsetReset`      |                  | [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset)                                      |
-| `rackId`               | `''`             | [client.rack](https://kafka.apache.org/43/configuration/consumer-configs/#client.rack)                                                  |
-| `groupInstanceId`      |                  | [group.instance.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id)                                      |
-| `maxBytesPerPartition` | `1048576`        | [max.partition.fetch.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes)                      |
-| `minBytes`             | `1`              | [fetch.min.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes)                                          |
-| `maxBytes`             | `10485760`       | [fetch.max.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes)                                          |
-| `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                      |
-| `retry`                | `{ retries: 5 }` |                                                                                                                                         |
+| Field                  | Default          | Java / Apache                                                                                                                                       |
+| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `groupId`              | required         | [group.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.id)                                                                    |
+| `groupProtocol`        | `'classic'`      | [group.protocol](https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol). `'consumer'` opts into KIP-848 (Kafka 4.0+)           |
+| `sessionTimeout`       | `30000`          | [session.timeout.ms](https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms). Unused when `groupProtocol: 'consumer'`       |
+| `rebalanceTimeout`     | `60000`          | [max.poll.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms)                                            |
+| `heartbeatInterval`    | `3000`           | [heartbeat.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms). Unused when `groupProtocol: 'consumer'` |
+| `partitionAssigners`   | `[roundRobin]`   | Classic protocol only. KIP-848 uses server-side assignment                                                                                          |
+| `readUncommitted`      | `false`          | Java `isolation.level=read_uncommitted`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level)             |
+| `autoOffsetReset`      |                  | [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset)                                                  |
+| `rackId`               | `''`             | [client.rack](https://kafka.apache.org/43/configuration/consumer-configs/#client.rack)                                                              |
+| `groupInstanceId`      |                  | [group.instance.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id)                                                  |
+| `maxBytesPerPartition` | `1048576`        | [max.partition.fetch.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes)                                  |
+| `minBytes`             | `1`              | [fetch.min.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes)                                                      |
+| `maxBytes`             | `10485760`       | [fetch.max.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes)                                                      |
+| `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                  |
+| `retry`                | `{ retries: 5 }` |                                                                                                                                                     |
 
 ## `AdminConfig`
 

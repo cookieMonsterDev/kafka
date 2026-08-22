@@ -17,6 +17,8 @@ export function groupMessagesPerPartition({
   const messagesPerPartition = new Map<number, Message[]>();
   if (partitionMetadata.length === 0) return messagesPerPartition;
 
+  partitioner.onNewBatch?.({ topic, partitionMetadata });
+
   for (const message of messages) {
     const partition = partitioner({ topic, partitionMetadata, message });
     const current = messagesPerPartition.get(partition);

@@ -10,6 +10,7 @@ import { Kafka } from '@cookiemonsterdev/kafka-core';
 
 const kafka = new Kafka({ clientId: 'my-app', brokers: ['localhost:9092'] });
 const consumer = kafka.consumer({ groupId: 'my-group' });
+// Opt in to KIP-848 on Kafka 4.0+: kafka.consumer({ groupId: 'my-group', groupProtocol: 'consumer' })
 
 await consumer.connect();
 await consumer.subscribe({ topics: ['events'], fromBeginning: true });
@@ -60,8 +61,22 @@ consumer.seek({ topic: 'events', partition: 0, offset: 42n });
 ## Assigners and isolation
 
 Range, round-robin (default), sticky, and cooperative-sticky are built in
-(`PartitionAssigners`). Groups use the classic protocol only — there is no
-KIP-848 `group.protocol=consumer`. Isolation defaults to `read_committed`
-(`readUncommitted: false`); Java default `isolation.level` is
-`read_uncommitted`. See [Compatibility](../reference/compatibility/) and
-[consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+(`PartitionAssigners`). Cooperative-sticky follows KIP-429: members retain
+unchanged partitions, revoke only partitions that move, and automatically run
+the follow-up generation needed to assign revoked partitions safely. The
+round-robin default and the other eager assigners still revoke their full
+assignment during a rebalance.
+
+Classic JoinGroup/SyncGroup remains the default. Set
+`groupProtocol: 'consumer'` (Java `group.protocol`) to opt into the KIP-848
+consumer protocol on Kafka 4.0+: membership and incremental assignment use
+`ConsumerGroupHeartbeat` instead of JoinGroup/SyncGroup. The broker assigns
+partitions (no client assignor). `heartbeatInterval` and `sessionTimeout` are
+unused for membership; `rebalanceTimeout` is still sent as the revoke budget.
+Admin describe of `consumer` protocol groups is a follow-up (use classic
+`DescribeGroups` only for classic groups). Isolation defaults to `read_committed`
+(`readUncommitted: false`); Java default `isolation.level` is `read_uncommitted`.
+See [Compatibility](../reference/compatibility/),
+[KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
+[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
+and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

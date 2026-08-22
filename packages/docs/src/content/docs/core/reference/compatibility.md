@@ -22,11 +22,22 @@ Default `KAFKA_VERSION` remains **4.0**. Compose files also exist for 4.1 and
 4.2 (`apache/kafka:4.1.2` / `4.2.1` / `4.3.1`); CI PRs run 4.3 and default-branch
 pushes run the full matrix.
 
-The client talks to **4.0 and 4.3** via overlap (Produce 3–10, Fetch 4–12). Kafka
-4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896; see
+The client talks to **4.0 and 4.3** via overlap (Produce 3–13, Fetch 4–18,
+Metadata 0–13). Kafka 4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896;
+see
 [Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/));
 the client still encodes those versions for 0.10 clusters and will not send
-them to 4.0 because the broker does not advertise them.
+them to 4.0 because the broker does not advertise them. Kafka 4.0 advertises
+Produce through v12; v13 (topic IDs, KIP-516) is used when the broker
+advertises it and Cluster metadata includes a `topicId`. Kafka 4.0 advertises
+Fetch through v17; v18 (KIP-1166) is used on 4.1+. Fetch v13+ (topic IDs,
+KIP-516) is used when the broker advertises it and Cluster metadata includes a
+`topicId`.
+
+Metadata v10–v13 decode KIP-516 topic IDs (`topicId` as a 16-byte `Buffer` on
+each topic). Produce v13 and Fetch v13+ address topics by those IDs; earlier
+versions still use topic names. `admin.describeTopicPartitions`
+(key 75, Kafka 4.0+) also returns `topicId` on each described topic.
 
 | `KAFKA_VERSION`                | Status                                      |
 | ------------------------------ | ------------------------------------------- |
@@ -43,22 +54,30 @@ These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 | `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                        |
 | `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
 | `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
-| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 (`Partitioners.DefaultPartitioner` / `JavaCompatiblePartitioner`)                  |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP and ZSTD are built in; Snappy and LZ4 are pluggable stubs                             |
+| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
+| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`)             |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
 
+The opt-in sticky partitioner keeps unkeyed records on one partition for each
+Produce batch formed by this client's `lingerMs` / `batchSize` model, then
+rotates uniformly to a different available partition. Explicit partitions and
+keyed murmur2 routing are unchanged.
+
 ## Not yet at the Java 4.3 surface
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
-(`PartitionAssigners`). The default assigner is still round-robin. Groups use
-the classic protocol only — there is no `group.protocol=consumer` (KIP-848; see
-[consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/)).
+(`PartitionAssigners`). The default assigner is still round-robin. Classic
+JoinGroup/SyncGroup remains the default membership protocol. Set
+`groupProtocol: 'consumer'` (Java `group.protocol`) to opt into KIP-848
+ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
+incremental. Admin describe of `consumer` protocol groups is a follow-up.
 `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative rebalance
-still uses eager join/sync on this client (the assignor withholds moving
-partitions; the runtime does not yet do incremental revoke).
+is supported and throws if there is no committed offset. Cooperative-sticky
+uses KIP-429 incremental revoke semantics and performs the follow-up generation
+needed to settle partitions that move between members. This assignor support
+applies to the classic group protocol.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
@@ -67,12 +86,37 @@ partitions; the runtime does not yet do incremental revoke).
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
 34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
-and Metadata otherwise. Still missing: describeProducers and transaction
-describe APIs.
+and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
+and queries partition leaders unless a `brokerId` is supplied.
+`admin.describeTransactions` uses key 65, dynamically discovers transaction
+coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
+fans the request out to every broker, unique-merges by transactional ID, and
+requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
+`transactionalIdPattern`. `admin.describeTopicPartitions` uses
+key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
+`nextCursor` for the caller to continue. `admin.updateFeatures` implements
+UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
+validate-only and rejects unsafe downgrades. `admin.listConfigResources`
+implements ListConfigResources (key 74) v0–v1 and targets the active
+controller. v0 lists client metrics names only (Kafka 4.0); filtering by
+`resourceTypes` needs v1 (Kafka 4.1+ / KIP-1142). An empty `resourceTypes`
+list is valid: v1 returns the broker's default supported types, v0 returns
+all client metrics. `admin.createDelegationToken`,
+`admin.renewDelegationToken`, `admin.expireDelegationToken`, and
+`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
+missing: abortTransaction and FenceProducers.
 
-**Security.** SASL PLAIN, SCRAM, and OAUTHBEARER are implemented. GSSAPI /
-Kerberos is not. The `aws` SASL helper is extra (non-Apache). See
-[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
+**Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
+implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or
+install the optional `kerberos` package; you still need a KDC and a ticket or
+keytab. CI does not run a Kerberos stack. The `aws` SASL helper is extra
+(non-Apache). Admin can create, describe, renew, and expire delegation tokens.
+SASL login with a delegation token is opt-in: set `sasl.mechanism` to
+`scram-sha-256` or `scram-sha-512` and pass `tokenId` / `tokenHmac` (see
+[Security](../guides/security/)). The broker still needs
+`delegation.token.secret.key` and SASL/SCRAM. See
+[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
+and the [security guide](../guides/security/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and

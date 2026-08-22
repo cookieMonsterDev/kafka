@@ -40,7 +40,7 @@ is too old for a _used_ API throws `KafkaServerDoesNotSupportApiKey`.
 | Kafka 1.x     | RecordBatch                           | SaslAuthenticate, CreatePartitions, DeleteGroups                                 |
 | Kafka 2.x     | RecordBatch                           | ZSTD from 2.1, rack-aware fetch from 2.2                                         |
 | Kafka 3.x     | RecordBatch, KRaft                    | Same client APIs as 2.x                                                          |
-| Kafka 4.0     | RecordBatch, KRaft only on the broker | Talks via overlap (Produce 3–10, Fetch 4–12)                                     |
+| Kafka 4.0     | RecordBatch, KRaft only on the broker | Talks via overlap (Produce 3–13, Fetch 4–18)                                     |
 | Kafka 4.1–4.3 | RecordBatch, KRaft only on the broker | Compose files in tree (`apache/kafka:4.1.2` / `4.2.1` / `4.3.1`); CI PRs run 4.3 |
 
 This is not Java-client 4.x parity. Integration tests cover 0.10, 0.11, 1.1,

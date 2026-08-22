@@ -9,7 +9,12 @@ export { Kafka } from './client';
 
 import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
 import { cooperativeSticky, range, roundRobin, sticky } from './consumer/assigners/index';
-import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner } from './producer/partitioners/index';
+import {
+  DefaultPartitioner,
+  JavaCompatiblePartitioner,
+  LegacyPartitioner,
+  StickyPartitioner,
+} from './producer/partitioners/index';
 
 export const PartitionAssigners = Object.freeze({ roundRobin, range, sticky, cooperativeSticky });
 export const AssignerProtocol = Object.freeze({ MemberMetadata, MemberAssignment });
@@ -17,6 +22,7 @@ export const Partitioners = Object.freeze({
   DefaultPartitioner,
   JavaCompatiblePartitioner,
   LegacyPartitioner,
+  StickyPartitioner,
 });
 
 export { LOG_LEVELS as logLevel } from './loggers/index';
@@ -31,6 +37,7 @@ export { ACL_OPERATION_TYPES as AclOperationTypes } from './protocol/enums/acl-o
 export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl-permission-types';
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
+export { FEATURE_UPDATE_UPGRADE_TYPES as FeatureUpdateUpgradeTypes } from './admin/types';
 
 export {
   KafkaError,
@@ -64,6 +71,7 @@ export {
   KafkaFetcherRebalanceError,
   KafkaNoBrokerAvailableError,
   KafkaAlterPartitionReassignmentsError,
+  KafkaUpdateFeaturesError,
 } from './errors';
 
 export type {
@@ -87,6 +95,10 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  GroupProtocol,
+  GssTokenChallenge,
+  GssTokenProvider,
+  GssTokenStep,
   KafkaConfig,
   KafkaMessage,
   LogCreator,
@@ -97,7 +109,9 @@ export type {
   OauthbearerProviderResponse,
   PartitionAssigner,
   PartitionMetadata,
+  Partitioner,
   PartitionerArgs,
+  PartitionerBatchArgs,
   Producer,
   ProducerBatch,
   ProducerConfig,
@@ -109,6 +123,7 @@ export type {
   SaslMechanism,
   SaslMechanismProvider,
   SaslOptions,
+  ScramSaslOptions,
   SocketFactory,
   TopicMessages,
   TopicPartitionOffset,
@@ -117,5 +132,34 @@ export type {
   Transaction,
 } from './types/index';
 
-export type { AclEntry, AclFilter, TopicConfig, TopicOffset } from './admin/types';
+export type {
+  ActiveProducerState,
+  AclEntry,
+  AclFilter,
+  DescribeProducersOptions,
+  DescribeTopicPartitionsCursor,
+  DescribeTopicPartitionsOptions,
+  DescribeTopicPartitionsPartition,
+  DescribeTopicPartitionsResult,
+  DescribeTopicPartitionsTopic,
+  DescribeTopicPartitionsTopicInput,
+  FeatureUpdate,
+  FeatureUpdateUpgradeType,
+  ListTransactionsOptions,
+  PartitionProducerState,
+  TopicConfig,
+  TopicOffset,
+  CreateDelegationTokenOptions,
+  CreateDelegationTokenResult,
+  DelegationToken,
+  DescribeDelegationTokenOptions,
+  ExpireDelegationTokenOptions,
+  KafkaPrincipal,
+  RenewDelegationTokenOptions,
+  TransactionDescription,
+  TransactionListing,
+  TransactionTopic,
+  UpdateFeaturesOptions,
+  UpdateFeaturesResult,
+} from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';

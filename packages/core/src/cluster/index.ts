@@ -16,7 +16,7 @@ import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
 import { staleMetadata } from '../protocol/error-codes';
 import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
-import type { MetadataResponseV9Body } from '../protocol/requests/metadata/v9/response';
+import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import { Lock } from '../utils/lock';
@@ -24,8 +24,8 @@ import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { BrokerPool } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
 
-type MetadataBroker = MetadataResponseV9Body['brokers'][number];
-type MetadataTopic = MetadataResponseV9Body['topicMetadata'][number];
+type MetadataBroker = ClusterMetadata['brokers'][number];
+type MetadataTopic = ClusterMetadata['topicMetadata'][number];
 type PartitionMetadata = MetadataTopic['partitionMetadata'][number];
 
 export interface FetchTopicsOffsetPartition {
@@ -220,7 +220,7 @@ export class Cluster {
     await this.#refreshMetadataIfNecessary();
   }
 
-  async metadata(options: { topics?: readonly string[] } = {}): Promise<MetadataResponseV9Body | null> {
+  async metadata(options: { topics?: readonly string[] } = {}): Promise<ClusterMetadata | null> {
     const topics = options.topics ?? [];
     return this.retrier(async (bail) => {
       try {
@@ -312,6 +312,20 @@ export class Cluster {
 
     const topicMetadata = metadata.topicMetadata.find((t) => t.topic === topic);
     return topicMetadata ? topicMetadata.partitionMetadata : [];
+  }
+
+  /** KIP-516 topic UUID from the last metadata fetch, or `undefined` on older brokers. */
+  findTopicId(topic: string): Buffer | undefined {
+    const { metadata } = this.brokerPool;
+    if (!metadata) {
+      throw new KafkaTopicMetadataNotLoaded('Topic metadata not loaded', { topic });
+    }
+
+    const topicId = metadata.topicMetadata.find((entry) => entry.topic === topic)?.topicId;
+    if (topicId == null || topicId.length !== 16 || topicId.equals(ZERO_TOPIC_ID)) {
+      return undefined;
+    }
+    return topicId;
   }
 
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {

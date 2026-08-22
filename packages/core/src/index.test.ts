@@ -33,6 +33,7 @@ describe('public surface', () => {
   it('exports partitioners, assigners, and the assigner protocol', () => {
     expect(Partitioners.DefaultPartitioner).toBeTypeOf('function');
     expect(Partitioners.LegacyPartitioner).toBeTypeOf('function');
+    expect(Partitioners.StickyPartitioner).toBeTypeOf('function');
     expect(Partitioners.JavaCompatiblePartitioner).toBe(Partitioners.DefaultPartitioner);
     expect(PartitionAssigners.roundRobin).toBeTypeOf('function');
     expect(PartitionAssigners.range).toBeTypeOf('function');
@@ -48,6 +49,8 @@ describe('public surface', () => {
     expect(CompressionTypes.ZSTD).toBe(4);
     expect(CompressionCodecs[CompressionTypes.GZIP]).toBeTypeOf('function');
     expect(ConfigResourceTypes.TOPIC).toBe(2);
+    expect(ConfigResourceTypes.CLIENT_METRICS).toBe(16);
+    expect(ConfigResourceTypes.GROUP).toBe(32);
     expect(ConfigOperations.SET).toBe(0);
     expect(ConfigOperations.DELETE).toBe(1);
     expect(ConfigSource.DYNAMIC_BROKER_CONFIG).toBe(2);

@@ -106,7 +106,12 @@ for (const transaction of transactionStates) {
 The client discovers and groups requests by transaction coordinator. Producer
 IDs and transaction start times are returned as `bigint`.
 
-`electLeaders`, `describeCluster`, log dirs, and quotas are implemented.
+`listTransactions(options?)` fans ListTransactions (key 66) out to every
+broker and unique-merges by transactional ID (Kafka 3.0+).
+
+`fenceProducers` and `forceTerminateTransaction` fence transactional IDs via
+InitProducerId (Kafka 2.5+). `abortTransaction` writes abort markers with
+WriteTxnMarkers on the partition leader (Kafka 3.0+).
 
 Kafka 3.0+ can report the producer state retained by partition leaders:
 
@@ -146,7 +151,15 @@ Upgrade types are `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
 UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
 downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
 
-Remaining transaction administration APIs (`fenceProducers`, `abortTransaction`,
-`forceTerminateTransaction`) and KRaft controller helpers (`describeMetadataQuorum`,
-`unregisterBroker`, `addRaftVoter`, `removeRaftVoter`) are listed under
-[Compatibility](../../reference/compatibility/).
+`describeFeatures()` reads ApiVersions v3+ tagged fields (KIP-584) from the
+active controller.
+
+## Cluster and KRaft
+
+`electLeaders`, `describeCluster`, `describeLogDirs` / `alterReplicaLogDirs` /
+`describeReplicaLogDirs`, and `describeClientQuotas` / `alterClientQuotas`
+cover leader election, cluster metadata, log dirs, and quotas.
+
+On KRaft clusters, `describeMetadataQuorum`, `unregisterBroker`, `addRaftVoter`,
+and `removeRaftVoter` target the active controller. Method signatures and
+version floors: [Admin API](../../reference/admin/).

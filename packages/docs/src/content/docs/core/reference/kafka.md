@@ -37,4 +37,4 @@ One `Kafka` instance per process. Each `producer()`, `consumer()`,
 | `logger()`              | `Logger`        | Shared logger for this client                             |
 
 `connect` / `disconnect` / `send` / `run` take an optional `{ signal?: AbortSignal }`.
-Producer, consumer, and admin implement `Symbol.asyncDispose`.
+Producer, consumer, share consumer, and admin implement `Symbol.asyncDispose`.

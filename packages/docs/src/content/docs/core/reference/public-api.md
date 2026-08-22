@@ -15,6 +15,7 @@ there is no hand-maintained `types/index.d.ts`.
 | Export                                                                                | Kind                                                                                        | Page                                                       |
 | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `Kafka`                                                                               | `producer()` / `consumer()` / `shareConsumer()` / `admin()` / `logger()`                    | [Kafka client](./kafka/)                                   |
+| `throughputPreset`                                                                    | linger/batch/sticky producer + consume-concurrency profile                                  | [Throughput](../../guides/throughput/)                     |
 | `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner`, `StickyPartitioner` | [Producer](../../guides/producer/#partitioners)            |
 | `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                        | [Consumer](../../guides/consumer/#assigners-and-isolation) |
 | `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                            |
@@ -24,6 +25,8 @@ there is no hand-maintained `types/index.d.ts`.
 | `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                 | [Admin](./admin/)                                          |
 | `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                    | [Admin](./admin/)                                          |
 | `ScramMechanisms`                                                                     | SCRAM                                                                                       | [Admin](./admin/)                                          |
+| `FeatureUpdateUpgradeTypes`                                                           | `UPGRADE`, `SAFE_DOWNGRADE`, `UNSAFE_DOWNGRADE`                                             | [Admin](./admin/)                                          |
+| `SHARE_ACKNOWLEDGE_TYPE`, `SHARE_ACQUIRE_MODE`                                        | Share-group ack types and acquire modes                                                     | [Consumer](./consumer/#shareconsumer)                      |
 | `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                     |                                                            |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
@@ -35,7 +38,7 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `ShareConsumerConfig`, `AdminConfig`, `Producer`, `Consumer`, `ShareConsumer`,
 `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
-`GroupProtocol`, `SHARE_ACKNOWLEDGE_TYPE`, `ShareAcknowledgeType`, `SHARE_ACQUIRE_MODE`, `ShareAcquireMode`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
+`GroupProtocol`, `ShareAcknowledgeType`, `ShareAcquireMode`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /

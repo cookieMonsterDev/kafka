@@ -14,6 +14,8 @@ interface Producer {
   flush(): Promise<void>;
   transaction(): Promise<Transaction>;
   isIdempotent(): boolean;
+  on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
+  readonly events: Record<string, string>;
   logger(): Logger;
   [Symbol.asyncDispose](): Promise<void>;
 }

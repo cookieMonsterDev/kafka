@@ -14,6 +14,12 @@ export default {
       },
     ],
     [
+      '@semantic-release/exec',
+      {
+        prepareCmd: 'pnpm exec prettier --write CHANGELOG.md',
+      },
+    ],
+    [
       '@semantic-release/npm',
       {
         npmPublish: true,

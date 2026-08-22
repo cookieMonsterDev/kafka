@@ -1,4 +1,4 @@
-import { KafkaNonRetriableError } from '../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { DescribeTransactionsState } from '../protocol/requests/describe-transactions/v0/response';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
@@ -6,11 +6,23 @@ import type { ListTransactionsState } from '../protocol/requests/list-transactio
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
+import type { FenceProducerResult, FenceProducersOptions } from './types';
 
 export interface TransactionsApi {
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: DescribeTransactionsState[] }>;
   listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: ListTransactionsState[] }>;
+  fenceProducers: (options: FenceProducersOptions) => Promise<{ results: FenceProducerResult[] }>;
 }
+
+const DEFAULT_FENCE_TRANSACTION_TIMEOUT = 60_000;
+
+const FENCE_PRODUCER_RETRIABLE_ERRORS = new Set([
+  'CONCURRENT_TRANSACTIONS',
+  'GROUP_LOAD_IN_PROGRESS',
+  'NOT_COORDINATOR_FOR_GROUP',
+  'GROUP_COORDINATOR_NOT_AVAILABLE',
+  'COORDINATOR_NOT_AVAILABLE',
+]);
 
 function validateListTransactionsOptions(options: ListTransactionsOptions): void {
   const { stateFilters, producerIdFilters, durationFilter, transactionalIdPattern } = options;
@@ -147,5 +159,90 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
     });
   };
 
-  return { describeTransactions, listTransactions };
+  const fenceProducers = async ({
+    transactionalIds,
+    transactionTimeout = DEFAULT_FENCE_TRANSACTION_TIMEOUT,
+  }: FenceProducersOptions): Promise<{ results: FenceProducerResult[] }> => {
+    if (!Array.isArray(transactionalIds)) {
+      throw new KafkaNonRetriableError(`Invalid transactionalIds array ${formatUnknown(transactionalIds)}`);
+    }
+    if (transactionalIds.some((transactionalId) => typeof transactionalId !== 'string' || transactionalId === '')) {
+      throw new KafkaNonRetriableError('Transactional IDs must be non-empty strings');
+    }
+    if (!Number.isInteger(transactionTimeout) || transactionTimeout < 0 || transactionTimeout > 2_147_483_647) {
+      throw new KafkaNonRetriableError(`Invalid transactionTimeout ${formatUnknown(transactionTimeout)}`);
+    }
+    if (transactionalIds.length === 0) return { results: [] };
+
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        const results = await Promise.all(
+          transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> =>
+            retrier(retry)(async (bail, retryCount, retryTime) => {
+              try {
+                const coordinator = await cluster.findGroupCoordinator({
+                  groupId: transactionalId,
+                  coordinatorType: COORDINATOR_TYPES.TRANSACTION,
+                });
+                const response = await coordinator.initProducerId({
+                  transactionalId,
+                  transactionTimeout,
+                  producerId: -1n,
+                  producerEpoch: -1,
+                });
+                return {
+                  transactionalId,
+                  errorCode: 0,
+                  producerId: response.producerId,
+                  producerEpoch: response.producerEpoch,
+                };
+              } catch (error) {
+                if (error instanceof KafkaProtocolError) {
+                  const type = error.type;
+                  if (type && FENCE_PRODUCER_RETRIABLE_ERRORS.has(type)) {
+                    logger.debug('Retrying fenceProducers after retriable coordinator error', {
+                      transactionalId,
+                      type,
+                      retryCount,
+                      retryTime,
+                    });
+                    if (
+                      type === 'NOT_COORDINATOR_FOR_GROUP' ||
+                      type === 'GROUP_COORDINATOR_NOT_AVAILABLE' ||
+                      type === 'COORDINATOR_NOT_AVAILABLE'
+                    ) {
+                      await cluster.refreshMetadata();
+                    }
+                    throw error;
+                  }
+                  return {
+                    transactionalId,
+                    errorCode: error.code ?? -1,
+                  };
+                }
+                bail(error as Error);
+                throw error;
+              }
+            }),
+          ),
+        );
+        return { results };
+      } catch (error) {
+        const type = protocolType(error);
+        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
+          logger.warn('Could not fence producers', {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            retryTime,
+          });
+          throw error;
+        }
+
+        bail(error as Error);
+        return { results: [] };
+      }
+    });
+  };
+
+  return { describeTransactions, listTransactions, fenceProducers };
 }

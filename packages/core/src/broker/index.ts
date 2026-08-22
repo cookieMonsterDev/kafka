@@ -10,7 +10,7 @@ import type { ConnectionPool } from '../network/connection-pool';
 import { asTypedSend } from '../network/connection';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
-import { failure } from '../protocol/error-codes';
+import { failure, createErrorFromCode, failIfVersionNotSupported } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { lookup } from '../protocol/requests/index';
 import type { BrokerVersions, ProtocolFactory, ProtocolResult } from '../protocol/requests/index';
@@ -31,6 +31,7 @@ import type { AlterPartitionReassignmentsRequestV0Options } from '../protocol/re
 import type { AlterPartitionReassignmentsResponseV0Body } from '../protocol/requests/alter-partition-reassignments/v0/response';
 import { ApiVersions } from '../protocol/requests/api-versions/index';
 import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response';
+import type { ApiVersionsResponseV3Body } from '../protocol/requests/api-versions/v3/response';
 import { CreateAcls } from '../protocol/requests/create-acls/index';
 import type { CreateAclsOptions } from '../protocol/requests/create-acls/index';
 import type { CreateAclsResponseV1Body } from '../protocol/requests/create-acls/v1/response';
@@ -337,6 +338,26 @@ export class Broker {
     return versions;
   }
 
+  /** ApiVersions v3+ with KIP-584 supported and finalized feature metadata. */
+  async describeFeatures(): Promise<ApiVersionsResponseV3Body> {
+    const advertised = this.versions?.[API_KEYS.ApiVersions];
+    const brokerMax = advertised?.maxVersion ?? 0;
+    const featureVersions = ApiVersions.versions.filter((version) => version >= 3 && version <= brokerMax);
+    if (featureVersions.length === 0) {
+      throw new KafkaProtocolError({
+        message: 'DescribeFeatures requires ApiVersions v3 or newer on the broker',
+        retriable: false,
+      });
+    }
+
+    const version = Math.max(...featureVersions);
+    const apiVersions = ApiVersions.protocol({ version });
+    return this.#send<ApiVersionsResponseV3Body>({
+      ...apiVersions({}),
+      requestTimeout: this.connectionPool.connectionTimeout,
+    });
+  }
+
   async metadata(topics: string[] = []): Promise<ClusterMetadata> {
     const metadata = this.lookupRequest<MetadataOptions>(API_KEYS.Metadata, Metadata);
     const shuffledTopics = shuffle(topics);
@@ -471,6 +492,24 @@ export class Broker {
   async leaveGroup(options: LeaveGroupOptions): Promise<LeaveGroupResponseV3Body> {
     const leaveGroup = this.lookupRequest<LeaveGroupOptions>(API_KEYS.LeaveGroup, LeaveGroup);
     return this.#send(leaveGroup(options));
+  }
+
+  /** Like {@link leaveGroup}, but returns per-member error codes instead of throwing on member failures. */
+  async leaveGroupMembers(options: LeaveGroupOptions): Promise<LeaveGroupResponseV3Body> {
+    const leaveGroup = this.lookupRequest<LeaveGroupOptions>(API_KEYS.LeaveGroup, LeaveGroup);
+    const protocol = leaveGroup(options);
+    return this.#send({
+      request: protocol.request,
+      response: {
+        decode: (rawData: Buffer) => protocol.response.decode(rawData),
+        parse: async (data: unknown) => {
+          const body = data as LeaveGroupResponseV3Body;
+          failIfVersionNotSupported(body.errorCode);
+          if (failure(body.errorCode)) throw createErrorFromCode(body.errorCode);
+          return body;
+        },
+      },
+    });
   }
 
   async syncGroup(options: SyncGroupOptions): Promise<SyncGroupResponseV2Body> {

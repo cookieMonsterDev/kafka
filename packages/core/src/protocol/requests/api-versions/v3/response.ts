@@ -1,21 +1,25 @@
+import { Decoder } from '../../../decoder';
 import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../../error-codes';
-import {
-  compactArray,
-  defineResponse,
-  field,
-  flexibleObject,
-  int16,
-  int32,
-  type ResponseDefinition,
-} from '../../../schema';
+import { compactArray, field, flexibleObject, int16, int32, object, type ResponseDefinition } from '../../../schema';
+import type { ApiVersionsFeatureFields } from '../feature-fields';
+import { readApiVersionsFeatureFields } from '../feature-fields';
 import type { ApiVersionsResponseV2Body } from '../v2/response';
 
-export type ApiVersionsResponseV3Body = ApiVersionsResponseV2Body;
+export type ApiVersionsResponseV3Body = ApiVersionsResponseV2Body &
+  ApiVersionsFeatureFields & {
+    clientSideThrottleTime: number;
+  };
 
 const apiVersionEntrySchema = flexibleObject([
   field('apiKey', int16),
   field('minVersion', int16),
   field('maxVersion', int16),
+]);
+
+const bodySchema = object([
+  field('errorCode', int16),
+  field('apiVersions', compactArray(apiVersionEntrySchema)),
+  field('throttleTime', int32),
 ]);
 
 /**
@@ -27,24 +31,22 @@ const apiVersionEntrySchema = flexibleObject([
  *     max_version => INT16
  *   throttle_time_ms => INT32
  *
- * Compact arrays/strings plus tagged fields (KIP-482). Throttle semantics match v2 (KIP-219).
+ * Compact arrays/strings plus tagged fields (KIP-482). KIP-584 feature metadata lives in tags
+ * 0–3 on the body TAG_BUFFER. Throttle semantics match v2 (KIP-219).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-const bodySchema = flexibleObject([
-  field('errorCode', int16),
-  field('apiVersions', compactArray(apiVersionEntrySchema)),
-  field('throttleTime', int32),
-]);
-
-const raw = defineResponse({
-  schema: bodySchema,
-});
-
 export const apiVersionsResponseV3: ResponseDefinition<ApiVersionsResponseV3Body> = {
   decode: async (rawData) => {
-    const decoded = await raw.decode(rawData);
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
+    const decoder = new Decoder(rawData);
+    const decoded = bodySchema.read(decoder);
+    const features = readApiVersionsFeatureFields(decoder);
+    return {
+      ...decoded,
+      ...features,
+      throttleTime: 0,
+      clientSideThrottleTime: decoded.throttleTime,
+    };
   },
   parse: async (data) => {
     failIfVersionNotSupported(data.errorCode);

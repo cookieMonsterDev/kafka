@@ -67,6 +67,71 @@ export interface UpdateFeaturesResult {
   errorMessage: string | null;
 }
 
+export interface SupportedFeatureDescription {
+  name: string;
+  minVersion: number;
+  maxVersion: number;
+}
+
+export interface FinalizedFeatureDescription {
+  name: string;
+  maxVersionLevel: number;
+  minVersionLevel: number;
+}
+
+export interface DescribeFeaturesResult {
+  supportedFeatures: SupportedFeatureDescription[];
+  finalizedFeatures: FinalizedFeatureDescription[];
+  finalizedFeaturesEpoch: bigint;
+  zkMigrationReady: boolean | null;
+}
+
+export interface FenceProducersOptions {
+  transactionalIds: string[];
+  transactionTimeout?: number;
+}
+
+export interface FenceProducerResult {
+  transactionalId: string;
+  errorCode: number;
+  producerId?: bigint;
+  producerEpoch?: number;
+}
+
+export interface RemoveMembersFromConsumerGroupMember {
+  memberId: string;
+  groupInstanceId?: string | null;
+  reason?: string | null;
+}
+
+export interface RemoveMembersFromConsumerGroupOptions {
+  groupId: string;
+  members: RemoveMembersFromConsumerGroupMember[];
+}
+
+export interface RemoveMembersFromConsumerGroupResult {
+  memberId: string;
+  groupInstanceId: string | null;
+  errorCode: number;
+}
+
+export interface DescribeReplicaLogDirsReplica {
+  topic: string;
+  partition: number;
+  brokerId: number | string;
+}
+
+export interface DescribeReplicaLogDirsResult {
+  topic: string;
+  partition: number;
+  brokerId: number;
+  logDir: string | null;
+  errorCode: number;
+  size?: bigint;
+  offsetLag?: bigint;
+  isFuture?: boolean;
+}
+
 /**
  * Kafka principal (`principalType` + `name`), matching `org.apache.kafka.common.security.auth.KafkaPrincipal`.
  */
@@ -374,6 +439,9 @@ export interface Admin {
     groupId: string;
     topics: TopicPartitions[];
   }) => Promise<{ topics: OffsetDeleteResponseV0Body['topics'] }>;
+  removeMembersFromConsumerGroup: (
+    options: RemoveMembersFromConsumerGroupOptions,
+  ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
   describeAcls: (options: AclFilter) => Promise<{ resources: DescribeAclsResponseV1Body['resources'] }>;
   deleteAcls: (options: {
@@ -414,16 +482,21 @@ export interface Admin {
     topics?: { topic: string; partitions: number[] }[] | null;
     brokerIds?: Array<string | number>;
   }) => Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }>;
+  describeReplicaLogDirs: (replicas: DescribeReplicaLogDirsReplica[]) => Promise<{
+    replicas: DescribeReplicaLogDirsResult[];
+  }>;
   alterReplicaLogDirs: (options: {
     dirs: { path: string; topics: { topic: string; partitions: number[] }[] }[];
     brokerId: string | number;
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  describeFeatures: () => Promise<DescribeFeaturesResult>;
   listConfigResources: (options?: {
     resourceTypes?: number[];
   }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
+  fenceProducers: (options: FenceProducersOptions) => Promise<{ results: FenceProducerResult[] }>;
   createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
   renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
   expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;

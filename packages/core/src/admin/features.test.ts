@@ -93,4 +93,31 @@ describe('admin/features', () => {
     ).rejects.toThrow('Invalid maxVersionLevel');
     expect(cluster.findControllerBroker).not.toHaveBeenCalled();
   });
+
+  it('queries the active controller for ApiVersions feature metadata', async () => {
+    const broker = {
+      describeFeatures: vi.fn(async () => ({
+        supportedFeatures: [{ name: 'metadata.version', minVersion: 1, maxVersion: 16 }],
+        finalizedFeatures: [{ name: 'metadata.version', maxVersionLevel: 16, minVersionLevel: 16 }],
+        finalizedFeaturesEpoch: 3n,
+        zkMigrationReady: false,
+      })),
+    };
+    const findControllerBroker = vi.fn(async () => broker);
+    const cluster = {
+      refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      findControllerBroker,
+    } as unknown as Cluster;
+    const api = createFeaturesApi({
+      cluster,
+      logger: silentLogger.namespace('Admin'),
+      rootLogger: silentLogger,
+    });
+
+    const result = await api.describeFeatures();
+
+    expect(findControllerBroker).toHaveBeenCalled();
+    expect(result.finalizedFeaturesEpoch).toBe(3n);
+    expect(result.supportedFeatures[0]?.name).toBe('metadata.version');
+  });
 });

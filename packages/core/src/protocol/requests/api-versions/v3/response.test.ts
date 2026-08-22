@@ -27,6 +27,10 @@ describe('protocol/requests/api-versions/v3/response', () => {
       ],
       throttleTime: 0,
       clientSideThrottleTime: 0,
+      supportedFeatures: [],
+      finalizedFeaturesEpoch: -1n,
+      finalizedFeatures: [],
+      zkMigrationReady: null,
     });
     await expect(apiVersionsResponseV3.parse(data)).resolves.toBeTruthy();
   });

@@ -70,4 +70,27 @@ describe('admin.transactions', () => {
 
     await transaction.abort();
   });
+
+  testIfKafkaAtLeast_3_0('fences an active transactional producer', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    producer = createProducer({
+      cluster: createCluster(),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    await admin.connect();
+    await producer.connect();
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v' }] });
+
+    const { results } = await admin.fenceProducers({ transactionalIds: [transactionalId] });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.transactionalId).toBe(transactionalId);
+    expect(results[0]?.errorCode).toBe(0);
+    expect(results[0]?.producerId).toEqual(expect.any(BigInt));
+
+    await transaction.abort().catch(() => undefined);
+  });
 });

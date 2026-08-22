@@ -41,6 +41,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | Method                                                         | Notes                                    |
 | -------------------------------------------------------------- | ---------------------------------------- |
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
+| `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors   |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
 | `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults       |
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
@@ -48,6 +49,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
+| `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+    |
 
 `describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
 specific replica. It returns one entry per partition with `activeProducers`; producer IDs,
@@ -82,14 +84,21 @@ know about. Optional filters:
 On brokers that only speak v0, the client omits v1/v2 fields rather than
 sending them. ListTransactions requires Kafka 3.0 or newer.
 
+`fenceProducers({ transactionalIds, transactionTimeout? })` sends InitProducerId
+(key 22) with `producerId: -1n` and `producerEpoch: -1` to each transaction
+coordinator. Returns `{ results }` with per-ID `errorCode`, and on success
+`producerId` / `producerEpoch` as `bigint` / `number`. Requires Kafka 2.5+
+(InitProducerId v3+). Default `transactionTimeout` is 60_000 ms.
+
 ## ACLs, SCRAM, quotas, log dirs
 
-| Method                                                       | Notes                                     |
-| ------------------------------------------------------------ | ----------------------------------------- |
-| `createAcls` / `describeAcls` / `deleteAcls`                 | Prefixed patterns need ACL APIs v1 (2.0+) |
-| `describeUserScramCredentials` / `alterUserScramCredentials` | Keys 50–51                                |
-| `describeClientQuotas` / `alterClientQuotas`                 | Keys 48–49                                |
-| `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35                                |
+| Method                                                       | Notes                                      |
+| ------------------------------------------------------------ | ------------------------------------------ |
+| `createAcls` / `describeAcls` / `deleteAcls`                 | Prefixed patterns need ACL APIs v1 (2.0+)  |
+| `describeUserScramCredentials` / `alterUserScramCredentials` | Keys 50–51                                 |
+| `describeClientQuotas` / `alterClientQuotas`                 | Keys 48–49                                 |
+| `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35                                 |
+| `describeReplicaLogDirs(replicas)`                           | DescribeLogDirs filtered by broker/replica |
 
 ## Tokens
 

@@ -3,9 +3,11 @@ import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
+import type { LeaveGroupMember } from '../protocol/requests/leave-group/index';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { protocolType, formatUnknown } from './helpers';
+import type { RemoveMembersFromConsumerGroupOptions, RemoveMembersFromConsumerGroupResult } from './types';
 import type { TopicPartitions } from './types';
 
 export interface GroupsApi {
@@ -16,6 +18,9 @@ export interface GroupsApi {
     groupId: string;
     topics: TopicPartitions[];
   }) => Promise<{ topics: OffsetDeleteResponseV0Body['topics'] }>;
+  removeMembersFromConsumerGroup: (
+    options: RemoveMembersFromConsumerGroupOptions,
+  ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
 }
 
 export function createGroupsApi({ cluster, logger, retry }: AdminContext): GroupsApi {
@@ -182,5 +187,64 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
     });
   };
 
-  return { listGroups, describeGroups, deleteGroups, deleteGroupOffsets };
+  const removeMembersFromConsumerGroup = async ({
+    groupId,
+    members,
+  }: RemoveMembersFromConsumerGroupOptions): Promise<{ members: RemoveMembersFromConsumerGroupResult[] }> => {
+    if (!groupId || typeof groupId !== 'string') {
+      throw new KafkaNonRetriableError(`Invalid groupId ${formatUnknown(groupId)}`);
+    }
+    if (!Array.isArray(members) || members.length === 0) {
+      throw new KafkaNonRetriableError(`Invalid members array ${formatUnknown(members)}`);
+    }
+    for (const member of members) {
+      if (typeof member.memberId !== 'string' || member.memberId.length === 0) {
+        throw new KafkaNonRetriableError('Each member must have a non-empty memberId');
+      }
+      if (
+        member.groupInstanceId !== undefined &&
+        member.groupInstanceId !== null &&
+        typeof member.groupInstanceId !== 'string'
+      ) {
+        throw new KafkaNonRetriableError(`Invalid groupInstanceId ${formatUnknown(member.groupInstanceId)}`);
+      }
+    }
+
+    const leaveMembers: LeaveGroupMember[] = members.map(({ memberId, groupInstanceId, reason }) => ({
+      memberId,
+      groupInstanceId: groupInstanceId ?? null,
+      reason: reason ?? null,
+    }));
+
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        await cluster.refreshMetadata();
+        const coordinator = await cluster.findGroupCoordinator({ groupId });
+        const { members: responseMembers } = await coordinator.leaveGroupMembers({ groupId, members: leaveMembers });
+        return {
+          members: responseMembers.map(({ memberId, groupInstanceId, errorCode }) => ({
+            memberId,
+            groupInstanceId,
+            errorCode,
+          })),
+        };
+      } catch (error) {
+        const type = protocolType(error);
+        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
+          logger.warn('Could not remove members from consumer group', {
+            error: error instanceof Error ? error.message : String(error),
+            groupId,
+            retryCount,
+            retryTime,
+          });
+          throw error;
+        }
+
+        bail(error as Error);
+        return { members: [] };
+      }
+    });
+  };
+
+  return { listGroups, describeGroups, deleteGroups, deleteGroupOffsets, removeMembersFromConsumerGroup };
 }

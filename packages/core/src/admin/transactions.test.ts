@@ -125,4 +125,55 @@ describe('admin/transactions', () => {
     );
     await expect(api.listTransactions({ durationFilter: 1_000 as never })).rejects.toThrow('Invalid durationFilter');
   });
+
+  it('fences producers through their transaction coordinators', async () => {
+    const coordinator = {
+      initProducerId: vi.fn(async () => ({ producerId: 7n, producerEpoch: 0, errorCode: 0 })),
+    };
+    const findGroupCoordinator = vi.fn(async () => coordinator);
+    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+
+    const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
+
+    expect(findGroupCoordinator).toHaveBeenCalled();
+    expect(coordinator.initProducerId).toHaveBeenCalledWith({
+      transactionalId: 'tx-a',
+      transactionTimeout: 60_000,
+      producerId: -1n,
+      producerEpoch: -1,
+    });
+    expect(result.results[0]).toEqual({
+      transactionalId: 'tx-a',
+      errorCode: 0,
+      producerId: 7n,
+      producerEpoch: 0,
+    });
+  });
+
+  it('retries fenceProducers when the coordinator returns CONCURRENT_TRANSACTIONS', async () => {
+    const { KafkaProtocolError } = await import('../errors');
+    const coordinator = {
+      initProducerId: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new KafkaProtocolError({ message: 'Concurrent txn', type: 'CONCURRENT_TRANSACTIONS', code: 51 }),
+        )
+        .mockResolvedValueOnce({ producerId: 7n, producerEpoch: 1, errorCode: 0 }),
+    };
+    const findGroupCoordinator = vi.fn(async () => coordinator);
+    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const api = createTransactionsApi({
+      cluster,
+      logger,
+      rootLogger: logger,
+      retry: { maxRetryTime: 1_000, initialRetryTime: 10, factor: 0.2, multiplier: 2, retries: 3 },
+    });
+
+    const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
+
+    expect(coordinator.initProducerId).toHaveBeenCalledTimes(2);
+    expect(result.results[0]?.errorCode).toBe(0);
+    expect(result.results[0]?.producerEpoch).toBe(1);
+  });
 });

@@ -3,6 +3,7 @@ import '@/styles/global.css'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
 import { DocsSearch } from '@/components/docs-search'
+import PackageSwitcher from '@/components/package-switcher.astro'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
 import { getSearchIndex } from '@/lib/search-index'
@@ -66,84 +67,78 @@ const searchIndex = await getSearchIndex()
     >
       Skip to content
     </a>
-    {
-      docs && (
-        <input
-          type="checkbox"
-          id="docs-nav"
-          class="sr-only"
-          aria-label="Open documentation menu"
-          aria-controls="docs-mobile-nav"
-          aria-expanded="false"
-        />
-      )
-    }
+    <input
+      type="checkbox"
+      id="docs-nav"
+      class="sr-only"
+      aria-label={docs ? 'Open documentation menu' : 'Open menu'}
+      aria-controls="docs-mobile-nav"
+      aria-expanded="false"
+    />
     <header
       class="border-border bg-background/95 sticky top-0 z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
     >
       <nav
-        class="flex h-full w-full items-center justify-between gap-3 pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:px-6"
+        class="grid h-full w-full grid-cols-3 items-center pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:flex lg:justify-between lg:gap-3 lg:px-6"
         aria-label="Site"
       >
-        <div class="flex min-w-0 items-center gap-1">
-          {
-            docs && (
-              <label
-                for="docs-nav"
-                class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
-              >
-                <svg
-                  class="docs-nav-menu size-6"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  aria-hidden="true"
-                >
-                  <path d="M4 5h16"></path>
-                  <path d="M4 12h16"></path>
-                  <path d="M4 19h16"></path>
-                </svg>
-                <svg
-                  class="docs-nav-close size-6"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  aria-hidden="true"
-                >
-                  <path d="M18 6 6 18"></path>
-                  <path d="m6 6 12 12"></path>
-                </svg>
-              </label>
-            )
-          }
+        <div class="flex min-w-0 items-center justify-self-start">
+          <label
+            for="docs-nav"
+            class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
+          >
+            <svg
+              class="docs-nav-menu size-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M4 5h16"></path>
+              <path d="M4 12h16"></path>
+              <path d="M4 19h16"></path>
+            </svg>
+            <svg
+              class="docs-nav-close size-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <path d="M18 6 6 18"></path>
+              <path d="m6 6 12 12"></path>
+            </svg>
+          </label>
 
-          <div id="docs-brand" class="flex min-w-0 items-center gap-3">
+          <div id="docs-brand" class="hidden min-w-0 items-center gap-3 lg:flex">
             <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
               <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
               <span class="text-foreground text-2xl font-semibold tracking-tight" translate="no">Kafka</span>
             </a>
-            <span class="text-border text-xl font-light select-none" aria-hidden="true">/</span>
-            <a
-              href={withBase('/docs/core/start/introduction/')}
-              class="text-muted-foreground hover:text-foreground text-xl font-light no-underline transition-colors"
-              translate="no"
-            >
-              Core
-            </a>
           </div>
         </div>
 
-        <div id="docs-header-actions" class="flex shrink-0 items-center gap-1.5">
-          <div role="search">
+        <a
+          id="docs-mobile-brand"
+          href={withBase('/')}
+          class="focus-visible:ring-ring justify-self-center rounded-md no-underline outline-none focus-visible:ring-3 lg:hidden"
+          aria-label="Kafka"
+          translate="no"
+        >
+          <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9" />
+        </a>
+
+        <div id="docs-header-actions" class="flex items-center justify-end justify-self-end gap-1.5">
+          <div role="search" class="max-lg:contents">
             <DocsSearch client:load index={searchIndex} />
           </div>
           <a
             href="https://github.com/cookieMonsterDev/kafka"
-            class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }))}
+            class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'max-lg:hidden')}
             aria-label="GitHub repository"
             rel="noopener noreferrer"
           >
@@ -190,80 +185,123 @@ const searchIndex = await getSearchIndex()
       })()
     </script>
 
-    {
-      docs && (
-        <>
-          <label
-            for="docs-nav"
-            class="docs-nav-overlay bg-background/70 fixed inset-0 top-(--header-height) z-40 cursor-pointer backdrop-blur-sm"
-            aria-hidden="true"
-          />
-          <div
-            id="docs-mobile-nav"
-            class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 w-full overflow-y-auto overscroll-contain border-r px-4 py-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Documentation"
-          >
-            <slot name="mobile-nav" />
-          </div>
-          <script is:inline>
-            ;(function () {
-              var nav = document.getElementById('docs-nav')
-              var drawer = document.getElementById('docs-mobile-nav')
-              var brand = document.getElementById('docs-brand')
-              var actions = document.getElementById('docs-header-actions')
-              var content = document.getElementById('docs-content')
-              if (!(nav instanceof HTMLInputElement) || drawer == null) return
+    <label
+      for="docs-nav"
+      class="docs-nav-overlay bg-background/70 fixed inset-0 top-(--header-height) z-40 cursor-pointer backdrop-blur-sm"
+      aria-hidden="true"
+    ></label>
+    <div
+      id="docs-mobile-nav"
+      class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 flex w-full flex-col overflow-hidden border-r px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={docs ? 'Documentation' : 'Menu'}
+    >
+      <PackageSwitcher class="mb-6 shrink-0" />
+      <button
+        type="button"
+        id="docs-mobile-search"
+        class="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 mb-6 flex h-11 w-full shrink-0 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3"
+        aria-label="Search documentation"
+        aria-haspopup="dialog"
+        aria-keyshortcuts="Control+K Meta+K"
+      >
+        <svg
+          class="size-5 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m20 20-3-3"></path>
+        </svg>
+        <span class="min-w-0 flex-1 truncate text-left">Search documentation…</span>
+      </button>
+      <div class="docs-nav-pane pb-2">
+        <slot name="mobile-nav" />
+      </div>
+      <div class="border-border mt-2 shrink-0 border-t pt-2">
+        <a
+          href="https://github.com/cookieMonsterDev/kafka"
+          class="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md px-2 text-sm no-underline transition-colors outline-none focus-visible:ring-3"
+          rel="noopener noreferrer"
+        >
+          GitHub
+        </a>
+      </div>
+    </div>
+    <script is:inline>
+      ;(function () {
+        var nav = document.getElementById('docs-nav')
+        var drawer = document.getElementById('docs-mobile-nav')
+        var brand = document.getElementById('docs-brand')
+        var mobileBrand = document.getElementById('docs-mobile-brand')
+        var actions = document.getElementById('docs-header-actions')
+        var content = document.getElementById('docs-content')
+        var mobileSearch = document.getElementById('docs-mobile-search')
+        if (!(nav instanceof HTMLInputElement) || drawer == null) return
 
-              function focusable(root) {
-                return Array.prototype.slice.call(
-                  root.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), summary, textarea, select, [tabindex]:not([tabindex="-1"])'),
-                )
-              }
+        var openLabel = nav.getAttribute('aria-label') || 'Open menu'
+        var closeLabel = openLabel.replace(/^Open /, 'Close ')
 
-              function sync() {
-                var open = nav.checked
-                nav.setAttribute('aria-expanded', open ? 'true' : 'false')
-                nav.setAttribute('aria-label', open ? 'Close documentation menu' : 'Open documentation menu')
-                if (open) drawer.removeAttribute('aria-hidden')
-                else drawer.setAttribute('aria-hidden', 'true')
-                if (brand) brand.toggleAttribute('inert', open)
-                if (actions) actions.toggleAttribute('inert', open)
-                if (content) content.toggleAttribute('inert', open)
-                if (open) {
-                  var first = focusable(drawer)[0]
-                  if (first) first.focus()
-                }
-              }
+        function focusable(root) {
+          return Array.prototype.slice.call(
+            root.querySelectorAll(
+              'a[href], button:not([disabled]), input:not([disabled]), summary, textarea, select, [tabindex]:not([tabindex="-1"])',
+            ),
+          )
+        }
 
-              nav.addEventListener('change', sync)
-              sync()
-              document.addEventListener('keydown', function (event) {
-                if (!nav.checked) return
-                if (event.key === 'Escape') {
-                  nav.checked = false
-                  nav.dispatchEvent(new Event('change'))
-                  nav.focus()
-                  return
-                }
-                if (event.key !== 'Tab') return
-                var drawerItems = focusable(drawer)
-                var first = nav
-                var last = drawerItems[drawerItems.length - 1] || nav
-                if (event.shiftKey && document.activeElement === first) {
-                  event.preventDefault()
-                  last.focus()
-                } else if (!event.shiftKey && document.activeElement === last) {
-                  event.preventDefault()
-                  first.focus()
-                }
-              })
-            })()
-          </script>
-        </>
-      )
-    }
+        function sync() {
+          var open = nav.checked
+          nav.setAttribute('aria-expanded', open ? 'true' : 'false')
+          nav.setAttribute('aria-label', open ? closeLabel : openLabel)
+          if (open) drawer.removeAttribute('aria-hidden')
+          else drawer.setAttribute('aria-hidden', 'true')
+          if (brand) brand.toggleAttribute('inert', open)
+          if (mobileBrand) mobileBrand.toggleAttribute('inert', open)
+          if (actions) actions.toggleAttribute('inert', open)
+          if (content) content.toggleAttribute('inert', open)
+          if (open) {
+            var first = focusable(drawer)[0]
+            if (first) first.focus()
+          }
+        }
+
+        nav.addEventListener('change', sync)
+        sync()
+        if (mobileSearch) {
+          mobileSearch.addEventListener('click', function () {
+            nav.checked = false
+            nav.dispatchEvent(new Event('change'))
+            window.dispatchEvent(new Event('docs-search-open'))
+          })
+        }
+        document.addEventListener('keydown', function (event) {
+          if (!nav.checked) return
+          if (event.key === 'Escape') {
+            nav.checked = false
+            nav.dispatchEvent(new Event('change'))
+            nav.focus()
+            return
+          }
+          if (event.key !== 'Tab') return
+          var drawerItems = focusable(drawer)
+          var first = nav
+          var last = drawerItems[drawerItems.length - 1] || nav
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault()
+            last.focus()
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault()
+            first.focus()
+          }
+        })
+      })()
+    </script>
 
     <div
       id="docs-content"

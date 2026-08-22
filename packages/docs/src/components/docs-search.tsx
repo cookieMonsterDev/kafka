@@ -7,7 +7,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { buttonVariants } from '@/components/ui/button';
 import { SECTION_LABELS, SECTION_ORDER } from '@/lib/docs';
 import { filterSearch, type SearchDoc, type SearchHit } from '@/lib/search';
 import { cn } from '@/lib/utils';
@@ -69,6 +68,11 @@ export function DocsSearch({ index }: DocsSearchProps) {
       return;
     }
     if (open && !dialog.open) {
+      const nav = document.getElementById('docs-nav');
+      if (nav instanceof HTMLInputElement && nav.checked) {
+        nav.checked = false;
+        nav.dispatchEvent(new Event('change'));
+      }
       dialog.showModal();
       inputRef.current?.focus();
     } else if (!open && dialog.open) {
@@ -89,8 +93,15 @@ export function DocsSearch({ index }: DocsSearchProps) {
       event.preventDefault();
       setOpen((current) => !current);
     }
+    function onOpen() {
+      setOpen(true);
+    }
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('docs-search-open', onOpen);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('docs-search-open', onOpen);
+    };
   }, []);
 
   function onDialogKeyDown(event: ReactKeyboardEvent<HTMLDialogElement>) {
@@ -128,18 +139,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
     <>
       <button
         type="button"
-        className={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'text-muted-foreground md:hidden')}
-        aria-label="Search documentation"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-keyshortcuts="Control+K Meta+K"
-        onClick={() => setOpen(true)}
-      >
-        <SearchIcon />
-      </button>
-      <button
-        type="button"
-        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-11 w-64 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3 md:inline-flex lg:w-72"
+        className="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 hidden h-11 w-64 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3 lg:inline-flex lg:w-72"
         aria-label="Search documentation"
         aria-haspopup="dialog"
         aria-expanded={open}

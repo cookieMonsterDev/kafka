@@ -89,6 +89,20 @@ so a typo in frontmatter fails the build instead of rendering a broken page.
 `Callout` and `CodeTabs` live in `src/components/` for use from `.astro`
 (and later MDX). Prefer static HTML; do not hydrate them.
 
+## Adding a package
+
+Docs are grouped by package folder (`core` today; later `cli`, `gui`, …). Each
+package gets its own sidebar. The package switcher at the top of the sidebar
+lists whatever is in `DOCS_PACKAGES`.
+
+To add a package:
+
+1. Create `src/content/docs/<package>/<section>/*.md` as usual
+2. Append the id to `DOCS_PACKAGES` in `src/lib/docs.ts`
+3. Add a `label` and `blurb` in `DOCS_PACKAGE_META` (shown in the switcher)
+
+The switcher links to that package’s first sidebar page. No layout changes.
+
 ## UI: shadcn/ui
 
 Set up per the [Astro guide](https://ui.shadcn.com/docs/installation/astro), on top of
@@ -177,6 +191,7 @@ src/pages/docs/[...slug].astro   one page per Markdown file (`/docs/core/…`)
 src/layouts/BaseLayout.astro     HTML shell, header, docs search, GitHub link, theme toggle
 src/components/docs-search.tsx   ⌘K documentation search dialog
 src/layouts/docs-layout.astro    sidebar + article + on-this-page TOC
+src/components/package-switcher.astro
 src/components/docs-sidebar.astro
 src/components/table-of-contents.astro
 src/components/prev-next.astro

@@ -26,6 +26,7 @@ import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
+import type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
@@ -293,6 +294,11 @@ export interface ShareConsumerConfig {
   maxBytes?: number;
   maxRecords?: number;
   batchSize?: number;
+  /**
+   * ShareFetch v2 acquire mode (KIP-1206, Kafka 4.2+). `0` batches for throughput;
+   * `1` stops at `maxRecords`. Negotiates down to v1 on 4.1 brokers.
+   */
+  shareAcquireMode?: ShareAcquireMode;
   rackId?: string;
   retry?: ConsumerRetryOptions;
   metadataMaxAge?: number;
@@ -357,3 +363,4 @@ export type { RetryOptions } from '../retry/index';
 
 export type { ShareConsumer, ShareConsumerRunConfig, ShareConsumerSubscribeTopics } from '../share-consumer/index';
 export type { ShareAcknowledgeType } from '../share-consumer/acknowledge-types';
+export type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';

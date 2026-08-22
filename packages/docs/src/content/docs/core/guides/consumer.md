@@ -100,6 +100,8 @@ await share.run({
 ```
 
 Requires Kafka 4.1+ (stable ShareGroupHeartbeat v1) with share groups enabled
-on the broker. Admin helpers: `describeShareGroups`, `listShareGroupOffsets`,
+on the broker. Kafka 4.2+ negotiates ShareFetch / ShareAcknowledge v2
+(`shareAcquireMode` for KIP-1206; `RENEW` acknowledgements for KIP-1222).
+Admin helpers: `describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, `deleteShareGroups`.
 See [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka).

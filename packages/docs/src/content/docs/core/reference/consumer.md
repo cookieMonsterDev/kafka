@@ -86,4 +86,5 @@ interface ShareConsumer {
 ```
 
 `SHARE_ACKNOWLEDGE_TYPE`: `GAP` 0, `ACCEPT` 1, `RELEASE` 2, `REJECT` 3, `RENEW` 4.
+`SHARE_ACQUIRE_MODE`: `BATCH_OPTIMIZED` 0, `RECORD_LIMIT` 1 (ShareFetch v2 / KIP-1206).
 Guide: [Share groups](../../guides/consumer/#share-groups-kip-932).

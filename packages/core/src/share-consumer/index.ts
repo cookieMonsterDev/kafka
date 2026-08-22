@@ -1,10 +1,10 @@
 import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
-import type { ConsumerRetryOptions } from '../consumer/types';
+import type { ConsumerRetryOptions, EachMessageHandler } from '../consumer/types';
+import { SHARE_ACQUIRE_MODE, type ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import { RETRY_DEFAULTS } from '../retry/defaults';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
-import type { EachMessageHandler } from '../consumer/types';
 import { ShareGroup } from './share-group';
 import { ShareRunner } from './share-runner';
 
@@ -26,6 +26,7 @@ export interface ShareConsumerOptions {
   maxBytes?: number;
   maxRecords?: number;
   batchSize?: number;
+  shareAcquireMode?: ShareAcquireMode;
   rackId?: string;
   retry?: ConsumerRetryOptions;
 }
@@ -50,6 +51,7 @@ export function createShareConsumer({
   maxBytes,
   maxRecords,
   batchSize,
+  shareAcquireMode = SHARE_ACQUIRE_MODE.BATCH_OPTIMIZED,
   rackId,
   retry = RETRY_DEFAULTS,
 }: ShareConsumerOptions): ShareConsumer {
@@ -89,6 +91,7 @@ export function createShareConsumer({
       maxBytes,
       maxRecords,
       batchSize,
+      shareAcquireMode,
       retry,
       onCrash: async (error) => {
         logger.error(`Share consumer crashed: ${error.message}`, { stack: error.stack });
@@ -115,5 +118,6 @@ export function createShareConsumer({
 }
 
 export { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
+export { SHARE_ACQUIRE_MODE } from '../protocol/requests/share-fetch/index';
 export { ShareBatch } from './share-batch';
 export { ShareGroup } from './share-group';

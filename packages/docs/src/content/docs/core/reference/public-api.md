@@ -35,7 +35,7 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `ShareConsumerConfig`, `AdminConfig`, `Producer`, `Consumer`, `ShareConsumer`,
 `Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
-`GroupProtocol`, `SHARE_ACKNOWLEDGE_TYPE`, `ShareAcknowledgeType`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
+`GroupProtocol`, `SHARE_ACKNOWLEDGE_TYPE`, `ShareAcknowledgeType`, `SHARE_ACQUIRE_MODE`, `ShareAcquireMode`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /

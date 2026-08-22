@@ -82,6 +82,7 @@ See [Security](../../guides/security/).
 | `maxBytes`          | `50MiB`          | ShareFetch max bytes                                                               |
 | `maxRecords`        | `500`            | ShareFetch max records                                                             |
 | `batchSize`         | `100`            | ShareFetch batch size                                                              |
+| `shareAcquireMode`  | `0`              | ShareFetch v2 (Kafka 4.2+): `0` batch-optimized, `1` record-limit (KIP-1206)       |
 | `rackId`            | `''`             | Optional rack for assignment                                                       |
 | `retry`             | `{ retries: 5 }` |                                                                                    |
 

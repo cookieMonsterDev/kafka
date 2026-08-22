@@ -97,7 +97,12 @@ describe('share-consumer/share-runner', () => {
     await runner.stop();
 
     expect(handled).toEqual([10n]);
-    expect(shareFetch).toHaveBeenCalled();
+    expect(shareFetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shareAcquireMode: 0,
+        isRenewAck: false,
+      }),
+    );
     expect(shareAcknowledge).toHaveBeenCalledWith(
       expect.objectContaining({
         groupId: 'share-1',
@@ -133,5 +138,31 @@ describe('share-consumer/share-runner', () => {
     expect(closeCall.topics[0]?.partitions[0]?.acknowledgementBatches[0]?.acknowledgeTypes).toEqual([
       SHARE_ACKNOWLEDGE_TYPE.RELEASE,
     ]);
+  });
+
+  it('sends ShareFetch v2 record-limit mode and marks renew acknowledgements', async () => {
+    const { shareGroup, shareFetch } = createShareGroup();
+    const runner = new ShareRunner({
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      shareAcquireMode: 1,
+      retry: { retries: 0 },
+      eachMessage: async () => {
+        runner.shuttingDown = true;
+      },
+      onCrash: vi.fn(),
+    });
+
+    await runner.start();
+    await vi.waitFor(() => expect(shareFetch).toHaveBeenCalled());
+    await runner.stop();
+
+    expect(shareFetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shareAcquireMode: 1,
+        isRenewAck: false,
+      }),
+    );
   });
 });

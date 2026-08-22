@@ -1,6 +1,11 @@
 import { KafkaError } from '../errors';
-import type { ShareFetchAcknowledgementBatchInput } from '../protocol/requests/share-fetch/index';
-import { SHARE_SESSION_CLOSE_EPOCH, SHARE_SESSION_INITIAL_EPOCH } from '../protocol/requests/share-fetch/index';
+import {
+  SHARE_ACQUIRE_MODE,
+  SHARE_SESSION_CLOSE_EPOCH,
+  SHARE_SESSION_INITIAL_EPOCH,
+  type ShareAcquireMode,
+  type ShareFetchAcknowledgementBatchInput,
+} from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
 import type { EachMessageHandler } from '../consumer/types';
@@ -31,6 +36,7 @@ export interface ShareRunnerOptions {
   maxBytes?: number;
   maxRecords?: number;
   batchSize?: number;
+  shareAcquireMode?: ShareAcquireMode;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
 }
@@ -44,6 +50,7 @@ export class ShareRunner {
   readonly #maxBytes: number;
   readonly #maxRecords: number;
   readonly #batchSize: number;
+  readonly #shareAcquireMode: ShareAcquireMode;
   readonly #onCrash: (reason: Error) => void | Promise<void>;
   readonly #retrier: ReturnType<typeof retrier>;
 
@@ -61,6 +68,7 @@ export class ShareRunner {
     maxBytes = DEFAULT_MAX_BYTES,
     maxRecords = DEFAULT_MAX_RECORDS,
     batchSize = DEFAULT_BATCH_SIZE,
+    shareAcquireMode = SHARE_ACQUIRE_MODE.BATCH_OPTIMIZED,
     onCrash,
     retry,
   }: ShareRunnerOptions) {
@@ -72,6 +80,7 @@ export class ShareRunner {
     this.#maxBytes = maxBytes;
     this.#maxRecords = maxRecords;
     this.#batchSize = batchSize;
+    this.#shareAcquireMode = shareAcquireMode;
     this.#onCrash = onCrash;
     this.#retrier = retrier(retry);
   }
@@ -185,6 +194,8 @@ export class ShareRunner {
           maxBytes: this.#maxBytes,
           maxRecords: this.#maxRecords,
           batchSize: this.#batchSize,
+          shareAcquireMode: this.#shareAcquireMode,
+          isRenewAck: takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics,
           forgottenTopics: [],
         }),
@@ -294,6 +305,7 @@ export class ShareRunner {
           groupId: this.#shareGroup.groupId,
           memberId,
           shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,
+          isRenewAck: this.#pendingAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics: this.#acknowledgementTopicsForNode(nodeId),
         });
       } catch {

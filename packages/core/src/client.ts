@@ -214,6 +214,7 @@ export class Kafka {
     maxBytes,
     maxRecords,
     batchSize,
+    shareAcquireMode,
     rackId,
     retry,
     metadataMaxAge = DEFAULT_METADATA_MAX_AGE,
@@ -239,6 +240,7 @@ export class Kafka {
       maxBytes,
       maxRecords,
       batchSize,
+      shareAcquireMode,
       rackId,
     });
   }

@@ -81,7 +81,9 @@ uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
 applies to the classic group protocol. `kafka.shareConsumer()` implements
 KIP-932 share groups (ShareGroupHeartbeat / ShareFetch / ShareAcknowledge,
-keys 76–79) on Kafka 4.1+. Classic `consumer()` remains the default.
+keys 76–79) on Kafka 4.1+. ShareFetch and ShareAcknowledge negotiate v1–v2;
+v2 adds `shareAcquireMode` (KIP-1206) and `RENEW` acknowledgements (KIP-1222)
+on Kafka 4.2+. Classic `consumer()` remains the default.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43

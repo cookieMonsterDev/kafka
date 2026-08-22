@@ -214,7 +214,7 @@ import type { ShareFetchOptions } from '../protocol/requests/share-fetch/index';
 import type { ShareFetchResponseV1Body } from '../protocol/requests/share-fetch/v1/response';
 import { ShareAcknowledge } from '../protocol/requests/share-acknowledge/index';
 import type { ShareAcknowledgeOptions } from '../protocol/requests/share-acknowledge/index';
-import type { ShareAcknowledgeResponseV1Body } from '../protocol/requests/share-acknowledge/v1/response';
+import type { ShareAcknowledgeResponseBody } from '../protocol/requests/share-acknowledge/index';
 import { DescribeShareGroupOffsets } from '../protocol/requests/describe-share-group-offsets/index';
 import type { DescribeShareGroupOffsetsOptions } from '../protocol/requests/describe-share-group-offsets/index';
 import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/requests/describe-share-group-offsets/v1/response';
@@ -791,7 +791,7 @@ export class Broker {
     return this.#send(shareFetch(options));
   }
 
-  async shareAcknowledge(options: ShareAcknowledgeOptions): Promise<ShareAcknowledgeResponseV1Body> {
+  async shareAcknowledge(options: ShareAcknowledgeOptions): Promise<ShareAcknowledgeResponseBody> {
     const shareAcknowledge = this.lookupRequest<ShareAcknowledgeOptions>(API_KEYS.ShareAcknowledge, ShareAcknowledge);
     return this.#send(shareAcknowledge(options));
   }

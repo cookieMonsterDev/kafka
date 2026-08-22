@@ -1,6 +1,7 @@
 import type { ProtocolFactory, RequestFamily } from '../index';
 import { shareFetchRequestV1 } from './v1/request';
 import { shareFetchResponseV1 } from './v1/response';
+import { shareFetchRequestV2 } from './v2/request';
 
 export type {
   ShareAcknowledgementBatch,
@@ -14,6 +15,14 @@ export type { ShareFetchResponseV1Body } from './v1/response';
 export const SHARE_SESSION_INITIAL_EPOCH = 0;
 /** Share-session epoch -1 closes a session (KIP-932). */
 export const SHARE_SESSION_CLOSE_EPOCH = -1;
+
+/** ShareFetch v2 ShareAcquireMode (KIP-1206). */
+export const SHARE_ACQUIRE_MODE = Object.freeze({
+  BATCH_OPTIMIZED: 0,
+  RECORD_LIMIT: 1,
+} as const);
+
+export type ShareAcquireMode = (typeof SHARE_ACQUIRE_MODE)[keyof typeof SHARE_ACQUIRE_MODE];
 
 export interface ShareFetchAcknowledgementBatchInput {
   firstOffset: bigint;
@@ -45,6 +54,8 @@ export interface ShareFetchOptions {
   maxBytes?: number;
   maxRecords: number;
   batchSize: number;
+  shareAcquireMode?: ShareAcquireMode;
+  isRenewAck?: boolean;
   topics: ShareFetchTopicInput[];
   forgottenTopics?: ShareFetchForgottenTopicInput[];
 }
@@ -74,9 +85,19 @@ const fields = (options: ShareFetchOptions) => ({
   forgottenTopics: (options.forgottenTopics ?? []).map(({ topicId, partitions }) => ({ topicId, partitions })),
 });
 
+const v2Fields = (options: ShareFetchOptions) => ({
+  ...fields(options),
+  shareAcquireMode: options.shareAcquireMode ?? SHARE_ACQUIRE_MODE.BATCH_OPTIMIZED,
+  isRenewAck: options.isRenewAck ?? false,
+});
+
 const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareFetchOptions>>> = {
   1: (options) => ({
     request: shareFetchRequestV1(fields(options)),
+    response: shareFetchResponseV1,
+  }),
+  2: (options) => ({
+    request: shareFetchRequestV2(v2Fields(options)),
     response: shareFetchResponseV1,
   }),
 };

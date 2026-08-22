@@ -38,7 +38,7 @@ export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
 export { FEATURE_UPDATE_UPGRADE_TYPES as FeatureUpdateUpgradeTypes } from './admin/types';
-export { SHARE_ACKNOWLEDGE_TYPE } from './share-consumer/index';
+export { SHARE_ACKNOWLEDGE_TYPE, SHARE_ACQUIRE_MODE } from './share-consumer/index';
 
 export {
   KafkaError,
@@ -125,6 +125,7 @@ export type {
   ShareConsumerRunConfig,
   ShareConsumerSubscribeTopics,
   ShareAcknowledgeType,
+  ShareAcquireMode,
   SaslAuthenticationProvider,
   SaslMechanism,
   SaslMechanismProvider,

@@ -482,8 +482,12 @@ html.dark .astro-code span {
     outline-offset: 2px;
   }
 
-  body:has(#docs-nav:checked) {
+  html:has(#docs-nav:checked) {
     overflow: hidden;
+  }
+
+  #docs-nav:checked ~ header {
+    pointer-events: auto;
   }
 }
 

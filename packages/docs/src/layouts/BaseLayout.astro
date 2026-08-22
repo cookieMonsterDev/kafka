@@ -77,7 +77,7 @@ const searchIndex = await getSearchIndex()
       aria-expanded="false"
     />
     <header
-      class="border-border bg-background/95 sticky top-0 z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
+      class="border-border bg-background/95 sticky top-0 isolate z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
     >
       <nav
         class="grid h-full w-full grid-cols-3 items-center pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:flex lg:justify-between lg:gap-3 lg:px-6"
@@ -110,11 +110,11 @@ const searchIndex = await getSearchIndex()
           <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9" />
         </a>
 
-        <div class="flex items-center justify-end justify-self-end gap-1.5">
-          <div role="search" class="max-lg:contents">
+        <div class="relative z-50 flex items-center justify-end justify-self-end gap-1.5">
+          <div role="search">
             <DocsSearch client:load index={searchIndex} />
           </div>
-          <div id="docs-header-actions" class="flex items-center gap-1.5">
+          <div id="docs-header-actions" class="relative z-50 flex items-center gap-1.5">
             <a
               href="https://github.com/cookieMonsterDev/kafka"
               class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'max-lg:hidden')}
@@ -167,12 +167,12 @@ const searchIndex = await getSearchIndex()
 
     <label
       for="docs-nav"
-      class="docs-nav-overlay bg-background/70 fixed inset-0 top-(--header-height) z-40 cursor-pointer backdrop-blur-sm"
+      class="docs-nav-overlay bg-background/70 fixed top-(--header-height) right-0 bottom-0 left-0 z-40 cursor-pointer backdrop-blur-sm"
       aria-hidden="true"
     ></label>
     <div
       id="docs-mobile-nav"
-      class="docs-nav-drawer bg-sidebar border-sidebar-border fixed inset-y-0 left-0 top-(--header-height) z-40 flex w-full flex-col overflow-hidden border-r px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+      class="docs-nav-drawer bg-sidebar border-sidebar-border fixed top-(--header-height) right-0 bottom-0 left-0 z-40 flex w-full flex-col overflow-hidden border-r px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
       role="dialog"
       aria-modal="true"
       aria-label={docs ? 'Documentation' : 'Menu'}
@@ -217,9 +217,6 @@ const searchIndex = await getSearchIndex()
       ;(function () {
         var nav = document.getElementById('docs-nav')
         var drawer = document.getElementById('docs-mobile-nav')
-        var brand = document.getElementById('docs-brand')
-        var mobileBrand = document.getElementById('docs-mobile-brand')
-        var actions = document.getElementById('docs-header-actions')
         var content = document.getElementById('docs-content')
         var mobileSearch = document.getElementById('docs-mobile-search')
         if (!(nav instanceof HTMLInputElement) || drawer == null) return
@@ -243,9 +240,6 @@ const searchIndex = await getSearchIndex()
           nav.setAttribute('aria-label', open ? closeLabel : openLabel)
           if (open) drawer.removeAttribute('aria-hidden')
           else drawer.setAttribute('aria-hidden', 'true')
-          if (brand) brand.toggleAttribute('inert', open)
-          if (mobileBrand) mobileBrand.toggleAttribute('inert', open)
-          if (actions) actions.toggleAttribute('inert', open)
           if (content) content.toggleAttribute('inert', open)
           if (open && !searchOpen) {
             var first = focusable(drawer)[0]
@@ -269,6 +263,7 @@ const searchIndex = await getSearchIndex()
         })
         document.addEventListener('keydown', function (event) {
           if (!nav.checked || searchOpen) return
+          if (document.querySelector('[data-slot="select-content"][data-state="open"]')) return
           if (event.key === 'Escape') {
             nav.checked = false
             nav.dispatchEvent(new Event('change'))

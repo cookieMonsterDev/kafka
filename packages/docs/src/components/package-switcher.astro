@@ -1,12 +1,12 @@
 ---
 import { getCollection } from 'astro:content'
+import { PackageSwitcherSelect } from '@/components/package-switcher-select'
 import {
   DOCS_PACKAGE_META,
   DOCS_PACKAGES,
   docsPackageFromPathname,
   packageHomeHref,
 } from '@/lib/docs'
-import { cn } from '@/lib/utils'
 
 interface Props {
   class?: string
@@ -19,57 +19,7 @@ const packages = DOCS_PACKAGES.map((id) => ({
   id,
   ...DOCS_PACKAGE_META[id],
   href: packageHomeHref(entries, id),
-  current: id === current,
 }))
-const active = packages.find((pkg) => pkg.current) ?? packages[0]
 ---
 
-{
-  active != null && (
-    <nav class={cn(Astro.props.class)} aria-label="Packages">
-      <p class="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">Package</p>
-      <details class="group/pkg border-border relative rounded-lg border">
-        <summary class="focus-visible:ring-ring hover:bg-sidebar-accent flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2.5 outline-none focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
-          <span class="min-w-0 text-left">
-            <span class="text-foreground block text-sm font-medium" translate="no">
-              {active.label}
-            </span>
-            <span class="text-muted-foreground mt-0.5 block truncate text-xs">{active.blurb}</span>
-          </span>
-          <svg
-            class="text-muted-foreground size-4 shrink-0 transition-transform group-open/pkg:rotate-180"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <path d="m6 9 6 6 6-6"></path>
-          </svg>
-        </summary>
-        <ul class="border-border border-t p-1">
-          {packages.map((pkg) => (
-            <li>
-              <a
-                href={pkg.href}
-                aria-current={pkg.current ? 'page' : undefined}
-                class={cn(
-                  'flex flex-col rounded-md px-2.5 py-2 no-underline transition-colors',
-                  pkg.current
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                )}
-              >
-                <span class="text-sm font-medium" translate="no">
-                  {pkg.label}
-                </span>
-                <span class={cn('mt-0.5 text-xs', pkg.current ? 'opacity-80' : undefined)}>{pkg.blurb}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
-      </details>
-    </nav>
-  )
-}
+<PackageSwitcherSelect client:load className={Astro.props.class} packages={packages} value={current} />

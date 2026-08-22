@@ -192,6 +192,7 @@ src/layouts/BaseLayout.astro     HTML shell, header, docs search, GitHub link, t
 src/components/docs-search.tsx   ⌘K documentation search dialog
 src/layouts/docs-layout.astro    sidebar + article + on-this-page TOC
 src/components/package-switcher.astro
+src/components/package-switcher-select.tsx
 src/components/docs-sidebar.astro
 src/components/table-of-contents.astro
 src/components/prev-next.astro

@@ -125,4 +125,29 @@ describe('admin/transactions', () => {
     );
     await expect(api.listTransactions({ durationFilter: 1_000 as never })).rejects.toThrow('Invalid durationFilter');
   });
+
+  it('fences producers through their transaction coordinators', async () => {
+    const coordinator = {
+      initProducerId: vi.fn(async () => ({ producerId: 7n, producerEpoch: 0, errorCode: 0 })),
+    };
+    const findGroupCoordinator = vi.fn(async () => coordinator);
+    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+
+    const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
+
+    expect(findGroupCoordinator).toHaveBeenCalled();
+    expect(coordinator.initProducerId).toHaveBeenCalledWith({
+      transactionalId: 'tx-a',
+      transactionTimeout: 60_000,
+      producerId: -1n,
+      producerEpoch: -1,
+    });
+    expect(result.results[0]).toEqual({
+      transactionalId: 'tx-a',
+      errorCode: 0,
+      producerId: 7n,
+      producerEpoch: 0,
+    });
+  });
 });

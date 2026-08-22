@@ -85,14 +85,19 @@ applies to the classic group protocol.
 (key 47). `admin.describeUserScramCredentials` and `admin.alterUserScramCredentials`
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
-34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
+34–35. `admin.describeReplicaLogDirs` filters DescribeLogDirs (35) to specific
+broker/replica pairs. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
 coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
 fans the request out to every broker, unique-merges by transactional ID, and
 requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
-`transactionalIdPattern`. `admin.describeTopicPartitions` uses
+`transactionalIdPattern`. `admin.fenceProducers` uses InitProducerId (22) via
+transaction coordinators (Kafka 2.5+ / v3+). `admin.describeFeatures` reads
+ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
+`admin.removeMembersFromConsumerGroup` uses LeaveGroup (13) v3+ with explicit
+member identities. `admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
@@ -104,7 +109,7 @@ list is valid: v1 returns the broker's default supported types, v0 returns
 all client metrics. `admin.createDelegationToken`,
 `admin.renewDelegationToken`, `admin.expireDelegationToken`, and
 `admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
-missing: abortTransaction and FenceProducers.
+missing: `abortTransaction` and `forceTerminateTransaction`.
 
 **Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
 implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or

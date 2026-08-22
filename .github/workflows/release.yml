@@ -79,11 +79,14 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Ensure npm CLI supports trusted publishing
+      - name: Install npm CLI with trusted publishing support
         run: |
-          major=$(npm --version | cut -d. -f1)
-          if [[ "$major" -lt 11 ]]; then
-            npm install -g npm@11
+          set -euo pipefail
+          npm install --global npm@11.19.0
+          npm --version
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
+            echo "::error::GitHub OIDC is unavailable; check id-token: write permissions"
+            exit 1
           fi
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test

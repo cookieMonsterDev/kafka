@@ -90,6 +90,8 @@ jobs:
           fi
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test
+      - name: Exchange npm OIDC token
+        run: node scripts/exchange-npm-oidc-token.mjs @cookiemonsterdev/kafka-core
       - name: semantic-release
         env:
           GITHUB_TOKEN: ${{ github.token }}

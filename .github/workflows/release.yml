@@ -94,6 +94,9 @@ jobs:
         run: node scripts/exchange-npm-oidc-token.mjs @cookiemonsterdev/kafka-core
       - name: semantic-release
         env:
+          # Use the short-lived NPM_TOKEN written by the preceding exchange step.
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ''
+          ACTIONS_ID_TOKEN_REQUEST_URL: ''
           GITHUB_TOKEN: ${{ github.token }}
           HUSKY: '0'
           DRY_RUN: ${{ inputs.dry_run || false }}

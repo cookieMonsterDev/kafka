@@ -14,7 +14,7 @@ const install = 'npm install @cookiemonsterdev/kafka-core'
   <main
     id="main-content"
     tabindex="-1"
-    class="landing-hero relative flex min-h-[calc(100vh-var(--header-height))] flex-col items-center justify-center px-6 py-20 text-center"
+    class="landing-hero relative flex min-h-[calc(100vh-var(--header-height))] flex-col items-center justify-center px-4 py-20 text-center sm:px-6"
   >
     <h1 class="max-w-3xl text-4xl font-semibold tracking-tight text-balance sm:text-6xl">
       The TypeScript Kafka client for Node.js
@@ -36,7 +36,11 @@ const install = 'npm install @cookiemonsterdev/kafka-core'
         Introduction
       </a>
     </div>
-    <CopyButton text={install} label="Copy install command" class="mt-10 font-mono text-sm">
+    <CopyButton
+      text={install}
+      label="Copy install command"
+      class="mt-10 max-w-full min-w-0 overflow-x-auto font-mono text-[0.6875rem] leading-none whitespace-nowrap sm:text-sm"
+    >
       {install}
     </CopyButton>
   </main>

@@ -75,6 +75,13 @@ The page is published at `/docs/core/<section>/<filename>/`, appears in the
 sidebar under that section, and is sorted by `order` within the section.
 No routing changes are needed.
 
+Use **URL-relative** internal links, not file-relative `../` (one level) or
+root-absolute `/docs/core/…` paths. Pages live at
+`/docs/core/<section>/<filename>/` (plus the `/kafka` base on GitHub Pages).
+From another section use `../../guides/testing/`; within the same section use
+`./installation/`. Root-absolute `/docs/…` links omit the GitHub Pages base;
+file-relative `../guides/…` resolves to `/docs/core/start/guides/…` and 404s.
+
 `title`, `description`, and `section` are required. `order` defaults to
 `999`. The schema in `src/content.config.ts` validates this at build time,
 so a typo in frontmatter fails the build instead of rendering a broken page.
@@ -193,6 +200,65 @@ change where content lives, edit the `base` path there — the routing follows.
 - Import `z` from `astro/zod`, not from `astro:content` — the latter is
   deprecated in Astro 7.
 - `site` in `astro.config.mjs` is `https://cookiemonsterdev.github.io`. GitHub Pages builds set `GITHUB_PAGES=1`, which prefixes URLs with `/kafka`. Local `pnpm dev` stays at `http://localhost:4321/`.
+
+## Releasing
+
+`@cookiemonsterdev/kafka-docs` is **private** and **not published to npm**. Releases still
+get a semver in `package.json`, a git tag, a GitHub release, and entries in
+[`CHANGELOG.md`](./CHANGELOG.md) — the same semantic-release flow as
+[`@cookiemonsterdev/kafka-core`](../core/CHANGELOG.md), minus the npm publish step.
+
+| Artifact       | Docs                          | Core (for comparison)        |
+| -------------- | ----------------------------- | ---------------------------- |
+| Git tag        | `docs-vX.Y.Z`                 | `core-vX.Y.Z`                |
+| Changelog      | `packages/docs/CHANGELOG.md`  | `packages/core/CHANGELOG.md` |
+| GitHub release | yes                           | yes                          |
+| npm publish    | no (`npmPublish: false`)      | yes                          |
+| GitHub Pages   | yes (separate Pages workflow) | —                            |
+
+Configuration lives in [`release.config.js`](./release.config.js). The
+[Release](../../.github/workflows/release.yml) workflow runs on pushes to
+`master` when `packages/docs/**` changed (or manually via **Actions → Release**,
+`package`: `docs`).
+
+### Commit types that bump the docs version
+
+Only commits that touch files under `packages/docs/` count (semantic-release-monorepo).
+Use Conventional Commits with a `docs` scope when the change is docs-only:
+
+| Commit type                          | Docs version bump |
+| ------------------------------------ | ----------------- |
+| `feat`                               | minor             |
+| `fix`                                | patch             |
+| `docs`                               | patch             |
+| `perf`                               | patch             |
+| `refactor`                           | patch             |
+| breaking (`!` or `BREAKING CHANGE:`) | major             |
+
+Examples: `fix(docs): repair internal markdown links`, `feat(docs): add changelog page`.
+
+### Dry-run (must be on `master` with full git history)
+
+```sh
+git checkout master && git pull
+pnpm release:docs:dry-run
+# or from this package:
+pnpm release:dry-run
+```
+
+Dry-run prints the next version and release notes without creating a tag, release, or commit.
+
+### After a release
+
+1. semantic-release commits `chore(docs): X.Y.Z [skip ci]` on `master` (updates
+   `package.json` + `CHANGELOG.md`).
+2. A bot opens **`master` → `develop`** to sync versions — merge it with a merge commit.
+3. [GitHub Pages](../../.github/workflows/pages.yml) deploys the site (same push or the
+   next one that touches `packages/docs/**`).
+4. To remove a mistaken release: **Actions → Unrelease**, package `docs`, version `X.Y.Z`,
+   confirm `DELETE` (drops tag + GitHub release; does not roll back Pages).
+
+Full repo release process: [CONTRIBUTING.md § Releasing](../../CONTRIBUTING.md#releasing).
 
 ## Contributing
 

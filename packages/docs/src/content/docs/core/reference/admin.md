@@ -7,7 +7,7 @@ section: reference
 
 Returned by `kafka.admin()`. Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
-Guide: [Admin](../guides/admin/). Apache:
+Guide: [Admin](../../guides/admin/). Apache:
 [basic operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
 
 Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
@@ -114,7 +114,7 @@ are `bigint`. Owner and renewer principals are `{ principalType, name }`
 request over SASL; PLAINTEXT returns `DELEGATION_TOKEN_REQUEST_NOT_ALLOWED`.
 Default integration compose files do not enable tokens. Pass the returned
 `tokenId` and `hmac` as `sasl.tokenId` / `sasl.tokenHmac` on a SCRAM client to
-authenticate with the token — see [Security](../guides/security/).
+authenticate with the token — see [Security](../../guides/security/).
 
 Also `connect`, `disconnect`, `logger()`, `Symbol.asyncDispose`. Missing
 methods: [Compatibility](./compatibility/).

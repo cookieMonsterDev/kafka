@@ -23,8 +23,8 @@ console.log(metadata[0]?.baseOffset); // bigint
 await producer.disconnect();
 ```
 
-Methods live on [`Producer`](../reference/producer/). Config fields are in
-[Configuration](../reference/configuration/). Source:
+Methods live on [`Producer`](../../reference/producer/). Config fields are in
+[Configuration](../../reference/configuration/). Source:
 [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 
 ## Message shape
@@ -54,7 +54,7 @@ For KIP-794 uniform sticky routing, opt in with
 `createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
 honored, keyed records continue to use Java-compatible murmur2, and unkeyed
 records share a partition for each producer batch before rotating uniformly.
-The default remains unchanged. See [Compatibility](../reference/compatibility/).
+The default remains unchanged. See [Compatibility](../../reference/compatibility/).
 
 ## Idempotence and abort
 
@@ -65,4 +65,4 @@ The default remains unchanged. See [Compatibility](../reference/compatibility/).
 await producer.send({ topic: 'events', messages: [{ value: 'hello' }], signal });
 ```
 
-Transactions: [Producer API](../reference/producer/#transaction).
+Transactions: [Producer API](../../reference/producer/#transaction).

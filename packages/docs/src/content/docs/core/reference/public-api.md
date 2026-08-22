@@ -12,19 +12,19 @@ there is no hand-maintained `types/index.d.ts`.
 
 ## Runtime exports
 
-| Export                                                                                | Kind                                                                                        | Page                                                    |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `Kafka`                                                                               | `producer()` / `consumer()` / `admin()` / `logger()`                                        | [Kafka client](./kafka/)                                |
-| `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner`, `StickyPartitioner` | [Producer](../guides/producer/#partitioners)            |
-| `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                        | [Consumer](../guides/consumer/#assigners-and-isolation) |
-| `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                         |
-| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                 | [Configuration](./configuration/)                       |
-| `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                                     |                                                         |
-| `CompressionCodecs`                                                                   | Codec registry; GZIP, Snappy, LZ4, and ZSTD built in                                        |                                                         |
-| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                 | [Admin](./admin/)                                       |
-| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                    | [Admin](./admin/)                                       |
-| `ScramMechanisms`                                                                     | SCRAM                                                                                       | [Admin](./admin/)                                       |
-| `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                     |                                                         |
+| Export                                                                                | Kind                                                                                        | Page                                                       |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `Kafka`                                                                               | `producer()` / `consumer()` / `admin()` / `logger()`                                        | [Kafka client](./kafka/)                                   |
+| `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner`, `StickyPartitioner` | [Producer](../../guides/producer/#partitioners)            |
+| `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                        | [Consumer](../../guides/consumer/#assigners-and-isolation) |
+| `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                            |
+| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                 | [Configuration](./configuration/)                          |
+| `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                                     |                                                            |
+| `CompressionCodecs`                                                                   | Codec registry; GZIP, Snappy, LZ4, and ZSTD built in                                        |                                                            |
+| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                 | [Admin](./admin/)                                          |
+| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                    | [Admin](./admin/)                                          |
+| `ScramMechanisms`                                                                     | SCRAM                                                                                       | [Admin](./admin/)                                          |
+| `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                     |                                                            |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
 Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
@@ -43,7 +43,7 @@ and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 [Producer API](./producer/),
 [Consumer API](./consumer/),
 [Admin API](./admin/),
-[Security](../guides/security/).
+[Security](../../guides/security/).
 
 ## Extra APIs
 

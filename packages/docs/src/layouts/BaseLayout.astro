@@ -1,5 +1,6 @@
 ---
 import '@/styles/global.css'
+import { Beer, Hamburger } from 'lucide-react'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
 import { DocsSearch } from '@/components/docs-search'
@@ -87,31 +88,8 @@ const searchIndex = await getSearchIndex()
             for="docs-nav"
             class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
           >
-            <svg
-              class="docs-nav-menu size-6"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M4 5h16"></path>
-              <path d="M4 12h16"></path>
-              <path d="M4 19h16"></path>
-            </svg>
-            <svg
-              class="docs-nav-close size-6"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              aria-hidden="true"
-            >
-              <path d="M18 6 6 18"></path>
-              <path d="m6 6 12 12"></path>
-            </svg>
+            <Hamburger className="docs-nav-menu size-6" aria-hidden="true" />
+            <Beer className="docs-nav-close size-6" aria-hidden="true" />
           </label>
 
           <div id="docs-brand" class="hidden min-w-0 items-center gap-3 lg:flex">

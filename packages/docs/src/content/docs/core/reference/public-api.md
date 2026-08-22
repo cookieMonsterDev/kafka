@@ -14,7 +14,7 @@ there is no hand-maintained `types/index.d.ts`.
 
 | Export                                                                                | Kind                                                                                        | Page                                                       |
 | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Kafka`                                                                               | `producer()` / `consumer()` / `admin()` / `logger()`                                        | [Kafka client](./kafka/)                                   |
+| `Kafka`                                                                               | `producer()` / `consumer()` / `shareConsumer()` / `admin()` / `logger()`                    | [Kafka client](./kafka/)                                   |
 | `Partitioners`                                                                        | `DefaultPartitioner`, `LegacyPartitioner`, `JavaCompatiblePartitioner`, `StickyPartitioner` | [Producer](../../guides/producer/#partitioners)            |
 | `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                        | [Consumer](../../guides/consumer/#assigners-and-isolation) |
 | `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                          |                                                            |
@@ -32,9 +32,10 @@ Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
 ## Types
 
 Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
-`AdminConfig`, `Producer`, `Consumer`, `Admin`, `Transaction`, `Message`,
+`ShareConsumerConfig`, `AdminConfig`, `Producer`, `Consumer`, `ShareConsumer`,
+`Admin`, `Transaction`, `Message`,
 `KafkaMessage`, `ProducerRecord`, `EachMessagePayload`, `EachBatchPayload`,
-`GroupProtocol`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
+`GroupProtocol`, `SHARE_ACKNOWLEDGE_TYPE`, `ShareAcknowledgeType`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
@@ -49,7 +50,7 @@ and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 
 - `AbortSignal` on `connect` / `disconnect` / `send` / `sendBatch` / `run`
 - `consumer.stream()` — async iteration over batches
-- `Symbol.asyncDispose` on producer, consumer, and admin (`await using`)
+- `Symbol.asyncDispose` on producer, consumer, share consumer, and admin (`await using`)
 - Built-in Snappy (`CompressionTypes.Snappy`), LZ4 (`CompressionTypes.LZ4`), and ZSTD (`CompressionTypes.ZSTD`)
 
 ## Capability errors

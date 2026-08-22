@@ -71,6 +71,22 @@ See [Security](../../guides/security/).
 | `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                  |
 | `retry`                | `{ retries: 5 }` |                                                                                                                                                     |
 
+## `ShareConsumerConfig`
+
+| Field               | Default          | Notes                                                                              |
+| ------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| `groupId`           | required         | Share group id (KIP-932)                                                           |
+| `heartbeatInterval` | `3000`           | Membership heartbeat interval, ms. The broker may override via ShareGroupHeartbeat |
+| `maxWaitTimeInMs`   | `5000`           | ShareFetch max wait, ms                                                            |
+| `minBytes`          | `1`              | ShareFetch min bytes                                                               |
+| `maxBytes`          | `50MiB`          | ShareFetch max bytes                                                               |
+| `maxRecords`        | `500`            | ShareFetch max records                                                             |
+| `batchSize`         | `100`            | ShareFetch batch size                                                              |
+| `rackId`            | `''`             | Optional rack for assignment                                                       |
+| `retry`             | `{ retries: 5 }` |                                                                                    |
+
+Requires Kafka 4.1+ with share groups enabled. See [Consumer](../../guides/consumer/#share-groups-kip-932).
+
 ## `AdminConfig`
 
 | Field   | Default                            | Notes |

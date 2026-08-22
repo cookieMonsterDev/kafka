@@ -157,7 +157,7 @@ import type { DescribeClusterOptions } from '../protocol/requests/describe-clust
 import type { DescribeClusterResponseV2Body } from '../protocol/requests/describe-cluster/v2/response';
 import { DescribeQuorum } from '../protocol/requests/describe-quorum/index';
 import type { DescribeQuorumOptions } from '../protocol/requests/describe-quorum/index';
-import type { DescribeQuorumResponseV0Body } from '../protocol/requests/describe-quorum/v0/response';
+import type { DescribeQuorumResponseBody } from '../protocol/requests/describe-quorum/index';
 import { DescribeProducers } from '../protocol/requests/describe-producers/index';
 import type { DescribeProducersRequestV0Options } from '../protocol/requests/describe-producers/v0/request';
 import type { DescribeProducersResponseV0Body } from '../protocol/requests/describe-producers/v0/response';
@@ -713,7 +713,7 @@ export class Broker {
     return this.#send(describeCluster(options));
   }
 
-  async describeQuorum(options: DescribeQuorumOptions = {}): Promise<DescribeQuorumResponseV0Body> {
+  async describeQuorum(options: DescribeQuorumOptions = {}): Promise<DescribeQuorumResponseBody> {
     const describeQuorum = this.lookupRequest<DescribeQuorumOptions>(API_KEYS.DescribeQuorum, DescribeQuorum);
     return this.#send(describeQuorum(options));
   }

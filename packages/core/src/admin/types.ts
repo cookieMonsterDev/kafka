@@ -95,11 +95,26 @@ export interface DescribeFeaturesResult {
 export interface MetadataQuorumReplica {
   replicaId: number;
   logEndOffset: bigint;
+  lastFetchTimestamp?: bigint;
+  lastCaughtUpTimestamp?: bigint;
+  replicaDirectoryId?: Buffer;
+}
+
+export interface MetadataQuorumListener {
+  name: string;
+  host: string;
+  port: number;
+}
+
+export interface MetadataQuorumNode {
+  nodeId: number;
+  listeners: MetadataQuorumListener[];
 }
 
 export interface MetadataQuorumPartition {
   partitionIndex: number;
   errorCode: number;
+  errorMessage?: string | null;
   leaderId: number;
   leaderEpoch: number;
   highWatermark: bigint;
@@ -113,7 +128,9 @@ export interface MetadataQuorumTopic {
 }
 
 export interface DescribeMetadataQuorumResult {
+  errorMessage?: string | null;
   topics: MetadataQuorumTopic[];
+  nodes?: MetadataQuorumNode[];
 }
 
 export interface UnregisterBrokerOptions {
@@ -560,19 +577,13 @@ export interface Admin {
     options: RemoveMembersFromConsumerGroupOptions,
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
   describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescription[] }>;
-  listShareGroupOffsets: (
-    options: ListShareGroupOffsetsOptions,
-  ) => Promise<{
+  listShareGroupOffsets: (options: ListShareGroupOffsetsOptions) => Promise<{
     groups: import('../protocol/requests/describe-share-group-offsets/v1/response').DescribeShareGroupOffsetsGroupV1[];
   }>;
-  alterShareGroupOffsets: (
-    options: AlterShareGroupOffsetsOptions,
-  ) => Promise<{
+  alterShareGroupOffsets: (options: AlterShareGroupOffsetsOptions) => Promise<{
     responses: import('../protocol/requests/alter-share-group-offsets/v0/response').AlterShareGroupOffsetsTopicResult[];
   }>;
-  deleteShareGroupOffsets: (
-    options: DeleteShareGroupOffsetsOptions,
-  ) => Promise<{
+  deleteShareGroupOffsets: (options: DeleteShareGroupOffsetsOptions) => Promise<{
     responses: import('../protocol/requests/delete-share-group-offsets/v0/response').DeleteShareGroupOffsetsTopicResult[];
   }>;
   deleteShareGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;

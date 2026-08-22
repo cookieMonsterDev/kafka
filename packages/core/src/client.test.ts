@@ -39,6 +39,14 @@ describe('Kafka', () => {
     expect(typeof consumer[Symbol.asyncDispose]).toBe('function');
   });
 
+  it('creates a share consumer', () => {
+    const shareConsumer = createClient().shareConsumer({ groupId: 'share-group' });
+    expect(typeof shareConsumer.subscribe).toBe('function');
+    expect(typeof shareConsumer.run).toBe('function');
+    expect(typeof shareConsumer.stop).toBe('function');
+    expect(typeof shareConsumer[Symbol.asyncDispose]).toBe('function');
+  });
+
   it('creates an admin client', () => {
     const admin = createClient().admin();
     expect(typeof admin.listTopics).toBe('function');

@@ -6,7 +6,10 @@ import type { Logger } from '../loggers/index';
 import { SHARE_GROUP_JOIN_EPOCH, SHARE_GROUP_LEAVE_EPOCH } from '../protocol/requests/share-group-heartbeat/index';
 import type { ShareGroupHeartbeatResponseV1Body } from '../protocol/requests/share-group-heartbeat/v1/response';
 import { retrier, type RetryOptions } from '../retry/index';
+import { sleep } from '../utils/wait';
 import type { TopicPartitions } from '../consumer/types';
+
+const JOIN_DEADLINE_MS = 30_000;
 
 export interface ShareGroupOptions {
   cluster: Cluster;
@@ -34,12 +37,13 @@ export class ShareGroup {
   lastHeartbeatAt = 0;
   #includeJoinFields = false;
   #topicNameById = new Map<string, string>();
+  readonly #retrier: ReturnType<typeof retrier>;
 
   constructor({ cluster, groupId, logger, retry, rackId = '' }: ShareGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
     this.#logger = logger.namespace('ShareGroup');
-    retrier(retry);
+    this.#retrier = retrier(retry);
     this.rackId = rackId;
   }
 
@@ -57,18 +61,26 @@ export class ShareGroup {
   }
 
   async joinAndSync(): Promise<void> {
-    this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
-    this.#includeJoinFields = true;
-    this.memberEpoch = SHARE_GROUP_JOIN_EPOCH;
-    this.#ensureMemberId();
-    await this.cluster.refreshMetadata();
-    await this.#heartbeat({ force: true });
-
-    let attempts = 0;
-    while (!this.joined && !this.shuttingDown && attempts < 8) {
-      attempts += 1;
+    await this.#retrier(async () => {
+      this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
+      this.#includeJoinFields = true;
+      this.memberEpoch = SHARE_GROUP_JOIN_EPOCH;
+      this.joined = false;
+      this.#ensureMemberId();
+      await this.cluster.refreshMetadata();
       await this.#heartbeat({ force: true });
-    }
+
+      const deadline = Date.now() + JOIN_DEADLINE_MS;
+      while (!this.joined && !this.shuttingDown && Date.now() < deadline) {
+        const waitMs = this.heartbeatIntervalMs ?? 500;
+        await sleep(Math.max(50, waitMs));
+        await this.#heartbeat({ force: true });
+      }
+
+      if (!this.joined && !this.shuttingDown) {
+        throw new KafkaError(`Share group join timed out for group ${this.groupId}`);
+      }
+    });
   }
 
   async leave(): Promise<void> {
@@ -108,12 +120,15 @@ export class ShareGroup {
     const isJoining = this.memberEpoch === SHARE_GROUP_JOIN_EPOCH;
     const includeJoinFields = this.#includeJoinFields || isJoining;
 
-    const response = await this.coordinator.shareGroupHeartbeat({
-      groupId: this.groupId,
-      memberId,
-      memberEpoch: this.memberEpoch,
-      rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
-      subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+    const response = await this.#retrier(() => {
+      if (!this.coordinator) throw new KafkaNonRetriableError('Share group coordinator is not set');
+      return this.coordinator.shareGroupHeartbeat({
+        groupId: this.groupId,
+        memberId,
+        memberEpoch: this.memberEpoch,
+        rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
+        subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+      });
     });
 
     this.#includeJoinFields = false;

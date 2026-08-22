@@ -10,6 +10,11 @@ export type {
 } from './shared';
 export type { ShareFetchResponseV1Body } from './v1/response';
 
+/** Share-session epoch 0 opens a session (KIP-932). */
+export const SHARE_SESSION_INITIAL_EPOCH = 0;
+/** Share-session epoch -1 closes a session (KIP-932). */
+export const SHARE_SESSION_CLOSE_EPOCH = -1;
+
 export interface ShareFetchAcknowledgementBatchInput {
   firstOffset: bigint;
   lastOffset: bigint;

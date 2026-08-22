@@ -356,3 +356,4 @@ export type {
 export type { RetryOptions } from '../retry/index';
 
 export type { ShareConsumer, ShareConsumerRunConfig, ShareConsumerSubscribeTopics } from '../share-consumer/index';
+export type { ShareAcknowledgeType } from '../share-consumer/acknowledge-types';

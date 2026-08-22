@@ -68,6 +68,10 @@ ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
 
+Share groups (KIP-932, Kafka 4.1+): `describeShareGroups`,
+`listShareGroupOffsets`, `alterShareGroupOffsets`, `deleteShareGroupOffsets`,
+`deleteShareGroups`.
+
 ## Delegation tokens
 
 Kafka 1.1+ can mint HMAC delegation tokens through the Admin API when the

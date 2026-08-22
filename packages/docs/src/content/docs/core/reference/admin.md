@@ -43,6 +43,11 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
 | `describeClassicGroups(ids)`                                   | DescribeGroups (15); classic JoinGroup   |
 | `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+   |
+| `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+      |
+| `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)           |
+| `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)              |
+| `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)             |
+| `deleteShareGroups(ids)`                                       | DeleteGroups (42) for share groups       |
 | `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors   |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
 | `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults       |
@@ -73,7 +78,9 @@ Each topic includes `topicId` as a 16-byte `Buffer`. Produce and Fetch still use
 
 `describeMetadataQuorum()` sends DescribeQuorum (key 55) for the
 `__cluster_metadata` partition to the active controller and returns metadata quorum
-partition state. `highWatermark` and `logEndOffset` values are `bigint`. `voterDirectoryId` for raft voter APIs is a
+partition state (v0–v2). `highWatermark` and `logEndOffset` values are `bigint`.
+v1 adds replica fetch timestamps; v2 adds `errorMessage`, `replicaDirectoryId`,
+and controller `nodes`. `voterDirectoryId` for raft voter APIs is a
 16-byte `Buffer`.
 
 ## Transactions

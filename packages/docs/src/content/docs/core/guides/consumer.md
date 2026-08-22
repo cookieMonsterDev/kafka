@@ -73,10 +73,33 @@ consumer protocol on Kafka 4.0+: membership and incremental assignment use
 `ConsumerGroupHeartbeat` instead of JoinGroup/SyncGroup. The broker assigns
 partitions (no client assignor). `heartbeatInterval` and `sessionTimeout` are
 unused for membership; `rebalanceTimeout` is still sent as the revoke budget.
-Admin describe of `consumer` protocol groups is a follow-up (use classic
-`DescribeGroups` only for classic groups). Isolation defaults to `read_committed`
+Use `admin.describeConsumerGroups` for KIP-848 groups and
+`admin.describeClassicGroups` (alias of `describeGroups`) for classic
+JoinGroup groups. Isolation defaults to `read_committed`
 (`readUncommitted: false`); Java default `isolation.level` is `read_uncommitted`.
 See [Compatibility](../../reference/compatibility/),
 [KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+
+## Share groups (KIP-932)
+
+`kafka.shareConsumer({ groupId })` is a separate API from `consumer()`. Records
+are acquired, processed, then acknowledged (`ACCEPT` on success, `RELEASE` if
+the handler throws). Classic subscribe remains the default path.
+
+```ts
+const share = kafka.shareConsumer({ groupId: 'share-events' });
+await share.connect();
+share.subscribe({ topics: ['events'] });
+await share.run({
+  eachMessage: async ({ topic, partition, message }) => {
+    console.log({ topic, partition, offset: message.offset });
+  },
+});
+```
+
+Requires Kafka 4.1+ (stable ShareGroupHeartbeat v1) with share groups enabled
+on the broker. Admin helpers: `describeShareGroups`, `listShareGroupOffsets`,
+`alterShareGroupOffsets`, `deleteShareGroupOffsets`, `deleteShareGroups`.
+See [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka).

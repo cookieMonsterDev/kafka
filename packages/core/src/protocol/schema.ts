@@ -28,6 +28,10 @@ export const int16: FieldCodec<number> = codec(
   (e, v) => void e.writeInt16(v),
   (d) => d.readInt16(),
 );
+export const uint16: FieldCodec<number> = codec(
+  (e, v) => void e.writeUInt16(v),
+  (d) => d.readUInt16(),
+);
 export const int32: FieldCodec<number> = codec(
   (e, v) => void e.writeInt32(v),
   (d) => d.readInt32(),

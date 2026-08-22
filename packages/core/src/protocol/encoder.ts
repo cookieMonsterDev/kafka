@@ -111,6 +111,13 @@ export class Encoder {
     return this;
   }
 
+  writeUInt16(value: number): this {
+    this.#ensureAvailable(INT16_SIZE);
+    this.#buf.writeUInt16BE(value, this.#offset);
+    this.#offset += INT16_SIZE;
+    return this;
+  }
+
   writeInt32(value: number): this {
     this.#ensureAvailable(INT32_SIZE);
     this.#buf.writeInt32BE(value, this.#offset);

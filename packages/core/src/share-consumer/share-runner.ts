@@ -1,9 +1,10 @@
 import { KafkaError } from '../errors';
 import type { ShareFetchAcknowledgementBatchInput } from '../protocol/requests/share-fetch/index';
+import { SHARE_SESSION_CLOSE_EPOCH, SHARE_SESSION_INITIAL_EPOCH } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
 import type { EachMessageHandler } from '../consumer/types';
-import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
+import { SHARE_ACKNOWLEDGE_TYPE, type ShareAcknowledgeType } from './acknowledge-types';
 import { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
 
@@ -18,6 +19,7 @@ interface PendingAck {
   partition: number;
   firstOffset: bigint;
   lastOffset: bigint;
+  acknowledgeType: ShareAcknowledgeType;
 }
 
 export interface ShareRunnerOptions {
@@ -43,6 +45,7 @@ export class ShareRunner {
   readonly #maxRecords: number;
   readonly #batchSize: number;
   readonly #onCrash: (reason: Error) => void | Promise<void>;
+  readonly #retrier: ReturnType<typeof retrier>;
 
   running = false;
   shuttingDown = false;
@@ -70,7 +73,7 @@ export class ShareRunner {
     this.#maxRecords = maxRecords;
     this.#batchSize = batchSize;
     this.#onCrash = onCrash;
-    retrier(retry);
+    this.#retrier = retrier(retry);
   }
 
   async start(): Promise<void> {
@@ -90,6 +93,7 @@ export class ShareRunner {
     }
 
     this.running = true;
+    void this.#heartbeatLoop();
     void this.#loop();
   }
 
@@ -98,14 +102,29 @@ export class ShareRunner {
     while (this.running) {
       await sleep(50);
     }
+    await this.#flushAndCloseSessions();
     await this.#shareGroup.leave();
     await this.#shareGroup.disconnect();
+  }
+
+  async #heartbeatLoop(): Promise<void> {
+    while (this.running && !this.shuttingDown) {
+      try {
+        await this.#shareGroup.heartbeat({ force: true });
+      } catch (error) {
+        if (this.shuttingDown) return;
+        await this.#onCrash(error as Error);
+        this.running = false;
+        return;
+      }
+      const waitMs = this.#shareGroup.heartbeatIntervalMs ?? this.#heartbeatInterval;
+      await sleep(Math.max(50, waitMs));
+    }
   }
 
   async #loop(): Promise<void> {
     while (this.running && !this.shuttingDown) {
       try {
-        await this.#shareGroup.heartbeat({ interval: this.#heartbeatInterval });
         const nodeIds = this.#shareGroup.getNodeIds();
         for (const nodeId of nodeIds) {
           const batches = await this.#fetchFromNode(nodeId);
@@ -133,51 +152,63 @@ export class ShareRunner {
     const memberId = this.#shareGroup.memberId;
     if (!memberId) return [];
 
-    const shareSessionEpoch = this.#nextShareSessionEpoch(nodeId);
+    const shareSessionEpoch = this.#shareSessionEpochByNode.get(nodeId) ?? SHARE_SESSION_INITIAL_EPOCH;
+    const takenAcks: PendingAck[] = [];
     const topics = topicPartitions
       .map(({ topic, partitions }) => {
         const topicId = this.#shareGroup.cluster.findTopicId(topic);
         if (!topicId) return null;
         return {
           topicId,
-          partitions: partitions.map((partitionIndex) => ({
-            partitionIndex,
-            acknowledgementBatches: this.#acknowledgementBatchesFor(topic, partitionIndex),
-          })),
+          partitions: partitions.map((partitionIndex) => {
+            const acknowledgementBatches = this.#takeAcknowledgementBatchesFor(topic, partitionIndex, takenAcks);
+            return { partitionIndex, acknowledgementBatches };
+          }),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry != null);
 
-    if (topics.length === 0) return [];
-
-    const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-    const response = await broker.shareFetch({
-      groupId: this.#shareGroup.groupId,
-      memberId,
-      shareSessionEpoch,
-      maxWaitMs: this.#maxWaitTimeInMs,
-      minBytes: this.#minBytes,
-      maxBytes: this.#maxBytes,
-      maxRecords: this.#maxRecords,
-      batchSize: this.#batchSize,
-      topics,
-      forgottenTopics: [],
-    });
-
-    const batches: ShareBatch[] = [];
-    for (const { topicId, partitions } of response.responses) {
-      const topic = await this.#resolveTopicName(topicId);
-      for (const partitionData of partitions) {
-        batches.push(
-          new ShareBatch(topic, {
-            partition: partitionData.partitionIndex,
-            messages: partitionData.records,
-            acquiredRecords: partitionData.acquiredRecords,
-          }),
-        );
-      }
+    if (topics.length === 0) {
+      this.#pendingAcks.push(...takenAcks);
+      return [];
     }
-    return batches;
+
+    try {
+      const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
+      const response = await this.#retrier(() =>
+        broker.shareFetch({
+          groupId: this.#shareGroup.groupId,
+          memberId,
+          shareSessionEpoch,
+          maxWaitMs: this.#maxWaitTimeInMs,
+          minBytes: this.#minBytes,
+          maxBytes: this.#maxBytes,
+          maxRecords: this.#maxRecords,
+          batchSize: this.#batchSize,
+          topics,
+          forgottenTopics: [],
+        }),
+      );
+      this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
+
+      const batches: ShareBatch[] = [];
+      for (const { topicId, partitions } of response.responses) {
+        const topic = await this.#resolveTopicName(topicId);
+        for (const partitionData of partitions) {
+          batches.push(
+            new ShareBatch(topic, {
+              partition: partitionData.partitionIndex,
+              messages: partitionData.records,
+              acquiredRecords: partitionData.acquiredRecords,
+            }),
+          );
+        }
+      }
+      return batches;
+    } catch (error) {
+      this.#pendingAcks.push(...takenAcks);
+      throw error;
+    }
   }
 
   async #resolveTopicName(topicId: Buffer): Promise<string> {
@@ -188,46 +219,133 @@ export class ShareRunner {
     throw new KafkaError('Unknown topic id in share fetch response');
   }
 
-  #acknowledgementBatchesFor(topic: string, partition: number): ShareFetchAcknowledgementBatchInput[] {
-    return this.#pendingAcks
-      .filter((ack) => ack.topic === topic && ack.partition === partition)
-      .map(({ firstOffset, lastOffset }) => ({
-        firstOffset,
-        lastOffset,
-        acknowledgeTypes: [SHARE_ACKNOWLEDGE_TYPE.ACCEPT],
-      }));
+  #takeAcknowledgementBatchesFor(
+    topic: string,
+    partition: number,
+    taken: PendingAck[],
+  ): ShareFetchAcknowledgementBatchInput[] {
+    const remaining: PendingAck[] = [];
+    const batches: ShareFetchAcknowledgementBatchInput[] = [];
+    for (const ack of this.#pendingAcks) {
+      if (ack.topic === topic && ack.partition === partition) {
+        taken.push(ack);
+        batches.push({
+          firstOffset: ack.firstOffset,
+          lastOffset: ack.lastOffset,
+          acknowledgeTypes: [ack.acknowledgeType],
+        });
+      } else {
+        remaining.push(ack);
+      }
+    }
+    this.#pendingAcks = remaining;
+    return batches;
   }
 
-  #nextShareSessionEpoch(nodeId: string): number {
-    const current = this.#shareSessionEpochByNode.get(nodeId) ?? -1;
-    const next = current < 0 ? 0 : current + 1;
-    this.#shareSessionEpochByNode.set(nodeId, next);
-    return next;
+  #queueAcks(batch: ShareBatch, acknowledgeType: ShareAcknowledgeType): void {
+    for (const acquired of batch.acquiredRecords) {
+      this.#pendingAcks.push({
+        topic: batch.topic,
+        partition: batch.partition,
+        firstOffset: acquired.firstOffset,
+        lastOffset: acquired.lastOffset,
+        acknowledgeType,
+      });
+    }
   }
 
   async #handleBatch(batch: ShareBatch): Promise<void> {
-    if (batch.isEmpty()) return;
+    try {
+      const { topic, partition } = batch;
+      for (const message of batch.messages) {
+        await this.#retrier(() =>
+          this.#eachMessage({
+            topic,
+            partition,
+            message,
+            heartbeat: async () => {
+              await this.#shareGroup.heartbeat({ force: true });
+            },
+            pause: () => () => {},
+          }),
+        );
+      }
+      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
+    } catch (error) {
+      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      this.running = false;
+      await this.#onCrash(error as Error);
+    }
+  }
 
-    const { topic, partition } = batch;
-    for (const message of batch.messages) {
-      await this.#eachMessage({
-        topic,
-        partition,
-        message,
-        heartbeat: async () => {
-          await this.#shareGroup.heartbeat({ force: true });
-        },
-        pause: () => () => {},
-      });
+  async #flushAndCloseSessions(): Promise<void> {
+    const memberId = this.#shareGroup.memberId;
+    if (!memberId) {
+      this.#pendingAcks = [];
+      this.#shareSessionEpochByNode.clear();
+      return;
     }
 
-    for (const acquired of batch.acquiredRecords) {
-      this.#pendingAcks.push({
-        topic,
-        partition,
-        firstOffset: acquired.firstOffset,
-        lastOffset: acquired.lastOffset,
-      });
+    const nodeIds = new Set([...this.#shareSessionEpochByNode.keys(), ...this.#shareGroup.getNodeIds()]);
+    for (const nodeId of nodeIds) {
+      try {
+        const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
+        await broker.shareAcknowledge({
+          groupId: this.#shareGroup.groupId,
+          memberId,
+          shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,
+          topics: this.#acknowledgementTopicsForNode(nodeId),
+        });
+      } catch {
+        // Closing is best-effort; leave() still runs after this.
+      }
     }
+
+    this.#pendingAcks = [];
+    this.#shareSessionEpochByNode.clear();
+  }
+
+  #acknowledgementTopicsForNode(nodeId: string): {
+    topicId: Buffer;
+    partitions: {
+      partitionIndex: number;
+      acknowledgementBatches: ShareFetchAcknowledgementBatchInput[];
+    }[];
+  }[] {
+    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
+    const partitionSet = new Set(
+      topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => `${topic}:${partition}`)),
+    );
+
+    const byTopic = new Map<
+      string,
+      { topicId: Buffer; partitions: Map<number, ShareFetchAcknowledgementBatchInput[]> }
+    >();
+
+    for (const ack of this.#pendingAcks) {
+      if (!partitionSet.has(`${ack.topic}:${ack.partition}`)) continue;
+      const topicId = this.#shareGroup.cluster.findTopicId(ack.topic);
+      if (!topicId) continue;
+      const existing = byTopic.get(ack.topic) ?? {
+        topicId,
+        partitions: new Map<number, ShareFetchAcknowledgementBatchInput[]>(),
+      };
+      const batches = existing.partitions.get(ack.partition) ?? [];
+      batches.push({
+        firstOffset: ack.firstOffset,
+        lastOffset: ack.lastOffset,
+        acknowledgeTypes: [ack.acknowledgeType],
+      });
+      existing.partitions.set(ack.partition, batches);
+      byTopic.set(ack.topic, existing);
+    }
+
+    return [...byTopic.values()].map(({ topicId, partitions }) => ({
+      topicId,
+      partitions: [...partitions.entries()].map(([partitionIndex, acknowledgementBatches]) => ({
+        partitionIndex,
+        acknowledgementBatches,
+      })),
+    }));
   }
 }

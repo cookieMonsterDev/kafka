@@ -79,7 +79,9 @@ JoinGroup groups. `fromBeginning` is boolean (earliest vs latest). `autoOffsetRe
 is supported and throws if there is no committed offset. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
-applies to the classic group protocol.
+applies to the classic group protocol. `kafka.shareConsumer()` implements
+KIP-932 share groups (ShareGroupHeartbeat / ShareFetch / ShareAcknowledge,
+keys 76–79) on Kafka 4.1+. Classic `consumer()` remains the default.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
@@ -105,13 +107,17 @@ ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
 member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
 aliases `admin.describeGroups` (DescribeGroups, key 15) for classic JoinGroup
-groups. `admin.describeTopicPartitions` uses
+groups. `admin.describeShareGroups`, `listShareGroupOffsets`,
+`alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
+implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
+`admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
 validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
-implements DescribeQuorum (key 55) v0 against the active controller and requires
-KRaft 3.6+. `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+implements DescribeQuorum (key 55) v0–v2 against the active controller and requires
+KRaft 3.6+. v1 adds replica timestamps (KIP-836); v2 adds directory IDs and
+node listeners (KIP-853). `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
 `admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of
 AddRaftVoter adds optional `ackWhenCommitted` (default `true`). These controller
 RPCs require KRaft 3.7+ when the broker advertises the API. `admin.listConfigResources`

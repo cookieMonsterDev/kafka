@@ -66,3 +66,25 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 
 `seek` / `commitOffsets` still accept `number` and `string` at runtime; prefer
 `bigint`.
+
+## ShareConsumer
+
+Returned by `kafka.shareConsumer({ groupId })` (KIP-932). Subscribe is
+synchronous. Successful `eachMessage` calls are acknowledged as `ACCEPT`;
+handler failures `RELEASE` the acquired range so another member can retry.
+
+```ts
+interface ShareConsumer {
+  connect(options?: ConnectOptions): Promise<void>;
+  disconnect(options?: ConnectOptions): Promise<void>;
+  subscribe(subscription: { topics: readonly string[] }): void;
+  run(config: { eachMessage: EachMessageHandler }): Promise<void>;
+  stop(): Promise<void>;
+  logger(): Logger;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+```
+
+`SHARE_ACKNOWLEDGE_TYPE`: `GAP` 0, `ACCEPT` 1, `RELEASE` 2, `REJECT` 3, `RENEW` 4.
+`SHARE_ACQUIRE_MODE`: `BATCH_OPTIMIZED` 0, `RECORD_LIMIT` 1 (ShareFetch v2 / KIP-1206).
+Guide: [Share groups](../../guides/consumer/#share-groups-kip-932).

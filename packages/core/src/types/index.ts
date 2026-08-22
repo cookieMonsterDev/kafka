@@ -26,6 +26,7 @@ import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
+import type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
@@ -282,6 +283,30 @@ export interface ConsumerConfig {
 export type GroupProtocol = 'classic' | 'consumer';
 
 /**
+ * Options for {@link Kafka.shareConsumer} (KIP-932 share groups, Kafka 4.0+).
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ */
+export interface ShareConsumerConfig {
+  groupId: string;
+  heartbeatInterval?: number;
+  maxWaitTimeInMs?: number;
+  minBytes?: number;
+  maxBytes?: number;
+  maxRecords?: number;
+  batchSize?: number;
+  /**
+   * ShareFetch v2 acquire mode (KIP-1206, Kafka 4.2+). `0` batches for throughput;
+   * `1` stops at `maxRecords`. Negotiates down to v1 on 4.1 brokers.
+   */
+  shareAcquireMode?: ShareAcquireMode;
+  rackId?: string;
+  retry?: ConsumerRetryOptions;
+  metadataMaxAge?: number;
+  allowAutoTopicCreation?: boolean;
+  maxInFlightRequests?: number;
+}
+
+/**
  * Options for {@link Kafka.admin}.
  * @see https://kafka.apache.org/43/configuration/admin-configs/
  */
@@ -325,7 +350,6 @@ export type {
   ProducerRecord,
   RecordHeaders,
   RecordMetadata,
-  RetryOptions,
   SaslAuthenticationProvider,
   SocketFactory,
   TopicMessages,
@@ -334,3 +358,9 @@ export type {
   TopicPartitions,
   Transaction,
 };
+
+export type { RetryOptions } from '../retry/index';
+
+export type { ShareConsumer, ShareConsumerRunConfig, ShareConsumerSubscribeTopics } from '../share-consumer/index';
+export type { ShareAcknowledgeType } from '../share-consumer/acknowledge-types';
+export type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';

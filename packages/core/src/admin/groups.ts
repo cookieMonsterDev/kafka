@@ -1,4 +1,5 @@
 import { KafkaDeleteGroupsError, KafkaNonRetriableError } from '../errors';
+import type { ConsumerGroupDescribeGroupV1 } from '../protocol/requests/consumer-group-describe/v1/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
@@ -13,6 +14,8 @@ import type { TopicPartitions } from './types';
 export interface GroupsApi {
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
   describeGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
+  describeClassicGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
+  describeConsumerGroups: (groupIds: string[]) => Promise<{ groups: ConsumerGroupDescribeGroupV1[] }>;
   deleteGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
   deleteGroupOffsets: (options: {
     groupId: string;
@@ -62,6 +65,50 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
     const responses = await Promise.all(
       [...groupsByCoordinator.values()].map(async ({ coordinator, groupIds: ids }) => {
         const { groups } = await retrier(retry)(() => coordinator.describeGroups({ groupIds: ids }));
+        return groups;
+      }),
+    );
+
+    return { groups: responses.flat() };
+  };
+
+  const describeClassicGroups = async (
+    groupIds: string[],
+  ): Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }> => describeGroups(groupIds);
+
+  const describeConsumerGroups = async (groupIds: string[]): Promise<{ groups: ConsumerGroupDescribeGroupV1[] }> => {
+    if (!Array.isArray(groupIds)) {
+      throw new KafkaNonRetriableError(`Invalid groupIds array ${formatUnknown(groupIds)}`);
+    }
+    if (groupIds.some((groupId) => typeof groupId !== 'string' || groupId === '')) {
+      throw new KafkaNonRetriableError('Group IDs must be non-empty strings');
+    }
+    if (groupIds.length === 0) return { groups: [] };
+
+    const coordinatorsForGroup = await Promise.all(
+      groupIds.map(async (groupId) => {
+        const coordinator = await cluster.findGroupCoordinator({ groupId });
+        return { coordinator, groupId };
+      }),
+    );
+
+    const groupsByCoordinator = new Map<
+      string,
+      { coordinator: (typeof coordinatorsForGroup)[number]['coordinator']; groupIds: string[] }
+    >();
+    for (const { coordinator, groupId } of coordinatorsForGroup) {
+      const key = String(coordinator.nodeId);
+      const existing = groupsByCoordinator.get(key);
+      if (existing) {
+        existing.groupIds.push(groupId);
+      } else {
+        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
+      }
+    }
+
+    const responses = await Promise.all(
+      [...groupsByCoordinator.values()].map(async ({ coordinator, groupIds: ids }) => {
+        const { groups } = await retrier(retry)(() => coordinator.consumerGroupDescribe({ groupIds: ids }));
         return groups;
       }),
     );
@@ -246,5 +293,13 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
     });
   };
 
-  return { listGroups, describeGroups, deleteGroups, deleteGroupOffsets, removeMembersFromConsumerGroup };
+  return {
+    listGroups,
+    describeGroups,
+    describeClassicGroups,
+    describeConsumerGroups,
+    deleteGroups,
+    deleteGroupOffsets,
+    removeMembersFromConsumerGroup,
+  };
 }

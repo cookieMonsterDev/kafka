@@ -16,6 +16,10 @@ import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describ
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type {
+  ConsumerGroupDescribeGroupV1,
+  ConsumerGroupDescribeMemberV1,
+} from '../protocol/requests/consumer-group-describe/v1/response';
+import type {
   DescribeTransactionsState,
   DescribeTransactionsTopic,
 } from '../protocol/requests/describe-transactions/v0/response';
@@ -39,6 +43,8 @@ export type OffsetInput = bigint | number | string;
 export type TransactionDescription = DescribeTransactionsState;
 export type TransactionTopic = DescribeTransactionsTopic;
 export type TransactionListing = ListTransactionsState;
+export type ConsumerGroupDescription = ConsumerGroupDescribeGroupV1;
+export type ConsumerGroupMemberDescription = ConsumerGroupDescribeMemberV1;
 export type { ListTransactionsOptions };
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
@@ -86,12 +92,99 @@ export interface DescribeFeaturesResult {
   zkMigrationReady: boolean | null;
 }
 
+export interface MetadataQuorumReplica {
+  replicaId: number;
+  logEndOffset: bigint;
+  lastFetchTimestamp?: bigint;
+  lastCaughtUpTimestamp?: bigint;
+  replicaDirectoryId?: Buffer;
+}
+
+export interface MetadataQuorumListener {
+  name: string;
+  host: string;
+  port: number;
+}
+
+export interface MetadataQuorumNode {
+  nodeId: number;
+  listeners: MetadataQuorumListener[];
+}
+
+export interface MetadataQuorumPartition {
+  partitionIndex: number;
+  errorCode: number;
+  errorMessage?: string | null;
+  leaderId: number;
+  leaderEpoch: number;
+  highWatermark: bigint;
+  currentVoters: MetadataQuorumReplica[];
+  observers: MetadataQuorumReplica[];
+}
+
+export interface MetadataQuorumTopic {
+  topicName: string;
+  partitions: MetadataQuorumPartition[];
+}
+
+export interface DescribeMetadataQuorumResult {
+  errorMessage?: string | null;
+  topics: MetadataQuorumTopic[];
+  nodes?: MetadataQuorumNode[];
+}
+
+export interface UnregisterBrokerOptions {
+  brokerId: number;
+}
+
+export interface RaftVoterListener {
+  name: string;
+  host: string;
+  port: number;
+}
+
+export interface AddRaftVoterOptions {
+  clusterId?: string | null;
+  timeoutMs?: number;
+  voterId: number;
+  voterDirectoryId: Buffer;
+  listeners: RaftVoterListener[];
+  ackWhenCommitted?: boolean;
+}
+
+export interface RemoveRaftVoterOptions {
+  clusterId?: string | null;
+  voterId: number;
+  voterDirectoryId: Buffer;
+}
+
 export interface FenceProducersOptions {
   transactionalIds: string[];
   transactionTimeout?: number;
 }
 
 export interface FenceProducerResult {
+  transactionalId: string;
+  errorCode: number;
+  producerId?: bigint;
+  producerEpoch?: number;
+}
+
+export interface AbortTransactionOptions {
+  topic: string;
+  partition: number;
+  producerId: bigint;
+  producerEpoch: number;
+  coordinatorEpoch?: number;
+  transactionVersion?: number;
+}
+
+export interface ForceTerminateTransactionOptions {
+  transactionalId: string;
+  transactionTimeout?: number;
+}
+
+export interface ForceTerminateTransactionResult {
   transactionalId: string;
   errorCode: number;
   producerId?: bigint;
@@ -113,6 +206,45 @@ export interface RemoveMembersFromConsumerGroupResult {
   memberId: string;
   groupInstanceId: string | null;
   errorCode: number;
+}
+
+export type ShareGroupDescription =
+  import('../protocol/requests/share-group-describe/v1/response').ShareGroupDescribeGroupV1;
+
+export interface ListShareGroupOffsetsTopicInput {
+  topicName: string;
+  partitions?: number[];
+}
+
+export interface ListShareGroupOffsetsGroupInput {
+  groupId: string;
+  topics?: ListShareGroupOffsetsTopicInput[] | null;
+}
+
+export interface ListShareGroupOffsetsOptions {
+  groups: ListShareGroupOffsetsGroupInput[];
+}
+
+export type DescribeShareGroupOffsetsOptions = ListShareGroupOffsetsOptions;
+
+export interface AlterShareGroupOffsetsPartitionInput {
+  partitionIndex: number;
+  startOffset: bigint;
+}
+
+export interface AlterShareGroupOffsetsTopicInput {
+  topicName: string;
+  partitions: AlterShareGroupOffsetsPartitionInput[];
+}
+
+export interface AlterShareGroupOffsetsOptions {
+  groupId: string;
+  topics: AlterShareGroupOffsetsTopicInput[];
+}
+
+export interface DeleteShareGroupOffsetsOptions {
+  groupId: string;
+  topics: string[];
 }
 
 export interface DescribeReplicaLogDirsReplica {
@@ -434,6 +566,8 @@ export interface Admin {
   }) => Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }>;
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
   describeGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
+  describeClassicGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
+  describeConsumerGroups: (groupIds: string[]) => Promise<{ groups: ConsumerGroupDescription[] }>;
   deleteGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
   deleteGroupOffsets: (options: {
     groupId: string;
@@ -442,6 +576,17 @@ export interface Admin {
   removeMembersFromConsumerGroup: (
     options: RemoveMembersFromConsumerGroupOptions,
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
+  describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescription[] }>;
+  listShareGroupOffsets: (options: ListShareGroupOffsetsOptions) => Promise<{
+    groups: import('../protocol/requests/describe-share-group-offsets/v1/response').DescribeShareGroupOffsetsGroupV1[];
+  }>;
+  alterShareGroupOffsets: (options: AlterShareGroupOffsetsOptions) => Promise<{
+    responses: import('../protocol/requests/alter-share-group-offsets/v0/response').AlterShareGroupOffsetsTopicResult[];
+  }>;
+  deleteShareGroupOffsets: (options: DeleteShareGroupOffsetsOptions) => Promise<{
+    responses: import('../protocol/requests/delete-share-group-offsets/v0/response').DeleteShareGroupOffsetsTopicResult[];
+  }>;
+  deleteShareGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
   describeAcls: (options: AclFilter) => Promise<{ resources: DescribeAclsResponseV1Body['resources'] }>;
   deleteAcls: (options: {
@@ -491,12 +636,18 @@ export interface Admin {
   }) => Promise<{ results: AlterReplicaLogDirsResponseV2Body['results'] }>;
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
   describeFeatures: () => Promise<DescribeFeaturesResult>;
+  describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
+  unregisterBroker: (options: UnregisterBrokerOptions) => Promise<void>;
+  addRaftVoter: (options: AddRaftVoterOptions) => Promise<void>;
+  removeRaftVoter: (options: RemoveRaftVoterOptions) => Promise<void>;
   listConfigResources: (options?: {
     resourceTypes?: number[];
   }) => Promise<{ resources: Array<{ resourceName: string; resourceType: number }> }>;
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: TransactionDescription[] }>;
   listTransactions: (options?: ListTransactionsOptions) => Promise<{ transactionStates: TransactionListing[] }>;
   fenceProducers: (options: FenceProducersOptions) => Promise<{ results: FenceProducerResult[] }>;
+  abortTransaction: (options: AbortTransactionOptions) => Promise<void>;
+  forceTerminateTransaction: (options: ForceTerminateTransactionOptions) => Promise<ForceTerminateTransactionResult>;
   createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
   renewDelegationToken: (options: RenewDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;
   expireDelegationToken: (options: ExpireDelegationTokenOptions) => Promise<{ expiryTimestamp: bigint }>;

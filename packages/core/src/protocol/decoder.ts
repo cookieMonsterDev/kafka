@@ -66,6 +66,12 @@ export class Decoder {
     return value;
   }
 
+  readUInt16(): number {
+    const value = this.buffer.readUInt16BE(this.offset);
+    this.offset += INT16_SIZE;
+    return value;
+  }
+
   canReadInt32(): boolean {
     return this.canReadBytes(INT32_SIZE);
   }

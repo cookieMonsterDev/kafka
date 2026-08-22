@@ -26,6 +26,7 @@ describe('protocol/Decoder', () => {
     it('round-trips signed values, including negative ones', () => {
       expect(new Decoder(new Encoder().writeInt8(-1).buffer).readInt8()).toEqual(-1);
       expect(new Decoder(new Encoder().writeInt16(-1).buffer).readInt16()).toEqual(-1);
+      expect(new Decoder(new Encoder().writeUInt16(65535).buffer).readUInt16()).toEqual(65535);
       expect(new Decoder(new Encoder().writeInt32(-1).buffer).readInt32()).toEqual(-1);
     });
   });

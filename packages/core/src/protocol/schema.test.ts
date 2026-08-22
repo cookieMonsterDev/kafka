@@ -17,6 +17,7 @@ import {
   int16,
   int32,
   int64,
+  uint16,
   nullableArray,
   nullableString,
   nullableStruct,
@@ -36,6 +37,13 @@ describe('protocol/schema', () => {
 
     const decoded = shape.read(new Decoder(encoder.buffer));
     expect(decoded).toEqual({ a: 7, b: true, c: 'hello' });
+  });
+
+  it('round-trips uint16', () => {
+    const shape = object([field('port', uint16)]);
+    const encoder = new Encoder();
+    shape.write(encoder, { port: 9093 });
+    expect(shape.read(new Decoder(encoder.buffer))).toEqual({ port: 9093 });
   });
 
   it('round-trips nested objects and arrays of objects, in field order', () => {

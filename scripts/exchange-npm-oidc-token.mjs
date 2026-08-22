@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { appendFile } from 'node:fs/promises';
+import { appendFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 
 const packageName = process.argv[2];
 
@@ -10,8 +11,9 @@ if (!packageName) {
 const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
 const githubEnv = process.env.GITHUB_ENV;
+const runnerTemp = process.env.RUNNER_TEMP;
 
-if (!requestUrl || !requestToken || !githubEnv) {
+if (!requestUrl || !requestToken || !githubEnv || !runnerTemp) {
   throw new Error('GitHub Actions OIDC environment is unavailable');
 }
 
@@ -46,4 +48,9 @@ if (!exchangeResponse.ok || typeof exchangeBody.token !== 'string') {
 }
 
 process.stdout.write(`::add-mask::${exchangeBody.token}\n`);
-await appendFile(githubEnv, `NPM_TOKEN=${exchangeBody.token}\n`, 'utf8');
+const npmrcPath = path.join(runnerTemp, 'npm-oidc.npmrc');
+await writeFile(npmrcPath, `//registry.npmjs.org/:_authToken=${exchangeBody.token}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+});
+await appendFile(githubEnv, `NPM_CONFIG_USERCONFIG=${npmrcPath}\n`, 'utf8');

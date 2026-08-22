@@ -17,12 +17,13 @@ export default {
       '@semantic-release/exec',
       {
         prepareCmd: 'pnpm exec prettier --write CHANGELOG.md',
+        publishCmd: 'npm publish --access public --registry https://registry.npmjs.org/',
       },
     ],
     [
       '@semantic-release/npm',
       {
-        npmPublish: true,
+        npmPublish: false,
       },
     ],
     [

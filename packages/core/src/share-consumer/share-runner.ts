@@ -1,4 +1,7 @@
-import { KafkaError } from '../errors';
+import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
+import type { EachMessageHandler } from '../consumer/types';
+import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
+import type { Logger } from '../loggers/index';
 import {
   SHARE_ACQUIRE_MODE,
   SHARE_SESSION_CLOSE_EPOCH,
@@ -8,7 +11,6 @@ import {
 } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
-import type { EachMessageHandler } from '../consumer/types';
 import { SHARE_ACKNOWLEDGE_TYPE, type ShareAcknowledgeType } from './acknowledge-types';
 import { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
@@ -27,9 +29,22 @@ interface PendingAck {
   acknowledgeType: ShareAcknowledgeType;
 }
 
+export interface EachShareBatchPayload {
+  batch: ShareBatch;
+  heartbeat: () => Promise<void>;
+  acknowledge: (type?: ShareAcknowledgeType) => void;
+  isRunning: () => boolean;
+  isStale: () => boolean;
+}
+
+export type EachShareBatchHandler = (payload: EachShareBatchPayload) => Promise<void>;
+
 export interface ShareRunnerOptions {
+  logger: Logger;
   shareGroup: ShareGroup;
-  eachMessage: EachMessageHandler;
+  eachMessage?: EachMessageHandler | null;
+  eachBatch?: EachShareBatchHandler | null;
+  eachBatchAutoAck?: boolean;
   heartbeatInterval: number;
   maxWaitTimeInMs?: number;
   minBytes?: number;
@@ -37,13 +52,19 @@ export interface ShareRunnerOptions {
   maxRecords?: number;
   batchSize?: number;
   shareAcquireMode?: ShareAcquireMode;
+  concurrency?: number;
+  prefetchMaxBatches?: number;
+  prefetchMaxBytes?: number;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
 }
 
 export class ShareRunner {
+  readonly #logger: Logger;
   readonly #shareGroup: ShareGroup;
-  readonly #eachMessage: EachMessageHandler;
+  readonly #eachMessage: EachMessageHandler | null;
+  readonly #eachBatch: EachShareBatchHandler | null;
+  readonly #eachBatchAutoAck: boolean;
   readonly #heartbeatInterval: number;
   readonly #maxWaitTimeInMs: number;
   readonly #minBytes: number;
@@ -53,6 +74,7 @@ export class ShareRunner {
   readonly #shareAcquireMode: ShareAcquireMode;
   readonly #onCrash: (reason: Error) => void | Promise<void>;
   readonly #retrier: ReturnType<typeof retrier>;
+  readonly #fetchManager: FetchManager<ShareBatch>;
 
   running = false;
   shuttingDown = false;
@@ -60,8 +82,11 @@ export class ShareRunner {
   #pendingAcks: PendingAck[] = [];
 
   constructor({
+    logger,
     shareGroup,
-    eachMessage,
+    eachMessage = null,
+    eachBatch = null,
+    eachBatchAutoAck = true,
     heartbeatInterval,
     maxWaitTimeInMs = DEFAULT_MAX_WAIT_MS,
     minBytes = DEFAULT_MIN_BYTES,
@@ -69,11 +94,17 @@ export class ShareRunner {
     maxRecords = DEFAULT_MAX_RECORDS,
     batchSize = DEFAULT_BATCH_SIZE,
     shareAcquireMode = SHARE_ACQUIRE_MODE.BATCH_OPTIMIZED,
+    concurrency = 1,
+    prefetchMaxBatches,
+    prefetchMaxBytes,
     onCrash,
     retry,
   }: ShareRunnerOptions) {
+    this.#logger = logger.namespace('ShareRunner');
     this.#shareGroup = shareGroup;
     this.#eachMessage = eachMessage;
+    this.#eachBatch = eachBatch;
+    this.#eachBatchAutoAck = eachBatchAutoAck;
     this.#heartbeatInterval = heartbeatInterval;
     this.#maxWaitTimeInMs = maxWaitTimeInMs;
     this.#minBytes = minBytes;
@@ -83,6 +114,16 @@ export class ShareRunner {
     this.#shareAcquireMode = shareAcquireMode;
     this.#onCrash = onCrash;
     this.#retrier = retrier(retry);
+    this.#fetchManager = createFetchManager<ShareBatch>({
+      logger: this.#logger,
+      getNodeIds: () => this.#shareGroup.getNodeIds(),
+      fetch: (nodeId) => this.#fetchFromNode(nodeId),
+      handler: (batch) => this.#handleBatch(batch),
+      concurrency,
+      prefetchMaxBatches,
+      prefetchMaxBytes,
+      isStale: (batch) => this.#isStale(batch),
+    });
   }
 
   async start(): Promise<void> {
@@ -108,6 +149,11 @@ export class ShareRunner {
 
   async stop(): Promise<void> {
     this.shuttingDown = true;
+    try {
+      await this.#fetchManager.stop();
+    } catch {
+      // Fetchers may already have exited.
+    }
     while (this.running) {
       await sleep(50);
     }
@@ -134,16 +180,19 @@ export class ShareRunner {
   async #loop(): Promise<void> {
     while (this.running && !this.shuttingDown) {
       try {
-        const nodeIds = this.#shareGroup.getNodeIds();
-        for (const nodeId of nodeIds) {
-          const batches = await this.#fetchFromNode(nodeId);
-          for (const batch of batches) {
-            await this.#handleBatch(batch);
-          }
+        if (this.#shareGroup.getNodeIds().length === 0) {
+          await sleep(100);
+          continue;
         }
-        if (nodeIds.length === 0) await sleep(this.#maxWaitTimeInMs);
+        await this.#fetchManager.start();
       } catch (error) {
+        if (this.shuttingDown || !this.running) break;
+        if (error instanceof KafkaNoBrokerAvailableError) {
+          await sleep(100);
+          continue;
+        }
         await this.#shareGroup.recoverFromFetch(error);
+        if (this.shuttingDown || !this.running) break;
         if (error instanceof KafkaError) continue;
         await this.#onCrash(error as Error);
         this.running = false;
@@ -153,7 +202,13 @@ export class ShareRunner {
     this.running = false;
   }
 
+  #isStale(batch: ShareBatch): boolean {
+    return !this.running || this.shuttingDown || !this.#shareGroup.hasAssignment(batch.topic, batch.partition);
+  }
+
   async #fetchFromNode(nodeId: string): Promise<ShareBatch[]> {
+    if (!this.running || this.shuttingDown) return [];
+
     await this.#shareGroup.cluster.refreshMetadataIfNecessary();
     const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
     if (topicPartitions.length === 0) return [];
@@ -215,7 +270,7 @@ export class ShareRunner {
           );
         }
       }
-      return batches;
+      return batches.filter((batch) => !this.#isStale(batch));
     } catch (error) {
       this.#pendingAcks.push(...takenAcks);
       throw error;
@@ -266,11 +321,42 @@ export class ShareRunner {
   }
 
   async #handleBatch(batch: ShareBatch): Promise<void> {
+    if (this.#isStale(batch)) {
+      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      return;
+    }
+
     try {
+      if (this.#eachBatch) {
+        let acknowledged = false;
+        await this.#eachBatch({
+          batch,
+          heartbeat: async () => {
+            if (this.#shareGroup.heartbeatDue(this.#heartbeatInterval)) {
+              await this.#shareGroup.heartbeat();
+            }
+          },
+          acknowledge: (type = SHARE_ACKNOWLEDGE_TYPE.ACCEPT) => {
+            acknowledged = true;
+            this.#queueAcks(batch, type);
+          },
+          isRunning: () => this.running && !this.shuttingDown,
+          isStale: () => this.#isStale(batch),
+        });
+        if (!acknowledged && this.#eachBatchAutoAck) {
+          this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
+        }
+        return;
+      }
+
+      const eachMessage = this.#eachMessage;
+      if (!eachMessage) return;
+
       const { topic, partition } = batch;
       for (const message of batch.messages) {
+        if (this.#isStale(batch)) break;
         await this.#retrier(() =>
-          this.#eachMessage({
+          eachMessage({
             topic,
             partition,
             message,

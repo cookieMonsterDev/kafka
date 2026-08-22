@@ -49,13 +49,14 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 
-| Setting              | Java 4.3                                  | This client                                                                                |
-| -------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                        |
-| `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
-| `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
-| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`)             |
+| Setting              | Java 4.3                                  | This client                                                                                                                                                                                                                   |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                                                                                                                                                           |
+| `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                                                                                                                                                   |
+| `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
+| `max.in.flight`      | 5                                         | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                                                 |
+| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                                                |
+| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                                                  |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
@@ -64,6 +65,52 @@ The opt-in sticky partitioner keeps unkeyed records on one partition for each
 Produce batch formed by this client's `lingerMs` / `batchSize` model, then
 rotates uniformly to a different available partition. Explicit partitions and
 keyed murmur2 routing are unchanged.
+
+## Throughput preset
+
+`throughputPreset()` is a named profile for load-oriented clients. Constructor
+defaults stay as in the table above. Spread the returned fragments:
+
+```ts
+import { Kafka, throughputPreset } from '@cookiemonsterdev/kafka-core';
+
+const kafka = new Kafka({ clientId: 'load', brokers: ['localhost:9092'] });
+const { producer, consumer } = throughputPreset();
+const p = kafka.producer({ ...producer });
+await kafka.consumer({ groupId: 'load' }).run({
+  ...consumer,
+  eachBatch: async ({ batch }) => {
+    for (const message of batch.messages) {
+      void message;
+    }
+  },
+});
+```
+
+`producer` sets `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`,
+the sticky partitioner, and a 32 MiB `bufferMemory`. `consumer` sets
+`partitionsConsumedConcurrently: 4` on `run()` (not on `kafka.consumer()`).
+
+`eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume
+API. Set `lingerMs` if you are not using the preset. Compression: GZIP and
+ZSTD already use the zlib threadpool; Snappy and LZ4 are off-thread as well
+(optional native packages if installed).
+
+Full walkthrough: [Throughput](../../guides/throughput/).
+
+## Next major defaults
+
+The **next major** will change these constructor defaults to match Java 4.x.
+This minor does **not** flip them.
+
+| Setting               | This minor                      | Next major |
+| --------------------- | ------------------------------- | ---------- |
+| `lingerMs`            | `0`                             | `5`        |
+| `batchSize`           | unset (no size flush by itself) | `16384`    |
+| `maxInFlightRequests` | unset (`null`, uncapped)        | `5`        |
+
+Use `throughputPreset()` until then. `flush()` remains. See
+[Breaking changes](../../migration/breaking-changes/).
 
 ## Not yet at the Java 4.3 surface
 

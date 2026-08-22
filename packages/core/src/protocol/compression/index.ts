@@ -6,6 +6,9 @@ import { zstdCodec } from './zstd';
 
 /**
  * Record-batch compression codecs. GZIP, Snappy, LZ4, and ZSTD are built in.
+ * GZIP and ZSTD use `node:zlib` (libuv threadpool). Snappy and LZ4 run the JS
+ * codecs on `worker_threads` so compress/decompress does not stall the event
+ * loop; optional native `snappy` / `lz4` packages are used when present and async.
  * @see https://kafka.apache.org/43/implementation/messages/
  */
 export const COMPRESSION_TYPES = Object.freeze({

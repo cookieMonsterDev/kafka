@@ -41,17 +41,21 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 
 ## `run` / `stream`
 
-| Option                           | Default | Notes                   |
-| -------------------------------- | ------- | ----------------------- |
-| `eachMessage`                    |         | Per-record handler      |
-| `eachBatch`                      |         | Per-batch handler       |
-| `autoCommit`                     | `true`  | Commit after processing |
-| `autoCommitInterval`             |         | ms                      |
-| `autoCommitThreshold`            |         | messages                |
-| `partitionsConsumedConcurrently` | `1`     | Parallel partitions     |
-| `signal`                         |         | Abort to stop           |
+| Option                           | Default | Notes                                                                             |
+| -------------------------------- | ------- | --------------------------------------------------------------------------------- |
+| `eachMessage`                    |         | Per-record handler                                                                |
+| `eachBatch`                      |         | Per-batch handler                                                                 |
+| `autoCommit`                     | `true`  | Commit after processing                                                           |
+| `autoCommitInterval`             |         | ms. When both interval and threshold are unset, commit after each processed batch |
+| `autoCommitThreshold`            |         | messages                                                                          |
+| `partitionsConsumedConcurrently` | `1`     | Parallel partitions                                                               |
+| `signal`                         |         | Abort to stop                                                                     |
 
 `stream()` cannot run alongside `run()`.
+
+`eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.
+The default concurrency is `1`. Spread `throughputPreset().consumer` into `run()`
+for concurrency `4`. See [Throughput](../../guides/throughput/).
 
 ## `KafkaMessage`
 
@@ -70,15 +74,25 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 ## ShareConsumer
 
 Returned by `kafka.shareConsumer({ groupId })` (KIP-932). Subscribe is
-synchronous. Successful `eachMessage` calls are acknowledged as `ACCEPT`;
-handler failures `RELEASE` the acquired range so another member can retry.
+synchronous. Successful `eachMessage` / auto-acked `eachBatch` calls are
+acknowledged as `ACCEPT`; handler failures `RELEASE` the acquired range so
+another member can retry. Share fetch runs per assigned node in parallel, with
+the same `partitionsConsumedConcurrently` / prefetch knobs as the classic
+consumer.
 
 ```ts
 interface ShareConsumer {
   connect(options?: ConnectOptions): Promise<void>;
   disconnect(options?: ConnectOptions): Promise<void>;
   subscribe(subscription: { topics: readonly string[] }): void;
-  run(config: { eachMessage: EachMessageHandler }): Promise<void>;
+  run(config: {
+    eachMessage?: EachMessageHandler | null;
+    eachBatch?: EachShareBatchHandler | null;
+    eachBatchAutoAck?: boolean;
+    partitionsConsumedConcurrently?: number;
+    prefetchMaxBatches?: number;
+    prefetchMaxBytes?: number;
+  }): Promise<void>;
   stop(): Promise<void>;
   logger(): Logger;
   [Symbol.asyncDispose](): Promise<void>;

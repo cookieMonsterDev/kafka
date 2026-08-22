@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { Logger } from '../loggers/index';
+import { sleep } from '../utils/wait';
 import type { WorkerQueue } from './worker-queue';
 
 export interface FetchBatch {
@@ -37,7 +38,9 @@ export function createFetcher<T extends FetchBatch>({
     partitionAssignments.set(assignmentKey(batch), nodeId);
   };
   const unassignTopicPartition = (batch: FetchBatch): void => {
-    partitionAssignments.delete(assignmentKey(batch));
+    if (getAssignedFetcher(batch) === nodeId) {
+      partitionAssignments.delete(assignmentKey(batch));
+    }
   };
 
   const filterUnassignedBatches = (batches: T[]): T[] =>
@@ -63,17 +66,33 @@ export function createFetcher<T extends FetchBatch>({
     while (isRunning) {
       try {
         const batches = await fetch(nodeId);
-        if (isRunning) {
-          const availableBatches = filterUnassignedBatches(batches);
+        if (!isRunning) break;
 
-          if (availableBatches.length > 0) {
-            availableBatches.forEach(assignTopicPartition);
-            try {
-              await workerQueue.push(...availableBatches);
-            } finally {
-              availableBatches.forEach(unassignTopicPartition);
-            }
+        const availableBatches = filterUnassignedBatches(batches);
+        if (availableBatches.length === 0) {
+          await sleep(1);
+          continue;
+        }
+
+        availableBatches.forEach(assignTopicPartition);
+        let enqueued = 0;
+        try {
+          await workerQueue.pushForNode(nodeId, availableBatches, {
+            onEnqueued: () => {
+              enqueued += 1;
+            },
+            onSettled: unassignTopicPartition,
+          });
+        } catch (error) {
+          for (let index = enqueued; index < availableBatches.length; index++) {
+            const batch = availableBatches[index];
+            if (batch) unassignTopicPartition(batch);
           }
+          throw error;
+        }
+        for (let index = enqueued; index < availableBatches.length; index++) {
+          const batch = availableBatches[index];
+          if (batch) unassignTopicPartition(batch);
         }
       } catch (error) {
         isRunning = false;
@@ -87,6 +106,7 @@ export function createFetcher<T extends FetchBatch>({
   const stop = async (): Promise<void> => {
     if (!isRunning) return;
     isRunning = false;
+    workerQueue.interrupt();
     await new Promise<void>((resolve) => {
       const timeoutId = setTimeout(resolve, 10_000);
       emitter.once('end', () => {

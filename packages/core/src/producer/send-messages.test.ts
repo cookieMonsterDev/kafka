@@ -52,8 +52,8 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
     isInitialized: vi.fn().mockReturnValue(false),
     initProducerId: vi.fn().mockResolvedValue(undefined),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-    acquireBrokerLock: vi.fn().mockResolvedValue(undefined),
-    releaseBrokerLock: vi.fn().mockResolvedValue(undefined),
+    acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
+    releasePartitionGates: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as EosManager;
 }
@@ -76,7 +76,15 @@ describe('producer/sendMessages', () => {
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
       findTopicId: vi.fn().mockReturnValue(undefined),
-      findLeaderForPartitions: vi.fn().mockReturnValue(partitionsPerLeader),
+      findLeaderForPartitions: vi.fn().mockImplementation((_topic: string, partitions: readonly number[]) => {
+        const requested = new Set(partitions);
+        const result: Record<number, number[]> = {};
+        for (const [nodeId, nodePartitions] of Object.entries(partitionsPerLeader)) {
+          const matching = nodePartitions.filter((partition) => requested.has(partition));
+          if (matching.length > 0) result[Number(nodeId)] = matching;
+        }
+        return result;
+      }),
       findBroker: vi
         .fn()
         .mockImplementation(({ nodeId }: { nodeId: string }) => Promise.resolve(brokers[Number(nodeId)])),
@@ -87,7 +95,7 @@ describe('producer/sendMessages', () => {
     };
   }
 
-  it('retries produce to every broker after a failed send so stale leader acks are not kept', async () => {
+  it('retries only failed brokers and keeps successful partition acks', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     brokers[1].produce
       .mockImplementationOnce(() => Promise.reject(createErrorFromCode(5)))
@@ -116,8 +124,8 @@ describe('producer/sendMessages', () => {
     expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled();
     expect(eosManager.addPartitionsToTransaction).not.toHaveBeenCalled();
 
-    expect(brokers[1].produce).toHaveBeenCalledTimes(3);
-    expect(brokers[2].produce).toHaveBeenCalledTimes(3);
+    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
     expect(brokers[3].produce).toHaveBeenCalledTimes(3);
     expect(response).toEqual([
       { topicName: topic, partition: 0, errorCode: 0, baseOffset: 0n, logAppendTime: -1n, logStartOffset: 0n },
@@ -197,6 +205,8 @@ describe('producer/sendMessages', () => {
     expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 3);
     expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 1, 3);
     expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 2, 3);
+    expect(eosManager.acquirePartitionGates).toHaveBeenCalled();
+    expect(eosManager.releasePartitionGates).toHaveBeenCalled();
   });
 
   it('adds partitions to the transaction when transactional', async () => {
@@ -300,7 +310,7 @@ describe('producer/sendMessages', () => {
     expect(response).toEqual([]);
   });
 
-  it('does not keep a sibling broker error-0 ack after NOT_LEADER_OR_FOLLOWER', async () => {
+  it('keeps a sibling broker error-0 ack after NOT_LEADER_OR_FOLLOWER', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const notLeader = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
     brokers[2].produce
@@ -316,11 +326,21 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    const response = await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
-    expect(brokers[1].produce.mock.calls.length).toBeGreaterThan(1);
-    expect(brokers[2].produce.mock.calls.length).toBeGreaterThan(1);
+    expect(brokers[1].produce).toHaveBeenCalledTimes(1);
+    expect(brokers[3].produce).toHaveBeenCalledTimes(1);
+    expect(brokers[2].produce).toHaveBeenCalledTimes(2);
+    expect(response).toEqual([
+      { topicName: topic, partition: 0, errorCode: 0, baseOffset: 0n, logAppendTime: -1n, logStartOffset: 0n },
+      { topicName: topic, partition: 1, errorCode: 0, baseOffset: 1n, logAppendTime: -1n, logStartOffset: 0n },
+      { topicName: topic, partition: 2, errorCode: 0, baseOffset: 2n, logAppendTime: -1n, logStartOffset: 0n },
+    ]);
   });
 
   it('refreshes metadata when a produce request times out', async () => {
@@ -391,6 +411,59 @@ describe('producer/sendMessages', () => {
     ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
 
     expect(eosManager.initProducerId).not.toHaveBeenCalled();
+  });
+
+  it('retries only the failed topic-partition and keeps merge order stable', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce
+      .mockImplementationOnce(() => Promise.reject(createErrorFromCode(5)))
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    const response = await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
+
+    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
+    expect(brokers[3].produce).toHaveBeenCalledTimes(1);
+
+    const retryTopicData = brokers[1].produce.mock.calls[1]?.[0]?.topicData as Array<{
+      partitions: Array<{ partition: number }>;
+    }>;
+    expect(retryTopicData[0]?.partitions.map((entry) => entry.partition)).toEqual([0]);
+    expect(response.map((entry) => entry.partition)).toEqual([0, 1, 2]);
+  });
+
+  it('does not drop the error when retries are exhausted after a partial success', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce.mockRejectedValue(createErrorFromCode(5));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
+
+    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
+    expect(brokers[3].produce).toHaveBeenCalledTimes(1);
   });
 
   it('plumbs topicId from cluster metadata onto Produce topicData', async () => {

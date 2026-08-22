@@ -1,4 +1,5 @@
 import type { PartitionerArgs } from '../../types';
+import { createAvailablePartitionCache } from '../available-partitions';
 import { randomBytes } from './random-bytes';
 
 /**
@@ -26,6 +27,7 @@ export type Murmur2 = (key: Buffer | string | number) => number;
 export function createPartitionerFactory(murmur2: Murmur2) {
   return () => {
     const counters = new Map<string, number>();
+    const availablePartitions = createAvailablePartitionCache();
 
     return ({ topic, partitionMetadata, message }: PartitionerArgs): number => {
       let counter = counters.get(topic);
@@ -34,14 +36,11 @@ export function createPartitionerFactory(murmur2: Murmur2) {
         counters.set(topic, counter);
       }
 
-      const numPartitions = partitionMetadata.length;
-      const availablePartitions = partitionMetadata.filter((p) => p.leader >= 0);
-      const numAvailablePartitions = availablePartitions.length;
-
       if (message.partition != null) {
         return message.partition;
       }
 
+      const numPartitions = partitionMetadata.length;
       if (message.key != null) {
         return toPositive(murmur2(message.key)) % numPartitions;
       }
@@ -49,13 +48,12 @@ export function createPartitionerFactory(murmur2: Murmur2) {
       const nextCounter = toPositive(counter + 1);
       counters.set(topic, nextCounter);
 
-      if (numAvailablePartitions > 0) {
-        const i = nextCounter % numAvailablePartitions;
-        // `i < availablePartitions.length` by construction, so this index is never `undefined`.
-        return availablePartitions[i]!.partitionId;
+      const available = availablePartitions.available(partitionMetadata);
+      if (available.length > 0) {
+        const i = nextCounter % available.length;
+        return available[i]!.partitionId;
       }
 
-      // No partitions are available; give a non-available partition.
       return nextCounter % numPartitions;
     };
   };

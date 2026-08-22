@@ -66,6 +66,7 @@ describe('consumer/runner', () => {
       commitOffsetsIfNecessary: vi.fn(async () => undefined),
       uncommittedOffsets: vi.fn(() => ({ topics: [] })),
       heartbeat: vi.fn(async () => undefined),
+      heartbeatDue: vi.fn(() => false),
       assigned: vi.fn(() => []),
       isLeader: vi.fn(() => true),
       isPaused: vi.fn().mockReturnValue(false),
@@ -121,7 +122,8 @@ describe('consumer/runner', () => {
     });
     await runner.handleBatch(batch);
     expect(eachBatch).toHaveBeenCalled();
-    expect(consumerGroup.commitOffsets).toHaveBeenCalled();
+    expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalled();
+    expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
     expect(onCrash).not.toHaveBeenCalled();
   });
 
@@ -375,5 +377,125 @@ describe('consumer/runner', () => {
     await runner.stop();
     expect(runner.running).toBe(false);
     expect(consumerGroup.leave).toHaveBeenCalled();
+  });
+
+  it('does not heartbeat or OffsetCommit after every eachMessage record', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    vi.mocked(consumerGroup.heartbeatDue).mockReturnValue(false);
+    const offsets: bigint[] = [];
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async ({ message }) => {
+        offsets.push(message.offset);
+      },
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+
+    const batch = new Batch(topicName, 0n, {
+      partition,
+      highWatermark: 5n,
+      messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)],
+    });
+    await runner.handleBatch(batch);
+
+    expect(offsets).toEqual([1n, 2n, 3n]);
+    expect(consumerGroup.heartbeat).not.toHaveBeenCalled();
+    expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+    expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+  });
+
+  it('heartbeats from the runner only when the interval has elapsed', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    vi.mocked(consumerGroup.heartbeatDue).mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async () => undefined,
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+
+    const batch = new Batch(topicName, 0n, {
+      partition,
+      highWatermark: 5n,
+      messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)],
+    });
+    await runner.handleBatch(batch);
+
+    expect(consumerGroup.heartbeatDue).toHaveBeenCalled();
+    expect(consumerGroup.heartbeat).toHaveBeenCalledTimes(2);
+    expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+    expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+  });
+
+  it('honors autoCommitInterval after eachBatch instead of committing every batch', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+
+    const batch = new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [kafkaMessage(4n)] });
+    await runner.handleBatch(batch);
+    await runner.handleBatch(batch);
+
+    expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(2);
+    expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+  });
+
+  it('commits offsets on stop so disconnect does not drop the last batch', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async () => undefined,
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+    vi.mocked(consumerGroup.commitOffsets).mockClear();
+    await runner.stop();
+    expect(consumerGroup.commitOffsets).toHaveBeenCalledTimes(1);
+    runner = undefined;
+  });
+
+  it('does not commit on stop when autoCommit is false', async () => {
+    const consumerGroup = fakeConsumerGroup();
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async () => undefined,
+      autoCommit: false,
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+    await runner.stop();
+    expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+    expect(consumerGroup.commitOffsetsIfNecessary).not.toHaveBeenCalled();
+    runner = undefined;
   });
 });

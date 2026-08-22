@@ -135,7 +135,7 @@ export class Decoder {
   }
 
   canReadBytes(length: number): boolean {
-    return Buffer.byteLength(this.buffer) - this.offset >= length;
+    return this.buffer.length - this.offset >= length;
   }
 
   readBytes(byteLength: number = this.readInt32()): Buffer | null {

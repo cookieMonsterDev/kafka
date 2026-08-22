@@ -2,7 +2,8 @@ const ABORTED_MESSAGE_KEY = Buffer.from([0, 0, 0, 0]);
 
 function isAbortMarker(message: { key?: Buffer | string | null }): boolean {
   if (!message.key) return false;
-  return Buffer.from(message.key).equals(ABORTED_MESSAGE_KEY);
+  const key = Buffer.isBuffer(message.key) ? message.key : Buffer.from(message.key);
+  return key.equals(ABORTED_MESSAGE_KEY);
 }
 
 export interface FilterableMessage {
@@ -28,12 +29,17 @@ export interface AbortedTransaction {
 export function filterAbortedMessages<T extends FilterableMessage>({
   messages,
   abortedTransactions,
+  excludeControlRecords = false,
 }: {
   messages: readonly T[];
   abortedTransactions?: readonly AbortedTransaction[] | null;
+  excludeControlRecords?: boolean;
 }): T[] {
   if (!abortedTransactions || abortedTransactions.length === 0) {
-    return [...messages];
+    if (excludeControlRecords) {
+      return messages.filter((message) => !message.isControlRecord);
+    }
+    return messages as T[];
   }
 
   const currentAbortedTransactions = new Map<bigint, true>();
@@ -51,6 +57,10 @@ export function filterAbortedMessages<T extends FilterableMessage>({
     if (isAbortMarker(message)) {
       currentAbortedTransactions.delete(producerId);
     } else if (currentAbortedTransactions.has(producerId) && inTransaction) {
+      return false;
+    }
+
+    if (excludeControlRecords && message.isControlRecord) {
       return false;
     }
 

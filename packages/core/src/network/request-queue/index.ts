@@ -8,7 +8,6 @@ import { SocketRequest } from './socket-request';
 import type { RequestEntry } from './socket-request';
 
 const REQUEST_QUEUE_EMPTY = 'requestQueueEmpty';
-const CHECK_PENDING_REQUESTS_INTERVAL = 10;
 
 export interface PushedRequest {
   entry: RequestEntry;
@@ -247,10 +246,9 @@ export class RequestQueue extends EventEmitter {
   }
 
   /**
-   * Ensures pending requests get checked again in the future. If client-side throttling is in
-   * effect, this schedules the check for when the throttle should lift; otherwise, if anything is
-   * still pending (blocked only by `maxInFlightRequests`), it schedules a short poll — fulfilling
-   * an in-flight request already triggers an immediate check, so this is just a safety net.
+   * Ensures pending requests get checked again when client-side throttling lifts. Fulfilling or
+   * timing out an in-flight request already calls `checkPendingRequests`, so there is no poll
+   * when the queue is only blocked by `maxInFlightRequests`.
    */
   scheduleCheckPendingRequests(): void {
     if (this.throttleCheckTimeoutId) {
@@ -263,14 +261,6 @@ export class RequestQueue extends EventEmitter {
         this.throttleCheckTimeoutId = null;
         this.checkPendingRequests();
       }, throttleDelay);
-      return;
-    }
-
-    if (this.pending.length > 0) {
-      this.throttleCheckTimeoutId = setTimeout(() => {
-        this.throttleCheckTimeoutId = null;
-        this.checkPendingRequests();
-      }, CHECK_PENDING_REQUESTS_INTERVAL);
     }
   }
 }

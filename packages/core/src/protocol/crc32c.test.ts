@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crc32c } from './crc32c';
+import { crc32c, crc32cJs, usesNativeCrc32c } from './crc32c';
 
 describe('protocol/crc32c', () => {
   it('returns 0 for an empty buffer', () => {
@@ -28,5 +28,23 @@ describe('protocol/crc32c', () => {
     const b = Buffer.from('kafka-core');
     b[0] = (b[0] as number) + 1;
     expect(crc32c(a)).not.toBe(crc32c(b));
+  });
+
+  it('JS table and public crc32c agree (native path when available)', () => {
+    const samples = [
+      Buffer.alloc(0),
+      Buffer.from('123456789'),
+      Buffer.from('kafka-core'),
+      Buffer.alloc(70 * 1024, 'a'),
+      Buffer.from([0xff, 0x00, 0x01, 0x80, 0x7f]),
+    ];
+    for (const sample of samples) {
+      expect(crc32c(sample)).toBe(crc32cJs(sample));
+    }
+  });
+
+  it('JS table matches the Castagnoli check value independently of native', () => {
+    expect(crc32cJs(Buffer.from('123456789'))).toBe(0xe3069283);
+    expect(typeof usesNativeCrc32c).toBe('boolean');
   });
 });

@@ -127,6 +127,13 @@ describe('protocol/Decoder', () => {
       decoder.forward(4);
       expect(decoder.canReadInt16()).toBe(false);
     });
+
+    it('uses the buffer length remaining after the current offset', () => {
+      const decoder = new Decoder(Buffer.alloc(8));
+      decoder.forward(5);
+      expect(decoder.canReadBytes(3)).toBe(true);
+      expect(decoder.canReadBytes(4)).toBe(false);
+    });
   });
 
   describe('slice / forward', () => {

@@ -8,6 +8,7 @@ import type { ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
 import type { EachBatchHandler, EachMessageHandler, Offsets } from './types';
+import { DEFAULT_PREFETCH_MAX_BATCHES, DEFAULT_PREFETCH_MAX_BYTES, estimatePrefetchBytes } from './worker-queue';
 
 const CONSUMING_START = 'consuming-start';
 const CONSUMING_STOP = 'consuming-stop';
@@ -18,6 +19,8 @@ export interface RunnerOptions {
   instrumentationEmitter: InstrumentationEventEmitter;
   eachBatchAutoResolve?: boolean;
   concurrency: number;
+  prefetchMaxBatches?: number;
+  prefetchMaxBytes?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
   heartbeatInterval: number;
@@ -50,6 +53,8 @@ export class Runner extends EventEmitter {
     instrumentationEmitter,
     eachBatchAutoResolve = true,
     concurrency,
+    prefetchMaxBatches = DEFAULT_PREFETCH_MAX_BATCHES,
+    prefetchMaxBytes = DEFAULT_PREFETCH_MAX_BYTES,
     eachBatch,
     eachMessage,
     heartbeatInterval,
@@ -68,12 +73,16 @@ export class Runner extends EventEmitter {
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
-    this.fetchManager = createFetchManager({
+    this.fetchManager = createFetchManager<Batch>({
       logger: this.logger,
       getNodeIds: () => this.consumerGroup.getNodeIds(),
       fetch: (nodeId) => this.fetch(nodeId),
       handler: (batch) => this.handleBatch(batch),
       concurrency,
+      prefetchMaxBatches,
+      prefetchMaxBytes,
+      getBatchBytes: (batch) => estimatePrefetchBytes(batch),
+      isStale: (batch) => this.consumerGroup.hasSeekOffset({ topic: batch.topic, partition: batch.partition }),
     });
   }
 
@@ -212,6 +221,11 @@ export class Runner extends EventEmitter {
     try {
       await this.fetchManager.stop();
       await this.waitForConsumer();
+      try {
+        await this.autoCommitOffsets();
+      } catch {
+        // Best-effort final commit so interval/threshold users do not lose offsets on disconnect.
+      }
       await this.consumerGroup.leave();
     } catch {
       // Swallow stop errors, matching the original shutdown behavior.
@@ -247,6 +261,11 @@ export class Runner extends EventEmitter {
       }
       throw e;
     }
+  }
+
+  heartbeatIfDue(): Promise<void> | undefined {
+    if (!this.consumerGroup.heartbeatDue(this.heartbeatInterval)) return undefined;
+    return this.heartbeat();
   }
 
   async processEachMessage(batch: Batch): Promise<void> {
@@ -288,8 +307,8 @@ export class Runner extends EventEmitter {
       }
 
       this.consumerGroup.resolveOffset({ topic, partition, offset: message.offset });
-      await this.heartbeat();
-      await this.autoCommitOffsetsIfNecessary();
+      const heartbeat = this.heartbeatIfDue();
+      if (heartbeat) await heartbeat;
 
       if (this.consumerGroup.isPaused(topic, partition)) {
         break;
@@ -379,7 +398,7 @@ export class Runner extends EventEmitter {
     });
 
     if (batches.length === 0) {
-      await this.heartbeat();
+      await this.heartbeatIfDue();
     }
 
     return batches;
@@ -418,12 +437,12 @@ export class Runner extends EventEmitter {
         ...payload,
         duration: Date.now() - startBatchProcess,
       });
-      await this.heartbeat();
+      await this.heartbeatIfDue();
       return;
     }
 
     if (batch.isEmpty()) {
-      await this.heartbeat();
+      await this.heartbeatIfDue();
       return;
     }
 
@@ -440,8 +459,8 @@ export class Runner extends EventEmitter {
       duration: Date.now() - startBatchProcess,
     });
 
-    await this.autoCommitOffsets();
-    await this.heartbeat();
+    await this.autoCommitOffsetsIfNecessary();
+    await this.heartbeatIfDue();
   }
 
   autoCommitOffsets(): Promise<void> | undefined {

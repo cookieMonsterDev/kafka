@@ -27,6 +27,7 @@ export interface ProducerOptions {
   compression?: CompressionType;
   lingerMs?: number;
   batchSize?: number;
+  bufferMemory?: number;
 }
 
 /**
@@ -89,6 +90,7 @@ export function createProducer({
   compression,
   lingerMs = 0,
   batchSize,
+  bufferMemory,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -125,6 +127,7 @@ export function createProducer({
     defaultCompression: compression,
     lingerMs,
     batchSize,
+    bufferMemory,
   };
 
   const { send, sendBatch, flush } = createMessageProducer({

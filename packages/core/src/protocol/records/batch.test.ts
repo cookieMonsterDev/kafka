@@ -95,4 +95,34 @@ describe('protocol/records/batch', () => {
     const truncated = encoded.buffer.subarray(0, encoded.buffer.length - 5);
     await expect(decodeRecordBatch(new Decoder(truncated))).rejects.toThrow(/partial record batch/);
   });
+
+  it('in-place writeRecords matches pre-encoded records byte-for-byte', async () => {
+    const options = {
+      firstOffset: 100n,
+      firstTimestamp: 1_500_000_000_000,
+      maxTimestamp: 1_500_000_000_100,
+      lastOffsetDelta: 2,
+      producerId: 7n,
+      producerEpoch: 1,
+      firstSequence: 3,
+    };
+    const records = [
+      encodeRecord({ offsetDelta: 0, key: 'k0', value: 'v0' }),
+      encodeRecord({ offsetDelta: 1, key: 'k1', value: 'v1' }),
+      encodeRecord({ offsetDelta: 2, key: 'k2', value: 'v2' }),
+    ];
+
+    const copied = await encodeRecordBatch({ ...options, records });
+    const inplace = await encodeRecordBatch({
+      ...options,
+      recordCount: 3,
+      writeRecords: (encoder) => {
+        encodeRecord({ offsetDelta: 0, key: 'k0', value: 'v0' }, encoder);
+        encodeRecord({ offsetDelta: 1, key: 'k1', value: 'v1' }, encoder);
+        encodeRecord({ offsetDelta: 2, key: 'k2', value: 'v2' }, encoder);
+      },
+    });
+
+    expect(inplace.buffer).toEqual(copied.buffer);
+  });
 });

@@ -1,6 +1,6 @@
+import type { KafkaMessage } from '../consumer/types';
 import type { DecodedRecordBatch } from '../protocol/records/batch';
 import type { ShareAcquiredRecords } from '../protocol/requests/share-fetch/shared';
-import type { KafkaMessage } from '../consumer/types';
 
 export interface ShareBatchPartitionData {
   partition: number;

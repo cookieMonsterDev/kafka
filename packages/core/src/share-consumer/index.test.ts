@@ -32,6 +32,16 @@ describe('share-consumer', () => {
     await expect(consumer.run({ eachMessage: async () => undefined })).rejects.toThrow('must subscribe before run()');
   });
 
+  it('rejects run without eachMessage or eachBatch', async () => {
+    const consumer = createShareConsumer({
+      cluster: fakeCluster(),
+      groupId: 'share-1',
+      logger: silentLogger,
+    });
+    consumer.subscribe({ topics: ['events'] });
+    await expect(consumer.run({})).rejects.toThrow('requires eachMessage or eachBatch');
+  });
+
   it('exposes a namespaced logger', () => {
     const consumer = createShareConsumer({
       cluster: fakeCluster(),

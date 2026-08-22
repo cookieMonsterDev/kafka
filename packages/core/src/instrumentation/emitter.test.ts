@@ -53,4 +53,30 @@ describe('instrumentation/InstrumentationEventEmitter', () => {
     // @ts-expect-error exercising the runtime guard against an empty event name
     expect(() => emitter.emit('', {})).toThrow('Invalid event name');
   });
+
+  it('does not invoke a lazy payload builder when there are no listeners', () => {
+    const emitter = new InstrumentationEventEmitter<TestEventMap>();
+    const builder = vi.fn(() => ({ memberId: 'should-not-run' }));
+
+    expect(() => emitter.emit('consumer.group_join', builder)).not.toThrow();
+    expect(builder).not.toHaveBeenCalled();
+    expect(emitter.listenerCount('consumer.group_join')).toBe(0);
+    expect(emitter.hasListeners('consumer.group_join')).toBe(false);
+  });
+
+  it('invokes a lazy payload builder only when listeners exist', () => {
+    const emitter = new InstrumentationEventEmitter<TestEventMap>();
+    const listener = vi.fn();
+    const builder = vi.fn(() => ({ memberId: 'lazy-1' }));
+
+    emitter.addListener('consumer.group_join', listener);
+    expect(emitter.hasListeners('consumer.group_join')).toBe(true);
+
+    emitter.emit('consumer.group_join', builder);
+
+    expect(builder).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    const [event] = listener.mock.calls[0]!;
+    expect(event.payload).toEqual({ memberId: 'lazy-1' });
+  });
 });

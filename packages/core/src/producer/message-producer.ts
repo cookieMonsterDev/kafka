@@ -1,6 +1,6 @@
 import { supportsHeaders, supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
-import { KafkaError, KafkaNonRetriableError } from '../errors';
+import { KafkaError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression/index';
@@ -34,6 +34,12 @@ export interface MessageProducerOptions {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
+  /**
+   * Max bytes of linger-buffered records. `send()` waits until a flush frees space,
+   * or rejects with `KafkaTimeout` after the send timeout. Unset or 0 is unlimited.
+   * Ignored when lingerMs is 0. @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
+   */
+  bufferMemory?: number;
 }
 
 export interface MessageProducer {
@@ -55,6 +61,7 @@ interface PendingSend {
   timeout: number;
   resolve: (metadata: RecordMetadata[]) => void;
   reject: (error: unknown) => void;
+  bytes: number;
 }
 
 function fieldBytes(value: Buffer | string | null | undefined): number {
@@ -97,6 +104,12 @@ function groupKey(entry: PendingSend): string {
   return `${entry.acks}\0${compression}\0${entry.timeout}`;
 }
 
+interface BufferWaiter {
+  bytes: number;
+  resolve: () => void;
+  reject: (error: Error) => void;
+}
+
 export function createMessageProducer({
   logger,
   cluster,
@@ -109,11 +122,14 @@ export function createMessageProducer({
   defaultCompression,
   lingerMs = DEFAULT_LINGER_MS,
   batchSize = 0,
+  bufferMemory,
 }: MessageProducerOptions): MessageProducer {
   const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager });
   const pending: PendingSend[] = [];
   let lingerTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInProgress: Promise<void> | null = null;
+  let bufferedBytes = 0;
+  const bufferWaiters: BufferWaiter[] = [];
 
   function validateConnectionStatus(): void {
     const connectionStatus = getConnectionStatus();
@@ -197,12 +213,59 @@ export function createMessageProducer({
     return sendMessages({ acks, timeout, compression, topicMessages });
   }
 
-  function estimatedPendingBytes(): number {
-    let total = 0;
-    for (const entry of pending) {
-      total += topicMessagesBytes(entry.topicMessages);
+  function hasBufferLimit(): boolean {
+    return lingerMs > 0 && bufferMemory != null && bufferMemory > 0;
+  }
+
+  function canAdmit(bytes: number): boolean {
+    return !hasBufferLimit() || bufferedBytes + bytes <= (bufferMemory ?? 0);
+  }
+
+  function notifyBufferWaiters(): void {
+    while (bufferWaiters[0] && canAdmit(bufferWaiters[0].bytes)) {
+      const waiter = bufferWaiters.shift();
+      if (!waiter) break;
+      bufferedBytes += waiter.bytes;
+      waiter.resolve();
     }
-    return total;
+  }
+
+  function releaseBufferedBytes(bytes: number): void {
+    bufferedBytes -= bytes;
+    if (bufferedBytes < 0) bufferedBytes = 0;
+    notifyBufferWaiters();
+  }
+
+  async function reserveBuffer(bytes: number, timeout: number): Promise<void> {
+    if (hasBufferLimit() && bytes > (bufferMemory ?? 0)) {
+      throw new KafkaNonRetriableError(`Record batch of ${bytes} bytes exceeds bufferMemory (${bufferMemory} bytes)`);
+    }
+
+    if (!hasBufferLimit() || canAdmit(bytes)) {
+      bufferedBytes += bytes;
+      return;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const waiter: BufferWaiter = {
+        bytes,
+        resolve: () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        reject: (error: Error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
+      const timer = setTimeout(() => {
+        const index = bufferWaiters.indexOf(waiter);
+        if (index >= 0) bufferWaiters.splice(index, 1);
+        waiter.reject(new KafkaTimeout(`Timeout while waiting for producer bufferMemory (${bufferMemory} bytes)`));
+      }, timeout);
+      bufferWaiters.push(waiter);
+      void startFlush();
+    });
   }
 
   function clearLingerTimer(): void {
@@ -221,7 +284,7 @@ export function createMessageProducer({
   }
 
   function shouldFlushBySize(): boolean {
-    return lingerMs > 0 && batchSize > 0 && estimatedPendingBytes() >= batchSize;
+    return lingerMs > 0 && batchSize > 0 && bufferedBytes >= batchSize;
   }
 
   async function sendGrouped(entries: readonly PendingSend[]): Promise<void> {
@@ -236,28 +299,38 @@ export function createMessageProducer({
       }
     }
 
-    for (const group of groups.values()) {
-      const first = group[0];
-      if (!first) continue;
+    await Promise.all(
+      [...groups.values()].map(async (group) => {
+        const first = group[0];
+        if (!first) return;
 
-      try {
-        const metadata = await dispatch(mergeTopicMessages(group), first.acks, first.timeout, first.compression);
-        for (const entry of group) {
-          entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
+        try {
+          const metadata = await dispatch(mergeTopicMessages(group), first.acks, first.timeout, first.compression);
+          for (const entry of group) {
+            entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
+          }
+        } catch (error) {
+          for (const entry of group) {
+            entry.reject(error);
+          }
         }
-      } catch (error) {
-        for (const entry of group) {
-          entry.reject(error);
-        }
-      }
-    }
+      }),
+    );
   }
 
   async function doFlush(): Promise<void> {
     clearLingerTimer();
     const entries = pending.splice(0);
     if (entries.length === 0) return;
-    await sendGrouped(entries);
+    try {
+      await sendGrouped(entries);
+    } finally {
+      let flushedBytes = 0;
+      for (const entry of entries) {
+        flushedBytes += entry.bytes;
+      }
+      releaseBufferedBytes(flushedBytes);
+    }
   }
 
   function startFlush(): Promise<void> {
@@ -282,12 +355,15 @@ export function createMessageProducer({
     }
   }
 
-  function enqueue(
+  async function enqueue(
     topicMessages: TopicMessages[],
     acks: number,
     timeout: number,
     compression: CompressionType | undefined,
   ): Promise<RecordMetadata[]> {
+    const bytes = topicMessagesBytes(topicMessages);
+    await reserveBuffer(bytes, timeout);
+
     let resolve!: (metadata: RecordMetadata[]) => void;
     let reject!: (error: unknown) => void;
     const result = new Promise<RecordMetadata[]>((res, rej) => {
@@ -303,6 +379,7 @@ export function createMessageProducer({
       timeout,
       resolve,
       reject,
+      bytes,
     });
 
     if (shouldFlushBySize()) {

@@ -85,6 +85,44 @@ describe('network/request-queue/RequestQueue', () => {
       expect(requestQueue.pending.length).toBe(0);
     });
 
+    it('enforces a numeric maxInFlightRequests cap of 5', () => {
+      const requestQueue = createRequestQueue({ maxInFlightRequests: 5 });
+      const first = createPushedRequest();
+      requestQueue.push(first);
+      for (let i = 0; i < 4; i++) {
+        requestQueue.push(createPushedRequest());
+      }
+
+      const overflow = createPushedRequest();
+      requestQueue.push(overflow);
+
+      expect(requestQueue.inflight.size).toBe(5);
+      expect(requestQueue.pending.length).toBe(1);
+      expect(overflow.sendRequest).not.toHaveBeenCalled();
+
+      requestQueue.fulfillRequest({
+        correlationId: first.entry.correlationId,
+        payload: Buffer.alloc(0),
+        size: 0,
+      });
+
+      expect(overflow.sendRequest).toHaveBeenCalledTimes(1);
+      expect(requestQueue.inflight.size).toBe(5);
+      expect(requestQueue.pending.length).toBe(0);
+    });
+
+    it('does not poll pending requests on a timer when blocked only by maxInFlightRequests', async () => {
+      const requestQueue = createRequestQueue({ maxInFlightRequests: 1 });
+      requestQueue.push(createPushedRequest());
+      const pending = createPushedRequest();
+      requestQueue.push(pending);
+
+      await sleep(30);
+
+      expect(pending.sendRequest).not.toHaveBeenCalled();
+      expect(requestQueue.pending.length).toBe(1);
+    });
+
     it('throws KafkaInvariantViolation on a correlation id collision', () => {
       const requestQueue = createRequestQueue();
       const request = createPushedRequest();

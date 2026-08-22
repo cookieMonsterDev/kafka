@@ -286,6 +286,50 @@ describe('protocol/Encoder', () => {
     });
   });
 
+  describe('inline varints', () => {
+    it('writes sequential uvarints into one buffer without per-field copies', () => {
+      const values = [0, 1, 127, 128, 16384, MAX_SAFE_UNSIGNED_INT];
+      const encoder = new Encoder();
+      for (const n of values) encoder.writeUVarInt(n);
+      expect(encoder.buffer).toEqual(Buffer.concat(values.map((n) => unsigned32(n))));
+    });
+
+    it('writes sequential varlongs into one buffer without per-field copies', () => {
+      const values = [0n, 1n, -1n, 64n, MIN_INT64, MAX_INT64];
+      const encoder = new Encoder();
+      for (const n of values) encoder.writeVarLong(n);
+      expect(encoder.buffer).toEqual(Buffer.concat(values.map((n) => signed64(n))));
+    });
+  });
+
+  describe('writeInt64', () => {
+    it('encodes bigint and number with the same bytes for safe integers', () => {
+      expect(new Encoder().writeInt64(42n).buffer).toEqual(new Encoder().writeInt64(42).buffer);
+      expect(new Encoder().writeInt64(0n).buffer).toEqual(new Encoder().writeInt64(0).buffer);
+      expect(new Encoder().writeInt64(-1n).buffer).toEqual(new Encoder().writeInt64(-1).buffer);
+    });
+  });
+
+  describe('writeInt32At / writeUInt32At', () => {
+    it('patches a reserved length prefix without moving the cursor', () => {
+      const encoder = new Encoder();
+      encoder.writeInt32(0);
+      encoder.writeInt16(7);
+      encoder.writeInt32At(0, encoder.size() - 4);
+      expect(encoder.buffer.readInt32BE(0)).toBe(encoder.size() - 4);
+      expect(encoder.buffer.readInt16BE(4)).toBe(7);
+    });
+
+    it('patches a reserved unsigned CRC slot', () => {
+      const encoder = new Encoder();
+      encoder.writeUInt32(0);
+      encoder.writeInt8(2);
+      encoder.writeUInt32At(0, 0xe3069283);
+      expect(encoder.buffer.readUInt32BE(0)).toBe(0xe3069283);
+      expect(encoder.buffer.readInt8(4)).toBe(2);
+    });
+  });
+
   describe('toJSON', () => {
     it('matches the shape of Buffer#toJSON, for fixture compatibility', () => {
       const encoder = new Encoder().writeBuffer(B(1, 2, 3));

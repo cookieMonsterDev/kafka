@@ -98,4 +98,17 @@ describe('protocol/createRequest', () => {
     expect(decoder.readUVarInt()).toBe(0); // header TAG_BUFFER
     expect(decoder.readInt8()).toBe(9);
   });
+
+  it('patches a 4-byte length prefix covering the rest of the single buffer', async () => {
+    const body = new Encoder().writeString('topic-name').writeInt32(42);
+    const encoded = await createRequest({
+      correlationId: 1234,
+      clientId: 'my-client',
+      request: { apiKey: 3, apiVersion: 6, encode: () => Promise.resolve(body) },
+    });
+
+    expect(encoded.buffer.readInt32BE(0)).toBe(encoded.size() - 4);
+    expect(encoded.size()).toBe(encoded.buffer.length);
+    expect(encoded.buffer.subarray(0, 4)).toEqual(new Encoder().writeInt32(encoded.size() - 4).buffer);
+  });
 });

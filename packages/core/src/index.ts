@@ -25,6 +25,9 @@ export const Partitioners = Object.freeze({
   StickyPartitioner,
 });
 
+export { throughputPreset } from './throughput-preset';
+export type { ThroughputPreset, ThroughputPresetConsumer, ThroughputPresetProducer } from './throughput-preset';
+
 export { LOG_LEVELS as logLevel } from './loggers/index';
 export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index';
 
@@ -96,6 +99,8 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  EachShareBatchHandler,
+  EachShareBatchPayload,
   GroupProtocol,
   GssTokenChallenge,
   GssTokenProvider,

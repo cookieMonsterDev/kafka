@@ -16,6 +16,14 @@ export interface TransactionsApi {
 
 const DEFAULT_FENCE_TRANSACTION_TIMEOUT = 60_000;
 
+const FENCE_PRODUCER_RETRIABLE_ERRORS = new Set([
+  'CONCURRENT_TRANSACTIONS',
+  'GROUP_LOAD_IN_PROGRESS',
+  'NOT_COORDINATOR_FOR_GROUP',
+  'GROUP_COORDINATOR_NOT_AVAILABLE',
+  'COORDINATOR_NOT_AVAILABLE',
+]);
+
 function validateListTransactionsOptions(options: ListTransactionsOptions): void {
   const { stateFilters, producerIdFilters, durationFilter, transactionalIdPattern } = options;
 
@@ -169,34 +177,54 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
     return retrier(retry)(async (bail, retryCount, retryTime) => {
       try {
         const results = await Promise.all(
-          transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> => {
-            try {
-              const coordinator = await cluster.findGroupCoordinator({
-                groupId: transactionalId,
-                coordinatorType: COORDINATOR_TYPES.TRANSACTION,
-              });
-              const response = await coordinator.initProducerId({
-                transactionalId,
-                transactionTimeout,
-                producerId: -1n,
-                producerEpoch: -1,
-              });
-              return {
-                transactionalId,
-                errorCode: 0,
-                producerId: response.producerId,
-                producerEpoch: response.producerEpoch,
-              };
-            } catch (error) {
-              if (error instanceof KafkaProtocolError) {
+          transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> =>
+            retrier(retry)(async (bail, retryCount, retryTime) => {
+              try {
+                const coordinator = await cluster.findGroupCoordinator({
+                  groupId: transactionalId,
+                  coordinatorType: COORDINATOR_TYPES.TRANSACTION,
+                });
+                const response = await coordinator.initProducerId({
+                  transactionalId,
+                  transactionTimeout,
+                  producerId: -1n,
+                  producerEpoch: -1,
+                });
                 return {
                   transactionalId,
-                  errorCode: error.code ?? -1,
+                  errorCode: 0,
+                  producerId: response.producerId,
+                  producerEpoch: response.producerEpoch,
                 };
+              } catch (error) {
+                if (error instanceof KafkaProtocolError) {
+                  const type = error.type;
+                  if (type && FENCE_PRODUCER_RETRIABLE_ERRORS.has(type)) {
+                    logger.debug('Retrying fenceProducers after retriable coordinator error', {
+                      transactionalId,
+                      type,
+                      retryCount,
+                      retryTime,
+                    });
+                    if (
+                      type === 'NOT_COORDINATOR_FOR_GROUP' ||
+                      type === 'GROUP_COORDINATOR_NOT_AVAILABLE' ||
+                      type === 'COORDINATOR_NOT_AVAILABLE'
+                    ) {
+                      await cluster.refreshMetadata();
+                    }
+                    throw error;
+                  }
+                  return {
+                    transactionalId,
+                    errorCode: error.code ?? -1,
+                  };
+                }
+                bail(error as Error);
+                throw error;
               }
-              throw error;
-            }
-          }),
+            }),
+          ),
         );
         return { results };
       } catch (error) {

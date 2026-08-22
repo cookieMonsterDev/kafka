@@ -150,4 +150,30 @@ describe('admin/transactions', () => {
       producerEpoch: 0,
     });
   });
+
+  it('retries fenceProducers when the coordinator returns CONCURRENT_TRANSACTIONS', async () => {
+    const { KafkaProtocolError } = await import('../errors');
+    const coordinator = {
+      initProducerId: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new KafkaProtocolError({ message: 'Concurrent txn', type: 'CONCURRENT_TRANSACTIONS', code: 51 }),
+        )
+        .mockResolvedValueOnce({ producerId: 7n, producerEpoch: 1, errorCode: 0 }),
+    };
+    const findGroupCoordinator = vi.fn(async () => coordinator);
+    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const api = createTransactionsApi({
+      cluster,
+      logger,
+      rootLogger: logger,
+      retry: { maxRetryTime: 1_000, initialRetryTime: 10, factor: 0.2, multiplier: 2, retries: 3 },
+    });
+
+    const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
+
+    expect(coordinator.initProducerId).toHaveBeenCalledTimes(2);
+    expect(result.results[0]?.errorCode).toBe(0);
+    expect(result.results[0]?.producerEpoch).toBe(1);
+  });
 });

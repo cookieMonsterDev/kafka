@@ -5,7 +5,7 @@ import { createGroupsApi } from './groups';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-describe('admin/groups removeMembersFromConsumerGroup', () => {
+describe('admin/removeMembersFromConsumerGroup', () => {
   it('sends LeaveGroup with member identities to the group coordinator', async () => {
     const coordinator = {
       leaveGroupMembers: vi.fn(async () => ({

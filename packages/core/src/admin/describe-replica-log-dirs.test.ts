@@ -5,7 +5,7 @@ import { createLogDirsApi } from './log-dirs';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-describe('admin/log-dirs describeReplicaLogDirs', () => {
+describe('admin/describeReplicaLogDirs', () => {
   it('queries each broker with a filtered topic list and maps partitions back to replicas', async () => {
     const broker = {
       describeLogDirs: vi.fn(async () => ({

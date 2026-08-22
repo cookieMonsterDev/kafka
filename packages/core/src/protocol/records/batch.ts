@@ -48,16 +48,37 @@ export interface EncodeRecordBatchOptions {
   producerId?: bigint;
   producerEpoch?: number;
   firstSequence?: number;
-  /** Already-encoded records, e.g. via `encodeRecord()`. */
+  /** Already-encoded records, e.g. via `encodeRecord()`. Ignored when `writeRecords` is set. */
   records?: readonly Encoder[];
+  /** Record count on the wire. Defaults to `records.length`. Required when using `writeRecords`. */
+  recordCount?: number;
+  /** Write records in place into the batch encoder (or a temp encoder when compressing). */
+  writeRecords?: (encoder: Encoder) => void;
+  /** Encoder capacity hint in bytes (power-of-two rounded). */
+  estimatedBytes?: number;
 }
 
-async function compressRecords(compression: CompressionType, records: readonly Encoder[]): Promise<Buffer> {
+/** firstOffset … records-count, matching Java `DefaultRecordBatch.RECORD_BATCH_OVERHEAD`. */
+const RECORD_BATCH_OVERHEAD = 61;
+
+function sizeOfEncodedRecords(records: readonly Encoder[]): number {
+  let size = 0;
+  for (const record of records) {
+    size += record.size();
+  }
+  return size;
+}
+
+async function compressEncoder(compression: CompressionType, encoder: Encoder): Promise<Buffer> {
   const codec = lookupCodec(compression);
   if (!codec) {
     throw new Error(`Invariant violated: no codec registered for compression type ${compression}`);
   }
-  return codec.compress(new Encoder().writeEncoderArray(records));
+  return codec.compress(encoder);
+}
+
+async function compressRecords(compression: CompressionType, records: readonly Encoder[]): Promise<Buffer> {
+  return compressEncoder(compression, new Encoder(sizeOfEncodedRecords(records)).writeEncoderArray(records));
 }
 
 export async function encodeRecordBatch({
@@ -72,12 +93,48 @@ export async function encodeRecordBatch({
   producerEpoch = 0, // for idempotent messages
   firstSequence = 0, // for idempotent messages
   records = [],
+  recordCount,
+  writeRecords,
+  estimatedBytes,
 }: EncodeRecordBatchOptions = {}): Promise<Encoder> {
   const compressionCodecBits = compression & COMPRESSION_CODEC_MASK;
   const inTransactionBit = transactional ? TRANSACTIONAL_MASK : 0;
   const attributes = compressionCodecBits | TIMESTAMP_MASK | inTransactionBit;
+  const count = recordCount ?? records.length;
 
-  const batchBody = new Encoder()
+  let compressedRecords: Buffer | undefined;
+  if (compression !== COMPRESSION_TYPES.None) {
+    if (writeRecords) {
+      const recordsEncoder = new Encoder(estimatedBytes ?? 511);
+      writeRecords(recordsEncoder);
+      compressedRecords = await compressEncoder(compression, recordsEncoder);
+    } else {
+      compressedRecords = await compressRecords(compression, records);
+    }
+  }
+
+  const estimatedSize =
+    estimatedBytes ??
+    (compressedRecords !== undefined
+      ? RECORD_BATCH_OVERHEAD + compressedRecords.length
+      : RECORD_BATCH_OVERHEAD + sizeOfEncodedRecords(records));
+
+  const encoder = new Encoder(estimatedSize);
+  encoder.writeInt64(firstOffset);
+
+  const lengthOffset = encoder.size();
+  encoder.writeInt32(0);
+
+  encoder.writeInt32(partitionLeaderEpoch);
+  encoder.writeInt8(MAGIC_BYTE);
+
+  const crcOffset = encoder.size();
+  encoder.writeUInt32(0);
+
+  // CRC32C covers attributes through the last record:
+  // https://github.com/apache/kafka/blob/0.11.0.1/clients/src/main/java/org/apache/kafka/common/record/DefaultRecordBatch.java#L148
+  const bodyStart = encoder.size();
+  encoder
     .writeInt16(attributes)
     .writeInt32(lastOffsetDelta)
     .writeInt64(firstTimestamp)
@@ -86,22 +143,21 @@ export async function encodeRecordBatch({
     .writeInt16(producerEpoch)
     .writeInt32(firstSequence);
 
-  if (compression === COMPRESSION_TYPES.None) {
-    batchBody.writeArray(records, 'object');
+  if (compressedRecords !== undefined) {
+    encoder.writeInt32(count).writeBuffer(compressedRecords);
   } else {
-    const compressedRecords = await compressRecords(compression, records);
-    batchBody.writeInt32(records.length).writeBuffer(compressedRecords);
+    encoder.writeInt32(count);
+    if (writeRecords) {
+      writeRecords(encoder);
+    } else {
+      encoder.writeEncoderArray(records);
+    }
   }
 
-  // CRC32C validation happens here:
-  // https://github.com/apache/kafka/blob/0.11.0.1/clients/src/main/java/org/apache/kafka/common/record/DefaultRecordBatch.java#L148
-  const batch = new Encoder()
-    .writeInt32(partitionLeaderEpoch)
-    .writeInt8(MAGIC_BYTE)
-    .writeUInt32(crc32c(batchBody.buffer))
-    .writeEncoder(batchBody);
-
-  return new Encoder().writeInt64(firstOffset).writeBytes(batch.buffer);
+  const end = encoder.size();
+  encoder.writeInt32At(lengthOffset, end - lengthOffset - 4);
+  encoder.writeUInt32At(crcOffset, crc32c(encoder.buffer.subarray(bodyStart)));
+  return encoder;
 }
 
 export type DecodedRecordBatch = Omit<RecordBatchContext, 'magicByte'> & {

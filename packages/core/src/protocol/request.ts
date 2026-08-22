@@ -23,17 +23,17 @@ export interface CreateRequestOptions {
  */
 export async function createRequest({ correlationId, clientId, request }: CreateRequestOptions): Promise<Encoder> {
   const payload = await request.encode();
-  const requestPayload = new Encoder()
-    .writeInt16(request.apiKey)
-    .writeInt16(request.apiVersion)
-    .writeInt32(correlationId)
-    .writeString(clientId);
+  const estimatedSize = 4 + 2 + 2 + 4 + 2 + Buffer.byteLength(clientId) + 1 + payload.size();
+  const encoder = new Encoder(estimatedSize);
+
+  encoder.writeInt32(0);
+  encoder.writeInt16(request.apiKey).writeInt16(request.apiVersion).writeInt32(correlationId).writeString(clientId);
 
   if (usesFlexibleRequestHeader(request.apiKey, request.apiVersion)) {
-    requestPayload.writeUVarInt(0);
+    encoder.writeUVarInt(0);
   }
 
-  requestPayload.writeEncoder(payload);
-
-  return new Encoder().writeInt32(requestPayload.size()).writeEncoder(requestPayload);
+  encoder.writeEncoder(payload);
+  encoder.writeInt32At(0, encoder.size() - 4);
+  return encoder;
 }

@@ -2,7 +2,7 @@ import type { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import type { TimestampType } from '../enums/timestamp-types';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
-import { decodeHeader, encodeHeader, type RecordHeaderInput } from './header';
+import { decodeHeader, type RecordHeaderInput } from './header';
 
 /**
  * v2
@@ -56,13 +56,22 @@ function sizeOfHeaders(headersArray: readonly RecordHeaderInput[]): number {
   return size;
 }
 
-export function encodeRecord({
-  offsetDelta = 0,
-  timestampDelta = 0n,
-  key = null,
-  value = null,
-  headers = {},
-}: EncodeRecordOptions = {}): Encoder {
+function writeHeaders(encoder: Encoder, headersArray: readonly RecordHeaderInput[]): void {
+  encoder.writeVarInt(headersArray.length);
+  for (const header of headersArray) {
+    encoder.writeVarIntString(header.key);
+    encoder.writeVarIntBytes(header.value);
+  }
+}
+
+/**
+ * Encode one v2 Record. When `encoder` is provided, bytes are appended in place (RecordBatch
+ * hot path). Otherwise a new Encoder is allocated, sized to the record.
+ */
+export function encodeRecord(
+  { offsetDelta = 0, timestampDelta = 0n, key = null, value = null, headers = {} }: EncodeRecordOptions = {},
+  encoder?: Encoder,
+): Encoder {
   const headersArray = flattenHeaders(headers);
 
   const sizeOfBody =
@@ -73,14 +82,16 @@ export function encodeRecord({
     Encoder.sizeOfVarIntBytes(value) +
     sizeOfHeaders(headersArray);
 
-  return new Encoder()
+  const target = encoder ?? new Encoder(Encoder.sizeOfVarInt(sizeOfBody) + sizeOfBody);
+  target
     .writeVarInt(sizeOfBody)
     .writeInt8(0) // no used record attributes at the moment
     .writeVarLong(timestampDelta)
     .writeVarInt(offsetDelta)
     .writeVarIntBytes(key)
-    .writeVarIntBytes(value)
-    .writeVarIntArray(headersArray.map(encodeHeader));
+    .writeVarIntBytes(value);
+  writeHeaders(target, headersArray);
+  return target;
 }
 
 export interface RecordBatchContext {

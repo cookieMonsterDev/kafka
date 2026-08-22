@@ -38,7 +38,7 @@ Source:
 
 `aws` is an extra (non-Apache) helper. Failed SASL throws
 `KafkaSASLAuthenticationError` (non-retriable). See
-[Errors](../reference/errors/).
+[Errors](../../reference/errors/).
 
 ## GSSAPI / Kerberos
 

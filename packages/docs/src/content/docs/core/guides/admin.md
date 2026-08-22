@@ -17,7 +17,7 @@ await admin.createTopics({
 await admin.disconnect();
 ```
 
-Full method list: [`Admin`](../reference/admin/). Source:
+Full method list: [`Admin`](../../reference/admin/). Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Cluster operations:
 [Basic Kafka operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
@@ -62,10 +62,15 @@ brokers. See [topic configs](https://kafka.apache.org/43/configuration/topic-con
 
 ## Groups, ACLs, SCRAM
 
-`listGroups` / `describeGroups` / `deleteGroups` / `deleteGroupOffsets`.
+`listGroups` / `describeGroups` / `describeClassicGroups` /
+`describeConsumerGroups` / `deleteGroups` / `deleteGroupOffsets`.
 ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.
+
+Share groups (KIP-932, Kafka 4.1+): `describeShareGroups`,
+`listShareGroupOffsets`, `alterShareGroupOffsets`, `deleteShareGroupOffsets`,
+`deleteShareGroups`.
 
 ## Delegation tokens
 
@@ -141,5 +146,7 @@ Upgrade types are `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
 UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
 downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
 
-Remaining transaction administration APIs are listed under
-[Compatibility](../reference/compatibility/).
+Remaining transaction administration APIs (`fenceProducers`, `abortTransaction`,
+`forceTerminateTransaction`) and KRaft controller helpers (`describeMetadataQuorum`,
+`unregisterBroker`, `addRaftVoter`, `removeRaftVoter`) are listed under
+[Compatibility](../../reference/compatibility/).

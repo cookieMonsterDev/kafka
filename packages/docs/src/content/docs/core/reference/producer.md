@@ -21,7 +21,7 @@ interface Producer {
 
 Source: [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 Types: [`producer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/types.ts).
-Guide: [Producer](../guides/producer/). Config:
+Guide: [Producer](../../guides/producer/). Config:
 [ProducerConfig](./configuration/#producerconfig).
 Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
@@ -61,3 +61,7 @@ interface Transaction {
 ```
 
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.
+
+For load, spread `throughputPreset().producer` into `kafka.producer()` (`lingerMs: 5`,
+`batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner). See
+[Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).

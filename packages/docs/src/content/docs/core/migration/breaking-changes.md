@@ -7,7 +7,7 @@ section: migration
 
 `@cookiemonsterdev/kafka-core` is a TypeScript client, not a drop-in for the
 Java client or for KafkaJS. This page lists the differences that break copy-paste.
-Defaults vs Java are tabulated under [Compatibility](../reference/compatibility/).
+Defaults vs Java are tabulated under [Compatibility](../../reference/compatibility/).
 
 ## Offsets are `bigint`
 
@@ -25,7 +25,7 @@ when `ApiVersions` advertises Produce v0–v2 / Fetch v0–v3.
 
 MessageSet has no headers, no transactions, and no idempotence. Sending headers
 or enabling `idempotent` / `transactionalId` against a 0.10 broker throws a
-non-retriable error. See [Public API](../reference/public-api/#capability-errors).
+non-retriable error. See [Public API](../../reference/public-api/#capability-errors).
 
 Kafka 0.11+ negotiates RecordBatch (magic 2).
 
@@ -53,4 +53,39 @@ These names are `KAFKA_*`, not `KAFKAJS_*`.
 | `DO_NOT_STOP=1`                           | Leave the integration cluster running                              |
 
 `KAFKA_VERSION` / `KAFKA_EXTERNAL` / `DO_NOT_STOP` are test runner flags, not
-client config. See [Testing](../guides/testing/).
+client config. See [Testing](../../guides/testing/).
+
+## Next major: linger, batch size, and in-flight defaults
+
+This minor keeps `lingerMs: 0` (one Produce per `send()`). The **next major**
+will change constructor defaults to match Java 4.x:
+
+| Setting               | This minor     | Next major |
+| --------------------- | -------------- | ---------- |
+| `lingerMs`            | `0`            | `5`        |
+| `batchSize`           | unset          | `16384`    |
+| `maxInFlightRequests` | unset (`null`) | `5`        |
+
+Until that release, spread `throughputPreset()` into `kafka.producer()` and
+`consumer.run()`:
+
+```ts
+import { throughputPreset } from '@cookiemonsterdev/kafka-core';
+
+const { producer, consumer } = throughputPreset();
+kafka.producer({ ...producer });
+await kafka.consumer({ groupId }).run({
+  ...consumer,
+  eachBatch: async ({ batch }) => {
+    for (const message of batch.messages) {
+      void message;
+    }
+  },
+});
+```
+
+That sets linger 5, `batchSize` 16384, sticky partitioner,
+`maxInFlightRequests` 5, and `partitionsConsumedConcurrently: 4`.
+`eachBatch` plus that concurrency is the heavy-load consume API. See
+[Throughput](../../guides/throughput/) and
+[Compatibility](../../reference/compatibility/).

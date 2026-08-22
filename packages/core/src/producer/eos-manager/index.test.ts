@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
@@ -400,17 +399,127 @@ describe('producer/eosManager', () => {
     }
   });
 
-  it('acquires and releases a per-broker lock only once initialized', async () => {
+  it('is a no-op for partition gates until initialized', async () => {
     const broker = fakeBroker();
     const cluster = fakeCluster(broker);
     const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-    const fakeTargetBroker = { nodeId: 7 } as unknown as Broker;
 
-    await expect(eosManager.acquireBrokerLock(fakeTargetBroker)).resolves.toBeUndefined();
-    await expect(eosManager.releaseBrokerLock(fakeTargetBroker)).resolves.toBeUndefined();
+    await expect(eosManager.acquirePartitionGates([{ topic, partition: 0 }])).resolves.toBeUndefined();
+    await expect(eosManager.releasePartitionGates([{ topic, partition: 0 }])).resolves.toBeUndefined();
+  });
 
+  it('allows overlapping Produce gates for different partitions after init', async () => {
+    const broker = fakeBroker();
+    const cluster = fakeCluster(broker);
+    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
     await eosManager.initProducerId();
-    await eosManager.acquireBrokerLock(fakeTargetBroker);
-    await eosManager.releaseBrokerLock(fakeTargetBroker);
+
+    let partition0Held = false;
+    let releasePartition0!: () => void;
+    const holdingPartition0 = new Promise<void>((resolve) => {
+      releasePartition0 = resolve;
+    });
+    let startedHolding0!: () => void;
+    const holding0Started = new Promise<void>((resolve) => {
+      startedHolding0 = resolve;
+    });
+
+    const first = (async () => {
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+      partition0Held = true;
+      startedHolding0();
+      await holdingPartition0;
+      partition0Held = false;
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+    })();
+
+    await holding0Started;
+    await eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
+    expect(partition0Held).toBe(true);
+    await eosManager.releasePartitionGates([{ topic, partition: 1 }]);
+    releasePartition0();
+    await first;
+  });
+
+  it('serializes Produce gates for the same partition so sequences stay monotonic', async () => {
+    const broker = fakeBroker();
+    const cluster = fakeCluster(broker);
+    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+    await eosManager.initProducerId();
+
+    const sequences: number[] = [];
+    let concurrent = 0;
+    let maxConcurrent = 0;
+
+    async function produce(count: number): Promise<void> {
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+      concurrent += 1;
+      maxConcurrent = Math.max(maxConcurrent, concurrent);
+      sequences.push(eosManager.getSequence(topic, 0));
+      eosManager.updateSequence(topic, 0, count);
+      await Promise.resolve();
+      concurrent -= 1;
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+    }
+
+    await Promise.all([produce(3), produce(5)]);
+    expect(maxConcurrent).toBe(1);
+    expect(sequences).toEqual([0, 3]);
+    expect(eosManager.getSequence(topic, 0)).toBe(8);
+  });
+
+  it('acquires multiple partitions in a stable order without deadlock', async () => {
+    const broker = fakeBroker();
+    const cluster = fakeCluster(broker);
+    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+    await eosManager.initProducerId();
+
+    await expect(
+      Promise.all([
+        (async () => {
+          await eosManager.acquirePartitionGates([
+            { topic, partition: 1 },
+            { topic, partition: 0 },
+          ]);
+          await eosManager.releasePartitionGates([
+            { topic, partition: 1 },
+            { topic, partition: 0 },
+          ]);
+        })(),
+        (async () => {
+          await eosManager.acquirePartitionGates([
+            { topic, partition: 0 },
+            { topic, partition: 1 },
+          ]);
+          await eosManager.releasePartitionGates([
+            { topic, partition: 0 },
+            { topic, partition: 1 },
+          ]);
+        })(),
+      ]),
+    ).resolves.toEqual([undefined, undefined]);
+  });
+
+  it('keeps sequences independent across partitions under concurrent gates', async () => {
+    const broker = fakeBroker();
+    const cluster = fakeCluster(broker);
+    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+    await eosManager.initProducerId();
+
+    await Promise.all([
+      (async () => {
+        await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+        eosManager.updateSequence(topic, 0, 4);
+        await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+      })(),
+      (async () => {
+        await eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
+        eosManager.updateSequence(topic, 1, 7);
+        await eosManager.releasePartitionGates([{ topic, partition: 1 }]);
+      })(),
+    ]);
+
+    expect(eosManager.getSequence(topic, 0)).toBe(4);
+    expect(eosManager.getSequence(topic, 1)).toBe(7);
   });
 });

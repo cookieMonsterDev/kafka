@@ -23,7 +23,7 @@ yarn add @cookiemonsterdev/kafka-core
 bun add @cookiemonsterdev/kafka-core
 ```
 
-TLS and SASL are optional. See [Security](../guides/security/) when the broker
+TLS and SASL are optional. See [Security](../../guides/security/) when the broker
 requires them. SASL/GSSAPI needs a KDC and either `sasl.gssProvider` or the
 optional `kerberos` package (`npm install kerberos`).
 

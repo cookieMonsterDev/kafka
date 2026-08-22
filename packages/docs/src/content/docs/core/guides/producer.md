@@ -23,8 +23,8 @@ console.log(metadata[0]?.baseOffset); // bigint
 await producer.disconnect();
 ```
 
-Methods live on [`Producer`](../reference/producer/). Config fields are in
-[Configuration](../reference/configuration/). Source:
+Methods live on [`Producer`](../../reference/producer/). Config fields are in
+[Configuration](../../reference/configuration/). Source:
 [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 
 ## Message shape
@@ -37,14 +37,20 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
 call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
-request. Set `lingerMs` / `batchSize` to batch; Java 4.0 default `linger.ms` is
-5 ms. See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
+request. Set `lingerMs` / `batchSize` to batch, or spread
+[`throughputPreset()`](./throughput/). Java 4.0 default `linger.ms` is 5 ms;
+the **next major** of this client will match that (see
+[Breaking changes](../../migration/breaking-changes/)). See
+[producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 GZIP, Snappy, LZ4, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /
 `.LZ4` / `.ZSTD`). Kafka Snappy uses xerial snappy-java framing. LZ4 uses the
 LZ4 Frame format (LZ4F) that Apache Kafka writes for magic-2 record batches.
-ZSTD needs Kafka 2.1+ (Produce v7). Built-in codecs remain overridable via
-`CompressionCodecs`.
+ZSTD needs Kafka 2.1+ (Produce v7). GZIP and ZSTD use Node’s zlib threadpool.
+Snappy and LZ4 run off-thread (`worker_threads`; optional native packages if
+installed). Built-in codecs remain overridable via `CompressionCodecs`.
+Prefer GZIP or ZSTD under load; Snappy and LZ4 are also safe for the event
+loop now that they are off-thread.
 
 ## Partitioners
 
@@ -54,7 +60,7 @@ For KIP-794 uniform sticky routing, opt in with
 `createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
 honored, keyed records continue to use Java-compatible murmur2, and unkeyed
 records share a partition for each producer batch before rotating uniformly.
-The default remains unchanged. See [Compatibility](../reference/compatibility/).
+The default remains unchanged. See [Compatibility](../../reference/compatibility/).
 
 ## Idempotence and abort
 
@@ -65,4 +71,4 @@ The default remains unchanged. See [Compatibility](../reference/compatibility/).
 await producer.send({ topic: 'events', messages: [{ value: 'hello' }], signal });
 ```
 
-Transactions: [Producer API](../reference/producer/#transaction).
+Transactions: [Producer API](../../reference/producer/#transaction).

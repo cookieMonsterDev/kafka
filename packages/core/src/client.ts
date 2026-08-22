@@ -8,8 +8,9 @@ import { consoleLogCreator } from './loggers/console';
 import { createLogger, LOG_LEVELS, type Logger } from './loggers/index';
 import { createDefaultSocketFactory } from './network/socket-factory';
 import { createProducer, type Producer } from './producer/index';
+import { createShareConsumer, type ShareConsumer } from './share-consumer/index';
 import { ISOLATION_LEVEL, type IsolationLevel } from './protocol/enums/isolation-level';
-import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig } from './types/index';
+import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig, ShareConsumerConfig } from './types/index';
 import { once } from './utils/once';
 
 const DEFAULT_METADATA_MAX_AGE = 300_000;
@@ -115,6 +116,7 @@ export class Kafka {
     compression,
     lingerMs,
     batchSize,
+    bufferMemory,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({
@@ -141,6 +143,7 @@ export class Kafka {
       compression,
       lingerMs,
       batchSize,
+      bufferMemory,
     });
   }
 
@@ -198,6 +201,49 @@ export class Kafka {
       groupInstanceId,
       autoOffsetReset,
       groupProtocol,
+    });
+  }
+
+  /**
+   * Create a share-group consumer (KIP-932, Kafka 4.0+).
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/
+   */
+  shareConsumer({
+    groupId,
+    heartbeatInterval,
+    maxWaitTimeInMs,
+    minBytes,
+    maxBytes,
+    maxRecords,
+    batchSize,
+    shareAcquireMode,
+    rackId,
+    retry,
+    metadataMaxAge = DEFAULT_METADATA_MAX_AGE,
+    allowAutoTopicCreation,
+    maxInFlightRequests,
+  }: ShareConsumerConfig): ShareConsumer {
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const cluster = this.#createCluster({
+      metadataMaxAge,
+      allowAutoTopicCreation,
+      maxInFlightRequests,
+      instrumentationEmitter,
+    });
+
+    return createShareConsumer({
+      retry: { ...this.#clusterRetry, ...retry },
+      logger: this.#logger,
+      cluster,
+      groupId,
+      heartbeatInterval,
+      maxWaitTimeInMs,
+      minBytes,
+      maxBytes,
+      maxRecords,
+      batchSize,
+      shareAcquireMode,
+      rackId,
     });
   }
 

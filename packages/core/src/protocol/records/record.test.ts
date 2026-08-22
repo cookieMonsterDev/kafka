@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
 import { decodeRecord, encodeRecord, type RecordBatchContext } from './record';
 
@@ -117,5 +118,17 @@ describe('protocol/records/record', () => {
     const decoder = new Decoder(encoder.buffer);
     const length = decoder.readVarInt();
     expect(decoder.buffer.length - decoder.offset).toBe(length);
+  });
+
+  it('appends into a provided encoder instead of allocating a new one', () => {
+    const encoder = new Encoder().writeInt8(7);
+    const returned = encodeRecord({ key: 'k', value: 'v' }, encoder);
+    expect(returned).toBe(encoder);
+    expect(encoder.buffer[0]).toBe(7);
+
+    const body = unwrapRecordBody(encoder.buffer.subarray(1));
+    const decoded = decodeRecord(new Decoder(body), baseBatchContext());
+    expect(decoded.key).toEqual(Buffer.from('k'));
+    expect(decoded.value).toEqual(Buffer.from('v'));
   });
 });

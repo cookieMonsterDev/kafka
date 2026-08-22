@@ -23,4 +23,24 @@ describe('admin.logDirs', () => {
       }),
     );
   });
+
+  testIfKafkaAtLeast_1_1('describes replica log dirs for a topic partition on a broker', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const metadata = await admin.fetchTopicMetadata();
+    const topic = metadata.topics[0];
+    const partition = topic?.partitions[0];
+    expect(topic?.name).toEqual(expect.any(String));
+    expect(partition?.leader).toEqual(expect.any(Number));
+    if (!topic || partition?.leader == null) {
+      throw new Error('expected topic metadata with a partition leader');
+    }
+
+    const described = await admin.describeReplicaLogDirs([
+      { topic: topic.name, partition: partition.partitionId, brokerId: partition.leader },
+    ]);
+    expect(described.replicas[0]?.errorCode ?? 0).toBe(0);
+    expect(described.replicas[0]?.logDir).toEqual(expect.any(String));
+  });
 });

@@ -33,7 +33,8 @@ export class Batch {
     this.messages = filterAbortedMessages({
       messages: this.messagesWithinOffset,
       abortedTransactions: partitionData.abortedTransactions,
-    }).filter((message) => !message.isControlRecord);
+      excludeControlRecords: true,
+    });
   }
 
   isEmpty(): boolean {

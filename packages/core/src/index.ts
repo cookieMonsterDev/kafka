@@ -25,6 +25,9 @@ export const Partitioners = Object.freeze({
   StickyPartitioner,
 });
 
+export { throughputPreset } from './throughput-preset';
+export type { ThroughputPreset, ThroughputPresetConsumer, ThroughputPresetProducer } from './throughput-preset';
+
 export { LOG_LEVELS as logLevel } from './loggers/index';
 export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index';
 
@@ -38,6 +41,7 @@ export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
 export { FEATURE_UPDATE_UPGRADE_TYPES as FeatureUpdateUpgradeTypes } from './admin/types';
+export { SHARE_ACKNOWLEDGE_TYPE, SHARE_ACQUIRE_MODE } from './share-consumer/index';
 
 export {
   KafkaError,
@@ -95,6 +99,8 @@ export type {
   EachBatchPayload,
   EachMessageHandler,
   EachMessagePayload,
+  EachShareBatchHandler,
+  EachShareBatchPayload,
   GroupProtocol,
   GssTokenChallenge,
   GssTokenProvider,
@@ -119,6 +125,12 @@ export type {
   RecordHeaders,
   RecordMetadata,
   RetryOptions,
+  ShareConsumer,
+  ShareConsumerConfig,
+  ShareConsumerRunConfig,
+  ShareConsumerSubscribeTopics,
+  ShareAcknowledgeType,
+  ShareAcquireMode,
   SaslAuthenticationProvider,
   SaslMechanism,
   SaslMechanismProvider,
@@ -136,7 +148,11 @@ export type {
   ActiveProducerState,
   AclEntry,
   AclFilter,
+  DescribeFeaturesResult,
+  DescribeMetadataQuorumResult,
   DescribeProducersOptions,
+  DescribeReplicaLogDirsReplica,
+  DescribeReplicaLogDirsResult,
   DescribeTopicPartitionsCursor,
   DescribeTopicPartitionsOptions,
   DescribeTopicPartitionsPartition,
@@ -147,15 +163,28 @@ export type {
   FeatureUpdateUpgradeType,
   ListTransactionsOptions,
   PartitionProducerState,
+  AddRaftVoterOptions,
+  RemoveRaftVoterOptions,
+  UnregisterBrokerOptions,
   TopicConfig,
   TopicOffset,
+  ConsumerGroupDescription,
+  ConsumerGroupMemberDescription,
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
   DelegationToken,
   DescribeDelegationTokenOptions,
   ExpireDelegationTokenOptions,
+  FenceProducerResult,
+  FenceProducersOptions,
+  AbortTransactionOptions,
+  ForceTerminateTransactionOptions,
+  ForceTerminateTransactionResult,
   KafkaPrincipal,
   RenewDelegationTokenOptions,
+  RemoveMembersFromConsumerGroupMember,
+  RemoveMembersFromConsumerGroupOptions,
+  RemoveMembersFromConsumerGroupResult,
   TransactionDescription,
   TransactionListing,
   TransactionTopic,

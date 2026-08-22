@@ -77,4 +77,16 @@ describe('StickyPartitioner', () => {
     partitioner.onNewBatch?.({ topic: 'events', partitionMetadata });
     expect(partitioner(args)).toBe(1);
   });
+
+  it('picks up newly available partitions after onNewBatch with refreshed metadata', () => {
+    const partitioner = StickyPartitioner();
+    const unavailable = [metadata(0, -1), metadata(1), metadata(2, -1)];
+    partitioner.onNewBatch?.({ topic: 'events', partitionMetadata: unavailable });
+    expect(partitioner({ topic: 'events', partitionMetadata: unavailable, message: { value: 'value' } })).toBe(1);
+
+    useRandomValues(0);
+    const available = [metadata(0), metadata(1), metadata(2)];
+    partitioner.onNewBatch?.({ topic: 'events', partitionMetadata: available });
+    expect(partitioner({ topic: 'events', partitionMetadata: available, message: { value: 'value' } })).toBe(0);
+  });
 });

@@ -49,13 +49,14 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 
-| Setting              | Java 4.3                                  | This client                                                                                |
-| -------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                        |
-| `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                |
-| `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch |
-| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in                     |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`)             |
+| Setting              | Java 4.3                                  | This client                                                                                                                                                                                                                   |
+| -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                                                                                                                                                           |
+| `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                                                                                                                                                   |
+| `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
+| `max.in.flight`      | 5                                         | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                                                 |
+| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                                                |
+| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                                                  |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
@@ -65,6 +66,52 @@ Produce batch formed by this client's `lingerMs` / `batchSize` model, then
 rotates uniformly to a different available partition. Explicit partitions and
 keyed murmur2 routing are unchanged.
 
+## Throughput preset
+
+`throughputPreset()` is a named profile for load-oriented clients. Constructor
+defaults stay as in the table above. Spread the returned fragments:
+
+```ts
+import { Kafka, throughputPreset } from '@cookiemonsterdev/kafka-core';
+
+const kafka = new Kafka({ clientId: 'load', brokers: ['localhost:9092'] });
+const { producer, consumer } = throughputPreset();
+const p = kafka.producer({ ...producer });
+await kafka.consumer({ groupId: 'load' }).run({
+  ...consumer,
+  eachBatch: async ({ batch }) => {
+    for (const message of batch.messages) {
+      void message;
+    }
+  },
+});
+```
+
+`producer` sets `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`,
+the sticky partitioner, and a 32 MiB `bufferMemory`. `consumer` sets
+`partitionsConsumedConcurrently: 4` on `run()` (not on `kafka.consumer()`).
+
+`eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume
+API. Set `lingerMs` if you are not using the preset. Compression: GZIP and
+ZSTD already use the zlib threadpool; Snappy and LZ4 are off-thread as well
+(optional native packages if installed).
+
+Full walkthrough: [Throughput](../../guides/throughput/).
+
+## Next major defaults
+
+The **next major** will change these constructor defaults to match Java 4.x.
+This minor does **not** flip them.
+
+| Setting               | This minor                      | Next major |
+| --------------------- | ------------------------------- | ---------- |
+| `lingerMs`            | `0`                             | `5`        |
+| `batchSize`           | unset (no size flush by itself) | `16384`    |
+| `maxInFlightRequests` | unset (`null`, uncapped)        | `5`        |
+
+Use `throughputPreset()` until then. `flush()` remains. See
+[Breaking changes](../../migration/breaking-changes/).
+
 ## Not yet at the Java 4.3 surface
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
@@ -72,12 +119,18 @@ keyed murmur2 routing are unchanged.
 JoinGroup/SyncGroup remains the default membership protocol. Set
 `groupProtocol: 'consumer'` (Java `group.protocol`) to opt into KIP-848
 ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
-incremental. Admin describe of `consumer` protocol groups is a follow-up.
-`fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
+incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
+(key 69) via each group coordinator on Kafka 4.0+. `admin.describeClassicGroups`
+is an alias for `admin.describeGroups` (DescribeGroups, key 15) for classic
+JoinGroup groups. `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
 is supported and throws if there is no committed offset. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
-applies to the classic group protocol.
+applies to the classic group protocol. `kafka.shareConsumer()` implements
+KIP-932 share groups (ShareGroupHeartbeat / ShareFetch / ShareAcknowledge,
+keys 76–79) on Kafka 4.1+. ShareFetch and ShareAcknowledge negotiate v1–v2;
+v2 adds `shareAcquireMode` (KIP-1206) and `RENEW` acknowledgements (KIP-1222)
+on Kafka 4.2+. Classic `consumer()` remains the default.
 
 **Admin.** `admin.alterConfigs` is kept for older brokers. Prefer
 `admin.incrementalAlterConfigs` (key 44). `admin.electLeaders` is key 43
@@ -85,26 +138,45 @@ applies to the classic group protocol.
 (key 47). `admin.describeUserScramCredentials` and `admin.alterUserScramCredentials`
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
-34–35. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
+34–35. `admin.describeReplicaLogDirs` filters DescribeLogDirs (35) to specific
+broker/replica pairs. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction
 coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
 fans the request out to every broker, unique-merges by transactional ID, and
 requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
-`transactionalIdPattern`. `admin.describeTopicPartitions` uses
+`transactionalIdPattern`. `admin.fenceProducers` uses InitProducerId (22) via
+transaction coordinators (Kafka 2.5+ / v3+). `admin.abortTransaction` uses
+WriteTxnMarkers (27) on partition leaders (Kafka 3.0+ / v1+; v0 removed in
+4.0). `admin.forceTerminateTransaction` fences one transactional ID via
+InitProducerId. `admin.describeFeatures` reads
+ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
+`admin.removeMembersFromConsumerGroup` uses LeaveGroup (13) v3+ with explicit
+member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
+(key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
+aliases `admin.describeGroups` (DescribeGroups, key 15) for classic JoinGroup
+groups. `admin.describeShareGroups`, `listShareGroupOffsets`,
+`alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
+implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
+`admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. `admin.listConfigResources`
+validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
+implements DescribeQuorum (key 55) v0–v2 against the active controller and requires
+KRaft 3.6+. v1 adds replica timestamps (KIP-836); v2 adds directory IDs and
+node listeners (KIP-853). `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+`admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of
+AddRaftVoter adds optional `ackWhenCommitted` (default `true`). These controller
+RPCs require KRaft 3.7+ when the broker advertises the API. `admin.listConfigResources`
 implements ListConfigResources (key 74) v0–v1 and targets the active
 controller. v0 lists client metrics names only (Kafka 4.0); filtering by
 `resourceTypes` needs v1 (Kafka 4.1+ / KIP-1142). An empty `resourceTypes`
 list is valid: v1 returns the broker's default supported types, v0 returns
 all client metrics. `admin.createDelegationToken`,
 `admin.renewDelegationToken`, `admin.expireDelegationToken`, and
-`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
-missing: abortTransaction and FenceProducers.
+`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+).
 
 **Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
 implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or
@@ -113,14 +185,14 @@ keytab. CI does not run a Kerberos stack. The `aws` SASL helper is extra
 (non-Apache). Admin can create, describe, renew, and expire delegation tokens.
 SASL login with a delegation token is opt-in: set `sasl.mechanism` to
 `scram-sha-256` or `scram-sha-512` and pass `tokenId` / `tokenHmac` (see
-[Security](../guides/security/)). The broker still needs
+[Security](../../guides/security/)). The broker still needs
 `delegation.token.secret.key` and SASL/SCRAM. See
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
-and the [security guide](../guides/security/).
+and the [security guide](../../guides/security/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and
 [Kafka Connect](https://kafka.apache.org/43/kafka-connect/overview/).
 
 Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
-[Breaking changes](../migration/breaking-changes/).
+[Breaking changes](../../migration/breaking-changes/).

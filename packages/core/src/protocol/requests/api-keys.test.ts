@@ -13,15 +13,26 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.OffsetDelete).toBe(47);
     expect(API_KEYS.DescribeUserScramCredentials).toBe(50);
     expect(API_KEYS.AlterUserScramCredentials).toBe(51);
+    expect(API_KEYS.DescribeQuorum).toBe(55);
     expect(API_KEYS.UpdateFeatures).toBe(57);
     expect(API_KEYS.DescribeCluster).toBe(60);
+    expect(API_KEYS.UnregisterBroker).toBe(64);
     expect(API_KEYS.DescribeProducers).toBe(61);
     expect(API_KEYS.DescribeTransactions).toBe(65);
     expect(API_KEYS.ListTransactions).toBe(66);
     expect(API_KEYS.ConsumerGroupHeartbeat).toBe(68);
     expect(API_KEYS.ConsumerGroupDescribe).toBe(69);
+    expect(API_KEYS.ShareGroupHeartbeat).toBe(76);
+    expect(API_KEYS.ShareGroupDescribe).toBe(77);
+    expect(API_KEYS.ShareFetch).toBe(78);
+    expect(API_KEYS.ShareAcknowledge).toBe(79);
+    expect(API_KEYS.DescribeShareGroupOffsets).toBe(90);
+    expect(API_KEYS.AlterShareGroupOffsets).toBe(91);
+    expect(API_KEYS.DeleteShareGroupOffsets).toBe(92);
     expect(API_KEYS.ListConfigResources).toBe(74);
     expect(API_KEYS.DescribeTopicPartitions).toBe(75);
+    expect(API_KEYS.AddRaftVoter).toBe(80);
+    expect(API_KEYS.RemoveRaftVoter).toBe(81);
   });
 
   it('is frozen', () => {

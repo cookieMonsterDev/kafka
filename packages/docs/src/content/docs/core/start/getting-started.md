@@ -46,5 +46,5 @@ await producer.send({ topic: 'events', messages: [{ value: 'hello' }] });
 Assume a broker at `localhost:9092`. Cluster concepts (topics, partitions, groups)
 are in the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/).
 
-Next: [Producer](../guides/producer/), [Consumer](../guides/consumer/),
-[Errors](../guides/errors/), [Compatibility](../reference/compatibility/).
+Next: [Producer](../../guides/producer/), [Consumer](../../guides/consumer/),
+[Errors](../../guides/errors/), [Compatibility](../../reference/compatibility/).

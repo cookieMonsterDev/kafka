@@ -180,9 +180,10 @@ export class Connection {
   #authenticatedAt: [number, number] | null = null;
   #sessionLifetime = 0n;
 
-  #bytesBuffered = 0;
   #bytesNeeded = Decoder.int32Size();
-  #chunks: Buffer[] = [];
+  #receiveBuffer = Buffer.allocUnsafe(0);
+  #receiveReadOffset = 0;
+  #receiveWriteOffset = 0;
 
   #authenticate = sharedPromiseTo(async (): Promise<void> => {
     if (this.sasl && !this.isAuthenticated()) {
@@ -286,6 +287,7 @@ export class Connection {
       }
 
       this.#authenticatedAt = null;
+      this.#resetReceiveBuffer();
 
       let timeoutId: NodeJS.Timeout;
 
@@ -377,6 +379,7 @@ export class Connection {
   async disconnect(): Promise<boolean> {
     this.#authenticatedAt = null;
     this.#connectionStatus = CONNECTION_STATUS.DISCONNECTING;
+    this.#resetReceiveBuffer();
     this.#logDebug('disconnecting...');
 
     await this.requestQueue.waitForPendingRequests();
@@ -583,45 +586,80 @@ export class Connection {
     return this.#correlationId++;
   }
 
+  #resetReceiveBuffer(): void {
+    this.#receiveBuffer = Buffer.allocUnsafe(0);
+    this.#receiveReadOffset = 0;
+    this.#receiveWriteOffset = 0;
+    this.#bytesNeeded = Decoder.int32Size();
+  }
+
+  /**
+   * Copy `additional` bytes into the receive buffer. Compacts unparsed bytes to offset 0
+   * (onto a fresh Buffer so in-flight payload views keep the previous backing store).
+   */
+  #ensureReceiveCapacity(additional: number): void {
+    const remaining = this.#receiveWriteOffset - this.#receiveReadOffset;
+    const needed = remaining + additional;
+    if (this.#receiveReadOffset === 0 && needed <= this.#receiveBuffer.length) {
+      return;
+    }
+
+    let capacity = this.#receiveBuffer.length;
+    if (capacity < needed) {
+      capacity = Math.max(capacity * 2, needed);
+    }
+
+    const next = Buffer.allocUnsafe(capacity);
+    if (remaining > 0) {
+      this.#receiveBuffer.copy(next, 0, this.#receiveReadOffset, this.#receiveWriteOffset);
+    }
+    this.#receiveBuffer = next;
+    this.#receiveReadOffset = 0;
+    this.#receiveWriteOffset = remaining;
+  }
+
+  #compactReceiveBuffer(): void {
+    if (this.#receiveReadOffset === 0) {
+      return;
+    }
+    this.#ensureReceiveCapacity(0);
+  }
+
   #processData(rawData: Buffer): void {
     if (this.#authHandlers && !this.#authExpectResponse) {
       this.#authHandlers.onSuccess(rawData);
       return;
     }
 
-    // Accumulate the new chunk.
-    this.#chunks.push(rawData);
-    this.#bytesBuffered += Buffer.byteLength(rawData);
+    this.#ensureReceiveCapacity(rawData.length);
+    rawData.copy(this.#receiveBuffer, this.#receiveWriteOffset);
+    this.#receiveWriteOffset += rawData.length;
 
-    // Process data if there are enough bytes to read the expected response size,
-    // otherwise keep buffering.
-    while (this.#bytesNeeded <= this.#bytesBuffered) {
-      const buffer = this.#chunks.length > 1 ? Buffer.concat(this.#chunks) : this.#chunks[0]!;
-      const decoder = new Decoder(buffer);
-      const expectedResponseSize = decoder.readInt32();
+    while (this.#receiveWriteOffset - this.#receiveReadOffset >= this.#bytesNeeded) {
+      const expectedResponseSize = this.#receiveBuffer.readInt32BE(this.#receiveReadOffset);
+      const frameSize = Decoder.int32Size() + expectedResponseSize;
 
-      // Return early if not enough bytes to read the full response.
-      if (!decoder.canReadBytes(expectedResponseSize)) {
-        this.#chunks = [buffer];
-        this.#bytesBuffered = Buffer.byteLength(buffer);
-        this.#bytesNeeded = Decoder.int32Size() + expectedResponseSize;
+      if (this.#receiveWriteOffset - this.#receiveReadOffset < frameSize) {
+        this.#bytesNeeded = frameSize;
+        this.#compactReceiveBuffer();
         return;
       }
 
-      const response = new Decoder(decoder.readBytes(expectedResponseSize)!);
-
-      // Reset the buffered chunks to whatever bytes remain.
-      const remainderBuffer = decoder.readAll();
-      this.#chunks = [remainderBuffer];
-      this.#bytesBuffered = Buffer.byteLength(remainderBuffer);
-      this.#bytesNeeded = Decoder.int32Size();
+      const responseStart = this.#receiveReadOffset + Decoder.int32Size();
+      const responseEnd = this.#receiveReadOffset + frameSize;
 
       if (this.#authHandlers) {
-        const rawResponseSize = Decoder.int32Size() + expectedResponseSize;
-        const rawResponseBuffer = buffer.subarray(0, rawResponseSize);
+        const rawResponseBuffer = this.#receiveBuffer.subarray(this.#receiveReadOffset, responseEnd);
+        this.#receiveReadOffset = responseEnd;
+        this.#bytesNeeded = Decoder.int32Size();
+        this.#compactReceiveBuffer();
         this.#authHandlers.onSuccess(rawResponseBuffer);
         return;
       }
+
+      const response = new Decoder(this.#receiveBuffer.subarray(responseStart, responseEnd));
+      this.#receiveReadOffset = responseEnd;
+      this.#bytesNeeded = Decoder.int32Size();
 
       const correlationId = response.readInt32();
       const inflight = this.requestQueue.inflight.get(correlationId);
@@ -632,6 +670,8 @@ export class Connection {
 
       this.requestQueue.fulfillRequest({ size: expectedResponseSize, correlationId, payload });
     }
+
+    this.#compactReceiveBuffer();
   }
 
   #rejectRequests(error: unknown): void {

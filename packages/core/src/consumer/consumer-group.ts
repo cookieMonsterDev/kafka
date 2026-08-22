@@ -46,6 +46,55 @@ const STALE_METADATA_ERRORS = Object.freeze([
 
 const CONSUMER_REPLICA_ID = -1;
 
+/** Sleep when a node has no fetchable partitions, instead of blocking for `maxWaitTimeInMs`. */
+export const EMPTY_NODE_FETCH_SLEEP_MS = 100;
+
+const ADAPTIVE_FULL_RATIO = 0.9;
+const ADAPTIVE_SPARSE_RATIO = 0.25;
+const ADAPTIVE_GROW_FACTOR = 1.5;
+const ADAPTIVE_SHRINK_FACTOR = 0.5;
+
+/**
+ * Next Fetch `maxBytes` from the previous response fill ratio.
+ *
+ * Formula (clamped to `[min, max]`):
+ * - `used/current >= 0.90` → grow: `floor(current * 1.5)`
+ * - `used/current <= 0.25` (including `used === 0`) → shrink: `floor(current * 0.5)`
+ * - otherwise unchanged
+ */
+export function nextAdaptiveMaxBytes({
+  current,
+  used,
+  min,
+  max,
+}: {
+  current: number;
+  used: number;
+  min: number;
+  max: number;
+}): number {
+  const lower = Math.max(1, min);
+  const upper = Math.max(lower, max);
+  const safeCurrent = Math.min(upper, Math.max(lower, current));
+  if (used <= 0 || used / safeCurrent <= ADAPTIVE_SPARSE_RATIO) {
+    return Math.max(lower, Math.floor(safeCurrent * ADAPTIVE_SHRINK_FACTOR));
+  }
+  if (used / safeCurrent >= ADAPTIVE_FULL_RATIO) {
+    return Math.min(upper, Math.floor(safeCurrent * ADAPTIVE_GROW_FACTOR));
+  }
+  return safeCurrent;
+}
+
+function estimateFetchedBytes(batches: readonly Batch[]): number {
+  let bytes = 0;
+  for (const batch of batches) {
+    for (const message of batch.rawMessages) {
+      bytes += (message.key?.byteLength ?? 0) + (message.value?.byteLength ?? 0);
+    }
+  }
+  return bytes;
+}
+
 interface PreferredReadReplica {
   nodeId: number;
   expireAt: number;
@@ -110,6 +159,7 @@ export interface ConsumerGroupHandle {
   commitOffsetsIfNecessary: () => Promise<void>;
   uncommittedOffsets: () => OffsetsByTopicPartition;
   heartbeat: (options: { interval: number }) => Promise<void>;
+  heartbeatDue: (interval: number) => boolean;
   pause: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   resume: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   isPaused: (topic: string, partition: number) => boolean;
@@ -163,6 +213,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #ownedPartitionsDirty = false;
   #consumerProtocolJoined = false;
   readonly #topicNameById = new Map<string, string>();
+  #activeTopicPartitions: Record<string, Set<number>> | null = null;
+  #adaptiveMaxBytes: number;
 
   constructor({
     retry,
@@ -211,6 +263,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
     this.useConsumerProtocol = groupProtocol === 'consumer';
+    this.#adaptiveMaxBytes = maxBytes;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
       if (this.useConsumerProtocol) {
@@ -431,6 +484,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
+    this.#invalidateActiveTopicPartitions();
 
     this.offsetManager = new OffsetManager({
       cluster: this.cluster,
@@ -707,11 +761,13 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   pause(topicPartitions: readonly { topic: string; partitions?: number[] }[]): void {
     this.logger.info(`Pausing fetching from ${topicPartitions.length} topics`, { topicPartitions });
     this.subscriptionState.pause(topicPartitions);
+    this.#invalidateActiveTopicPartitions();
   }
 
   resume(topicPartitions: readonly { topic: string; partitions?: number[] }[]): void {
     this.logger.info(`Resuming fetching from ${topicPartitions.length} topics`, { topicPartitions });
     this.subscriptionState.resume(topicPartitions);
+    this.#invalidateActiveTopicPartitions();
   }
 
   assigned(): TopicPartitions[] {
@@ -740,6 +796,21 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async heartbeat({ interval }: { interval: number }): Promise<void> {
     await this.#sharedHeartbeat({ interval });
+  }
+
+  heartbeatDue(interval: number): boolean {
+    if (this.useConsumerProtocol) {
+      if (!this.coordinator) return false;
+      const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
+      return Date.now() >= this.lastRequest + heartbeatInterval;
+    }
+
+    return (
+      this.memberId != null &&
+      this.generationId != null &&
+      this.coordinator != null &&
+      Date.now() >= this.lastRequest + interval
+    );
   }
 
   async fetch(nodeId: string): Promise<Batch[]> {
@@ -774,7 +845,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         .filter(({ partitions }) => partitions.length > 0);
 
       if (requests.length === 0) {
-        await sleep(this.maxWaitTime);
+        await sleep(Math.min(EMPTY_NODE_FETCH_SLEEP_MS, this.maxWaitTime));
         return [];
       }
 
@@ -783,13 +854,13 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         replicaId: CONSUMER_REPLICA_ID,
         maxWaitTime: this.maxWaitTime,
         minBytes: this.minBytes,
-        maxBytes: this.maxBytes,
+        maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
         topics: requests,
         rackId: this.rackId,
       });
 
-      return responses.flatMap(({ topicName, partitions }) => {
+      const batches = responses.flatMap(({ topicName, partitions }) => {
         const topicRequestData = requests.find(({ topic }) => topic === topicName);
 
         let preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topicName];
@@ -830,6 +901,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
             return [new Batch(topicName, partitionRequestData.fetchOffset, partitionData)];
           });
       });
+
+      this.#adaptiveMaxBytes = nextAdaptiveMaxBytes({
+        current: this.#adaptiveMaxBytes,
+        used: estimateFetchedBytes(batches),
+        min: this.minBytes,
+        max: this.maxBytes,
+      });
+
+      return batches;
     } catch (e) {
       await this.recoverFromFetch(e);
       return [];
@@ -1036,10 +1116,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   getActiveTopicPartitions(): Record<string, Set<number>> {
+    if (this.#activeTopicPartitions) return this.#activeTopicPartitions;
+
     const activeTopicPartitions: Record<string, Set<number>> = {};
     for (const { topic, partitions } of this.subscriptionState.active()) {
       activeTopicPartitions[topic] = new Set(partitions);
     }
+    this.#activeTopicPartitions = activeTopicPartitions;
     return activeTopicPartitions;
+  }
+
+  #invalidateActiveTopicPartitions(): void {
+    this.#activeTopicPartitions = null;
   }
 }

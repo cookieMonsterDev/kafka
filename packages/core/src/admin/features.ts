@@ -4,6 +4,7 @@ import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
 import {
   FEATURE_UPDATE_UPGRADE_TYPES,
+  type DescribeFeaturesResult,
   type FeatureUpdateUpgradeType,
   type UpdateFeaturesOptions,
   type UpdateFeaturesResult,
@@ -11,6 +12,7 @@ import {
 
 export interface FeaturesApi {
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
+  describeFeatures: () => Promise<DescribeFeaturesResult>;
 }
 
 const VALID_UPGRADE_TYPES: readonly FeatureUpdateUpgradeType[] = Object.values(FEATURE_UPDATE_UPGRADE_TYPES);
@@ -85,5 +87,29 @@ export function createFeaturesApi({ cluster, logger, retry }: AdminContext): Fea
     });
   };
 
-  return { updateFeatures };
+  const describeFeatures = async (): Promise<DescribeFeaturesResult> => {
+    return retrier(retry)(async (bail, retryCount, retryTime) => {
+      try {
+        await cluster.refreshMetadata();
+        const broker = await cluster.findControllerBroker();
+        const { supportedFeatures, finalizedFeatures, finalizedFeaturesEpoch, zkMigrationReady } =
+          await broker.describeFeatures();
+        return { supportedFeatures, finalizedFeatures, finalizedFeaturesEpoch, zkMigrationReady };
+      } catch (error) {
+        if (protocolType(error) === 'NOT_CONTROLLER') {
+          logger.warn('Could not describe features', {
+            error: error instanceof Error ? error.message : String(error),
+            retryCount,
+            retryTime,
+          });
+          await cluster.refreshMetadata();
+          throw error;
+        }
+        bail(error as Error);
+        throw error;
+      }
+    });
+  };
+
+  return { updateFeatures, describeFeatures };
 }

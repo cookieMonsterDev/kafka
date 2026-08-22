@@ -22,7 +22,7 @@ try {
 ```
 
 Public classes are in [`errors.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/errors.ts).
-The catalog is [Errors](../reference/errors/). Protocol codes:
+The catalog is [Errors](../../reference/errors/). Protocol codes:
 [Kafka protocol](https://kafka.apache.org/43/design/protocol/).
 
 ## Retriable vs not
@@ -46,4 +46,4 @@ Broker error codes surface as `KafkaProtocolError` with `type` (for example
 
 The client checks `ApiVersions` rather than a broker version string. Too-old
 APIs throw `KafkaServerDoesNotSupportApiKey` (non-retriable). See
-[Public API](../reference/public-api/#capability-errors).
+[Public API](../../reference/public-api/#capability-errors).

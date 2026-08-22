@@ -113,14 +113,14 @@ keytab. CI does not run a Kerberos stack. The `aws` SASL helper is extra
 (non-Apache). Admin can create, describe, renew, and expire delegation tokens.
 SASL login with a delegation token is opt-in: set `sasl.mechanism` to
 `scram-sha-256` or `scram-sha-512` and pass `tokenId` / `tokenHmac` (see
-[Security](../guides/security/)). The broker still needs
+[Security](../../guides/security/)). The broker still needs
 `delegation.token.secret.key` and SASL/SCRAM. See
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
-and the [security guide](../guides/security/).
+and the [security guide](../../guides/security/).
 
 **Out of scope.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and
 [Kafka Connect](https://kafka.apache.org/43/kafka-connect/overview/).
 
 Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
-[Breaking changes](../migration/breaking-changes/).
+[Breaking changes](../../migration/breaking-changes/).

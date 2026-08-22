@@ -21,7 +21,7 @@ await consumer.run({
 });
 ```
 
-`message.offset` is `bigint`. Methods: [`Consumer`](../reference/consumer/).
+`message.offset` is `bigint`. Methods: [`Consumer`](../../reference/consumer/).
 Source:
 [`consumer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/consumer/index.ts).
 
@@ -76,7 +76,7 @@ unused for membership; `rebalanceTimeout` is still sent as the revoke budget.
 Admin describe of `consumer` protocol groups is a follow-up (use classic
 `DescribeGroups` only for classic groups). Isolation defaults to `read_committed`
 (`readUncommitted: false`); Java default `isolation.level` is `read_uncommitted`.
-See [Compatibility](../reference/compatibility/),
+See [Compatibility](../../reference/compatibility/),
 [KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

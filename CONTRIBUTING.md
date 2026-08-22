@@ -110,6 +110,7 @@ Keep the description short. One concern per branch.
 - Imperative mood (`add`, not `added` or `adds`)
 - No trailing period
 - One logical change per commit
+- No co-author during committing
 
 ```
 feat(core): add fetch request v4 encoder

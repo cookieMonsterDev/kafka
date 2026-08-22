@@ -57,6 +57,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
     }
     function onClose() {
       setOpen(false);
+      window.dispatchEvent(new Event('docs-search-close'));
     }
     dialog.addEventListener('close', onClose);
     return () => dialog.removeEventListener('close', onClose);
@@ -68,11 +69,7 @@ export function DocsSearch({ index }: DocsSearchProps) {
       return;
     }
     if (open && !dialog.open) {
-      const nav = document.getElementById('docs-nav');
-      if (nav instanceof HTMLInputElement && nav.checked) {
-        nav.checked = false;
-        nav.dispatchEvent(new Event('change'));
-      }
+      window.dispatchEvent(new Event('docs-search-open'));
       dialog.showModal();
       inputRef.current?.focus();
     } else if (!open && dialog.open) {

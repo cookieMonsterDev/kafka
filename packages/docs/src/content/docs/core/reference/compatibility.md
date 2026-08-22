@@ -72,8 +72,10 @@ keyed murmur2 routing are unchanged.
 JoinGroup/SyncGroup remains the default membership protocol. Set
 `groupProtocol: 'consumer'` (Java `group.protocol`) to opt into KIP-848
 ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
-incremental. Admin describe of `consumer` protocol groups is a follow-up.
-`fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
+incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
+(key 69) via each group coordinator on Kafka 4.0+. `admin.describeClassicGroups`
+is an alias for `admin.describeGroups` (DescribeGroups, key 15) for classic
+JoinGroup groups. `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
 is supported and throws if there is no committed offset. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
@@ -94,22 +96,32 @@ coordinators, and requires Kafka 3.0+. `admin.listTransactions` uses key 66,
 fans the request out to every broker, unique-merges by transactional ID, and
 requires Kafka 3.0+; v1 adds `durationFilter` and v2 adds
 `transactionalIdPattern`. `admin.fenceProducers` uses InitProducerId (22) via
-transaction coordinators (Kafka 2.5+ / v3+). `admin.describeFeatures` reads
+transaction coordinators (Kafka 2.5+ / v3+). `admin.abortTransaction` uses
+WriteTxnMarkers (27) on partition leaders (Kafka 3.0+ / v1+; v0 removed in
+4.0). `admin.forceTerminateTransaction` fences one transactional ID via
+InitProducerId. `admin.describeFeatures` reads
 ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
 `admin.removeMembersFromConsumerGroup` uses LeaveGroup (13) v3+ with explicit
-member identities. `admin.describeTopicPartitions` uses
+member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
+(key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
+aliases `admin.describeGroups` (DescribeGroups, key 15) for classic JoinGroup
+groups. `admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements
 UpdateFeatures (key 57) v0–v2 and targets the active controller; v0 cannot
-validate-only and rejects unsafe downgrades. `admin.listConfigResources`
+validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
+implements DescribeQuorum (key 55) v0 against the active controller and requires
+KRaft 3.6+. `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+`admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of
+AddRaftVoter adds optional `ackWhenCommitted` (default `true`). These controller
+RPCs require KRaft 3.7+ when the broker advertises the API. `admin.listConfigResources`
 implements ListConfigResources (key 74) v0–v1 and targets the active
 controller. v0 lists client metrics names only (Kafka 4.0); filtering by
 `resourceTypes` needs v1 (Kafka 4.1+ / KIP-1142). An empty `resourceTypes`
 list is valid: v1 returns the broker's default supported types, v0 returns
 all client metrics. `admin.createDelegationToken`,
 `admin.renewDelegationToken`, `admin.expireDelegationToken`, and
-`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+). Still
-missing: `abortTransaction` and `forceTerminateTransaction`.
+`admin.describeDelegationToken` implement keys 38–41 (Kafka 1.1+).
 
 **Security.** SASL PLAIN, SCRAM, OAUTHBEARER, and GSSAPI / Kerberos are
 implemented. GSSAPI is opt-in (`mechanism: 'gssapi'`): supply `gssProvider` or

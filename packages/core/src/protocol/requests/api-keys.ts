@@ -58,8 +58,10 @@ export const API_KEYS = Object.freeze({
   AlterClientQuotas: 49,
   DescribeUserScramCredentials: 50,
   AlterUserScramCredentials: 51,
+  DescribeQuorum: 55,
   UpdateFeatures: 57,
   DescribeCluster: 60,
+  UnregisterBroker: 64,
   DescribeProducers: 61,
   DescribeTransactions: 65,
   ListTransactions: 66,
@@ -67,6 +69,8 @@ export const API_KEYS = Object.freeze({
   ConsumerGroupDescribe: 69,
   ListConfigResources: 74,
   DescribeTopicPartitions: 75,
+  AddRaftVoter: 80,
+  RemoveRaftVoter: 81,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];

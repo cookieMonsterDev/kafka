@@ -93,4 +93,26 @@ describe('admin.transactions', () => {
 
     await transaction.abort().catch(() => undefined);
   });
+
+  testIfKafkaAtLeast_3_0('force-terminates an active transactional producer', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    producer = createProducer({
+      cluster: createCluster(),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    await admin.connect();
+    await producer.connect();
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v' }] });
+
+    const result = await admin.forceTerminateTransaction({ transactionalId });
+    expect(result.transactionalId).toBe(transactionalId);
+    expect(result.errorCode).toBe(0);
+    expect(result.producerId).toEqual(expect.any(BigInt));
+
+    await transaction.abort().catch(() => undefined);
+  });
 });

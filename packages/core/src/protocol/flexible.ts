@@ -57,8 +57,10 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.AlterClientQuotas]: 1,
   [API_KEYS.DescribeUserScramCredentials]: 0,
   [API_KEYS.AlterUserScramCredentials]: 0,
+  [API_KEYS.DescribeQuorum]: 0,
   [API_KEYS.UpdateFeatures]: 0,
   [API_KEYS.DescribeCluster]: 0,
+  [API_KEYS.UnregisterBroker]: 0,
   [API_KEYS.DescribeProducers]: 0,
   [API_KEYS.DescribeTransactions]: 0,
   [API_KEYS.ListTransactions]: 0,
@@ -66,6 +68,8 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.ConsumerGroupDescribe]: 0,
   [API_KEYS.ListConfigResources]: 0,
   [API_KEYS.DescribeTopicPartitions]: 0,
+  [API_KEYS.AddRaftVoter]: 0,
+  [API_KEYS.RemoveRaftVoter]: 0,
 });
 
 /**

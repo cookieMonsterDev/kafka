@@ -8,6 +8,7 @@ import {
   secureRandom,
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_0,
   waitFor,
   waitForConsumerToJoinGroup,
 } from '../../helpers/index';
@@ -155,5 +156,34 @@ describe('admin.groups', () => {
 
     await consumer.disconnect();
     consumer = undefined;
+  });
+
+  testIfKafkaAtLeast_4_0('describes consumer protocol groups via ConsumerGroupDescribe', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      groupProtocol: 'consumer',
+      maxWaitTimeInMs: 100,
+      rebalanceTimeout: 15_000,
+      logger: newLogger(),
+    });
+
+    await admin.connect();
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer);
+    await consumer.run({ eachMessage: async () => undefined });
+    await join;
+
+    const described = await admin.describeConsumerGroups([groupId]);
+    expect(described.groups[0]?.groupId).toBe(groupId);
+    expect(described.groups[0]?.members.length).toBeGreaterThan(0);
+    expect(described.groups[0]?.groupState).toEqual(expect.any(String));
+
+    const classic = await admin.describeClassicGroups([groupId]);
+    const legacy = await admin.describeGroups([groupId]);
+    expect(classic).toEqual(legacy);
   });
 });

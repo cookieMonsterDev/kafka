@@ -176,4 +176,93 @@ describe('admin/transactions', () => {
     expect(result.results[0]?.errorCode).toBe(0);
     expect(result.results[0]?.producerEpoch).toBe(1);
   });
+
+  it('writes an abort marker to the partition leader', async () => {
+    const leader = {
+      writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
+      describeProducers: vi.fn(),
+    };
+    const cluster = {
+      metadata: vi.fn(async () => ({ topics: [] })),
+      findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
+      findBroker: vi.fn(async () => leader),
+      refreshMetadata: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Cluster;
+    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+
+    await api.abortTransaction({
+      topic: 'orders',
+      partition: 0,
+      producerId: 9n,
+      producerEpoch: 2,
+      coordinatorEpoch: 1,
+    });
+
+    expect(leader.describeProducers).not.toHaveBeenCalled();
+    expect(leader.writeTxnMarkers).toHaveBeenCalledWith({
+      markers: [
+        {
+          producerId: 9n,
+          producerEpoch: 2,
+          transactionResult: false,
+          coordinatorEpoch: 1,
+          topics: [{ topic: 'orders', partitions: [0] }],
+        },
+      ],
+    });
+  });
+
+  it('resolves coordinatorEpoch from describeProducers when omitted', async () => {
+    const leader = {
+      writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
+      describeProducers: vi.fn(async () => ({
+        topics: [
+          {
+            topic: 'orders',
+            partitions: [{ partition: 0, activeProducers: [{ producerId: 9n, coordinatorEpoch: 4 }] }],
+          },
+        ],
+      })),
+    };
+    const cluster = {
+      metadata: vi.fn(async () => ({ topics: [] })),
+      findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
+      findBroker: vi.fn(async () => leader),
+      refreshMetadata: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Cluster;
+    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+
+    await api.abortTransaction({
+      topic: 'orders',
+      partition: 0,
+      producerId: 9n,
+      producerEpoch: 2,
+    });
+
+    expect(leader.describeProducers).toHaveBeenCalled();
+    expect(leader.writeTxnMarkers).toHaveBeenCalledWith(
+      expect.objectContaining({
+        markers: [expect.objectContaining({ coordinatorEpoch: 4 })],
+      }),
+    );
+  });
+
+  it('forceTerminateTransaction delegates to fenceProducers', async () => {
+    const coordinator = {
+      initProducerId: vi.fn(async () => ({ producerId: 3n, producerEpoch: 0, errorCode: 0 })),
+    };
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => coordinator),
+    } as unknown as Cluster;
+    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+
+    const result = await api.forceTerminateTransaction({ transactionalId: 'tx-z' });
+
+    expect(result).toEqual({
+      transactionalId: 'tx-z',
+      errorCode: 0,
+      producerId: 3n,
+      producerEpoch: 0,
+    });
+  });
 });

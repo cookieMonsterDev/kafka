@@ -131,6 +131,9 @@ import type { SyncGroupResponseV2Body } from '../protocol/requests/sync-group/v2
 import { TxnOffsetCommit } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitOptions } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitResponseV1Body } from '../protocol/requests/txn-offset-commit/v1/response';
+import { WriteTxnMarkers } from '../protocol/requests/write-txn-markers/index';
+import type { WriteTxnMarkersOptions } from '../protocol/requests/write-txn-markers/index';
+import type { WriteTxnMarkersResponseV1Body } from '../protocol/requests/write-txn-markers/v1/response';
 import { AlterUserScramCredentials } from '../protocol/requests/alter-user-scram-credentials/index';
 import type { AlterUserScramCredentialsOptions } from '../protocol/requests/alter-user-scram-credentials/index';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
@@ -152,6 +155,9 @@ import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alt
 import { DescribeCluster } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterOptions } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterResponseV2Body } from '../protocol/requests/describe-cluster/v2/response';
+import { DescribeQuorum } from '../protocol/requests/describe-quorum/index';
+import type { DescribeQuorumOptions } from '../protocol/requests/describe-quorum/index';
+import type { DescribeQuorumResponseV0Body } from '../protocol/requests/describe-quorum/v0/response';
 import { DescribeProducers } from '../protocol/requests/describe-producers/index';
 import type { DescribeProducersRequestV0Options } from '../protocol/requests/describe-producers/v0/request';
 import type { DescribeProducersResponseV0Body } from '../protocol/requests/describe-producers/v0/response';
@@ -176,6 +182,15 @@ import type { ConsumerGroupDescribeResponseV1Body } from '../protocol/requests/c
 import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
+import { UnregisterBroker } from '../protocol/requests/unregister-broker/index';
+import type { UnregisterBrokerOptions } from '../protocol/requests/unregister-broker/index';
+import type { UnregisterBrokerResponseV0Body } from '../protocol/requests/unregister-broker/v0/response';
+import { AddRaftVoter } from '../protocol/requests/add-raft-voter/index';
+import type { AddRaftVoterOptions } from '../protocol/requests/add-raft-voter/index';
+import type { AddRaftVoterResponseV0Body } from '../protocol/requests/add-raft-voter/v0/response';
+import { RemoveRaftVoter } from '../protocol/requests/remove-raft-voter/index';
+import type { RemoveRaftVoterOptions } from '../protocol/requests/remove-raft-voter/index';
+import type { RemoveRaftVoterResponseV0Body } from '../protocol/requests/remove-raft-voter/v0/response';
 import { CreateDelegationToken } from '../protocol/requests/create-delegation-token/index';
 import type { CreateDelegationTokenOptions } from '../protocol/requests/create-delegation-token/index';
 import type { CreateDelegationTokenResponseV3Body } from '../protocol/requests/create-delegation-token/v3/response';
@@ -677,6 +692,26 @@ export class Broker {
     return this.#send(describeCluster(options));
   }
 
+  async describeQuorum(options: DescribeQuorumOptions = {}): Promise<DescribeQuorumResponseV0Body> {
+    const describeQuorum = this.lookupRequest<DescribeQuorumOptions>(API_KEYS.DescribeQuorum, DescribeQuorum);
+    return this.#send(describeQuorum(options));
+  }
+
+  async unregisterBroker(options: UnregisterBrokerOptions): Promise<UnregisterBrokerResponseV0Body> {
+    const unregisterBroker = this.lookupRequest<UnregisterBrokerOptions>(API_KEYS.UnregisterBroker, UnregisterBroker);
+    return this.#send(unregisterBroker(options));
+  }
+
+  async addRaftVoter(options: AddRaftVoterOptions): Promise<AddRaftVoterResponseV0Body> {
+    const addRaftVoter = this.lookupRequest<AddRaftVoterOptions>(API_KEYS.AddRaftVoter, AddRaftVoter);
+    return this.#send(addRaftVoter(options));
+  }
+
+  async removeRaftVoter(options: RemoveRaftVoterOptions): Promise<RemoveRaftVoterResponseV0Body> {
+    const removeRaftVoter = this.lookupRequest<RemoveRaftVoterOptions>(API_KEYS.RemoveRaftVoter, RemoveRaftVoter);
+    return this.#send(removeRaftVoter(options));
+  }
+
   async describeProducers(options: DescribeProducersRequestV0Options): Promise<DescribeProducersResponseV0Body> {
     const describeProducers = this.lookupRequest<DescribeProducersRequestV0Options>(
       API_KEYS.DescribeProducers,
@@ -796,6 +831,12 @@ export class Broker {
   async endTxn(options: EndTxnOptions): Promise<EndTxnResponseV1Body> {
     const endTxn = this.lookupRequest<EndTxnOptions>(API_KEYS.EndTxn, EndTxn);
     return this.#send(endTxn(options));
+  }
+
+  /** Writes commit or abort markers to partition leaders. Used by Admin.abortTransaction. */
+  async writeTxnMarkers(options: WriteTxnMarkersOptions): Promise<WriteTxnMarkersResponseV1Body> {
+    const writeTxnMarkers = this.lookupRequest<WriteTxnMarkersOptions>(API_KEYS.WriteTxnMarkers, WriteTxnMarkers);
+    return this.#send(writeTxnMarkers(options));
   }
 
   async listGroups(options: ListGroupsOptions = {}): Promise<ListGroupsResponseV2Body> {

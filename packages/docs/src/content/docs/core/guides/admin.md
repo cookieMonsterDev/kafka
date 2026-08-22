@@ -62,7 +62,8 @@ brokers. See [topic configs](https://kafka.apache.org/43/configuration/topic-con
 
 ## Groups, ACLs, SCRAM
 
-`listGroups` / `describeGroups` / `deleteGroups` / `deleteGroupOffsets`.
+`listGroups` / `describeGroups` / `describeClassicGroups` /
+`describeConsumerGroups` / `deleteGroups` / `deleteGroupOffsets`.
 ACL helpers use `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`,
 and `ResourcePatternTypes`. SCRAM:
 `describeUserScramCredentials` / `alterUserScramCredentials`.

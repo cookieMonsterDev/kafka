@@ -41,6 +41,8 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | Method                                                         | Notes                                    |
 | -------------------------------------------------------------- | ---------------------------------------- |
 | `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
+| `describeClassicGroups(ids)`                                   | DescribeGroups (15); classic JoinGroup   |
+| `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+   |
 | `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors   |
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
 | `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults       |
@@ -50,6 +52,15 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
 | `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+    |
+| `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+      |
+| `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+    |
+| `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+        |
+| `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+     |
+
+`describeConsumerGroups` discovers each group coordinator and sends
+ConsumerGroupDescribe (key 69). Use it for KIP-848 `groupProtocol: 'consumer'`
+groups on Kafka 4.0+. `describeClassicGroups` is an alias for `describeGroups`
+(DescribeGroups, key 15) for classic JoinGroup/SyncGroup groups.
 
 `describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
 specific replica. It returns one entry per partition with `activeProducers`; producer IDs,
@@ -59,6 +70,11 @@ timestamps, and transaction start offsets use `bigint`, and
 `describeTopicPartitions` is name-based (optional `topicId` on input is accepted). It
 returns `{ topics, nextCursor }` for a single page; pass `nextCursor` to continue.
 Each topic includes `topicId` as a 16-byte `Buffer`. Produce and Fetch still use names.
+
+`describeMetadataQuorum()` sends DescribeQuorum (key 55) for the
+`__cluster_metadata` partition to the active controller and returns metadata quorum
+partition state. `highWatermark` and `logEndOffset` values are `bigint`. `voterDirectoryId` for raft voter APIs is a
+16-byte `Buffer`.
 
 ## Transactions
 
@@ -89,6 +105,16 @@ sending them. ListTransactions requires Kafka 3.0 or newer.
 coordinator. Returns `{ results }` with per-ID `errorCode`, and on success
 `producerId` / `producerEpoch` as `bigint` / `number`. Requires Kafka 2.5+
 (InitProducerId v3+). Default `transactionTimeout` is 60_000 ms.
+
+`abortTransaction({ topic, partition, producerId, producerEpoch, coordinatorEpoch?, transactionVersion? })`
+sends WriteTxnMarkers (key 27) with `transactionResult: false` to the partition
+leader. Omit `coordinatorEpoch` to resolve it from `describeProducers` on that
+partition. Requires Kafka 3.0+ (WriteTxnMarkers v1+; v0 removed in 4.0). v2
+adds optional `transactionVersion` when the broker negotiates WriteTxnMarkers v2.
+
+`forceTerminateTransaction({ transactionalId, transactionTimeout? })` fences a
+single transactional producer via InitProducerId, matching Java's convenience
+wrapper around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 
 ## ACLs, SCRAM, quotas, log dirs
 

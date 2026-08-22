@@ -53,8 +53,10 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.OffsetDelete)).toBe(1);
     expect(firstFlexibleVersion(API_KEYS.DescribeUserScramCredentials)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.AlterUserScramCredentials)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.DescribeQuorum)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.UpdateFeatures)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeCluster)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.UnregisterBroker)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeProducers)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeTransactions)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ListTransactions)).toBe(0);
@@ -62,6 +64,8 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.ConsumerGroupDescribe)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.ListConfigResources)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.DescribeTopicPartitions)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.AddRaftVoter)).toBe(0);
+    expect(firstFlexibleVersion(API_KEYS.RemoveRaftVoter)).toBe(0);
     expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
     expect(firstFlexibleVersion(999)).toBeUndefined();
   });
@@ -78,8 +82,12 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.DescribeQuorum, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.UnregisterBroker, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.AddRaftVoter, 1)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.RemoveRaftVoter, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.ListTransactions, 0)).toBe(true);
@@ -102,8 +110,12 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.DescribeQuorum, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.UnregisterBroker, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.AddRaftVoter, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.RemoveRaftVoter, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeProducers, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeTransactions, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.ListTransactions, 0)).toBe(true);

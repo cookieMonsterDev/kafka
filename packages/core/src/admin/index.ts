@@ -7,15 +7,18 @@ import { createConfigsApi } from './configs';
 import { createDelegationTokensApi } from './delegation-tokens';
 import { createFeaturesApi } from './features';
 import { createGroupsApi } from './groups';
+import { createMetadataQuorumApi } from './metadata-quorum';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type AdminEventName } from './instrumentation-events';
 import { createLogDirsApi } from './log-dirs';
 import { createOffsetsApi } from './offsets';
 import { createProducersApi } from './producers';
 import { createQuotasApi } from './quotas';
+import { createRaftVotersApi } from './raft-voters';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createTopicsApi } from './topics';
 import { createTransactionsApi } from './transactions';
+import { createUnregisterBrokerApi } from './unregister-broker';
 import type { Admin, AdminOptions } from './types';
 
 export type {
@@ -24,11 +27,14 @@ export type {
   AdminOptions,
   AclEntry,
   AclFilter,
+  ConsumerGroupDescription,
+  ConsumerGroupMemberDescription,
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
   DelegationToken,
   DescribeDelegationTokenOptions,
   DescribeFeaturesResult,
+  DescribeMetadataQuorumResult,
   DescribeProducersOptions,
   DescribeReplicaLogDirsReplica,
   DescribeReplicaLogDirsResult,
@@ -41,6 +47,9 @@ export type {
   ExpireDelegationTokenOptions,
   FenceProducerResult,
   FenceProducersOptions,
+  AbortTransactionOptions,
+  ForceTerminateTransactionOptions,
+  ForceTerminateTransactionResult,
   KafkaPrincipal,
   ListTransactionsOptions,
   PartitionProducerState,
@@ -48,6 +57,9 @@ export type {
   RemoveMembersFromConsumerGroupMember,
   RemoveMembersFromConsumerGroupOptions,
   RemoveMembersFromConsumerGroupResult,
+  AddRaftVoterOptions,
+  RemoveRaftVoterOptions,
+  UnregisterBrokerOptions,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
@@ -87,8 +99,11 @@ export function createAdmin({
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
   const features = createFeaturesApi(context);
+  const metadataQuorum = createMetadataQuorumApi(context);
+  const raftVoters = createRaftVotersApi(context);
   const transactions = createTransactionsApi(context);
   const delegationTokens = createDelegationTokensApi(context);
+  const unregisterBrokerApi = createUnregisterBrokerApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -133,6 +148,9 @@ export function createAdmin({
     ...quotas,
     ...logDirs,
     ...features,
+    ...metadataQuorum,
+    ...raftVoters,
+    ...unregisterBrokerApi,
     ...transactions,
     ...delegationTokens,
     on,

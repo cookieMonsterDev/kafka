@@ -6,7 +6,7 @@ order: 6
 section: reference
 ---
 
-Guide: [Errors](../guides/errors/). Source:
+Guide: [Errors](../../guides/errors/). Source:
 [`errors.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/errors.ts).
 Broker codes:
 [`protocol/error-codes.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/protocol/error-codes.ts)

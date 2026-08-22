@@ -17,7 +17,7 @@ await admin.createTopics({
 await admin.disconnect();
 ```
 
-Full method list: [`Admin`](../reference/admin/). Source:
+Full method list: [`Admin`](../../reference/admin/). Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Cluster operations:
 [Basic Kafka operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
@@ -142,4 +142,4 @@ UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
 downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
 
 Remaining transaction administration APIs are listed under
-[Compatibility](../reference/compatibility/).
+[Compatibility](../../reference/compatibility/).

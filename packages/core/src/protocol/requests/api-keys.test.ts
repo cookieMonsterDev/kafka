@@ -22,6 +22,13 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.ListTransactions).toBe(66);
     expect(API_KEYS.ConsumerGroupHeartbeat).toBe(68);
     expect(API_KEYS.ConsumerGroupDescribe).toBe(69);
+    expect(API_KEYS.ShareGroupHeartbeat).toBe(76);
+    expect(API_KEYS.ShareGroupDescribe).toBe(77);
+    expect(API_KEYS.ShareFetch).toBe(78);
+    expect(API_KEYS.ShareAcknowledge).toBe(79);
+    expect(API_KEYS.DescribeShareGroupOffsets).toBe(90);
+    expect(API_KEYS.AlterShareGroupOffsets).toBe(91);
+    expect(API_KEYS.DeleteShareGroupOffsets).toBe(92);
     expect(API_KEYS.ListConfigResources).toBe(74);
     expect(API_KEYS.DescribeTopicPartitions).toBe(75);
     expect(API_KEYS.AddRaftVoter).toBe(80);

@@ -203,6 +203,27 @@ import type { ExpireDelegationTokenResponseV1Body } from '../protocol/requests/e
 import { DescribeDelegationToken } from '../protocol/requests/describe-delegation-token/index';
 import type { DescribeDelegationTokenOptions } from '../protocol/requests/describe-delegation-token/index';
 import type { DescribeDelegationTokenResponseV3Body } from '../protocol/requests/describe-delegation-token/v3/response';
+import { ShareGroupHeartbeat } from '../protocol/requests/share-group-heartbeat/index';
+import type { ShareGroupHeartbeatOptions } from '../protocol/requests/share-group-heartbeat/index';
+import type { ShareGroupHeartbeatResponseV1Body } from '../protocol/requests/share-group-heartbeat/v1/response';
+import { ShareGroupDescribe } from '../protocol/requests/share-group-describe/index';
+import type { ShareGroupDescribeOptions } from '../protocol/requests/share-group-describe/index';
+import type { ShareGroupDescribeResponseV1Body } from '../protocol/requests/share-group-describe/v1/response';
+import { ShareFetch } from '../protocol/requests/share-fetch/index';
+import type { ShareFetchOptions } from '../protocol/requests/share-fetch/index';
+import type { ShareFetchResponseV1Body } from '../protocol/requests/share-fetch/v1/response';
+import { ShareAcknowledge } from '../protocol/requests/share-acknowledge/index';
+import type { ShareAcknowledgeOptions } from '../protocol/requests/share-acknowledge/index';
+import type { ShareAcknowledgeResponseV1Body } from '../protocol/requests/share-acknowledge/v1/response';
+import { DescribeShareGroupOffsets } from '../protocol/requests/describe-share-group-offsets/index';
+import type { DescribeShareGroupOffsetsOptions } from '../protocol/requests/describe-share-group-offsets/index';
+import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/requests/describe-share-group-offsets/v1/response';
+import { AlterShareGroupOffsets } from '../protocol/requests/alter-share-group-offsets/index';
+import type { AlterShareGroupOffsetsOptions } from '../protocol/requests/alter-share-group-offsets/index';
+import type { AlterShareGroupOffsetsResponseV0Body } from '../protocol/requests/alter-share-group-offsets/v0/response';
+import { DeleteShareGroupOffsets } from '../protocol/requests/delete-share-group-offsets/index';
+import type { DeleteShareGroupOffsetsOptions } from '../protocol/requests/delete-share-group-offsets/index';
+import type { DeleteShareGroupOffsetsResponseV0Body } from '../protocol/requests/delete-share-group-offsets/v0/response';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -747,6 +768,60 @@ export class Broker {
       ConsumerGroupDescribe,
     );
     return this.#send(consumerGroupDescribe(options));
+  }
+
+  async shareGroupHeartbeat(options: ShareGroupHeartbeatOptions): Promise<ShareGroupHeartbeatResponseV1Body> {
+    const shareGroupHeartbeat = this.lookupRequest<ShareGroupHeartbeatOptions>(
+      API_KEYS.ShareGroupHeartbeat,
+      ShareGroupHeartbeat,
+    );
+    return this.#send(shareGroupHeartbeat(options));
+  }
+
+  async shareGroupDescribe(options: ShareGroupDescribeOptions): Promise<ShareGroupDescribeResponseV1Body> {
+    const shareGroupDescribe = this.lookupRequest<ShareGroupDescribeOptions>(
+      API_KEYS.ShareGroupDescribe,
+      ShareGroupDescribe,
+    );
+    return this.#send(shareGroupDescribe(options));
+  }
+
+  async shareFetch(options: ShareFetchOptions): Promise<ShareFetchResponseV1Body> {
+    const shareFetch = this.lookupRequest<ShareFetchOptions>(API_KEYS.ShareFetch, ShareFetch);
+    return this.#send(shareFetch(options));
+  }
+
+  async shareAcknowledge(options: ShareAcknowledgeOptions): Promise<ShareAcknowledgeResponseV1Body> {
+    const shareAcknowledge = this.lookupRequest<ShareAcknowledgeOptions>(API_KEYS.ShareAcknowledge, ShareAcknowledge);
+    return this.#send(shareAcknowledge(options));
+  }
+
+  async describeShareGroupOffsets(
+    options: DescribeShareGroupOffsetsOptions,
+  ): Promise<DescribeShareGroupOffsetsResponseV1Body> {
+    const describeShareGroupOffsets = this.lookupRequest<DescribeShareGroupOffsetsOptions>(
+      API_KEYS.DescribeShareGroupOffsets,
+      DescribeShareGroupOffsets,
+    );
+    return this.#send(describeShareGroupOffsets(options));
+  }
+
+  async alterShareGroupOffsets(options: AlterShareGroupOffsetsOptions): Promise<AlterShareGroupOffsetsResponseV0Body> {
+    const alterShareGroupOffsets = this.lookupRequest<AlterShareGroupOffsetsOptions>(
+      API_KEYS.AlterShareGroupOffsets,
+      AlterShareGroupOffsets,
+    );
+    return this.#send(alterShareGroupOffsets(options));
+  }
+
+  async deleteShareGroupOffsets(
+    options: DeleteShareGroupOffsetsOptions,
+  ): Promise<DeleteShareGroupOffsetsResponseV0Body> {
+    const deleteShareGroupOffsets = this.lookupRequest<DeleteShareGroupOffsetsOptions>(
+      API_KEYS.DeleteShareGroupOffsets,
+      DeleteShareGroupOffsets,
+    );
+    return this.#send(deleteShareGroupOffsets(options));
   }
 
   async describeTopicPartitions(

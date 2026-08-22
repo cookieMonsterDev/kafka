@@ -191,6 +191,45 @@ export interface RemoveMembersFromConsumerGroupResult {
   errorCode: number;
 }
 
+export type ShareGroupDescription =
+  import('../protocol/requests/share-group-describe/v1/response').ShareGroupDescribeGroupV1;
+
+export interface ListShareGroupOffsetsTopicInput {
+  topicName: string;
+  partitions?: number[];
+}
+
+export interface ListShareGroupOffsetsGroupInput {
+  groupId: string;
+  topics?: ListShareGroupOffsetsTopicInput[] | null;
+}
+
+export interface ListShareGroupOffsetsOptions {
+  groups: ListShareGroupOffsetsGroupInput[];
+}
+
+export type DescribeShareGroupOffsetsOptions = ListShareGroupOffsetsOptions;
+
+export interface AlterShareGroupOffsetsPartitionInput {
+  partitionIndex: number;
+  startOffset: bigint;
+}
+
+export interface AlterShareGroupOffsetsTopicInput {
+  topicName: string;
+  partitions: AlterShareGroupOffsetsPartitionInput[];
+}
+
+export interface AlterShareGroupOffsetsOptions {
+  groupId: string;
+  topics: AlterShareGroupOffsetsTopicInput[];
+}
+
+export interface DeleteShareGroupOffsetsOptions {
+  groupId: string;
+  topics: string[];
+}
+
 export interface DescribeReplicaLogDirsReplica {
   topic: string;
   partition: number;
@@ -520,6 +559,23 @@ export interface Admin {
   removeMembersFromConsumerGroup: (
     options: RemoveMembersFromConsumerGroupOptions,
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
+  describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescription[] }>;
+  listShareGroupOffsets: (
+    options: ListShareGroupOffsetsOptions,
+  ) => Promise<{
+    groups: import('../protocol/requests/describe-share-group-offsets/v1/response').DescribeShareGroupOffsetsGroupV1[];
+  }>;
+  alterShareGroupOffsets: (
+    options: AlterShareGroupOffsetsOptions,
+  ) => Promise<{
+    responses: import('../protocol/requests/alter-share-group-offsets/v0/response').AlterShareGroupOffsetsTopicResult[];
+  }>;
+  deleteShareGroupOffsets: (
+    options: DeleteShareGroupOffsetsOptions,
+  ) => Promise<{
+    responses: import('../protocol/requests/delete-share-group-offsets/v0/response').DeleteShareGroupOffsetsTopicResult[];
+  }>;
+  deleteShareGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
   describeAcls: (options: AclFilter) => Promise<{ resources: DescribeAclsResponseV1Body['resources'] }>;
   deleteAcls: (options: {

@@ -282,6 +282,25 @@ export interface ConsumerConfig {
 export type GroupProtocol = 'classic' | 'consumer';
 
 /**
+ * Options for {@link Kafka.shareConsumer} (KIP-932 share groups, Kafka 4.0+).
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ */
+export interface ShareConsumerConfig {
+  groupId: string;
+  heartbeatInterval?: number;
+  maxWaitTimeInMs?: number;
+  minBytes?: number;
+  maxBytes?: number;
+  maxRecords?: number;
+  batchSize?: number;
+  rackId?: string;
+  retry?: ConsumerRetryOptions;
+  metadataMaxAge?: number;
+  allowAutoTopicCreation?: boolean;
+  maxInFlightRequests?: number;
+}
+
+/**
  * Options for {@link Kafka.admin}.
  * @see https://kafka.apache.org/43/configuration/admin-configs/
  */
@@ -325,7 +344,6 @@ export type {
   ProducerRecord,
   RecordHeaders,
   RecordMetadata,
-  RetryOptions,
   SaslAuthenticationProvider,
   SocketFactory,
   TopicMessages,
@@ -334,3 +352,7 @@ export type {
   TopicPartitions,
   Transaction,
 };
+
+export type { RetryOptions } from '../retry/index';
+
+export type { ShareConsumer, ShareConsumerRunConfig, ShareConsumerSubscribeTopics } from '../share-consumer/index';

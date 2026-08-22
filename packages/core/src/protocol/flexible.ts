@@ -69,8 +69,15 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.ConsumerGroupDescribe]: 0,
   [API_KEYS.ListConfigResources]: 0,
   [API_KEYS.DescribeTopicPartitions]: 0,
+  [API_KEYS.ShareGroupHeartbeat]: 0,
+  [API_KEYS.ShareGroupDescribe]: 0,
+  [API_KEYS.ShareFetch]: 0,
+  [API_KEYS.ShareAcknowledge]: 0,
   [API_KEYS.AddRaftVoter]: 0,
   [API_KEYS.RemoveRaftVoter]: 0,
+  [API_KEYS.DescribeShareGroupOffsets]: 0,
+  [API_KEYS.AlterShareGroupOffsets]: 0,
+  [API_KEYS.DeleteShareGroupOffsets]: 0,
 });
 
 /**

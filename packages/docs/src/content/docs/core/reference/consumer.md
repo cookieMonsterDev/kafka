@@ -20,6 +20,8 @@ interface Consumer {
   commitOffsets(topicPartitions: readonly TopicPartitionOffsetAndMetadata[]): Promise<void>;
   describeGroup(): Promise<GroupDescription>;
   logger(): Logger;
+  on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
+  readonly events: Record<string, string>;
   [Symbol.asyncDispose](): Promise<void>;
 }
 ```

@@ -35,7 +35,8 @@ Error
 │   │   ├── KafkaOffsetOutOfRange
 │   │   ├── KafkaMemberIdRequired
 │   │   ├── KafkaCreateTopicError
-│   │   └── KafkaAlterPartitionReassignmentsError
+│   │   ├── KafkaAlterPartitionReassignmentsError
+│   │   └── KafkaUpdateFeaturesError
 │   ├── KafkaConnectionError → KafkaConnectionClosedError
 │   ├── KafkaRequestTimeoutError
 │   ├── KafkaMetadataNotLoaded → KafkaTopicMetadataNotLoaded
@@ -62,6 +63,7 @@ Every `KafkaError` has `name`, `retriable`, optional `helpUrl`, and `cause`.
 | `KafkaServerDoesNotSupportApiKey` | Broker `ApiVersions` has no overlap for a used API |
 | `KafkaNumberOfRetriesExceeded`    | Retrier exhausted (`retryCount`, `retryTime`)      |
 | `KafkaCreateTopicError`           | CreateTopics failed for that topic name            |
+| `KafkaUpdateFeaturesError`        | UpdateFeatures failed for that feature name        |
 | `KafkaNoBrokerAvailableError`     | Pool has no connected broker                       |
 
 ## Protocol codes (common)

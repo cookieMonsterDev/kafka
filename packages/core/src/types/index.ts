@@ -197,6 +197,14 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
+  /**
+   * Max bytes of linger-buffered records waiting to be sent. `send()` waits until
+   * a flush frees space, or rejects with `KafkaTimeout` after the send timeout.
+   * Unset or 0 means unlimited. Java `buffer.memory` is 32 MiB; this client's
+   * constructor stays unlimited unless set (see `throughputPreset()`).
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
+   */
+  bufferMemory?: number;
 }
 
 /**
@@ -361,6 +369,12 @@ export type {
 
 export type { RetryOptions } from '../retry/index';
 
-export type { ShareConsumer, ShareConsumerRunConfig, ShareConsumerSubscribeTopics } from '../share-consumer/index';
+export type {
+  EachShareBatchHandler,
+  EachShareBatchPayload,
+  ShareConsumer,
+  ShareConsumerRunConfig,
+  ShareConsumerSubscribeTopics,
+} from '../share-consumer/index';
 export type { ShareAcknowledgeType } from '../share-consumer/acknowledge-types';
 export type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';

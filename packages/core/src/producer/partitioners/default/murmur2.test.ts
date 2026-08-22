@@ -33,7 +33,8 @@ describe('producer/partitioners/default/murmur2', () => {
     expect(murmur2(0)).toBe(971027396);
   });
 
-  it('handles buffer input', () => {
-    expect(murmur2(Buffer.from('1'))).toBe(-1993445489);
+  it('hashes Buffer keys as raw bytes without String() conversion', () => {
+    const key = Buffer.from([0xff, 0x00, 0xfe]);
+    expect(murmur2(key)).not.toBe(murmur2(String(key)));
   });
 });

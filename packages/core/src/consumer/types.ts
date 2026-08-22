@@ -46,7 +46,10 @@ export type EachMessageHandler = (payload: EachMessagePayload) => Promise<void>;
 export interface ConsumerRunConfig {
   /** Commit offsets automatically after processing. */
   autoCommit?: boolean;
-  /** Commit at least this often, in milliseconds. */
+  /**
+   * Commit at least this often, in milliseconds. When both this and
+   * `autoCommitThreshold` are unset, commit after each processed batch.
+   */
   autoCommitInterval?: number | null;
   /** Commit after this many messages have been processed. */
   autoCommitThreshold?: number | null;
@@ -54,6 +57,10 @@ export interface ConsumerRunConfig {
   eachBatchAutoResolve?: boolean;
   /** How many partitions to process in parallel. */
   partitionsConsumedConcurrently?: number;
+  /** Max queued+in-flight batches prefetched per broker node. */
+  prefetchMaxBatches?: number;
+  /** Max queued+in-flight record bytes prefetched per broker node. */
+  prefetchMaxBytes?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
   signal?: AbortSignal;

@@ -90,33 +90,56 @@ async function encodePartition(
   }: { compression: CompressionType; transactionalId?: string | null; producerId?: bigint; producerEpoch?: number },
 ): Promise<{ partition: number; recordSet: Buffer }> {
   const dateNow = Date.now();
-  const messageTimestamps = messages
-    .map((m) => m.timestamp)
-    .filter((timestamp): timestamp is number => timestamp != null);
+  let firstTimestamp = dateNow;
+  let maxTimestamp = dateNow;
+  let seenTimestamp = false;
+  let estimatedBytes = 61;
 
-  const firstTimestamp = messageTimestamps.length === 0 ? dateNow : Math.min(...messageTimestamps);
-  const maxTimestamp = messageTimestamps.length === 0 ? dateNow : Math.max(...messageTimestamps);
+  for (const message of messages) {
+    const timestamp = message.timestamp;
+    if (timestamp != null) {
+      if (!seenTimestamp) {
+        firstTimestamp = timestamp;
+        maxTimestamp = timestamp;
+        seenTimestamp = true;
+      } else {
+        if (timestamp < firstTimestamp) firstTimestamp = timestamp;
+        if (timestamp > maxTimestamp) maxTimestamp = timestamp;
+      }
+    }
 
-  const records = messages.map((message, i) =>
-    encodeRecord({
-      offsetDelta: i,
-      timestampDelta: BigInt((message.timestamp ?? dateNow) - firstTimestamp),
-      key: message.key ?? null,
-      value: message.value ?? null,
-      headers: message.headers ?? {},
-    }),
-  );
+    estimatedBytes += 32;
+    if (message.key != null) estimatedBytes += Buffer.byteLength(message.key);
+    if (message.value != null) estimatedBytes += Buffer.byteLength(message.value);
+  }
 
   const recordBatch = await encodeRecordBatch({
     compression,
-    records,
     firstTimestamp,
     maxTimestamp,
     producerId,
     producerEpoch,
     firstSequence,
     transactional: transactionalId != null,
-    lastOffsetDelta: records.length - 1,
+    lastOffsetDelta: messages.length - 1,
+    recordCount: messages.length,
+    estimatedBytes,
+    writeRecords: (encoder) => {
+      let offsetDelta = 0;
+      for (const message of messages) {
+        encodeRecord(
+          {
+            offsetDelta,
+            timestampDelta: BigInt((message.timestamp ?? dateNow) - firstTimestamp),
+            key: message.key ?? null,
+            value: message.value ?? null,
+            headers: message.headers ?? {},
+          },
+          encoder,
+        );
+        offsetDelta += 1;
+      }
+    },
   });
 
   return { partition, recordSet: recordBatch.buffer };

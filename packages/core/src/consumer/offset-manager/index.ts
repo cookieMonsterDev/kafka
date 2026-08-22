@@ -187,6 +187,11 @@ export class OffsetManager {
   }
 
   async commitOffsetsIfNecessary(): Promise<void> {
+    if (this.autoCommitInterval == null && this.autoCommitThreshold == null) {
+      await this.commitOffsets();
+      return;
+    }
+
     const now = Date.now();
     const timeoutReached = this.autoCommitInterval != null && now >= this.lastCommit + this.autoCommitInterval;
     const thresholdReached =

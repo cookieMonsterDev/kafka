@@ -48,9 +48,18 @@ export interface EosManager {
   isInitialized: () => boolean;
   isTransactional: () => boolean;
   isInTransaction: () => boolean;
-  acquireBrokerLock: (broker: Broker) => Promise<void>;
-  releaseBrokerLock: (broker: Broker) => Promise<void>;
+  /**
+   * Serialize Produce for these topic-partitions so sequences stay monotonic.
+   * Distinct partitions may overlap; the same partition is exclusive (≤ 1 in-flight).
+   */
+  acquirePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
+  releasePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
   sendOffsets: (options: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => Promise<void>;
+}
+
+export interface EosManagerPartition {
+  topic: string;
+  partition: number;
 }
 
 export interface EosManagerOptions {
@@ -83,8 +92,19 @@ export function createEosManager({
   /** Idempotent production tracks the next sequence number to send, per topic-partition. */
   const producerSequence = new Map<string, Map<number, number>>();
 
-  /** Serializes requests per broker so sequence-number bookkeeping never races. */
-  const brokerMutexLocks = new Map<number, Lock>();
+  /**
+   * Serializes InitProducerId / epoch bump. Produce no longer takes a broker-wide
+   * mutex; overlapping RPCs to one broker are allowed when they do not share a partition.
+   */
+  const initProducerIdLock = new Lock({ timeout: 0xffff, description: 'InitProducerId' });
+
+  /**
+   * Per-partition Produce gate. Same-partition Produce is exclusive so sequences stay
+   * monotonic on mixed-partition RPCs. Distinct partitions on one broker may overlap.
+   * The broker's idempotent window is 5; we keep 1 in-flight per partition rather than
+   * pipelining the same partition without a single sender thread (OutOfOrderSequence).
+   */
+  const partitionGates = new Map<string, Lock>();
 
   /** Topic-partitions already known to be participating in the current transaction. */
   let transactionTopicPartitions = new Map<string, Set<number>>();
@@ -143,47 +163,52 @@ export function createEosManager({
   }
 
   async function initProducerId(): Promise<void> {
-    await retry(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadataIfNecessary();
+    await initProducerIdLock.acquire();
+    try {
+      await retry(async (bail, retryCount, retryTime) => {
+        try {
+          await cluster.refreshMetadataIfNecessary();
 
-        // If non-transactional, we can request the PID from any broker.
-        const broker = transactional ? await findTransactionCoordinator() : await cluster.findControllerBroker();
+          // If non-transactional, we can request the PID from any broker.
+          const broker = transactional ? await findTransactionCoordinator() : await cluster.findControllerBroker();
 
-        const result = await broker.initProducerId({
-          transactionalId: transactional ? transactionalId! : null,
-          transactionTimeout,
-          producerId: producerId === NO_PRODUCER_ID ? -1n : producerId,
-          producerEpoch: producerId === NO_PRODUCER_ID ? -1 : producerEpoch,
-        });
+          const result = await broker.initProducerId({
+            transactionalId: transactional ? transactionalId! : null,
+            transactionTimeout,
+            producerId: producerId === NO_PRODUCER_ID ? -1n : producerId,
+            producerEpoch: producerId === NO_PRODUCER_ID ? -1 : producerEpoch,
+          });
 
-        stateMachine.transitionTo(TRANSACTION_STATES.READY);
-        producerId = result.producerId;
-        producerEpoch = result.producerEpoch;
-        producerSequence.clear();
-        brokerMutexLocks.clear();
+          stateMachine.transitionTo(TRANSACTION_STATES.READY);
+          producerId = result.producerId;
+          producerEpoch = result.producerEpoch;
+          producerSequence.clear();
+          partitionGates.clear();
 
-        logger.debug('Initialized producer id & epoch', { producerId: producerId.toString(), producerEpoch });
-      } catch (e) {
-        const error = e as Error & { type?: string };
+          logger.debug('Initialized producer id & epoch', { producerId: producerId.toString(), producerEpoch });
+        } catch (e) {
+          const error = e as Error & { type?: string };
 
-        if (error.type && INIT_PRODUCER_RETRIABLE_PROTOCOL_ERRORS.has(error.type)) {
-          if (error.type === 'CONCURRENT_TRANSACTIONS') {
-            logger.debug('There is an ongoing transaction on this transactionId, retrying', {
-              error: error.message,
-              stack: error.stack,
-              transactionalId,
-              retryCount,
-              retryTime,
-            });
+          if (error.type && INIT_PRODUCER_RETRIABLE_PROTOCOL_ERRORS.has(error.type)) {
+            if (error.type === 'CONCURRENT_TRANSACTIONS') {
+              logger.debug('There is an ongoing transaction on this transactionId, retrying', {
+                error: error.message,
+                stack: error.stack,
+                transactionalId,
+                retryCount,
+                retryTime,
+              });
+            }
+
+            throw error;
           }
 
-          throw error;
+          bail(error);
         }
-
-        bail(error);
-      }
-    });
+      });
+    } finally {
+      await initProducerIdLock.release();
+    }
   }
 
   function getSequence(topic: string, partition: number): number {
@@ -287,22 +312,67 @@ export function createEosManager({
     await endTransaction(false, TRANSACTION_STATES.ABORTING);
   }
 
-  async function acquireBrokerLock(broker: Broker): Promise<void> {
-    if (!isInitialized()) return;
-
-    const nodeId = broker.nodeId!;
-    let lock = brokerMutexLocks.get(nodeId);
-    if (!lock) {
-      lock = new Lock({ timeout: 0xffff });
-      brokerMutexLocks.set(nodeId, lock);
-    }
-
-    await lock.acquire();
+  function partitionGateKey(topic: string, partition: number): string {
+    return `${topic}\0${partition}`;
   }
 
-  async function releaseBrokerLock(broker: Broker): Promise<void> {
+  function comparePartitions(a: EosManagerPartition, b: EosManagerPartition): number {
+    const byTopic = a.topic < b.topic ? -1 : a.topic > b.topic ? 1 : 0;
+    return byTopic !== 0 ? byTopic : a.partition - b.partition;
+  }
+
+  function uniqueSortedPartitions(partitions: readonly EosManagerPartition[]): EosManagerPartition[] {
+    const seen = new Set<string>();
+    const unique: EosManagerPartition[] = [];
+    for (const entry of partitions) {
+      const key = partitionGateKey(entry.topic, entry.partition);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(entry);
+    }
+    unique.sort(comparePartitions);
+    return unique;
+  }
+
+  function partitionLock(topic: string, partition: number): Lock {
+    const key = partitionGateKey(topic, partition);
+    let lock = partitionGates.get(key);
+    if (!lock) {
+      lock = new Lock({ timeout: 0xffff, description: `idempotent produce ${key}` });
+      partitionGates.set(key, lock);
+    }
+    return lock;
+  }
+
+  async function acquirePartitionGates(partitions: readonly EosManagerPartition[]): Promise<void> {
     if (!isInitialized()) return;
-    await brokerMutexLocks.get(broker.nodeId!)?.release();
+
+    const unique = uniqueSortedPartitions(partitions);
+    const acquired: EosManagerPartition[] = [];
+    try {
+      for (const entry of unique) {
+        await partitionLock(entry.topic, entry.partition).acquire();
+        acquired.push(entry);
+      }
+    } catch (error) {
+      for (let i = acquired.length - 1; i >= 0; i--) {
+        const entry = acquired[i];
+        if (!entry) continue;
+        await partitionLock(entry.topic, entry.partition).release();
+      }
+      throw error;
+    }
+  }
+
+  async function releasePartitionGates(partitions: readonly EosManagerPartition[]): Promise<void> {
+    if (!isInitialized()) return;
+
+    const unique = uniqueSortedPartitions(partitions);
+    for (let i = unique.length - 1; i >= 0; i--) {
+      const entry = unique[i];
+      if (!entry) continue;
+      await partitionLock(entry.topic, entry.partition).release();
+    }
   }
 
   async function sendOffsets({
@@ -391,8 +461,8 @@ export function createEosManager({
       isInitialized,
       isTransactional,
       isInTransaction,
-      acquireBrokerLock,
-      releaseBrokerLock,
+      acquirePartitionGates,
+      releasePartitionGates,
       sendOffsets,
     },
     {

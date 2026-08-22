@@ -242,9 +242,18 @@ export class Cluster {
   }
 
   async addMultipleTargetTopics(topics: readonly string[]): Promise<void> {
+    if (this.#hasLoadedTargetTopics(topics)) {
+      return;
+    }
+
     await this.mutatingTargetTopics.acquire();
 
     try {
+      // Recheck under the lock so a concurrent first-seen add cannot drop a topic.
+      if (this.#hasLoadedTargetTopics(topics)) {
+        return;
+      }
+
       const previousSize = this.targetTopics.size;
       const previousTopics = new Set(this.targetTopics);
       for (const topic of topics) {
@@ -276,6 +285,10 @@ export class Cluster {
     } finally {
       await this.mutatingTargetTopics.release();
     }
+  }
+
+  #hasLoadedTargetTopics(topics: readonly string[]): boolean {
+    return this.brokerPool.metadata != null && topics.every((topic) => this.targetTopics.has(topic));
   }
 
   getNodeIds(): string[] {

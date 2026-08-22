@@ -179,6 +179,71 @@ describe('cluster/Cluster', () => {
       expect(refreshSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('returns without locking when every topic is already targeted and metadata is loaded', async () => {
+      const cluster = createCluster();
+      cluster.brokerPool.metadata = fakeMetadata();
+      cluster.targetTopics = new Set(['topic-a', 'topic-b']);
+      const acquireSpy = vi.spyOn(cluster.mutatingTargetTopics, 'acquire');
+      const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      await cluster.addMultipleTargetTopics(['topic-a', 'topic-b']);
+
+      expect(acquireSpy).not.toHaveBeenCalled();
+      expect(refreshSpy).not.toHaveBeenCalled();
+      expect(cluster.targetTopics).toEqual(new Set(['topic-a', 'topic-b']));
+    });
+
+    it('locks when adding a topic that is not yet targeted', async () => {
+      const cluster = createCluster();
+      cluster.brokerPool.metadata = fakeMetadata();
+      const acquireSpy = vi.spyOn(cluster.mutatingTargetTopics, 'acquire');
+      vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      await cluster.addMultipleTargetTopics(['new-topic']);
+
+      expect(acquireSpy).toHaveBeenCalledOnce();
+      expect(cluster.targetTopics.has('new-topic')).toBe(true);
+    });
+
+    it('locks when topics are known but metadata has not been loaded', async () => {
+      const cluster = createCluster();
+      cluster.targetTopics = new Set(['topic-a']);
+      const acquireSpy = vi.spyOn(cluster.mutatingTargetTopics, 'acquire');
+      const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      await cluster.addMultipleTargetTopics(['topic-a']);
+
+      expect(acquireSpy).toHaveBeenCalledOnce();
+      expect(refreshSpy).toHaveBeenCalledOnce();
+    });
+
+    it('keeps a newly added topic when a concurrent add waits on the lock', async () => {
+      const cluster = createCluster();
+      let releaseRefresh!: () => void;
+      const refreshStarted = new Promise<void>((resolve) => {
+        vi.spyOn(cluster, 'refreshMetadata').mockImplementation(
+          () =>
+            new Promise<void>((release) => {
+              resolve();
+              releaseRefresh = () => {
+                cluster.brokerPool.metadata = fakeMetadata();
+                release();
+              };
+            }),
+        );
+      });
+      const acquireSpy = vi.spyOn(cluster.mutatingTargetTopics, 'acquire');
+
+      const first = cluster.addMultipleTargetTopics(['topic-a']);
+      await refreshStarted;
+      const second = cluster.addMultipleTargetTopics(['topic-a']);
+      releaseRefresh();
+      await Promise.all([first, second]);
+
+      expect(cluster.targetTopics).toEqual(new Set(['topic-a']));
+      expect(acquireSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('reverts the target topic set when the refresh fails with an unknown-topic error', async () => {
       const cluster = createCluster();
       vi.spyOn(cluster, 'refreshMetadata').mockRejectedValue(

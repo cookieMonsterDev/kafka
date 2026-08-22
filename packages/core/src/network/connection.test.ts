@@ -167,6 +167,18 @@ describe('network/Connection', () => {
     });
   });
 
+  describe('maxInFlightRequests', () => {
+    it('defaults to null so the request queue is unbounded', () => {
+      const connection = createConnection(0);
+      expect(connection.requestQueue.maxInFlightRequests).toBeNull();
+    });
+
+    it('passes a numeric cap through to the request queue', () => {
+      const connection = createConnection(0, { maxInFlightRequests: 5 });
+      expect(connection.requestQueue.maxInFlightRequests).toBe(5);
+    });
+  });
+
   describe('send', () => {
     it('writes a framed request and resolves with the parsed response', async () => {
       const { server, port } = await startFakeBroker((request, socket) => {
@@ -258,6 +270,69 @@ describe('network/Connection', () => {
 
       const result = await connection.send({ request: metadataRequest(), response });
       expect(result?.greeting).toHaveLength(5000);
+    });
+
+    it('reassembles a response delivered one byte at a time', async () => {
+      const greeting = 'hello-from-tiny-chunks';
+      const { server, port } = await startFakeBroker((request, socket) => {
+        const body = new Encoder().writeString(greeting);
+        const responseHeader = new Encoder().writeInt32(request.correlationId).writeEncoder(body);
+        const framed = new Encoder().writeInt32(responseHeader.size()).writeEncoder(responseHeader);
+        const full = framed.buffer;
+
+        let offset = 0;
+        const sendByte = (): void => {
+          if (offset >= full.length) return;
+          socket.write(full.subarray(offset, offset + 1));
+          offset += 1;
+          setImmediate(sendByte);
+        };
+        sendByte();
+      });
+      servers.push(server);
+
+      const connection = createConnection(port);
+      await connection.connect();
+
+      const response = {
+        decode: async (rawData: Buffer) => ({ greeting: new Decoder(rawData).readString() }),
+        parse: async (data: { greeting: string | null }) => data,
+      };
+
+      await expect(connection.send({ request: metadataRequest(), response })).resolves.toEqual({ greeting });
+    });
+
+    it('reassembles a large response from many small TCP chunks', async () => {
+      const payload = Buffer.alloc(64_000, 0x7a);
+      const { server, port } = await startFakeBroker((request, socket) => {
+        const body = new Encoder().writeBytes(payload);
+        const responseHeader = new Encoder().writeInt32(request.correlationId).writeEncoder(body);
+        const framed = new Encoder().writeInt32(responseHeader.size()).writeEncoder(responseHeader);
+        const full = framed.buffer;
+
+        let offset = 0;
+        const sendChunk = (): void => {
+          if (offset >= full.length) return;
+          const end = Math.min(offset + 32, full.length);
+          socket.write(full.subarray(offset, end));
+          offset = end;
+          setImmediate(sendChunk);
+        };
+        sendChunk();
+      });
+      servers.push(server);
+
+      const connection = createConnection(port, { requestTimeout: 5_000 });
+      await connection.connect();
+
+      const response = {
+        decode: async (rawData: Buffer) => ({ bytes: new Decoder(rawData).readBytes() }),
+        parse: async (data: { bytes: Buffer | null }) => data,
+      };
+
+      const result = await connection.send({ request: metadataRequest(), response });
+      expect(result?.bytes).toHaveLength(64_000);
+      expect(result?.bytes?.equals(payload)).toBe(true);
     });
 
     it('rejects in-flight requests when the broker closes the connection', async () => {

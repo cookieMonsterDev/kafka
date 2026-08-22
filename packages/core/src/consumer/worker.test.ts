@@ -89,6 +89,7 @@ describe('consumer/worker-queue', () => {
     const workers = seq(3, (workerId) => createWorker({ handler, workerId }));
     const workerQueue = createWorkerQueue({ workers });
     await workerQueue.push(...batches);
+    await workerQueue.idle();
     expect(handler).toHaveBeenCalledTimes(100);
   });
 
@@ -99,7 +100,10 @@ describe('consumer/worker-queue', () => {
     });
     const workers = seq(3, (workerId) => createWorker({ handler, workerId }));
     const workerQueue = createWorkerQueue({ workers });
-    await expect(workerQueue.push(...batches)).rejects.toThrow('test');
+    const failed = workerQueue.failed();
+    await workerQueue.push(...batches).catch(() => undefined);
+    await workerQueue.idle();
+    await expect(failed).rejects.toThrow('test');
     expect(handler).toHaveBeenCalledTimes(100);
   });
 

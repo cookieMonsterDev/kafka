@@ -1,5 +1,10 @@
 // CRC32-C (Castagnoli) — the polynomial RecordBatch v2 uses for its batch checksum, also used by
 // iSCSI. Based on https://github.com/ashi009/node-fast-crc32c/blob/master/impls/js_crc32c.js
+//
+// Prefer Node/OpenSSL CRC32C when the platform exposes it (`crypto.hash('crc32c', …)`). Some
+// OpenSSL builds omit the digest; the JS table is the always-correct fallback.
+
+import crypto from 'node:crypto';
 
 // prettier-ignore
 const CRC_C_TABLE = new Int32Array([
@@ -37,11 +42,49 @@ const CRC_C_TABLE = new Int32Array([
   0x79b737ba, 0x8bdcb4b9, 0x988c474d, 0x6ae7c44e, 0xbe2da0a5, 0x4c4623a6, 0x5f16d052, 0xad7d5351,
 ]);
 
-export function crc32c(buffer: Buffer): number {
+/** ITU-T V.42 / Castagnoli check value for the ASCII string "123456789". */
+const CRC32C_CHECK_INPUT = Buffer.from('123456789');
+const CRC32C_CHECK_VALUE = 0xe3069283;
+
+export function crc32cJs(buffer: Buffer): number {
   let crc = 0 ^ -1;
   for (let i = 0; i < buffer.length; i++) {
     const byte = buffer[i] as number;
     crc = (CRC_C_TABLE[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8);
   }
   return (crc ^ -1) >>> 0;
+}
+
+function resolveNativeCrc32c(): ((buffer: Buffer) => number) | undefined {
+  try {
+    if (typeof crypto.hash !== 'function') {
+      return undefined;
+    }
+
+    const digest = crypto.hash('crc32c', CRC32C_CHECK_INPUT, 'buffer');
+    if (digest.length !== 4) {
+      return undefined;
+    }
+
+    if (digest.readUInt32BE(0) === CRC32C_CHECK_VALUE) {
+      return (buffer: Buffer) => crypto.hash('crc32c', buffer, 'buffer').readUInt32BE(0);
+    }
+
+    if (digest.readUInt32LE(0) === CRC32C_CHECK_VALUE) {
+      return (buffer: Buffer) => crypto.hash('crc32c', buffer, 'buffer').readUInt32LE(0);
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const nativeCrc32c = resolveNativeCrc32c();
+
+/** True when RecordBatch checksums use Node/OpenSSL CRC32C instead of the JS table. */
+export const usesNativeCrc32c = nativeCrc32c !== undefined;
+
+export function crc32c(buffer: Buffer): number {
+  return nativeCrc32c !== undefined ? nativeCrc32c(buffer) : crc32cJs(buffer);
 }

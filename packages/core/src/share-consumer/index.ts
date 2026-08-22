@@ -1,19 +1,24 @@
 import type { Cluster } from '../cluster/index';
+import type { ConsumerRetryOptions, EachMessageHandler } from '../consumer/types';
 import { KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
-import type { ConsumerRetryOptions, EachMessageHandler } from '../consumer/types';
 import { SHARE_ACQUIRE_MODE, type ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import { RETRY_DEFAULTS } from '../retry/defaults';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { ShareGroup } from './share-group';
-import { ShareRunner } from './share-runner';
+import { ShareRunner, type EachShareBatchHandler } from './share-runner';
 
 export interface ShareConsumerSubscribeTopics {
   topics: readonly string[];
 }
 
 export interface ShareConsumerRunConfig {
-  eachMessage: EachMessageHandler;
+  eachMessage?: EachMessageHandler | null;
+  eachBatch?: EachShareBatchHandler | null;
+  eachBatchAutoAck?: boolean;
+  partitionsConsumedConcurrently?: number;
+  prefetchMaxBatches?: number;
+  prefetchMaxBytes?: number;
 }
 
 export interface ShareConsumerOptions {
@@ -77,14 +82,28 @@ export function createShareConsumer({
     shareGroup.subscribe(topics);
   }
 
-  async function run({ eachMessage }: ShareConsumerRunConfig): Promise<void> {
+  async function run({
+    eachMessage = null,
+    eachBatch = null,
+    eachBatchAutoAck = true,
+    partitionsConsumedConcurrently = 1,
+    prefetchMaxBatches,
+    prefetchMaxBytes,
+  }: ShareConsumerRunConfig = {}): Promise<void> {
     if (shareGroup.topicsSubscribed.length === 0) {
       throw new KafkaNonRetriableError('Share consumer must subscribe before run()');
     }
 
+    if (!eachMessage && !eachBatch) {
+      throw new KafkaNonRetriableError('Share consumer run() requires eachMessage or eachBatch');
+    }
+
     runner = new ShareRunner({
+      logger: rootLogger,
       shareGroup,
       eachMessage,
+      eachBatch,
+      eachBatchAutoAck,
       heartbeatInterval,
       maxWaitTimeInMs,
       minBytes,
@@ -92,6 +111,9 @@ export function createShareConsumer({
       maxRecords,
       batchSize,
       shareAcquireMode,
+      concurrency: partitionsConsumedConcurrently,
+      prefetchMaxBatches,
+      prefetchMaxBytes,
       retry,
       onCrash: async (error) => {
         logger.error(`Share consumer crashed: ${error.message}`, { stack: error.stack });
@@ -119,5 +141,6 @@ export function createShareConsumer({
 
 export { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
 export { SHARE_ACQUIRE_MODE } from '../protocol/requests/share-fetch/index';
+export type { EachShareBatchHandler, EachShareBatchPayload } from './share-runner';
 export { ShareBatch } from './share-batch';
 export { ShareGroup } from './share-group';

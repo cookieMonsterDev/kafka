@@ -36,9 +36,13 @@ commit. Pass `autoOffsetReset: 'none'` to throw instead. See
 
 ## eachMessage vs eachBatch vs stream
 
-`run({ eachMessage })` is the usual path. `eachBatch` gives the whole fetch
-batch plus `resolveOffset` / `commitOffsetsIfNecessary`. `consumer.stream()` is
-an async iterator over batches; it cannot run alongside `run()`.
+`run({ eachMessage })` is the usual path. `eachBatch` plus
+`partitionsConsumedConcurrently` is the heavy-load consume API: you get the
+whole fetch batch plus `resolveOffset` / `commitOffsetsIfNecessary`, and can
+process partitions in parallel. The run default for concurrency remains `1`.
+Spread `throughputPreset().consumer` into `run()` to set concurrency to `4`.
+See [Throughput](./throughput/). `consumer.stream()` is an async iterator over
+batches; it cannot run alongside `run()`.
 
 ```ts
 for await (const batch of consumer.stream()) {

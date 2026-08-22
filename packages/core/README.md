@@ -102,6 +102,7 @@ From the repo root (after `pnpm install`):
 pnpm --filter @cookiemonsterdev/kafka-core dev        # vite build --watch
 pnpm --filter @cookiemonsterdev/kafka-core build      # JS + .d.ts into dist/
 pnpm --filter @cookiemonsterdev/kafka-core typecheck  # src + tests, tsc --noEmit
+pnpm --filter @cookiemonsterdev/kafka-core bench      # local microbenches (no Docker; not in pnpm test)
 pnpm --filter @cookiemonsterdev/kafka-core clean      # remove dist/
 ```
 
@@ -149,6 +150,14 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running after the suite. Mapping, feature gates, and CI matrix: [`test/assets/README.md`](test/assets/README.md).
+
+Local microbenches under `bench/` measure encode/decode/framing without Docker. They are **not** part of `pnpm test` and are not CI-gated on wall time:
+
+```sh
+pnpm --filter @cookiemonsterdev/kafka-core bench
+```
+
+Live produce/consume comparisons (`send()` linger 0 vs 5, `eachMessage` vs `eachBatch`) run only when `KAFKA_EXTERNAL=1` or `KAFKA_BROKERS=host:port` is set. Optional: `BENCH_FRAMING_1_BYTE=1` for a 4 MiB response in 1-byte TCP chunks.
 
 ## Contributing
 

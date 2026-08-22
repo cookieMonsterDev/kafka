@@ -1,7 +1,9 @@
+import { inspect } from 'node:util';
 import { compress as snappyCompress } from 'snappyjs';
 import { describe, expect, it } from 'vitest';
 import { KafkaNonRetriableError } from '../../errors';
 import { Encoder } from '../encoder';
+import { compressSnappySync } from './codec-worker';
 import { decompressSnappy, snappyCodec } from './snappy';
 
 const XERIAL_MAGIC = Buffer.from([0x82, 0x53, 0x4e, 0x41, 0x50, 0x50, 0x59, 0x00]);
@@ -55,5 +57,26 @@ describe('protocol/compression/snappy', () => {
   it('propagates snappy errors that are not a size-cap violation', async () => {
     await expect(decompressSnappy(Buffer.from('not snappy'))).rejects.toThrow();
     await expect(decompressSnappy(Buffer.from('not snappy'))).rejects.not.toBeInstanceOf(KafkaNonRetriableError);
+  });
+
+  it('does not resolve compress on the calling tick (off-thread or native async)', () => {
+    const encoder = new Encoder().writeBuffer(Buffer.alloc(8 * 1024, 'a'));
+    const pending = snappyCodec.compress(encoder);
+    expect(inspect(pending)).toContain('pending');
+    return pending;
+  });
+
+  it('round-trips concurrent compress/decompress without mixing payloads', async () => {
+    const payloads = ['alpha', 'bravo', 'charlie', 'delta'].map((value) => new Encoder().writeString(value));
+    const compressed = await Promise.all(payloads.map((encoder) => snappyCodec.compress(encoder)));
+    const decompressed = await Promise.all(compressed.map((buf) => snappyCodec.decompress(buf)));
+    expect(decompressed.map((buf) => buf.toString())).toEqual(payloads.map((encoder) => encoder.buffer.toString()));
+  });
+
+  it('JS helper writes the same xerial framing the codec consumes', async () => {
+    const raw = Buffer.from('sync helper');
+    const compressed = compressSnappySync(raw);
+    expect(compressed.subarray(0, 8)).toEqual(XERIAL_MAGIC);
+    expect(await decompressSnappy(compressed)).toEqual(raw);
   });
 });

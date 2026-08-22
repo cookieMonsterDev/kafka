@@ -225,11 +225,11 @@ describe('consumer/offset-manager', () => {
   });
 
   describe('commitOffsetsIfNecessary', () => {
-    it('does not commit offsets when interval and threshold are unset', async () => {
+    it('commits offsets when interval and threshold are unset', async () => {
       const offsetManager = createOffsetManager({ autoCommitInterval: null, autoCommitThreshold: null });
       const commitOffsets = vi.spyOn(offsetManager, 'commitOffsets');
       await offsetManager.commitOffsetsIfNecessary();
-      expect(commitOffsets).not.toHaveBeenCalled();
+      expect(commitOffsets).toHaveBeenCalledTimes(1);
     });
 
     it('commits the offsets whenever the interval is reached', async () => {

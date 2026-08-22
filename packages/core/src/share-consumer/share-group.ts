@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
+import type { TopicPartitions } from '../consumer/types';
 import { KafkaError, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { SHARE_GROUP_JOIN_EPOCH, SHARE_GROUP_LEAVE_EPOCH } from '../protocol/requests/share-group-heartbeat/index';
 import type { ShareGroupHeartbeatResponseV1Body } from '../protocol/requests/share-group-heartbeat/v1/response';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
-import type { TopicPartitions } from '../consumer/types';
 
 const JOIN_DEADLINE_MS = 30_000;
 
@@ -109,6 +109,12 @@ export class ShareGroup {
     await this.#heartbeat({ interval, force });
   }
 
+  heartbeatDue(interval: number): boolean {
+    if (!this.coordinator) return false;
+    const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
+    return Date.now() >= this.lastHeartbeatAt + heartbeatInterval;
+  }
+
   async #heartbeat({ interval = 0, force = false }: { interval?: number; force?: boolean }): Promise<void> {
     if (this.shuttingDown || !this.coordinator) return;
 
@@ -207,6 +213,10 @@ export class ShareGroup {
 
   assigned(): TopicPartitions[] {
     return this.assignment;
+  }
+
+  hasAssignment(topic: string, partition: number): boolean {
+    return this.assignment.some((entry) => entry.topic === topic && entry.partitions.includes(partition));
   }
 
   getNodeIds(): string[] {

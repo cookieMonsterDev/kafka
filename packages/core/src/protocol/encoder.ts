@@ -73,7 +73,7 @@ export class Encoder {
   #offset: number;
 
   constructor(initialSize = 511) {
-    this.#buf = Buffer.alloc(Encoder.nextPowerOfTwo(initialSize));
+    this.#buf = Buffer.allocUnsafe(Encoder.nextPowerOfTwo(initialSize));
     this.#offset = 0;
   }
 
@@ -87,7 +87,7 @@ export class Encoder {
   #ensureAvailable(length: number): void {
     if (this.#offset + length > this.#buf.length) {
       const newLength = Encoder.nextPowerOfTwo(this.#offset + length);
-      const newBuffer = Buffer.alloc(newLength);
+      const newBuffer = Buffer.allocUnsafe(newLength);
       this.#buf.copy(newBuffer, 0, 0, this.#offset);
       this.#buf = newBuffer;
     }
@@ -125,6 +125,12 @@ export class Encoder {
     return this;
   }
 
+  /** Overwrite a previously reserved int32 slot without moving the write cursor. */
+  writeInt32At(offset: number, value: number): this {
+    this.#buf.writeInt32BE(value, offset);
+    return this;
+  }
+
   writeUInt32(value: number): this {
     this.#ensureAvailable(INT32_SIZE);
     this.#buf.writeUInt32BE(value, this.#offset);
@@ -132,10 +138,16 @@ export class Encoder {
     return this;
   }
 
+  /** Overwrite a previously reserved uint32 slot without moving the write cursor. */
+  writeUInt32At(offset: number, value: number): this {
+    this.#buf.writeUInt32BE(value, offset);
+    return this;
+  }
+
   /** Accepts a `number` for convenience (e.g. `Date.now()` timestamps); offsets/ids pass `bigint`. */
   writeInt64(value: bigint | number): this {
     this.#ensureAvailable(INT64_SIZE);
-    this.#buf.writeBigInt64BE(BigInt(value), this.#offset);
+    this.#buf.writeBigInt64BE(typeof value === 'bigint' ? value : BigInt(value), this.#offset);
     this.#offset += INT64_SIZE;
     return this;
   }
@@ -338,27 +350,25 @@ export class Encoder {
   }
 
   writeUVarInt(value: number): this {
-    const byteArray: number[] = [];
+    this.#ensureAvailable(10);
     while ((value & UNSIGNED_INT32_MAX_NUMBER) !== 0) {
-      byteArray.push((value & OTHER_BITS) | MOST_SIGNIFICANT_BIT);
+      this.#buf[this.#offset++] = (value & OTHER_BITS) | MOST_SIGNIFICANT_BIT;
       value >>>= 7;
     }
-    byteArray.push(value & OTHER_BITS);
-    this.#writeBufferInternal(Buffer.from(byteArray));
+    this.#buf[this.#offset++] = value & OTHER_BITS;
     return this;
   }
 
   writeVarLong(value: bigint): this {
-    const byteArray: number[] = [];
+    this.#ensureAvailable(10);
     let longValue = encodeZigZag64(value);
 
     while ((longValue & UNSIGNED_INT64_MAX_NUMBER) !== 0n) {
-      byteArray.push(Number(BigInt.asIntN(32, (longValue & BigInt(OTHER_BITS)) | BigInt(MOST_SIGNIFICANT_BIT))));
+      this.#buf[this.#offset++] = Number(longValue & 0x7fn) | MOST_SIGNIFICANT_BIT;
       longValue >>= 7n;
     }
 
-    byteArray.push(Number(BigInt.asIntN(32, longValue)));
-    this.#writeBufferInternal(Buffer.from(byteArray));
+    this.#buf[this.#offset++] = Number(longValue);
     return this;
   }
 

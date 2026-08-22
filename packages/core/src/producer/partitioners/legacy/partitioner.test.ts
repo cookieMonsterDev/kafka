@@ -34,6 +34,26 @@ describe('producer/partitioners/legacy/partitioner', () => {
     expect(countForPartition0).toBe(countForPartition2);
   });
 
+  it('picks up newly available partitions after a metadata refresh', () => {
+    const partitioner = createPartitionerFactory(() => 0)();
+    const unavailable = [{ ...partitionMetadata[0]!, leader: -1 }, partitionMetadata[1]!, partitionMetadata[2]!];
+
+    for (let i = 0; i < 4; i++) {
+      const partition = partitioner({ topic, partitionMetadata: unavailable, message: { value: null } });
+      expect([0, 2]).toContain(partition);
+    }
+
+    const counts: Record<number, number> = {};
+    for (let i = 0; i < 30; i++) {
+      const partition = partitioner({ topic, partitionMetadata, message: { value: null } });
+      counts[partition] = (counts[partition] ?? 0) + 1;
+    }
+
+    expect(counts[0]).toBe(10);
+    expect(counts[1]).toBe(10);
+    expect(counts[2]).toBe(10);
+  });
+
   it('round-robins evenly across all partitions when all are available', () => {
     const partitioner = createPartitionerFactory(() => 0)();
     const counts: Record<number, number> = {};

@@ -319,6 +319,8 @@ export function createConsumer({
     autoCommitThreshold = null,
     eachBatchAutoResolve = true,
     partitionsConsumedConcurrently: concurrency = 1,
+    prefetchMaxBatches,
+    prefetchMaxBytes,
     eachBatch = null,
     eachMessage = null,
     signal,
@@ -372,6 +374,8 @@ export function createConsumer({
         eachMessage,
         onCrash,
         concurrency,
+        prefetchMaxBatches,
+        prefetchMaxBytes,
       });
 
       await runner.start();

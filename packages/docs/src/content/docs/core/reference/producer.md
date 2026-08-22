@@ -61,3 +61,7 @@ interface Transaction {
 ```
 
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.
+
+For load, spread `throughputPreset().producer` into `kafka.producer()` (`lingerMs: 5`,
+`batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner). See
+[Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).

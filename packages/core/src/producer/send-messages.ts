@@ -6,7 +6,7 @@ import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier } from '../retry/index';
 import { createTopicData } from './create-topic-data';
-import type { EosManager } from './eos-manager/index';
+import type { EosManager, EosManagerPartition } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
@@ -27,21 +27,46 @@ export interface SendMessagesRequest {
   topicMessages: readonly TopicMessages[];
 }
 
-interface TopicRequestMetadata {
-  partitionsPerLeader: Record<number, number[]>;
-  messagesPerPartition: Map<number, Message[]>;
-  topicId?: Buffer;
+function partitionKey(topic: string, partition: number): string {
+  return `${topic}\0${partition}`;
+}
+
+function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicData>): EosManagerPartition[] {
+  const partitions: EosManagerPartition[] = [];
+  for (const { topic, partitions: entries } of topicData) {
+    for (const entry of entries) {
+      partitions.push({ topic, partition: entry.partition });
+    }
+  }
+  return partitions;
 }
 
 export function createSendMessages({ logger, cluster, partitioner, eosManager, retrier }: SendMessagesOptions) {
   return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
-    async function createProducerRequests(
-      responsePerBroker: Map<Broker, RecordMetadata[] | null>,
-    ): Promise<Promise<void>[]> {
-      const topicMetadata = new Map<string, TopicRequestMetadata>();
+    const assignment = new Map<string, Map<number, Message[]>>();
+    const ackedPartitions = new Set<string>();
+    const metadataByPartition = new Map<string, RecordMetadata>();
 
-      await cluster.refreshMetadataIfNecessary();
+    function collectResponse(): RecordMetadata[] {
+      if (acks === 0) return [];
 
+      const result: RecordMetadata[] = [];
+      for (const { topic } of topicMessages) {
+        const messagesPerPartition = assignment.get(topic);
+        if (!messagesPerPartition) continue;
+        const partitionIds = [...messagesPerPartition.keys()].sort((a, b) => a - b);
+        for (const partition of partitionIds) {
+          const metadata = metadataByPartition.get(partitionKey(topic, partition));
+          if (metadata) result.push(metadata);
+        }
+      }
+      return result;
+    }
+
+    function assignMessages(): void {
+      if (assignment.size > 0) return;
+
+      const next = new Map<string, Map<number, Message[]>>();
       for (const { topic, messages } of topicMessages) {
         const partitionMetadata = cluster.findTopicPartitionMetadata(topic);
 
@@ -50,35 +75,60 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           throw new KafkaMetadataNotLoaded('Producing to topic without metadata');
         }
 
-        const messagesPerPartition = groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner });
-        const partitionsPerLeader = cluster.findLeaderForPartitions(topic, [...messagesPerPartition.keys()]);
-        const topicId = cluster.findTopicId(topic);
+        next.set(topic, groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner }));
+      }
 
-        topicMetadata.set(topic, { partitionsPerLeader, messagesPerPartition, topicId });
+      for (const [topic, messagesPerPartition] of next) {
+        assignment.set(topic, messagesPerPartition);
+      }
+    }
+
+    async function createProducerRequests(): Promise<Promise<void>[]> {
+      await cluster.refreshMetadataIfNecessary();
+      assignMessages();
+
+      const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
+
+      for (const { topic } of topicMessages) {
+        const messagesPerPartition = assignment.get(topic);
+        if (!messagesPerPartition) continue;
+
+        const pendingPartitions = new Map<number, Message[]>();
+        for (const [partition, messages] of messagesPerPartition) {
+          if (!ackedPartitions.has(partitionKey(topic, partition))) {
+            pendingPartitions.set(partition, messages);
+          }
+        }
+
+        if (pendingPartitions.size === 0) continue;
+
+        const partitionsPerLeader = cluster.findLeaderForPartitions(topic, [...pendingPartitions.keys()]);
+        const topicId = cluster.findTopicId(topic);
 
         for (const nodeId of Object.keys(partitionsPerLeader)) {
           const broker = await cluster.findBroker({ nodeId });
-          if (!responsePerBroker.has(broker)) {
-            responsePerBroker.set(broker, null);
-          }
+          const leaderPartitions = (broker.nodeId != null ? partitionsPerLeader[broker.nodeId] : undefined) ?? [];
+          const partitions = leaderPartitions.filter((partition) => pendingPartitions.has(partition));
+          if (partitions.length === 0) continue;
+
+          const current = topicDataByBroker.get(broker) ?? [];
+          current.push(
+            ...createTopicData([
+              {
+                topic,
+                topicId,
+                partitions,
+                messagesPerPartition: pendingPartitions,
+              },
+            ]),
+          );
+          topicDataByBroker.set(broker, current);
         }
       }
 
-      const brokersWithoutResponse = [...responsePerBroker.keys()].filter((broker) => !responsePerBroker.get(broker));
-
-      return brokersWithoutResponse.map(async (broker) => {
-        const topicDataForBroker = [...topicMetadata.entries()]
-          .filter(([, { partitionsPerLeader }]) => broker.nodeId != null && partitionsPerLeader[broker.nodeId])
-          .map(([topic, { partitionsPerLeader, messagesPerPartition, topicId }]) => ({
-            topic,
-            topicId,
-            partitions: (broker.nodeId != null ? partitionsPerLeader[broker.nodeId] : undefined) ?? [],
-            messagesPerPartition,
-          }));
-
-        const topicData = createTopicData(topicDataForBroker);
-
-        await eosManager.acquireBrokerLock(broker);
+      return [...topicDataByBroker.entries()].map(async ([broker, topicData]) => {
+        const topicPartitions = topicPartitionsFromTopicData(topicData);
+        await eosManager.acquirePartitionGates(topicPartitions);
         try {
           if (eosManager.isTransactional()) {
             await eosManager.addPartitionsToTransaction(topicData);
@@ -114,25 +164,33 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           const expectsResponse = acks !== 0;
           const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
 
-          responsePerBroker.set(broker, formattedResponse);
-        } catch (e) {
-          responsePerBroker.delete(broker);
-          throw e;
+          if (expectsResponse) {
+            for (const metadata of formattedResponse) {
+              const key = partitionKey(metadata.topicName, metadata.partition);
+              ackedPartitions.add(key);
+              metadataByPartition.set(key, metadata);
+            }
+          } else {
+            for (const { topic, partition } of topicPartitions) {
+              ackedPartitions.add(partitionKey(topic, partition));
+            }
+          }
         } finally {
-          await eosManager.releaseBrokerLock(broker);
+          await eosManager.releasePartitionGates(topicPartitions);
         }
       });
     }
 
     return retrier(async (bail, retryCount, retryTime) => {
-      const responsePerBroker = new Map<Broker, RecordMetadata[] | null>();
       const topics = topicMessages.map(({ topic }) => topic);
       await cluster.addMultipleTargetTopics(topics);
 
       try {
-        const requests = await createProducerRequests(responsePerBroker);
-        await Promise.all(requests);
-        return [...responsePerBroker.values()].flatMap((response) => response ?? []);
+        const requests = await createProducerRequests();
+        const results = await Promise.allSettled(requests);
+        const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (rejection) throw rejection.reason;
+        return collectResponse();
       } catch (e) {
         const error = e as Error & { name: string; host?: string; port?: number; retriable?: boolean; type?: string };
 
@@ -176,7 +234,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
         logger.error(`${error.message}`, { retryCount, retryTime });
         if (error.retriable) throw error;
         bail(error);
-        return [];
+        return collectResponse();
       }
     });
   };

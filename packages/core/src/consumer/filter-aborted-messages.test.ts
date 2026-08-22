@@ -40,6 +40,14 @@ describe('consumer/filter-aborted-messages', () => {
         abortedTransactions,
       }),
     ).toStrictEqual([expect.objectContaining({ key: Buffer.from([0, 0, 0, 0]) }), ...nontransactionalMessages]);
+
+    expect(
+      filterAbortedMessages({
+        messages: [...abortedMessages, ...nontransactionalMessages],
+        abortedTransactions,
+        excludeControlRecords: true,
+      }),
+    ).toStrictEqual(nontransactionalMessages);
   });
 
   it('filters out aborted messages with malformed keys', () => {
@@ -62,6 +70,7 @@ describe('consumer/filter-aborted-messages', () => {
       message(1n, { batchContext: { producerId: 1n, inTransaction: true } }),
     ];
     expect(filterAbortedMessages({ messages, abortedTransactions: [] })).toStrictEqual(messages);
+    expect(filterAbortedMessages({ messages, abortedTransactions: [] })).toBe(messages);
   });
 
   it('returns all nontransactional messages', () => {
@@ -70,11 +79,10 @@ describe('consumer/filter-aborted-messages', () => {
     );
   });
 
-  it('returns messages unchanged when abortedTransactions is omitted or empty', () => {
-    expect(filterAbortedMessages({ messages: abortedMessages })).toStrictEqual(abortedMessages);
-    expect(filterAbortedMessages({ messages: abortedMessages, abortedTransactions: null })).toStrictEqual(
-      abortedMessages,
-    );
+  it('returns the same array instance when abortedTransactions is omitted or empty', () => {
+    expect(filterAbortedMessages({ messages: abortedMessages })).toBe(abortedMessages);
+    expect(filterAbortedMessages({ messages: abortedMessages, abortedTransactions: null })).toBe(abortedMessages);
+    expect(filterAbortedMessages({ messages: abortedMessages, abortedTransactions: [] })).toBe(abortedMessages);
   });
 
   it('treats a four-null-byte string key as an abort marker', () => {

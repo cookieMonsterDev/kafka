@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Cluster, PartitionMetadata } from '../cluster/index';
+import { KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
@@ -49,8 +50,8 @@ function fakeEosManager() {
     updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-    acquireBrokerLock: vi.fn().mockResolvedValue(undefined),
-    releaseBrokerLock: vi.fn().mockResolvedValue(undefined),
+    acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
+    releasePartitionGates: vi.fn().mockResolvedValue(undefined),
   } as unknown as EosManager;
 }
 
@@ -211,5 +212,85 @@ describe('producer/messageProducer', () => {
     await producer.flush();
     await sendPromise;
     expect(broker.produce).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes independent acks groups in parallel', async () => {
+    vi.useFakeTimers();
+    const broker = fakeBroker(1);
+    let inFlight = 0;
+    let maxInFlight = 0;
+    broker.produce.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return fakeProduceResponse(topic, 0);
+    });
+    const producer = createTestProducer(broker, { lingerMs: 50 });
+
+    const first = producer.send({ topic, messages: [{ value: 'a' }], acks: 1 });
+    const second = producer.send({ topic, messages: [{ value: 'b' }], acks: -1 });
+    await vi.advanceTimersByTimeAsync(50);
+    await Promise.all([first, second]);
+
+    expect(broker.produce).toHaveBeenCalledTimes(2);
+    expect(maxInFlight).toBe(2);
+  });
+
+  it('rejects a linger send whose records exceed bufferMemory', async () => {
+    const broker = fakeBroker(1);
+    const producer = createTestProducer(broker, { lingerMs: 50, bufferMemory: 4 });
+
+    await expect(producer.send({ topic, messages: [{ value: 'abcde' }] })).rejects.toBeInstanceOf(
+      KafkaNonRetriableError,
+    );
+    expect(broker.produce).not.toHaveBeenCalled();
+  });
+
+  it('waits for in-flight produce to free bufferMemory before accepting more records', async () => {
+    vi.useFakeTimers();
+    const broker = fakeBroker(1);
+    let releaseProduce!: (value: unknown) => void;
+    broker.produce
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseProduce = resolve;
+          }),
+      )
+      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+    const producer = createTestProducer(broker, { lingerMs: 50, bufferMemory: 4 });
+
+    const first = producer.send({ topic, messages: [{ value: 'abcd' }] });
+    await Promise.resolve();
+    expect(broker.produce).not.toHaveBeenCalled();
+
+    const second = producer.send({ topic, messages: [{ value: 'x' }] });
+    await vi.waitFor(() => {
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+    });
+
+    releaseProduce(fakeProduceResponse(topic, 0));
+    await first;
+
+    await vi.advanceTimersByTimeAsync(50);
+    await second;
+    expect(broker.produce).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects when waiting for bufferMemory exceeds the send timeout', async () => {
+    vi.useFakeTimers();
+    const broker = fakeBroker(1);
+    broker.produce.mockImplementation(() => new Promise(() => {}));
+    const producer = createTestProducer(broker, { lingerMs: 10_000, bufferMemory: 4 });
+
+    void producer.send({ topic, messages: [{ value: 'abcd' }], timeout: 30_000 });
+    await Promise.resolve();
+
+    const second = producer.send({ topic, messages: [{ value: 'x' }], timeout: 50 });
+    // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+    const assertion = expect(second).rejects.toBeInstanceOf(KafkaTimeout);
+    await vi.advanceTimersByTimeAsync(50);
+    await assertion;
   });
 });

@@ -4,7 +4,7 @@ import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { MemberAssignment } from './assigner-protocol';
-import { ConsumerGroup } from './consumer-group';
+import { ConsumerGroup, nextAdaptiveMaxBytes } from './consumer-group';
 import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetManager } from './offset-manager/index';
 import type { Assigner } from './types';
@@ -321,5 +321,81 @@ describe('consumer/consumer-group', () => {
     expect(groupJoins).toHaveLength(2);
     expect(groupJoins[1]?.payload.memberAssignment).toEqual({ topic1: [0] });
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+  });
+
+  it('caches getActiveTopicPartitions until pause, resume, or assign', () => {
+    const consumerGroup = createGroup();
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+
+    const first = consumerGroup.getActiveTopicPartitions();
+    const second = consumerGroup.getActiveTopicPartitions();
+    expect(first).toBe(second);
+    expect([...(first.topic1 ?? [])]).toEqual([0, 1]);
+
+    consumerGroup.pause([{ topic: 'topic1', partitions: [1] }]);
+    const paused = consumerGroup.getActiveTopicPartitions();
+    expect(paused).not.toBe(first);
+    expect([...(paused.topic1 ?? [])]).toEqual([0]);
+
+    const pausedAgain = consumerGroup.getActiveTopicPartitions();
+    expect(pausedAgain).toBe(paused);
+
+    consumerGroup.resume([{ topic: 'topic1', partitions: [1] }]);
+    const resumed = consumerGroup.getActiveTopicPartitions();
+    expect(resumed).not.toBe(paused);
+    expect([...(resumed.topic1 ?? [])]).toEqual([0, 1]);
+  });
+
+  it('sleeps the short empty-node interval instead of maxWaitTime', async () => {
+    vi.useFakeTimers();
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1 }]),
+        findTopicId: vi.fn(() => undefined),
+      } as unknown as Cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 5_000,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+    });
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.pause([{ topic: 'topic1' }]);
+    consumerGroup.offsetManager = {
+      committedOffsets: () => ({ topic1: { 0: 0n } }),
+      nextOffset: () => 0n,
+      seek: vi.fn(async () => undefined),
+      resolveOffsets: vi.fn(async () => undefined),
+    } as unknown as OffsetManager;
+
+    const fetchPromise = consumerGroup.fetch('1');
+    try {
+      await vi.advanceTimersByTimeAsync(100);
+      await expect(fetchPromise).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('adapts fetch maxBytes from fill ratio', () => {
+    expect(nextAdaptiveMaxBytes({ current: 1000, used: 1000, min: 100, max: 10_000 })).toBe(1500);
+    expect(nextAdaptiveMaxBytes({ current: 1000, used: 200, min: 100, max: 10_000 })).toBe(500);
+    expect(nextAdaptiveMaxBytes({ current: 1000, used: 500, min: 100, max: 10_000 })).toBe(1000);
+    expect(nextAdaptiveMaxBytes({ current: 100, used: 0, min: 100, max: 10_000 })).toBe(100);
+    expect(nextAdaptiveMaxBytes({ current: 8000, used: 8000, min: 100, max: 9000 })).toBe(9000);
   });
 });

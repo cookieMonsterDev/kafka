@@ -46,6 +46,7 @@ is too old for a _used_ API throws `KafkaServerDoesNotSupportApiKey`.
 This is not Java-client 4.x parity. Integration tests cover 0.10, 0.11, 1.1,
 2.4, 3.6, 4.0, and 4.3. Kafka 4.0 brokers no longer run ZooKeeper.
 The client still encodes older Produce/Fetch versions when a 0.10–3.x broker
-advertises them. Defaults that differ from the Java client, and APIs that are
-not implemented yet, are listed under [Compatibility](../../reference/compatibility/).
+advertises them. Defaults that differ from the Java client, the implemented
+producer/consumer/admin surface, and APIs that are not implemented, are listed
+under [Compatibility](../../reference/compatibility/).
 How to run the integration matrix: [Testing](../../guides/testing/).

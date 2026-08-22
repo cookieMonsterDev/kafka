@@ -1,6 +1,6 @@
 ---
 title: Compatibility
-description: Broker versions, Java-client defaults, and APIs this client does not implement
+description: Broker versions, Java-client defaults, the implemented surface, and APIs this client does not implement
 order: 8
 section: reference
 ---
@@ -56,6 +56,7 @@ These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
 | `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
 | `max.in.flight`      | 5                                         | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                                                 |
 | Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                                                |
+| Partition assigner   | Range + CooperativeSticky                 | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                                               |
 | Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                                                  |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
@@ -112,7 +113,11 @@ This minor does **not** flip them.
 Use `throughputPreset()` until then. `flush()` remains. See
 [Breaking changes](../../migration/breaking-changes/).
 
-## Not yet at the Java 4.3 surface
+## Implemented surface
+
+Method lists: [Producer API](./producer/), [Consumer API](./consumer/),
+[Admin API](./admin/). The notes below are version floors and protocol keys,
+not a backlog.
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
@@ -190,9 +195,29 @@ SASL login with a delegation token is opt-in: set `sasl.mechanism` to
 [SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
 and the [security guide](../../guides/security/).
 
-**Out of scope.** No Kafka Streams or Kafka Connect packages. See
+## Not implemented
+
+These are not in `@cookiemonsterdev/kafka-core`. Broker-internal RPCs
+(controller replication, share-group state keys 83–87, and similar) are not
+client APIs and are omitted here.
+
+**Packages.** No Kafka Streams or Kafka Connect packages. See
 [Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and
 [Kafka Connect](https://kafka.apache.org/43/kafka-connect/overview/).
+
+**Streams groups (KIP-1071).** No StreamsGroupHeartbeat or StreamsGroupDescribe
+(keys 88–89). Admin has no `describeStreamsGroups`, `listStreamsGroupOffsets`,
+`alterStreamsGroupOffsets`, `deleteStreamsGroupOffsets`, or
+`deleteStreamsGroups`.
+
+**Client telemetry (KIP-714).** No GetTelemetrySubscriptions (71) or
+PushTelemetry (72). There is no `clientInstanceId()` or `metrics()`. Java's
+deprecated `listClientMetricsResources` is covered by
+`admin.listConfigResources` (v0 lists client-metrics names).
+
+**Consumer shape.** Membership is `run()` / `stream()`, not Java `poll()`.
+The `Consumer` interface has no `assign()`, `unsubscribe()`, `assignment()`,
+or `committed()`.
 
 Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
 [Breaking changes](../../migration/breaking-changes/).

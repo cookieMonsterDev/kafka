@@ -12,17 +12,18 @@ This package is the library in the [kafka](https://github.com/cookieMonsterDev/k
 
 ## Features
 
-| Area        | What you get                                                                    |
-| ----------- | ------------------------------------------------------------------------------- |
-| Producer    | `send` / `sendBatch`, headers, optional idempotence, transactions, linger/batch |
-| Consumer    | Groups with pause/resume/seek, `run()`, `stream()`, classic protocol            |
-| Assigners   | Range, round-robin (default), sticky, cooperative-sticky                        |
-| Admin       | Topics, configs, ACLs, offsets, groups, SCRAM, leader election                  |
-| Compression | GZIP, Snappy, LZ4, and ZSTD built in (overridable via `CompressionCodecs`)      |
-| Security    | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER / GSSAPI, AWS IAM helper              |
-| DX          | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`         |
+| Area         | What you get                                                                         |
+| ------------ | ------------------------------------------------------------------------------------ |
+| Producer     | `send` / `sendBatch`, headers, optional idempotence, transactions, linger/batch      |
+| Consumer     | Groups with pause/resume/seek, `run()`, `stream()`, classic protocol, opt-in KIP-848 |
+| Share groups | `shareConsumer()` (KIP-932) on Kafka 4.1+                                            |
+| Assigners    | Range, round-robin (default), sticky, cooperative-sticky                             |
+| Admin        | Topics, configs, ACLs, offsets, groups, share groups, SCRAM, transactions, KRaft     |
+| Compression  | GZIP, Snappy, LZ4, and ZSTD built in (overridable via `CompressionCodecs`)           |
+| Security     | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER / GSSAPI, AWS IAM helper                   |
+| DX           | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`              |
 
-Not in scope: Kafka Streams, Kafka Connect, Java-client 4.x parity. See [compatibility](../docs/src/content/docs/core/reference/compatibility.md).
+Not in scope: Kafka Streams, Kafka Connect, Java-client 4.x parity. Implemented vs missing APIs: [compatibility](../docs/src/content/docs/core/reference/compatibility.md).
 
 ## Usage
 
@@ -75,7 +76,7 @@ npm install kerberos
 
 See [Security](../docs/src/content/docs/core/guides/security.md). CI does not run a KDC.
 
-`await using` works because producer, consumer, and admin implement `Symbol.asyncDispose` (it calls `disconnect()`).
+`await using` works because producer, consumer, share consumer, and admin implement `Symbol.asyncDispose` (it calls `disconnect()`).
 
 To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartitioner`. The default is murmur2 (`Partitioners.DefaultPartitioner`), not the Java 4.x sticky partitioner.
 

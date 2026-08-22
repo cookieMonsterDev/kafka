@@ -149,5 +149,6 @@ Default integration compose files do not enable tokens. Pass the returned
 `tokenId` and `hmac` as `sasl.tokenId` / `sasl.tokenHmac` on a SCRAM client to
 authenticate with the token — see [Security](../../guides/security/).
 
-Also `connect`, `disconnect`, `logger()`, `Symbol.asyncDispose`. Missing
-methods: [Compatibility](./compatibility/).
+Also `connect`, `disconnect`, `logger()`, `on` / `events`, `Symbol.asyncDispose`.
+APIs this client does not implement are listed under
+[Compatibility](./compatibility/#not-implemented).

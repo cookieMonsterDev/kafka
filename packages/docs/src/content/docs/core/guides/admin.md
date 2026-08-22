@@ -142,5 +142,7 @@ Upgrade types are `UPGRADE`, `SAFE_DOWNGRADE`, and `UNSAFE_DOWNGRADE`.
 UpdateFeatures v0 supports upgrades and safe downgrades, but rejects unsafe
 downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
 
-Remaining transaction administration APIs are listed under
+Remaining transaction administration APIs (`fenceProducers`, `abortTransaction`,
+`forceTerminateTransaction`) and KRaft controller helpers (`describeMetadataQuorum`,
+`unregisterBroker`, `addRaftVoter`, `removeRaftVoter`) are listed under
 [Compatibility](../../reference/compatibility/).

@@ -94,6 +94,43 @@ describe('admin.transactions', () => {
     await transaction.abort().catch(() => undefined);
   });
 
+  testIfKafkaAtLeast_3_0('aborts an active transaction via WriteTxnMarkers on the partition leader', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    producer = createProducer({
+      cluster: createCluster(),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    await admin.connect();
+    await producer.connect();
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v' }] });
+
+    const { transactionStates } = await admin.describeTransactions([transactionalId]);
+    const state = transactionStates[0];
+    expect(state?.transactionState).toBe('Ongoing');
+    expect(state?.topics[0]?.topic).toBe(topicName);
+    expect(state?.topics[0]?.partitions).toContain(0);
+
+    await admin.abortTransaction({
+      topic: topicName,
+      partition: 0,
+      producerId: state!.producerId,
+      producerEpoch: state!.producerEpoch,
+    });
+
+    const producerStates = await admin.describeProducers({
+      topicPartitions: [{ topic: topicName, partitions: [0] }],
+    });
+    const partitionState = producerStates[0];
+    const activeProducer = partitionState?.activeProducers.find(({ producerId }) => producerId === state!.producerId);
+    expect(activeProducer?.currentTransactionStartOffset).toBeNull();
+
+    await transaction.abort().catch(() => undefined);
+  });
+
   testIfKafkaAtLeast_3_0('force-terminates an active transactional producer', async () => {
     admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
     producer = createProducer({

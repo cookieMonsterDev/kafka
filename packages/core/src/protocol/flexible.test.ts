@@ -31,6 +31,7 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.AddPartitionsToTxn)).toBe(3);
     expect(firstFlexibleVersion(API_KEYS.AddOffsetsToTxn)).toBe(3);
     expect(firstFlexibleVersion(API_KEYS.EndTxn)).toBe(3);
+    expect(firstFlexibleVersion(API_KEYS.WriteTxnMarkers)).toBe(1);
     expect(firstFlexibleVersion(API_KEYS.TxnOffsetCommit)).toBe(3);
     expect(firstFlexibleVersion(API_KEYS.DescribeAcls)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.CreateAcls)).toBe(2);
@@ -82,6 +83,8 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.WriteTxnMarkers, 1)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.WriteTxnMarkers, 2)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.DescribeQuorum, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
@@ -110,6 +113,8 @@ describe('protocol/flexible', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 6)).toBe(false);
     expect(usesFlexibleResponseHeader(API_KEYS.Metadata, 9)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.WriteTxnMarkers, 1)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.WriteTxnMarkers, 2)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.DescribeQuorum, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);

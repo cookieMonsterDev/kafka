@@ -33,6 +33,7 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.AddPartitionsToTxn]: 3,
   [API_KEYS.AddOffsetsToTxn]: 3,
   [API_KEYS.EndTxn]: 3,
+  [API_KEYS.WriteTxnMarkers]: 1,
   [API_KEYS.TxnOffsetCommit]: 3,
   [API_KEYS.DescribeAcls]: 2,
   [API_KEYS.CreateAcls]: 2,

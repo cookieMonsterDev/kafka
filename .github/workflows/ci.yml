@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-node-pnpm
@@ -70,11 +70,11 @@ jobs:
     env:
       KAFKA_VERSION: ${{ matrix.kafka-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
       - name: Restore Kafka Docker images
         id: docker-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/kafka-docker-images.tar
           key: kafka-docker-${{ matrix.kafka-version }}-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
@@ -101,11 +101,11 @@ jobs:
       KAFKA_VERSION: '4.0'
       OAUTHBEARER_ENABLED: '1'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
       - name: Restore Kafka Docker images
         id: docker-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /tmp/kafka-docker-images.tar
           key: kafka-docker-oauthbearer-4.0-${{ hashFiles('packages/core/test/assets/docker-compose.kraft-oauthbearer.yml', 'packages/core/scripts/format-and-start.sh') }}

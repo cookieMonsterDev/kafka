@@ -31,7 +31,7 @@ export function encodeMessageV1({
     .writeBytes(key)
     .writeBytes(value);
 
-  return new Encoder().writeInt32(crc32(content)).writeEncoder(content);
+  return new Encoder().writeInt32(crc32(content)).writeEncoder(content, { release: true });
 }
 
 export function decodeMessageV1(decoder: Decoder): {

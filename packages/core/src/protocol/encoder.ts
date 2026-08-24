@@ -1,3 +1,5 @@
+import { acquireBuffer, releaseBuffer } from './buffer-pool';
+
 const INT8_SIZE = 1;
 const INT16_SIZE = 2;
 const INT32_SIZE = 4;
@@ -71,10 +73,17 @@ export class Encoder {
 
   #buf: Buffer;
   #offset: number;
+  #released = false;
 
   constructor(initialSize = 511) {
-    this.#buf = Buffer.allocUnsafe(Encoder.nextPowerOfTwo(initialSize));
+    this.#buf = acquireBuffer(Encoder.nextPowerOfTwo(initialSize));
     this.#offset = 0;
+  }
+
+  #assertNotReleased(): void {
+    if (this.#released) {
+      throw new Error('Encoder used after its buffer was released');
+    }
   }
 
   #writeBufferInternal(buffer: Buffer): void {
@@ -85,16 +94,32 @@ export class Encoder {
   }
 
   #ensureAvailable(length: number): void {
+    this.#assertNotReleased();
     if (this.#offset + length > this.#buf.length) {
       const newLength = Encoder.nextPowerOfTwo(this.#offset + length);
-      const newBuffer = Buffer.allocUnsafe(newLength);
+      const newBuffer = acquireBuffer(newLength);
       this.#buf.copy(newBuffer, 0, 0, this.#offset);
+      releaseBuffer(this.#buf);
       this.#buf = newBuffer;
     }
   }
 
   get buffer(): Buffer {
+    this.#assertNotReleased();
     return this.#buf.subarray(0, this.#offset);
+  }
+
+  /**
+   * Returns the backing buffer to the pool. Call only once every byte has been read out (e.g.
+   * after `writeEncoder`/`writeEncoderArray` copy it into another Encoder, or after handing
+   * `.buffer` to something that consumes it synchronously) — any further use throws.
+   */
+  release(): void {
+    if (this.#released) {
+      return;
+    }
+    releaseBuffer(this.#buf);
+    this.#released = true;
   }
 
   writeInt8(value: number): this {
@@ -127,6 +152,7 @@ export class Encoder {
 
   /** Overwrite a previously reserved int32 slot without moving the write cursor. */
   writeInt32At(offset: number, value: number): this {
+    this.#assertNotReleased();
     this.#buf.writeInt32BE(value, offset);
     return this;
   }
@@ -140,6 +166,7 @@ export class Encoder {
 
   /** Overwrite a previously reserved uint32 slot without moving the write cursor. */
   writeUInt32At(offset: number, value: number): this {
+    this.#assertNotReleased();
     this.#buf.writeUInt32BE(value, offset);
     return this;
   }
@@ -260,13 +287,22 @@ export class Encoder {
     return this;
   }
 
-  writeEncoder(value: Encoder): this {
+  /**
+   * Copies `value`'s bytes in. Pass `release: true` only when the caller is certain `value`
+   * has no further use — its buffer goes back to the pool and any later access throws.
+   */
+  writeEncoder(value: Encoder, { release = false }: { release?: boolean } = {}): this {
     this.#writeBufferInternal(value.buffer);
+    if (release) value.release();
     return this;
   }
 
-  writeEncoderArray(value: readonly Encoder[]): this {
-    for (const v of value) this.#writeBufferInternal(v.buffer);
+  /** Same trade-off as `writeEncoder`, applied to every element of `value`. */
+  writeEncoderArray(value: readonly Encoder[], { release = false }: { release?: boolean } = {}): this {
+    for (const v of value) {
+      this.#writeBufferInternal(v.buffer);
+      if (release) v.release();
+    }
     return this;
   }
 

@@ -33,7 +33,8 @@ export async function createRequest({ correlationId, clientId, request }: Create
     encoder.writeUVarInt(0);
   }
 
-  encoder.writeEncoder(payload);
+  // `payload` has no further use once its bytes are copied in — pool its buffer.
+  encoder.writeEncoder(payload, { release: true });
   encoder.writeInt32At(0, encoder.size() - 4);
   return encoder;
 }

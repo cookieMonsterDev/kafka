@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { KafkaOffsetOutOfRange } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
@@ -372,6 +373,159 @@ describe('consumer/consumer-group', () => {
     expect(applyLeaderUpdate).toHaveBeenCalled();
     expect(refreshMetadata).toHaveBeenCalled();
     expect(joinAndSync).toHaveBeenCalled();
+  });
+
+  it('sends the assigned currentLeaderEpoch on fetch and seeks past a truncated log via OffsetForLeaderEpoch (KIP-320)', async () => {
+    const brokerFetch = vi.fn().mockResolvedValue({ responses: [] });
+    const offsetForLeaderEpoch = vi.fn().mockResolvedValue({
+      throttleTime: 0,
+      topics: [{ topic: 'topic1', partitions: [{ errorCode: 0, partition: 0, leaderEpoch: 4, endOffset: 50n }] }],
+    });
+    const broker = { fetch: brokerFetch, offsetForLeaderEpoch };
+    const cluster = {
+      refreshMetadataIfNecessary: vi.fn(async () => undefined),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, leaderEpoch: 4 }]),
+      findTopicId: vi.fn(() => undefined),
+      findBroker: vi.fn(async () => broker),
+      applyLeaderUpdate: vi.fn().mockResolvedValue(true),
+    } as unknown as Cluster;
+
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+    });
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    const seek = vi.fn(async () => undefined);
+    consumerGroup.offsetManager = {
+      committedOffsets: () => ({ topic1: { 0: 100n } }),
+      nextOffset: () => 100n,
+      seek,
+      resolveOffsets: vi.fn(async () => undefined),
+    } as unknown as OffsetManager;
+
+    await consumerGroup.fetch('1');
+
+    expect(brokerFetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topics: [
+          expect.objectContaining({
+            topic: 'topic1',
+            partitions: [expect.objectContaining({ partition: 0, currentLeaderEpoch: 4 })],
+          }),
+        ],
+      }),
+    );
+
+    const code = ERROR_CODES.find((entry) => entry.type === 'FENCED_LEADER_EPOCH')!.code;
+    const error = createErrorFromCode(code, {
+      topic: 'topic1',
+      partition: 0,
+      currentLeader: { leaderId: 1, leaderEpoch: 6 },
+    });
+
+    await consumerGroup.recoverFromFetch(error);
+
+    expect(offsetForLeaderEpoch).toHaveBeenCalledWith({
+      topics: [{ topic: 'topic1', partitions: [{ partition: 0, currentLeaderEpoch: 4, leaderEpoch: 4 }] }],
+    });
+    expect(seek).toHaveBeenCalledWith({ topic: 'topic1', partition: 0, offset: 50n });
+  });
+
+  it('does not seek when the epoch end offset is at or beyond the current fetch position (no truncation)', async () => {
+    const cluster = {
+      refreshMetadataIfNecessary: vi.fn(async () => undefined),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, leaderEpoch: 4 }]),
+      findTopicId: vi.fn(() => undefined),
+      findBroker: vi.fn(async () => ({
+        fetch: vi.fn().mockResolvedValue({ responses: [] }),
+        offsetForLeaderEpoch: vi.fn().mockResolvedValue({
+          throttleTime: 0,
+          topics: [{ topic: 'topic1', partitions: [{ errorCode: 0, partition: 0, leaderEpoch: 3, endOffset: 100n }] }],
+        }),
+      })),
+    } as unknown as Cluster;
+
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+    });
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    const seek = vi.fn(async () => undefined);
+    consumerGroup.offsetManager = {
+      committedOffsets: () => ({ topic1: { 0: 100n } }),
+      nextOffset: () => 100n,
+      seek,
+      resolveOffsets: vi.fn(async () => undefined),
+    } as unknown as OffsetManager;
+
+    // Populates the tracked "last fetched epoch" for topic1/partition 0 (leaderEpoch: 4).
+    await consumerGroup.fetch('1');
+
+    const recovered = await consumerGroup.recoverFromTruncation({ topic: 'topic1', partition: 0 });
+
+    expect(recovered).toBe(false);
+    expect(seek).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a full metadata refresh (no OffsetForLeaderEpoch attempt) without a previously fetched epoch', async () => {
+    const consumerGroup = createGroup();
+    const findBroker = vi.fn();
+    consumerGroup.cluster = { findBroker } as unknown as Cluster;
+
+    const recovered = await consumerGroup.recoverFromTruncation({ topic: 'topic1', partition: 0 });
+
+    expect(recovered).toBe(false);
+    expect(findBroker).not.toHaveBeenCalled();
+  });
+
+  it('resets to the default offset on OFFSET_OUT_OF_RANGE when there is no tracked epoch to validate', async () => {
+    const consumerGroup = createGroup();
+    const findBroker = vi.fn();
+    consumerGroup.cluster = { findBroker } as unknown as Cluster;
+    const setDefaultOffset = vi.fn(async () => undefined);
+    consumerGroup.offsetManager = { setDefaultOffset } as unknown as OffsetManager;
+
+    const code = ERROR_CODES.find((entry) => entry.type === 'OFFSET_OUT_OF_RANGE')!.code;
+    const error = new KafkaOffsetOutOfRange(createErrorFromCode(code), { topic: 'topic1', partition: 0 });
+
+    await consumerGroup.recoverFromFetch(error);
+
+    expect(findBroker).not.toHaveBeenCalled();
+    expect(setDefaultOffset).toHaveBeenCalledWith({ topic: 'topic1', partition: 0 });
   });
 
   it('caches getActiveTopicPartitions until pause, resume, or assign', () => {

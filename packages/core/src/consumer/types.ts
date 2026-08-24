@@ -15,6 +15,8 @@ export interface KafkaMessage {
   headers: RecordHeaders;
   isControlRecord: boolean;
   batchContext: RecordBatchContext;
+  /** This message's on-wire size (post-decompression); see `DecodedRecord.byteSize`. */
+  byteSize: number;
 }
 
 export interface EachMessagePayload {

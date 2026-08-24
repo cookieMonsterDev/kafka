@@ -23,6 +23,7 @@ const v0Messages = [0, 1, 2].map((i) => ({
     inTransaction: false,
     producerId: -1n,
   }),
+  byteSize: 31,
 }));
 
 describe('protocol/message-set/decoder', () => {

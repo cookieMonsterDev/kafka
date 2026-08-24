@@ -29,6 +29,7 @@ function msg(offset: bigint, extra: Partial<KafkaMessage> = {}): KafkaMessage {
     headers: {},
     isControlRecord: extra.isControlRecord ?? false,
     batchContext: extra.batchContext ?? defaultBatchContext,
+    byteSize: extra.byteSize ?? 0,
     ...extra,
   };
 }

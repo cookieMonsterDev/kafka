@@ -50,6 +50,7 @@ function toDecodedRecord(message: DecodedMessage & { timestamp?: bigint }): Deco
     headers: {},
     isControlRecord: false,
     batchContext: messageSetBatchContext({ offset, timestamp, magicByte: message.magicByte }),
+    byteSize: message.size,
   };
 }
 

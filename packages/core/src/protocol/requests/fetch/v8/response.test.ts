@@ -47,6 +47,7 @@ describe('protocol/requests/fetch/v8/response', () => {
                 key: Buffer.from(`key-${i}`),
                 value: Buffer.from(`some-value-${i}`),
                 isControlRecord: false,
+                byteSize: 51,
               })),
             },
           ],

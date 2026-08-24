@@ -6,17 +6,21 @@ export const DEFAULT_PREFETCH_MAX_BATCHES = 4;
 export const DEFAULT_PREFETCH_MAX_BYTES = 10_485_760;
 
 export interface PrefetchSize {
-  key?: Buffer | null;
-  value?: Buffer | null;
+  byteSize: number;
 }
 
-/** Lower bound of key+value bytes in a batch; empty batches count as 1 byte so they still occupy a slot. */
+/**
+ * Lower bound of on-wire bytes in a batch; empty batches count as 1 byte so they still occupy a
+ * slot. Sums each message's `byteSize` rather than its decoded `key`/`value` lengths — the
+ * latter would force every message's `value`/`headers` to decode just to size the batch,
+ * defeating the point of decoding them lazily (see `DecodedRecord`).
+ */
 export function estimatePrefetchBytes(batch: { messages?: readonly PrefetchSize[] }): number {
   const messages = batch.messages;
   if (messages == null || messages.length === 0) return 1;
   let bytes = 0;
   for (const message of messages) {
-    bytes += (message.key?.byteLength ?? 0) + (message.value?.byteLength ?? 0);
+    bytes += message.byteSize;
   }
   return bytes > 0 ? bytes : 1;
 }

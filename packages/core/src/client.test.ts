@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Kafka } from './client';
-import { KafkaNonRetriableError } from './errors';
 import { logLevel, Partitioners, type KafkaConfig } from './index';
 
 function createClient(overrides: Partial<KafkaConfig> = {}): Kafka {
@@ -29,8 +28,8 @@ describe('Kafka', () => {
     expect(producer.isIdempotent()).toBe(false);
   });
 
-  it('creates a consumer that requires a groupId', () => {
-    expect(() => createClient().consumer({ groupId: '' })).toThrow(KafkaNonRetriableError);
+  it('creates a consumer; groupId is optional at construction (required by subscribe())', () => {
+    expect(() => createClient().consumer({})).not.toThrow();
 
     const consumer = createClient().consumer({ groupId: 'test-group' });
     expect(typeof consumer.subscribe).toBe('function');

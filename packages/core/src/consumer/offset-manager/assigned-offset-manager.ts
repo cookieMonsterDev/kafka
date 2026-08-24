@@ -15,7 +15,13 @@ import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
 import type { OffsetManagerHandle } from './offset-manager-handle';
 
-export type { OffsetManagerHandle } from './offset-manager-handle';
+/**
+ * `OffsetCommit`/`OffsetFetch` outside of any consumer-group membership use these sentinels -
+ * Kafka's "simple"/standalone consumer convention. The broker skips generation and membership
+ * validation when `groupGenerationId` is `-1` and `memberId` is empty.
+ */
+const STANDALONE_GENERATION_ID = -1;
+const STANDALONE_MEMBER_ID = '';
 
 function indexTopics(topics: readonly string[]): Record<string, Record<string, bigint>> {
   return topics.reduce<Record<string, Record<string, bigint>>>((obj, topic) => {
@@ -24,75 +30,77 @@ function indexTopics(topics: readonly string[]): Record<string, Record<string, b
   }, {});
 }
 
-export interface OffsetManagerOptions {
+export interface AssignedOffsetManagerOptions {
   cluster: Cluster;
-  coordinator: Broker;
-  memberAssignment: MemberAssignment;
-  autoCommit: boolean;
-  autoCommitInterval: number | null;
-  autoCommitThreshold: number | null;
+  /** `null` when the consumer has no configured `groupId`; `commitOffsets` then always rejects. */
+  groupId: string | null;
+  assignment: MemberAssignment;
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
   instrumentationEmitter: InstrumentationEventEmitter;
-  groupId: string;
-  generationId: number;
-  memberId: string;
 }
 
 /**
- * Kafka's committed offset is the next offset to read, not the last consumed one.
- * `resolveOffset({ offset })` therefore stores `offset + 1n`.
+ * Offset tracking for `consumer.assign()` (no group membership, no JoinGroup/SyncGroup).
+ *
+ * Initial position, per partition, decided the first time it is needed (and cached after):
+ * 1. An explicit `consumer.seek()` call, applied by `ConsumerGroup.seekOffsets` exactly like
+ *    subscribe-mode, always wins.
+ * 2. Otherwise, if the consumer has a `groupId` configured, the group's committed offset
+ *    (`OffsetFetch`) for that partition, when one exists.
+ * 3. Otherwise, `autoOffsetReset` (default `latest`) resolved via `ListOffsets` - the same
+ *    fallback subscribe-mode uses when a group has no committed offset yet.
+ *
+ * `commitOffsets` requires a configured `groupId` and throws a clear error otherwise. When a
+ * `groupId` is configured, commits are sent as a standalone consumer (`groupGenerationId: -1`,
+ * `memberId: ''`), so the broker does not validate them against a running group's generation or
+ * membership.
  */
-export class OffsetManager implements OffsetManagerHandle {
+export class AssignedOffsetManager implements OffsetManagerHandle {
   cluster: Cluster;
-  coordinator: Broker;
-  memberAssignment: MemberAssignment;
+  groupId: string | null;
+  assignment: MemberAssignment;
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
   instrumentationEmitter: InstrumentationEventEmitter;
-  groupId: string;
-  generationId: number;
-  memberId: string;
-  autoCommit: boolean;
-  autoCommitInterval: number | null;
-  autoCommitThreshold: number | null;
-  lastCommit: number;
   topics: string[];
   resolvedOffsets: Record<string, Record<string, bigint>>;
-  #committedOffsets: Record<string, Record<string, bigint>> | undefined;
+  #basePositions: Record<string, Record<string, bigint>>;
+  #coordinator: Broker | null = null;
 
   constructor({
     cluster,
-    coordinator,
-    memberAssignment,
-    autoCommit,
-    autoCommitInterval,
-    autoCommitThreshold,
+    groupId,
+    assignment,
     topicConfigurations,
     instrumentationEmitter,
-    groupId,
-    generationId,
-    memberId,
-  }: OffsetManagerOptions) {
+  }: AssignedOffsetManagerOptions) {
     this.cluster = cluster;
-    this.coordinator = coordinator;
-    this.memberAssignment = memberAssignment;
+    this.groupId = groupId;
+    this.assignment = assignment;
     this.topicConfigurations = topicConfigurations;
     this.instrumentationEmitter = instrumentationEmitter;
-    this.groupId = groupId;
-    this.generationId = generationId;
-    this.memberId = memberId;
-    this.autoCommit = autoCommit;
-    this.autoCommitInterval = autoCommitInterval;
-    this.autoCommitThreshold = autoCommitThreshold;
-    this.lastCommit = Date.now();
-    this.topics = Object.keys(memberAssignment);
-    this.resolvedOffsets = {};
-    this.clearAllOffsets();
+    this.topics = Object.keys(assignment);
+    this.resolvedOffsets = indexTopics(this.topics);
+    this.#basePositions = indexTopics(this.topics);
+  }
+
+  /**
+   * Update the fixed assignment in place, e.g. after a metadata refresh recomputed partition
+   * leadership. Existing partitions keep whatever position they already resolved/consumed;
+   * only newly seen partitions start with a blank slate.
+   */
+  updateAssignment(assignment: MemberAssignment): void {
+    this.assignment = assignment;
+    this.topics = Object.keys(assignment);
+    for (const topic of this.topics) {
+      this.resolvedOffsets[topic] ??= {};
+      this.#basePositions[topic] ??= {};
+    }
   }
 
   nextOffset(topic: string, partition: number): bigint {
     const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
     if (resolvedTopic[partition] === undefined) {
-      resolvedTopic[partition] = this.committedOffsets()[topic]?.[partition] ?? 0n;
+      resolvedTopic[partition] = this.#basePositions[topic]?.[partition] ?? 0n;
     }
 
     let offset = resolvedTopic[partition];
@@ -104,16 +112,22 @@ export class OffsetManager implements OffsetManagerHandle {
   }
 
   async getCoordinator(): Promise<Broker> {
-    if (!this.coordinator.isConnected()) {
-      this.coordinator = await this.cluster.findBroker({ nodeId: String(this.coordinator.nodeId) });
+    if (!this.groupId) {
+      throw new KafkaNonRetriableError(
+        'Cannot reach a group coordinator in assign() mode without a configured groupId.',
+      );
     }
 
-    return this.coordinator;
+    if (!this.#coordinator || !this.#coordinator.isConnected()) {
+      this.#coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
+    }
+
+    return this.#coordinator;
   }
 
   resetOffset({ topic, partition }: TopicPartition): void {
     const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
-    resolvedTopic[partition] = this.committedOffsets()[topic]?.[partition] ?? 0n;
+    resolvedTopic[partition] = this.#basePositions[topic]?.[partition] ?? 0n;
   }
 
   resolveOffset({ topic, partition, offset }: TopicPartitionOffset): void {
@@ -122,23 +136,36 @@ export class OffsetManager implements OffsetManagerHandle {
   }
 
   countResolvedOffsets(): bigint {
-    const committedOffsets = this.committedOffsets();
-
-    const subtractOffsets = (resolvedOffset: bigint | undefined, committedOffset: bigint | undefined): bigint => {
+    const subtractOffsets = (resolvedOffset: bigint | undefined, baseOffset: bigint | undefined): bigint => {
       const resolved = resolvedOffset ?? 0n;
-      return isInvalidOffset(committedOffset) ? resolved : resolved - (committedOffset ?? 0n);
+      return isInvalidOffset(baseOffset) ? resolved : resolved - (baseOffset ?? 0n);
     };
 
     let sum = 0n;
     for (const topic of this.topics) {
       const resolvedTopicOffsets = this.resolvedOffsets[topic] ?? {};
-      const committedTopicOffsets = committedOffsets[topic] ?? {};
+      const baseTopicOffsets = this.#basePositions[topic] ?? {};
       for (const partition of Object.keys(resolvedTopicOffsets)) {
-        sum += subtractOffsets(resolvedTopicOffsets[partition], committedTopicOffsets[partition]);
+        sum += subtractOffsets(resolvedTopicOffsets[partition], baseTopicOffsets[partition]);
       }
     }
 
     return sum;
+  }
+
+  /**
+   * Overrides the local position directly. Unlike group mode, this never round-trips through
+   * the broker: assign-mode never auto-commits, so there is no group offset to keep in sync.
+   */
+  async seek({ topic, partition, offset }: TopicPartitionOffset): Promise<void> {
+    const assignedPartitions = this.assignment[topic];
+    if (!assignedPartitions || !assignedPartitions.includes(partition)) {
+      return;
+    }
+
+    (this.#basePositions[topic] ??= {})[partition] = offset;
+    const resolvedTopic = this.resolvedOffsets[topic];
+    if (resolvedTopic) delete resolvedTopic[partition];
   }
 
   async setDefaultOffset({ topic, partition }: TopicPartition): Promise<void> {
@@ -149,75 +176,35 @@ export class OffsetManager implements OffsetManagerHandle {
       );
     }
 
-    const defaultOffset = this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
-    const coordinator = await this.getCoordinator();
-
-    await coordinator.offsetCommit({
-      groupId: this.groupId,
-      memberId: this.memberId,
-      groupGenerationId: this.generationId,
-      topics: [{ topic, partitions: [{ partition, offset: defaultOffset }] }],
-    });
-
-    this.clearOffsets({ topic, partition });
-  }
-
-  /**
-   * Commit the given offset to the topic/partition. NO-OP if this consumer isn't assigned to it.
-   * With `autoCommit: false`, only the local resolved offset is updated (seek-offset minus one,
-   * so `resolveOffset`'s +1 lands on the requested offset).
-   */
-  async seek({ topic, partition, offset }: TopicPartitionOffset): Promise<void> {
-    const assigned = this.memberAssignment[topic];
-    if (!assigned || !assigned.includes(partition)) {
-      return;
+    if (this.groupId) {
+      const defaultOffset = this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
+      const coordinator = await this.getCoordinator();
+      await coordinator.offsetCommit({
+        groupId: this.groupId,
+        memberId: STANDALONE_MEMBER_ID,
+        groupGenerationId: STANDALONE_GENERATION_ID,
+        topics: [{ topic, partitions: [{ partition, offset: defaultOffset }] }],
+      });
     }
-
-    if (!this.autoCommit) {
-      this.resolveOffset({ topic, partition, offset: offset - 1n });
-      return;
-    }
-
-    const coordinator = await this.getCoordinator();
-    await coordinator.offsetCommit({
-      groupId: this.groupId,
-      memberId: this.memberId,
-      groupGenerationId: this.generationId,
-      topics: [{ topic, partitions: [{ partition, offset }] }],
-    });
 
     this.clearOffsets({ topic, partition });
   }
 
   async commitOffsetsIfNecessary(): Promise<void> {
-    if (this.autoCommitInterval == null && this.autoCommitThreshold == null) {
-      await this.commitOffsets();
-      return;
-    }
-
-    const now = Date.now();
-    const timeoutReached = this.autoCommitInterval != null && now >= this.lastCommit + this.autoCommitInterval;
-    const thresholdReached =
-      this.autoCommitThreshold != null && this.countResolvedOffsets() >= BigInt(this.autoCommitThreshold);
-
-    if (timeoutReached || thresholdReached) {
-      await this.commitOffsets();
-    }
+    await this.commitOffsets();
   }
 
   uncommittedOffsets(): OffsetsByTopicPartition {
-    const committedOffsets = this.committedOffsets();
-
     const topicsWithPartitionsToCommit = this.topics
       .map((topic) => {
         const resolvedTopic = this.resolvedOffsets[topic] ?? {};
-        const committedTopic = committedOffsets[topic] ?? {};
+        const baseTopic = this.#basePositions[topic] ?? {};
         const partitions = Object.keys(resolvedTopic)
           .map((partition) => ({
             partition: Number(partition),
             offset: resolvedTopic[partition] ?? 0n,
           }))
-          .filter(({ partition, offset }) => offset !== committedTopic[partition] && offset >= 0n);
+          .filter(({ partition, offset }) => offset !== baseTopic[partition] && offset >= 0n);
 
         return { topic, partitions };
       })
@@ -226,18 +213,22 @@ export class OffsetManager implements OffsetManagerHandle {
     return { topics: topicsWithPartitionsToCommit };
   }
 
-  async commitOffsets(offsets: Offsets = {} as Offsets): Promise<void> {
-    const topics = offsets.topics ?? this.uncommittedOffsets().topics;
+  async commitOffsets(offsets: Offsets = { topics: [] }): Promise<void> {
+    if (!this.groupId) {
+      throw new KafkaNonRetriableError(
+        'Cannot commit offsets in assign() mode without a configured groupId. Pass `groupId` to `kafka.consumer(...)` to enable commitOffsets().',
+      );
+    }
 
+    const topics = offsets.topics.length > 0 ? offsets.topics : this.uncommittedOffsets().topics;
     if (topics.length === 0) {
-      this.lastCommit = Date.now();
       return;
     }
 
     const payload = {
       groupId: this.groupId,
-      memberId: this.memberId,
-      groupGenerationId: this.generationId,
+      memberId: STANDALONE_MEMBER_ID,
+      groupGenerationId: STANDALONE_GENERATION_ID,
       topics,
     };
 
@@ -247,13 +238,11 @@ export class OffsetManager implements OffsetManagerHandle {
       this.instrumentationEmitter.emit(COMMIT_OFFSETS, payload);
 
       for (const { topic, partitions } of topics) {
-        const committedTopic = (this.committedOffsets()[topic] ??= {});
+        const baseTopic = (this.#basePositions[topic] ??= {});
         for (const { partition, offset } of partitions) {
-          committedTopic[partition] = offset;
+          baseTopic[partition] = offset;
         }
       }
-
-      this.lastCommit = Date.now();
     } catch (e) {
       const error = e as { type?: string };
       if (error.type === 'NOT_COORDINATOR_FOR_GROUP') {
@@ -268,8 +257,8 @@ export class OffsetManager implements OffsetManagerHandle {
     const pendingPartitions = this.topics
       .map((topic) => ({
         topic,
-        partitions: (this.memberAssignment[topic] ?? [])
-          .filter((partition) => isInvalidOffset(this.committedOffsets()[topic]?.[partition]))
+        partitions: (this.assignment[topic] ?? [])
+          .filter((partition) => isInvalidOffset(this.#basePositions[topic]?.[partition]))
           .map((partition) => ({ partition })),
       }))
       .filter((t) => t.partitions.length > 0);
@@ -278,11 +267,21 @@ export class OffsetManager implements OffsetManagerHandle {
       return;
     }
 
-    const coordinator = await this.getCoordinator();
-    const { responses: consumerOffsets } = await coordinator.offsetFetch({
-      groupId: this.groupId,
-      topics: pendingPartitions,
-    });
+    let consumerOffsets: { topic: string; partitions: { partition: number; offset: bigint }[] }[];
+
+    if (this.groupId) {
+      const coordinator = await this.getCoordinator();
+      ({ responses: consumerOffsets } = await coordinator.offsetFetch({
+        groupId: this.groupId,
+        topics: pendingPartitions,
+      }));
+    } else {
+      // No groupId configured: skip OffsetFetch entirely and resolve straight from autoOffsetReset.
+      consumerOffsets = pendingPartitions.map(({ topic, partitions }) => ({
+        topic,
+        partitions: partitions.map(({ partition }) => ({ partition, offset: -1n })),
+      }));
+    }
 
     const unresolvedPartitions = consumerOffsets.map(({ topic, partitions }) => ({
       topic,
@@ -317,39 +316,26 @@ export class OffsetManager implements OffsetManagerHandle {
     }
 
     for (const { topic, partitions } of offsets) {
-      const committedTopic = (this.committedOffsets()[topic] ??= {});
+      const baseTopic = (this.#basePositions[topic] ??= {});
       for (const { partition, offset } of partitions) {
-        committedTopic[partition] = offset;
+        baseTopic[partition] = offset;
       }
     }
   }
 
   clearOffsets({ topic, partition }: TopicPartition): void {
-    const committed = this.committedOffsets()[topic];
-    if (committed) delete committed[partition];
+    const base = this.#basePositions[topic];
+    if (base) delete base[partition];
     const resolved = this.resolvedOffsets[topic];
     if (resolved) delete resolved[partition];
   }
 
   clearAllOffsets(): void {
-    const committedOffsets = this.committedOffsets();
-
-    for (const topic of Object.keys(committedOffsets)) {
-      delete committedOffsets[topic];
-    }
-
-    for (const topic of this.topics) {
-      committedOffsets[topic] = {};
-    }
-
+    this.#basePositions = indexTopics(this.topics);
     this.resolvedOffsets = indexTopics(this.topics);
   }
 
   committedOffsets(): Record<string, Record<string, bigint>> {
-    if (!this.#committedOffsets) {
-      this.#committedOffsets = this.groupId ? this.cluster.committedOffsets({ groupId: this.groupId }) : {};
-    }
-
-    return this.#committedOffsets;
+    return this.#basePositions;
   }
 }

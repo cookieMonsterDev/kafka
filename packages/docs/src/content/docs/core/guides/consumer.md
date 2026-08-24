@@ -62,6 +62,57 @@ consumer.resume([{ topic: 'events' }]);
 consumer.seek({ topic: 'events', partition: 0, offset: 42n });
 ```
 
+## Assign mode
+
+`assign()` fetches exact partitions directly, with no group membership: no
+JoinGroup/SyncGroup, no `ConsumerGroupHeartbeat`, no rebalancing. Use it when
+you already know which partitions to read (a fixed worker-per-partition
+layout, replaying a specific partition for debugging, or coordinating
+assignment yourself outside Kafka's consumer groups). Use `subscribe()`
+instead whenever you want the broker to divide topics across a running set of
+consumers.
+
+```ts
+const consumer = kafka.consumer({}); // groupId is optional in assign mode
+await consumer.connect();
+await consumer.assign([
+  { topic: 'events', partition: 0 },
+  { topic: 'events', partition: 1 },
+]);
+await consumer.run({
+  eachMessage: async ({ topic, partition, message }) => {
+    console.log({ topic, partition, offset: message.offset });
+  },
+});
+```
+
+`assign()` and `subscribe()` are mutually exclusive on one consumer instance;
+calling one after the other throws, and so does `run()`/`stream()` if neither
+was called first. Pause, resume, and seek work exactly as they do with
+`subscribe()`.
+
+**Offset policy.** Assign mode never auto-commits, regardless of the `run()`
+`autoCommit` options - there is no consumer group to own the offsets, so the
+only way an offset is committed is an explicit `consumer.commitOffsets()`
+call. `groupId` is optional on `kafka.consumer(...)`; it is required only if
+you call `commitOffsets()` - calling it without one throws immediately rather
+than committing nowhere. When a `groupId` is configured, commits are sent as
+a standalone/simple consumer (no generation or membership check), so any
+consumer using that group id can read them back with `OffsetFetch`, whether
+or not it ever joined the group.
+
+The starting position for each assigned partition, decided the first time
+it's needed:
+
+1. An earlier `seek()` call always wins.
+2. Otherwise, if `groupId` is configured, that group's committed offset for
+   the partition, when one exists (`OffsetFetch`).
+3. Otherwise, `autoOffsetReset` (default `latest`), resolved with
+   `ListOffsets` - the same fallback `subscribe()` uses when a group has no
+   committed offset yet.
+
+`seek()` overrides the position at any point, before or after `run()` starts.
+
 ## Assigners and isolation
 
 Range, round-robin (default), sticky, and cooperative-sticky are built in

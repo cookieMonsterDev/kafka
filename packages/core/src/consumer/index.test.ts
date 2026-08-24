@@ -43,14 +43,20 @@ describe('consumer', () => {
     ).not.toThrow();
   });
 
-  it('throws when groupId is missing', () => {
+  it('does not require groupId at construction (assign() mode may omit it)', () => {
     expect(() =>
       createConsumer({
         cluster: fakeCluster(),
         logger: silentLogger,
-        groupId: '',
       }),
-    ).toThrow('Consumer groupId must be a non-empty string.');
+    ).not.toThrow();
+  });
+
+  it('subscribe() throws when groupId is missing', async () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), logger: silentLogger });
+    await expect(consumer.subscribe({ topic: 't' })).rejects.toThrow(
+      'Consumer groupId must be a non-empty string to use subscribe().',
+    );
   });
 
   it('exposes a namespaced logger', () => {
@@ -194,5 +200,144 @@ describe('consumer', () => {
     const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
     expect(() => consumer.seek({ topic: '', partition: 0, offset: 1n })).toThrow('Invalid topic');
     expect(() => consumer.seek({ topic: 't', partition: Number.NaN, offset: 1n })).toThrow('Invalid partition');
+  });
+
+  describe('assign() mode', () => {
+    function fakeAssignCluster(overrides: Partial<Cluster> = {}): Cluster {
+      return {
+        ...fakeCluster(),
+        refreshMetadata: vi.fn(async () => undefined),
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        getNodeIds: vi.fn(() => ['1']),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1 }]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: vi.fn(async () => ({ responses: [], sessionId: 0 })) })),
+        fetchTopicsOffset: vi.fn(async () => [{ topic: 't', partitions: [{ partition: 0, offset: 0n }] }]),
+        defaultOffset: vi.fn(() => 0n),
+        ...overrides,
+      } as unknown as Cluster;
+    }
+
+    it('does not require a groupId to be constructed or to call assign()', async () => {
+      const cluster = fakeAssignCluster();
+      const consumer = createConsumer({ cluster, logger: silentLogger });
+      await expect(consumer.assign([{ topic: 't', partition: 0 }])).resolves.toBeUndefined();
+    });
+
+    it('groups and sorts partitions by topic when registering target topics', async () => {
+      const addMultipleTargetTopics = vi.fn(async () => undefined);
+      const cluster = fakeAssignCluster({ addMultipleTargetTopics });
+      const consumer = createConsumer({ cluster, logger: silentLogger });
+
+      await consumer.assign([
+        { topic: 'b', partition: 1 },
+        { topic: 'a', partition: 2 },
+        { topic: 'a', partition: 0 },
+      ]);
+
+      expect(addMultipleTargetTopics).toHaveBeenCalledWith(['b', 'a']);
+    });
+
+    it('rejects assign() with an invalid topic or non-numeric partition', async () => {
+      const consumer = createConsumer({ cluster: fakeAssignCluster(), logger: silentLogger });
+      await expect(consumer.assign([{ topic: '', partition: 0 }])).rejects.toThrow('Invalid topic');
+      await expect(consumer.assign([{ topic: 't', partition: Number.NaN }])).rejects.toThrow('Invalid partition');
+      await expect(consumer.assign('not-an-array' as never)).rejects.toThrow(
+        'Argument "topicPartitions" must be an array',
+      );
+    });
+
+    it('assign() and subscribe() are mutually exclusive', async () => {
+      const consumerAssignFirst = createConsumer({ cluster: fakeAssignCluster(), groupId: 'g', logger: silentLogger });
+      await consumerAssignFirst.assign([{ topic: 't', partition: 0 }]);
+      await expect(consumerAssignFirst.subscribe({ topic: 't' })).rejects.toThrow(
+        'Cannot call subscribe() after assign()',
+      );
+
+      const consumerSubscribeFirst = createConsumer({
+        cluster: fakeAssignCluster(),
+        groupId: 'g',
+        logger: silentLogger,
+      });
+      await consumerSubscribeFirst.subscribe({ topic: 't' });
+      await expect(consumerSubscribeFirst.assign([{ topic: 't', partition: 0 }])).rejects.toThrow(
+        'Cannot call assign() after subscribe()',
+      );
+    });
+
+    it('run() throws when neither subscribe() nor assign() was called', async () => {
+      const consumer = createConsumer({ cluster: fakeAssignCluster(), logger: silentLogger });
+      await expect(consumer.run()).rejects.toThrow('Consumer must call subscribe() or assign() before run().');
+    });
+
+    it('stream() throws when neither subscribe() nor assign() was called', async () => {
+      const consumer = createConsumer({ cluster: fakeAssignCluster(), logger: silentLogger });
+      const iterator = consumer.stream()[Symbol.asyncIterator]();
+      await expect(iterator.next()).rejects.toThrow('Consumer must call subscribe() or assign() before run().');
+    });
+
+    it('fetches without any JoinGroup/group-membership RPC and never requires a groupId', async () => {
+      const findGroupCoordinator = vi.fn();
+      const cluster = fakeAssignCluster({ findGroupCoordinator });
+      const consumer = createConsumer({ cluster, logger: silentLogger });
+
+      await consumer.assign([{ topic: 't', partition: 0 }]);
+      await consumer.run();
+      try {
+        expect(findGroupCoordinator).not.toHaveBeenCalled();
+      } finally {
+        await consumer.stop();
+      }
+    });
+
+    it('pause/resume/seek work in assign mode', async () => {
+      const consumer = createConsumer({ cluster: fakeAssignCluster(), logger: silentLogger });
+      await consumer.assign([{ topic: 't', partition: 0 }]);
+      await consumer.run();
+
+      try {
+        consumer.pause([{ topic: 't', partitions: [0] }]);
+        expect(consumer.paused()).toEqual([{ topic: 't', partitions: [0] }]);
+
+        consumer.resume([{ topic: 't', partitions: [0] }]);
+        expect(consumer.paused()).toEqual([]);
+
+        expect(() => consumer.seek({ topic: 't', partition: 0, offset: 10n })).not.toThrow();
+      } finally {
+        await consumer.stop();
+      }
+    });
+
+    it('commitOffsets() throws a clear error in assign mode without a configured groupId', async () => {
+      const consumer = createConsumer({ cluster: fakeAssignCluster(), logger: silentLogger });
+      await consumer.assign([{ topic: 't', partition: 0 }]);
+      await consumer.run();
+
+      try {
+        await expect(consumer.commitOffsets([{ topic: 't', partition: 0, offset: 5n }])).rejects.toThrow(
+          'Cannot commit offsets in assign() mode without a configured groupId',
+        );
+      } finally {
+        await consumer.stop();
+      }
+    });
+
+    it('commitOffsets() works in assign mode when a groupId is configured', async () => {
+      const offsetCommit = vi.fn(async () => undefined);
+      const findGroupCoordinator = vi.fn(async () => ({ offsetCommit, isConnected: () => true }));
+      const cluster = fakeAssignCluster({ findGroupCoordinator: findGroupCoordinator as never });
+      const consumer = createConsumer({ cluster, groupId: 'my-group', logger: silentLogger });
+      await consumer.assign([{ topic: 't', partition: 0 }]);
+      await consumer.run();
+
+      try {
+        await consumer.commitOffsets([{ topic: 't', partition: 0, offset: 5n }]);
+        expect(offsetCommit).toHaveBeenCalledWith(
+          expect.objectContaining({ groupId: 'my-group', memberId: '', groupGenerationId: -1 }),
+        );
+      } finally {
+        await consumer.stop();
+      }
+    });
   });
 });

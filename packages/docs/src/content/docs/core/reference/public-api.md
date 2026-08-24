@@ -53,6 +53,8 @@ and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 
 - `AbortSignal` on `connect` / `disconnect` / `send` / `sendBatch` / `run`
 - `consumer.stream()` — async iteration over batches
+- `consumer.assign()` — fetch exact partitions with no group membership; mutually exclusive with
+  `subscribe()` (see [Consumer: Assign mode](../../guides/consumer/#assign-mode))
 - `Symbol.asyncDispose` on producer, consumer, share consumer, and admin (`await using`)
 - Built-in Snappy (`CompressionTypes.Snappy`), LZ4 (`CompressionTypes.LZ4`), and ZSTD (`CompressionTypes.ZSTD`)
 

@@ -82,23 +82,23 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 
 ## `ConsumerConfig`
 
-| Field                  | Default          | Notes                                                                                                                                               |
-| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `groupId`              | required         | [group.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.id)                                                                    |
-| `groupProtocol`        | `'classic'`      | [group.protocol](https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol). `'consumer'` opts into KIP-848 (Kafka 4.0+)           |
-| `sessionTimeout`       | `30000`          | [session.timeout.ms](https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms). Unused when `groupProtocol: 'consumer'`       |
-| `rebalanceTimeout`     | `60000`          | [max.poll.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms)                                            |
-| `heartbeatInterval`    | `3000`           | [heartbeat.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms). Unused when `groupProtocol: 'consumer'` |
-| `partitionAssigners`   | `[roundRobin]`   | Classic protocol only. KIP-848 uses server-side assignment                                                                                          |
-| `readUncommitted`      | `false`          | Isolation defaults to `read_committed`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level)              |
-| `autoOffsetReset`      |                  | [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset)                                                  |
-| `rackId`               | `''`             | [client.rack](https://kafka.apache.org/43/configuration/consumer-configs/#client.rack)                                                              |
-| `groupInstanceId`      |                  | [group.instance.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id)                                                  |
-| `maxBytesPerPartition` | `1048576`        | [max.partition.fetch.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes)                                  |
-| `minBytes`             | `1`              | [fetch.min.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes)                                                      |
-| `maxBytes`             | `10485760`       | [fetch.max.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes)                                                      |
-| `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                  |
-| `retry`                | `{ retries: 5 }` |                                                                                                                                                     |
+| Field                  | Default                    | Notes                                                                                                                                                                                                        |
+| ---------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `groupId`              | required for `subscribe()` | [group.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.id). Optional for `assign()` (see [Assign mode](../../guides/consumer/#assign-mode)); needed there only to call `commitOffsets` |
+| `groupProtocol`        | `'classic'`                | [group.protocol](https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol). `'consumer'` opts into KIP-848 (Kafka 4.0+)                                                                    |
+| `sessionTimeout`       | `30000`                    | [session.timeout.ms](https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms). Unused when `groupProtocol: 'consumer'`                                                                |
+| `rebalanceTimeout`     | `60000`                    | [max.poll.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms)                                                                                                     |
+| `heartbeatInterval`    | `3000`                     | [heartbeat.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms). Unused when `groupProtocol: 'consumer'`                                                          |
+| `partitionAssigners`   | `[roundRobin]`             | Classic protocol only. KIP-848 uses server-side assignment                                                                                                                                                   |
+| `readUncommitted`      | `false`                    | Isolation defaults to `read_committed`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level)                                                                       |
+| `autoOffsetReset`      |                            | [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset)                                                                                                           |
+| `rackId`               | `''`                       | [client.rack](https://kafka.apache.org/43/configuration/consumer-configs/#client.rack)                                                                                                                       |
+| `groupInstanceId`      |                            | [group.instance.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id)                                                                                                           |
+| `maxBytesPerPartition` | `1048576`                  | [max.partition.fetch.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes)                                                                                           |
+| `minBytes`             | `1`                        | [fetch.min.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes)                                                                                                               |
+| `maxBytes`             | `10485760`                 | [fetch.max.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes)                                                                                                               |
+| `maxWaitTimeInMs`      | `5000`                     | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                                                                           |
+| `retry`                | `{ retries: 5 }`           |                                                                                                                                                                                                              |
 
 ## `ShareConsumerConfig`
 

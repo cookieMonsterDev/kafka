@@ -10,6 +10,7 @@ interface Consumer {
   connect(options?: ConnectOptions): Promise<void>;
   disconnect(options?: ConnectOptions): Promise<void>;
   subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>;
+  assign(topicPartitions: readonly { topic: string; partition: number }[]): Promise<void>;
   run(config?: ConsumerRunConfig): Promise<void>;
   stream(config?: Omit<ConsumerRunConfig, 'eachBatch' | 'eachMessage'>): AsyncIterableIterator<Batch>;
   stop(): Promise<void>;
@@ -40,6 +41,21 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 ```
 
 `autoOffsetReset` wins over `fromBeginning` when both are set.
+
+## `assign`
+
+```ts
+await consumer.assign([
+  { topic: 'events', partition: 0 },
+  { topic: 'events', partition: 1 },
+]);
+```
+
+Fetches exactly these partitions with no group membership (no JoinGroup/SyncGroup, no
+`ConsumerGroupHeartbeat`, no rebalancing). Mutually exclusive with `subscribe` on the same
+consumer - calling one after the other throws, and so does `run`/`stream` if neither was called.
+`groupId` is optional on `kafka.consumer(...)` in this mode; it is required only to call
+`commitOffsets`. Guide: [Assign mode](../../guides/consumer/#assign-mode).
 
 ## `run` / `stream`
 

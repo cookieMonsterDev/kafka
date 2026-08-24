@@ -321,6 +321,7 @@ export function createConsumer({
     partitionsConsumedConcurrently: concurrency = 1,
     prefetchMaxBatches,
     prefetchMaxBytes,
+    maxRecords,
     eachBatch = null,
     eachMessage = null,
     signal,
@@ -376,6 +377,7 @@ export function createConsumer({
         concurrency,
         prefetchMaxBatches,
         prefetchMaxBytes,
+        maxRecords,
       });
 
       await runner.start();

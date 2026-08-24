@@ -63,6 +63,14 @@ export interface ConsumerRunConfig {
   prefetchMaxBatches?: number;
   /** Max queued+in-flight record bytes prefetched per broker node. */
   prefetchMaxBytes?: number;
+  /**
+   * Caps how many records are delivered to the handler per internal processing cycle of an
+   * already-fetched batch (Java's `max.poll.records`). This slices delivery client-side only:
+   * it never shrinks the Fetch request (`maxBytes`/`maxBytesPerPartition` are unaffected), and
+   * leftover records carry over to the next cycle instead of being dropped or re-fetched.
+   * Defaults to `500` for `eachMessage`; `eachBatch` is unlimited unless set explicitly.
+   */
+  maxRecords?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
   signal?: AbortSignal;

@@ -3,7 +3,7 @@ import { isKafkaError, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { retrier, type RetryOptions } from '../retry/index';
-import type { Batch } from './batch';
+import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
@@ -12,6 +12,12 @@ import { DEFAULT_PREFETCH_MAX_BATCHES, DEFAULT_PREFETCH_MAX_BYTES, estimatePrefe
 
 const CONSUMING_START = 'consuming-start';
 const CONSUMING_STOP = 'consuming-stop';
+
+/**
+ * Default `maxRecords` for `eachMessage` (Java `max.poll.records` default). `eachBatch` has no
+ * default cap: a batch handler is designed to receive a whole batch unless the caller opts in.
+ */
+const DEFAULT_MAX_RECORDS_EACH_MESSAGE = 500;
 
 export interface RunnerOptions {
   logger: Logger;
@@ -27,6 +33,35 @@ export interface RunnerOptions {
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
   autoCommit?: boolean;
+  maxRecords?: number;
+}
+
+function sliceMessages<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Split an already-fetched batch into `maxRecords`-sized sub-batches for `eachBatch`. This is
+ * purely a client-side delivery slice: the broker already returned every record in `batch` (the
+ * Fetch request's `maxBytes`/`maxBytesPerPartition` are untouched), this only changes how many
+ * records reach the handler per `eachBatch` invocation.
+ */
+function sliceBatchForMaxRecords(batch: Batch, maxRecords: number): Batch[] {
+  return sliceMessages(batch.messages, maxRecords).map(
+    (messages) =>
+      new Batch(batch.topic, batch.fetchedOffset, {
+        partition: batch.partition,
+        highWatermark: batch.highWatermark,
+        messages,
+        // `batch.messages` is already fully filtered (aborted transactions and control records
+        // removed), so passing `null` here skips redundant, already-satisfied re-filtering.
+        abortedTransactions: null,
+      }),
+  );
 }
 
 export class Runner extends EventEmitter {
@@ -40,6 +75,11 @@ export class Runner extends EventEmitter {
   retrier: ReturnType<typeof retrier>;
   onCrash: (reason: Error) => void | Promise<void>;
   autoCommit: boolean;
+  /**
+   * Raw `maxRecords` as configured. `null` means "not set": `eachMessage` falls back to
+   * {@link DEFAULT_MAX_RECORDS_EACH_MESSAGE}; `eachBatch` stays unlimited.
+   */
+  maxRecords: number | null;
   fetchManager: FetchManager<Batch>;
   running = false;
   shuttingDown = false;
@@ -61,6 +101,7 @@ export class Runner extends EventEmitter {
     onCrash,
     retry,
     autoCommit = true,
+    maxRecords,
   }: RunnerOptions) {
     super();
     this.logger = logger.namespace('Runner');
@@ -73,6 +114,7 @@ export class Runner extends EventEmitter {
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
+    this.maxRecords = maxRecords ?? null;
     this.fetchManager = createFetchManager<Batch>({
       logger: this.logger,
       getNodeIds: () => this.consumerGroup.getNodeIds(),
@@ -278,6 +320,13 @@ export class Runner extends EventEmitter {
       return () => this.consumerGroup.resume([{ topic, partitions: [partition] }]);
     };
 
+    // `maxRecords` slices delivery to `eachMessage` (default 500), mirroring Java's
+    // `max.poll.records`: the broker already returned the full batch (the Fetch request is
+    // untouched), this only checkpoints offsets between slices so a crash partway through an
+    // oversized batch does not lose offsets that were already processed.
+    const maxRecords = this.maxRecords ?? DEFAULT_MAX_RECORDS_EACH_MESSAGE;
+    let recordsInCurrentSlice = 0;
+
     for (const message of batch.messages) {
       if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
         break;
@@ -307,11 +356,18 @@ export class Runner extends EventEmitter {
       }
 
       this.consumerGroup.resolveOffset({ topic, partition, offset: message.offset });
+      recordsInCurrentSlice += 1;
+
       const heartbeat = this.heartbeatIfDue();
       if (heartbeat) await heartbeat;
 
       if (this.consumerGroup.isPaused(topic, partition)) {
         break;
+      }
+
+      if (recordsInCurrentSlice >= maxRecords) {
+        await this.autoCommitOffsetsIfNecessary();
+        recordsInCurrentSlice = 0;
       }
     }
   }
@@ -328,50 +384,80 @@ export class Runner extends EventEmitter {
       return () => this.consumerGroup.resume([{ topic, partitions: [partition] }]);
     };
 
-    try {
-      await eachBatch({
-        batch,
-        resolveOffset: (offset) => {
-          /**
-           * The transactional producer writes a control record as the last record of a
-           * RecordBatch. That record is filtered before it reaches `eachBatch`. When
-           * auto-resolve is disabled, user code can never resolve the control-record
-           * offset, and the consumer would stall.
-           *
-           * Resolving the last filtered message offset therefore also resolves the batch's
-           * last offset (the control record). See
-           * https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/internals/Fetcher.java
-           */
-          const offsetToResolve =
-            lastFilteredMessage && offset === lastFilteredMessage.offset ? batch.lastOffset() : offset;
-          this.consumerGroup.resolveOffset({ topic, partition, offset: offsetToResolve });
-        },
-        heartbeat: () => this.heartbeat(),
-        pause,
-        commitOffsetsIfNecessary: async (offsets) => {
-          return offsets ? this.consumerGroup.commitOffsets(offsets) : this.consumerGroup.commitOffsetsIfNecessary();
-        },
-        uncommittedOffsets: () => this.consumerGroup.uncommittedOffsets(),
-        isRunning: () => this.running && !this.shuttingDown,
-        isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
-      });
-    } catch (e) {
-      if (!isKafkaError(e)) {
-        this.logger.error(`Error when calling eachBatch`, {
+    // `eachBatch` is unlimited by default (a batch handler is designed to receive a whole
+    // batch); `maxRecords` only slices it when the caller sets it explicitly. Slicing is
+    // client-side delivery only: the broker already returned every record in `batch`.
+    const slices =
+      this.maxRecords != null && batch.messages.length > this.maxRecords
+        ? sliceBatchForMaxRecords(batch, this.maxRecords)
+        : [batch];
+
+    for (let i = 0; i < slices.length; i++) {
+      const slice = slices[i]!;
+      const isLastSlice = i === slices.length - 1;
+
+      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
+        break;
+      }
+
+      try {
+        await eachBatch({
+          batch: slice,
+          resolveOffset: (offset) => {
+            /**
+             * The transactional producer writes a control record as the last record of a
+             * RecordBatch. That record is filtered before it reaches `eachBatch`. When
+             * auto-resolve is disabled, user code can never resolve the control-record
+             * offset, and the consumer would stall.
+             *
+             * Resolving the last filtered message offset therefore also resolves the batch's
+             * last offset (the control record). See
+             * https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/internals/Fetcher.java
+             */
+            const offsetToResolve =
+              lastFilteredMessage && offset === lastFilteredMessage.offset ? batch.lastOffset() : offset;
+            this.consumerGroup.resolveOffset({ topic, partition, offset: offsetToResolve });
+          },
+          heartbeat: () => this.heartbeat(),
+          pause,
+          commitOffsetsIfNecessary: async (offsets) => {
+            return offsets ? this.consumerGroup.commitOffsets(offsets) : this.consumerGroup.commitOffsetsIfNecessary();
+          },
+          uncommittedOffsets: () => this.consumerGroup.uncommittedOffsets(),
+          isRunning: () => this.running && !this.shuttingDown,
+          isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
+        });
+      } catch (e) {
+        if (!isKafkaError(e)) {
+          this.logger.error(`Error when calling eachBatch`, {
+            topic,
+            partition,
+            offset: slice.firstOffset(),
+            stack: (e as Error).stack,
+            error: e,
+          });
+        }
+
+        await this.autoCommitOffsets();
+        throw e;
+      }
+
+      if (this.eachBatchAutoResolve) {
+        // Interim slices resolve up to their own last message. The final slice resolves the
+        // *original* batch's last offset, matching the unsliced behavior: that can be past the
+        // last real message when a trailing control record was filtered out of `batch.messages`.
+        this.consumerGroup.resolveOffset({
           topic,
           partition,
-          offset: batch.firstOffset(),
-          stack: (e as Error).stack,
-          error: e,
+          offset: isLastSlice ? batch.lastOffset() : slice.lastOffset(),
         });
       }
 
-      await this.autoCommitOffsets();
-      throw e;
-    }
-
-    if (this.eachBatchAutoResolve) {
-      this.consumerGroup.resolveOffset({ topic, partition, offset: batch.lastOffset() });
+      if (!isLastSlice) {
+        // Checkpoint what has been resolved so far before moving to the next maxRecords slice
+        // of this already-fetched batch (no re-fetch, no dropped records).
+        await this.autoCommitOffsetsIfNecessary();
+      }
     }
   }
 

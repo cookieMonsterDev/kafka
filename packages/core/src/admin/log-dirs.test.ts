@@ -64,7 +64,7 @@ describe('admin/log-dirs', () => {
     });
 
     it('alters replica log dirs on the requested broker', async () => {
-      const dirs = [{ logDir: '/data', topics: [{ topic: 'orders', partitions: [0] }] }];
+      const dirs = [{ path: '/data', topics: [{ topic: 'orders', partitions: [0] }] }];
       const broker = { alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) };
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
@@ -85,7 +85,7 @@ describe('admin/log-dirs', () => {
       };
       await expect(
         makeApi(cluster, { retries: 0 }).alterReplicaLogDirs({
-          dirs: [{ logDir: '/data', topics: [] }],
+          dirs: [{ path: '/data', topics: [] }],
           brokerId: 1,
         }),
       ).rejects.toThrow();
@@ -111,7 +111,11 @@ describe('admin/log-dirs', () => {
     it('maps a protocol error from one broker onto each of its replicas', async () => {
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findBroker: vi.fn().mockRejectedValue(new KafkaProtocolError({ type: 'BROKER_NOT_AVAILABLE', code: 8 })),
+        findBroker: vi
+          .fn()
+          .mockRejectedValue(
+            new KafkaProtocolError({ type: 'BROKER_NOT_AVAILABLE', code: 8, message: 'The broker is not available' }),
+          ),
       };
       const result = await makeApi(cluster).describeReplicaLogDirs([
         { topic: 'orders', partition: 0, brokerId: 1 },

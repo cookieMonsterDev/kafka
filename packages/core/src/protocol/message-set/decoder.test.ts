@@ -47,4 +47,13 @@ describe('protocol/message-set/decoder', () => {
 
     await expect(decodeMessageSet(decoder)).resolves.toEqual([]);
   });
+
+  it('throws when a compressed entry has a null value', async () => {
+    const { encodeMessageV0 } = await import('../message/v0');
+    const { COMPRESSION_TYPES } = await import('../compression/index');
+    const message = encodeMessageV0({ compression: COMPRESSION_TYPES.GZIP, key: null, value: null });
+    const set = new Encoder().writeInt64(-1n).writeInt32(message.size()).writeEncoder(message);
+    const decoder = new Decoder(new Encoder().writeInt32(set.size()).writeEncoder(set).buffer);
+    await expect(decodeMessageSet(decoder)).rejects.toThrow('null value');
+  });
 });

@@ -84,6 +84,23 @@ describe('protocol/error-codes', () => {
       expect(error.message).toContain('topic: orders');
       expect(error.message).toContain('partition: 3');
     });
+
+    it('attaches KIP-951 currentLeader and nodeEndpoints extras', () => {
+      const currentLeader = { leaderId: 2, leaderEpoch: 7 };
+      const nodeEndpoints = [{ nodeId: 2, host: 'broker-2', port: 9092, rack: 'az-a' }];
+      const error = createErrorFromCode(6, { currentLeader, nodeEndpoints });
+      expect(error.currentLeader).toEqual(currentLeader);
+      expect(error.nodeEndpoints).toEqual(nodeEndpoints);
+      expect(error.message).not.toContain('topic:');
+    });
+
+    it.each(ERROR_CODES)('maps code $code to $type (retriable=$retriable)', (entry) => {
+      const error = createErrorFromCode(entry.code);
+      expect(error.type).toBe(entry.type);
+      expect(error.code).toBe(entry.code);
+      expect(error.retriable).toBe(entry.retriable);
+      expect(error.message).toBe(entry.message);
+    });
   });
 
   describe('failIfVersionNotSupported', () => {

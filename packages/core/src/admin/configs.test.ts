@@ -132,7 +132,7 @@ describe('admin/configs describeConfigs', () => {
       rootLogger: silentLogger,
     });
 
-    await expect(api.describeConfigs({ resources: [{ type: 99, name: 'orders' }] })).rejects.toThrow(
+    await expect(api.describeConfigs({ resources: [{ type: 99 as never, name: 'orders' }] })).rejects.toThrow(
       KafkaNonRetriableError,
     );
   });
@@ -267,7 +267,7 @@ describe('admin/configs alterConfigs', () => {
     });
 
     await expect(
-      api.alterConfigs({ resources: [{ type: 99, name: 'orders', configEntries: validEntries }] }),
+      api.alterConfigs({ resources: [{ type: 99 as never, name: 'orders', configEntries: validEntries }] }),
     ).rejects.toThrow(KafkaNonRetriableError);
   });
 
@@ -413,7 +413,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
     });
 
     await expect(
-      api.incrementalAlterConfigs({ resources: [{ type: 99, name: 'orders', configs: validConfigs }] }),
+      api.incrementalAlterConfigs({ resources: [{ type: 99 as never, name: 'orders', configs: validConfigs }] }),
     ).rejects.toThrow(KafkaNonRetriableError);
   });
 

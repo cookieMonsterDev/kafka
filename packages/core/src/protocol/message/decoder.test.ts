@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { KafkaPartialMessageError, KafkaUnsupportedMagicByteInMessageSet } from '../../errors';
 import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
+import { COMPRESSION_TYPES } from '../compression/index';
 import { decodeMessage } from './decoder';
 import { decodeMessageV0, encodeMessageV0 } from './v0';
 import { decodeMessageV1, encodeMessageV1 } from './v1';
@@ -22,6 +23,22 @@ describe('protocol/message/v0', () => {
     decoder.readInt8();
     expect(decodeMessageV0(decoder)).toEqual({ attributes: 0, key: null, value: null });
   });
+
+  it('encodes the compression codec in the attributes byte', () => {
+    const encoded = encodeMessageV0({ compression: COMPRESSION_TYPES.GZIP, key: null, value: Buffer.from('x') });
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32();
+    decoder.readInt8();
+    expect(decodeMessageV0(decoder).attributes).toBe(COMPRESSION_TYPES.GZIP);
+  });
+
+  it('masks compression attributes to the codec bits', () => {
+    const encoded = encodeMessageV0({ compression: (COMPRESSION_TYPES.LZ4 | 0x10) as never, value: 'x' });
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32();
+    decoder.readInt8();
+    expect(decodeMessageV0(decoder).attributes).toBe(COMPRESSION_TYPES.LZ4);
+  });
 });
 
 describe('protocol/message/v1', () => {
@@ -36,6 +53,31 @@ describe('protocol/message/v1', () => {
       key: Buffer.from('k'),
       value: Buffer.from('v'),
     });
+  });
+
+  it('defaults timestamp to Date.now() when omitted', () => {
+    const before = Date.now();
+    const encoded = encodeMessageV1({ key: null, value: 'v' });
+    const after = Date.now();
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32();
+    decoder.readInt8();
+    const decoded = decodeMessageV1(decoder);
+    expect(decoded.timestamp).toBeGreaterThanOrEqual(BigInt(before));
+    expect(decoded.timestamp).toBeLessThanOrEqual(BigInt(after));
+  });
+
+  it('encodes the compression codec in the attributes byte', () => {
+    const encoded = encodeMessageV1({
+      compression: COMPRESSION_TYPES.Snappy,
+      timestamp: 1,
+      key: null,
+      value: 'v',
+    });
+    const decoder = new Decoder(encoded.buffer);
+    decoder.readInt32();
+    decoder.readInt8();
+    expect(decodeMessageV1(decoder).attributes).toBe(COMPRESSION_TYPES.Snappy);
   });
 });
 

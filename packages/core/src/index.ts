@@ -27,6 +27,7 @@ export const Partitioners = Object.freeze({
 
 export { throughputPreset } from './throughput-preset';
 export type { ThroughputPreset, ThroughputPresetConsumer, ThroughputPresetProducer } from './throughput-preset';
+export type { StickyPartitionerOptions } from './producer/partitioners/index';
 
 export { LOG_LEVELS as logLevel } from './loggers/index';
 export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index';
@@ -113,6 +114,7 @@ export type {
   LogLevel,
   Logger,
   Message,
+  NodeLatencyReader,
   OauthbearerProviderResponse,
   PartitionAssigner,
   PartitionMetadata,

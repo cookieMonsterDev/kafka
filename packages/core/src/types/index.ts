@@ -31,6 +31,7 @@ import type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
+import type { NodeLatencyReader } from '../producer/node-latency-tracker';
 import type {
   CustomPartitioner,
   Message,
@@ -366,6 +367,7 @@ export type {
   LogLevel,
   Logger,
   Message,
+  NodeLatencyReader,
   PartitionAssigner,
   PartitionMetadata,
   Partitioner,

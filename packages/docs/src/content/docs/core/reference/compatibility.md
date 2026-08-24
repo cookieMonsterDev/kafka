@@ -53,7 +53,7 @@ These defaults are product choices, kept on purpose for this minor.
 | `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                                                         |
 | `lingerMs`            | `0` (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
 | `maxInFlightRequests` | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                            |
-| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                           |
+| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`)                            |
 | Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                          |
 | Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                             |
 

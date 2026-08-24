@@ -11,6 +11,7 @@ import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createEosManager, type EosManager } from './eos-manager/index';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
 import { createMessageProducer } from './message-producer';
+import { createNodeLatencyTracker } from './node-latency-tracker';
 import { DefaultPartitioner } from './partitioners/index';
 import type { CustomPartitioner, ProducerBatch, ProducerRecord, RecordMetadata } from './types';
 
@@ -110,6 +111,9 @@ export function createProducer({
   const partitioner = createPartitioner();
   const producerRetrier = retrier(producerRetry);
   const instrumentationEmitter = rootInstrumentationEmitter ?? new InstrumentationEventEmitter();
+  // Shared across the idempotent producer and every transaction() below - it's about how fast
+  // this producer's broker nodes respond, not anything specific to one message-producer instance.
+  const nodeLatencyTracker = createNodeLatencyTracker();
   const idempotentEosManager = createEosManager({
     logger,
     cluster,
@@ -124,6 +128,7 @@ export function createProducer({
     cluster,
     partitioner,
     retrier: producerRetrier,
+    nodeLatencyTracker,
     getConnectionStatus: () => connectionStatus,
     defaultAcks: acks,
     defaultCompression: compression,

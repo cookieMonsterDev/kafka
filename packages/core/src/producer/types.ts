@@ -1,6 +1,7 @@
 import type { PartitionMetadata } from '../cluster/index';
 import type { CompressionType } from '../protocol/compression/index';
 import type { RecordHeaders } from '../protocol/records/record';
+import type { NodeLatencyReader } from './node-latency-tracker';
 
 /** One record to produce. @see https://kafka.apache.org/43/implementation/messages/ */
 export interface Message {
@@ -60,11 +61,15 @@ export interface PartitionerArgs {
   topic: string;
   partitionMetadata: readonly PartitionMetadata[];
   message: Message;
+  /** Per-node Produce latency, for partitioners that bias routing toward faster leaders. */
+  nodeLatency?: NodeLatencyReader;
 }
 
 export interface PartitionerBatchArgs {
   topic: string;
   partitionMetadata: readonly PartitionMetadata[];
+  /** Per-node Produce latency, for partitioners that bias routing toward faster leaders. */
+  nodeLatency?: NodeLatencyReader;
 }
 
 export interface Partitioner {

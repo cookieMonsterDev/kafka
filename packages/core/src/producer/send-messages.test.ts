@@ -5,6 +5,7 @@ import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
 import type { EosManager } from './eos-manager/index';
+import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { PartitionerArgs } from './types';
 
@@ -553,5 +554,57 @@ describe('producer/sendMessages', () => {
         topicData: [expect.objectContaining({ topic, topicId })],
       }),
     );
+  });
+
+  describe('nodeLatencyTracker', () => {
+    it('records latency for the responding node after a successful produce', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fakeCluster(brokers);
+      const nodeLatencyTracker = createNodeLatencyTracker();
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        eosManager: fakeEosManager(),
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+        nodeLatencyTracker,
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeUndefined();
+
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeGreaterThanOrEqual(0);
+      expect(nodeLatencyTracker.latencyFor(2)).toBeGreaterThanOrEqual(0);
+      expect(nodeLatencyTracker.latencyFor(3)).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does not record latency for acks: 0, since no response is awaited', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fakeCluster(brokers);
+      const nodeLatencyTracker = createNodeLatencyTracker();
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        eosManager: fakeEosManager(),
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+        nodeLatencyTracker,
+      });
+
+      await sendMessages({
+        acks: 0,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeUndefined();
+      expect(nodeLatencyTracker.latencyFor(2)).toBeUndefined();
+      expect(nodeLatencyTracker.latencyFor(3)).toBeUndefined();
+    });
   });
 });

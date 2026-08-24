@@ -57,6 +57,14 @@ codecs on `worker_threads`, so they no longer stall the event loop. An optional
 native `snappy` or `lz4` package is used when it is installed and exposes an
 async API; it is not a hard dependency.
 
+`Partitioners.StickyPartitioner` (what the preset uses) tracks each broker
+node's Produce latency and biases unkeyed-record rotation toward whichever
+candidate partition's leader has responded fastest, falling back to KIP-794's
+plain uniform choice once a node hasn't been measured yet. This is on by
+default (`adaptive: true`); pass `StickyPartitioner({ adaptive: false })` as
+`createPartitioner` for the plain uniform behavior. Keyed murmur2 routing is
+unaffected either way. See [Producer](./producer/#partitioners).
+
 ## Consume
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.

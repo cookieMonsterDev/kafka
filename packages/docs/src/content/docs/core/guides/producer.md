@@ -91,8 +91,17 @@ The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass
 For KIP-794 uniform sticky routing, opt in with
 `createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
 honored, keyed records use murmur2 routing, and unkeyed records share a
-partition for each producer batch before rotating uniformly. The default
+partition for each producer batch before rotating. The default
 remains unchanged. See [Compatibility](../../reference/compatibility/).
+
+`StickyPartitioner` tracks each broker node's Produce latency and, by
+default, rotates unkeyed records toward whichever candidate's leader has
+responded fastest rather than choosing uniformly at random — the same idea
+as [`partitioner.adaptive.partitioning.enable`](https://kafka.apache.org/43/configuration/producer-configs/#partitioner.adaptive.partitioning.enable).
+It falls back to a plain uniform choice whenever none of the candidates have
+been measured yet (e.g. right after a rebalance). Disable it with
+`createPartitioner: () => Partitioners.StickyPartitioner({ adaptive: false })`.
+A custom partitioner can read the same signal via `PartitionerArgs.nodeLatency`.
 
 ## Idempotence and abort
 

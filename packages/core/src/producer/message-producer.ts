@@ -7,6 +7,7 @@ import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression
 import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import type { EosManager } from './eos-manager/index';
+import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { CustomPartitioner, Message, ProducerBatch, ProducerRecord, RecordMetadata, TopicMessages } from './types';
 
@@ -17,6 +18,8 @@ export interface MessageProducerOptions {
   eosManager: EosManager;
   idempotent: boolean;
   retrier: Retrier;
+  /** Shared across a producer's lifetime, including transactions. Defaults to a fresh tracker. */
+  nodeLatencyTracker?: NodeLatencyTracker;
   getConnectionStatus: () => ConnectionStatus;
   /** Used when send/sendBatch omit acks. Falls back to -1 (all ISR). */
   defaultAcks?: number;
@@ -140,6 +143,7 @@ export function createMessageProducer({
   eosManager,
   idempotent,
   retrier,
+  nodeLatencyTracker = createNodeLatencyTracker(),
   getConnectionStatus,
   defaultAcks,
   defaultCompression,
@@ -148,7 +152,7 @@ export function createMessageProducer({
   bufferMemory,
   deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
 }: MessageProducerOptions): MessageProducer {
-  const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager });
+  const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager, nodeLatencyTracker });
   const pending: PendingSend[] = [];
   let lingerTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInProgress: Promise<void> | null = null;

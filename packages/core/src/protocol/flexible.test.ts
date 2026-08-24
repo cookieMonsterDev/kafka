@@ -27,7 +27,7 @@ describe('protocol/flexible', () => {
     expect(firstFlexibleVersion(API_KEYS.DeleteTopics)).toBe(4);
     expect(firstFlexibleVersion(API_KEYS.DeleteRecords)).toBe(2);
     expect(firstFlexibleVersion(API_KEYS.InitProducerId)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.OffsetForLeaderEpoch)).toBe(3);
+    expect(firstFlexibleVersion(API_KEYS.OffsetForLeaderEpoch)).toBe(4);
     expect(firstFlexibleVersion(API_KEYS.AddPartitionsToTxn)).toBe(3);
     expect(firstFlexibleVersion(API_KEYS.AddOffsetsToTxn)).toBe(3);
     expect(firstFlexibleVersion(API_KEYS.EndTxn)).toBe(3);

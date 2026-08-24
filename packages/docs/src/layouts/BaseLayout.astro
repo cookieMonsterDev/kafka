@@ -5,6 +5,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
 import { DocsSearch } from '@/components/docs-search'
 import PackageSwitcher from '@/components/package-switcher.astro'
+import SectionTabs from '@/components/section-tabs.astro'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
 import { getSearchIndex } from '@/lib/search-index'
@@ -201,7 +202,9 @@ const searchIndex = await getSearchIndex()
         <span class="min-w-0 flex-1 truncate text-left">Search documentation…</span>
       </button>
       <div class="docs-nav-pane pb-2">
-        <slot name="mobile-nav" />
+        <slot name="mobile-nav">
+          <SectionTabs />
+        </slot>
       </div>
       <div class="border-border mt-2 shrink-0 border-t pt-2">
         <a

@@ -192,3 +192,4 @@ export type {
   UpdateFeaturesResult,
 } from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';
+export type { MetadataRecovery } from './cluster/broker-pool';

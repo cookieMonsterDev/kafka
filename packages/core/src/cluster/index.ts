@@ -21,7 +21,7 @@ import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import { Lock } from '../utils/lock';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
-import { BrokerPool, type ApplyLeaderUpdateOptions } from './broker-pool';
+import { BrokerPool, type ApplyLeaderUpdateOptions, type MetadataRecovery } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
 
 type MetadataBroker = ClusterMetadata['brokers'][number];
@@ -64,6 +64,7 @@ export interface ClusterOptions {
   requestTimeout?: number;
   enforceRequestTimeout?: boolean;
   metadataMaxAge?: number;
+  metadataRecovery?: MetadataRecovery;
   retry?: RetryOptions;
   allowAutoTopicCreation?: boolean;
   maxInFlightRequests?: number | null;
@@ -108,6 +109,7 @@ export class Cluster {
     requestTimeout = 30_000,
     enforceRequestTimeout,
     metadataMaxAge,
+    metadataRecovery,
     retry,
     allowAutoTopicCreation,
     maxInFlightRequests,
@@ -145,6 +147,7 @@ export class Cluster {
       allowAutoTopicCreation,
       authenticationTimeout,
       metadataMaxAge,
+      metadataRecovery,
     });
     this.committedOffsetsByGroup = offsets;
 

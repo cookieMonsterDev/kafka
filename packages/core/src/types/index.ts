@@ -1,5 +1,6 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import type { Admin } from '../admin/types';
+import type { MetadataRecovery } from '../cluster/broker-pool';
 import type { PartitionMetadata } from '../cluster/index';
 import type {
   AutoOffsetReset,
@@ -137,6 +138,12 @@ export interface KafkaConfig {
   requestTimeout?: number;
   /** When false, in-flight requests are not timed out by the client. */
   enforceRequestTimeout?: boolean;
+  /**
+   * KIP-1102: on `REBOOTSTRAP_REQUIRED` or an exhausted/unreachable broker set, `'rebootstrap'`
+   * (the default) drops discovered metadata and reconnects to the original bootstrap broker
+   * list; `'none'` keeps retrying the brokers already known to the client.
+   */
+  metadataRecovery?: MetadataRecovery;
   retry?: RetryOptions;
   socketFactory?: SocketFactory;
   logLevel?: LogLevel;

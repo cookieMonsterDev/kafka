@@ -161,6 +161,51 @@ export interface GroupDescription {
   state: string;
 }
 
+/**
+ * Payload for {@link ConsumerHooks.onConsume}. Fires immediately before the user's handler runs
+ * for this unit of work: once per message when running with `eachMessage`, or once per batch when
+ * running with `eachBatch`. Exactly one of `message`/`batch` is set, matching the active mode.
+ */
+export interface OnConsumeEvent {
+  topic: string;
+  partition: number;
+  /** Set in `eachMessage` mode. */
+  message?: KafkaMessage;
+  /** Set in `eachBatch` mode. */
+  batch?: import('./batch').Batch;
+}
+
+export type OnConsumeHook = (event: OnConsumeEvent) => void | Promise<void>;
+
+/**
+ * Payload for {@link ConsumerHooks.onCommit}. Fires once per offset-commit attempt - auto-commit
+ * or a manual {@link Consumer.commitOffsets} call - after the broker responds (or the attempt
+ * fails). `error` is set on failure; `topics` is the set of topic/partition offsets committed (or
+ * attempted).
+ */
+export interface OnCommitEvent {
+  groupId: string;
+  memberId: string;
+  groupGenerationId: number;
+  topics: TopicOffsets[];
+  error?: unknown;
+}
+
+export type OnCommitHook = (event: OnCommitEvent) => void | Promise<void>;
+
+/**
+ * User-supplied hooks for a consumer's consume/commit paths. These are plain ordered async
+ * callbacks, not an interceptor SPI: each array runs in registration order, one hook is always
+ * awaited before the next starts, and a hook that throws is caught and logged - it never fails or
+ * alters the underlying consume or commit outcome.
+ */
+export interface ConsumerHooks {
+  /** Before `eachMessage`/`eachBatch` runs for a message or batch. */
+  onConsume?: readonly OnConsumeHook[];
+  /** After an offset-commit attempt (auto-commit or manual `commitOffsets`) settles. */
+  onCommit?: readonly OnCommitHook[];
+}
+
 /** Coerce a user-supplied offset to `bigint`. Accepts `bigint`, integer `number`, and numeric strings. */
 export function parseOffset(offset: unknown): bigint {
   if (typeof offset === 'bigint') return offset;

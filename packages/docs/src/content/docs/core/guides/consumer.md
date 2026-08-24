@@ -85,6 +85,35 @@ JoinGroup groups. Isolation defaults to `read_committed`
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
 
+## Hooks
+
+`hooks` is a set of ordered async callbacks, not an interceptor SPI - there is
+no `ConsumerInterceptor` class to implement. `onConsume` fires immediately
+before the user's handler runs: once per message in `eachMessage` mode, once
+per batch in `eachBatch` mode (exactly one of `message`/`batch` is set on the
+event, matching the active mode). `onCommit` fires once per offset-commit
+attempt - auto-commit or a manual `commitOffsets()` call - after the broker
+responds, with `error` set on failure. Each array runs in registration order,
+one hook is always awaited before the next starts, and a hook that throws is
+caught, logged, and never affects consumption or the commit - it neither
+blocks a message/batch nor turns a successful commit into a failure (or vice
+versa).
+
+```ts
+const consumer = kafka.consumer({
+  groupId: 'my-group',
+  hooks: {
+    onConsume: [({ topic, partition, message }) => console.log('consuming', topic, partition, message?.offset)],
+    onCommit: [
+      ({ topics, error }) => {
+        if (error) console.error('commit failed', error);
+        else console.log('committed', topics.length, 'topic(s)');
+      },
+    ],
+  },
+});
+```
+
 ## Share groups (KIP-932)
 
 `kafka.shareConsumer({ groupId })` is a separate API from `consumer()`. Records

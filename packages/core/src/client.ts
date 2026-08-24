@@ -120,6 +120,7 @@ export class Kafka {
     batchSize,
     bufferMemory,
     deliveryTimeoutMs,
+    hooks,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({
@@ -148,6 +149,7 @@ export class Kafka {
       batchSize,
       bufferMemory,
       deliveryTimeoutMs,
+      hooks,
     });
   }
 
@@ -174,6 +176,7 @@ export class Kafka {
     groupInstanceId,
     autoOffsetReset,
     groupProtocol,
+    hooks,
   }: ConsumerConfig): Consumer {
     const isolationLevel = readUncommitted ? ISOLATION_LEVEL.READ_UNCOMMITTED : ISOLATION_LEVEL.READ_COMMITTED;
     const instrumentationEmitter = new InstrumentationEventEmitter();
@@ -205,6 +208,7 @@ export class Kafka {
       groupInstanceId,
       autoOffsetReset,
       groupProtocol,
+      hooks,
     });
   }
 

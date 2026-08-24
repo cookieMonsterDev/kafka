@@ -2,9 +2,12 @@ import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import type { Logger } from '../../loggers/index';
+import { runHooks } from '../../utils/run-hooks';
 import { COMMIT_OFFSETS } from '../instrumentation-events';
 import { resolveAutoOffsetReset, type AutoOffsetReset, type TopicOffsetConfiguration } from '../offset-reset';
 import type {
+  ConsumerHooks,
   MemberAssignment,
   Offsets,
   OffsetsByTopicPartition,
@@ -33,6 +36,9 @@ export interface OffsetManagerOptions {
   groupId: string;
   generationId: number;
   memberId: string;
+  logger: Logger;
+  /** Ordered async `onCommit` hook. See {@link ConsumerHooks}. */
+  hooks?: ConsumerHooks;
 }
 
 /**
@@ -54,6 +60,8 @@ export class OffsetManager {
   lastCommit: number;
   topics: string[];
   resolvedOffsets: Record<string, Record<string, bigint>>;
+  logger: Logger;
+  hooks: ConsumerHooks | undefined;
   #committedOffsets: Record<string, Record<string, bigint>> | undefined;
 
   constructor({
@@ -68,6 +76,8 @@ export class OffsetManager {
     groupId,
     generationId,
     memberId,
+    logger,
+    hooks,
   }: OffsetManagerOptions) {
     this.cluster = cluster;
     this.coordinator = coordinator;
@@ -83,6 +93,8 @@ export class OffsetManager {
     this.lastCommit = Date.now();
     this.topics = Object.keys(memberAssignment);
     this.resolvedOffsets = {};
+    this.logger = logger.namespace('OffsetManager');
+    this.hooks = hooks;
     this.clearAllOffsets();
   }
 
@@ -251,12 +263,18 @@ export class OffsetManager {
       }
 
       this.lastCommit = Date.now();
+      if (this.hooks?.onCommit?.length) {
+        await runHooks(this.hooks.onCommit, payload, 'onCommit', this.logger);
+      }
     } catch (e) {
       const error = e as { type?: string };
       if (error.type === 'NOT_COORDINATOR_FOR_GROUP') {
         await this.cluster.refreshMetadata();
       }
 
+      if (this.hooks?.onCommit?.length) {
+        await runHooks(this.hooks.onCommit, { ...payload, error: e }, 'onCommit', this.logger);
+      }
       throw e;
     }
   }

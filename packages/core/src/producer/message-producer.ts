@@ -6,10 +6,19 @@ import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-
 import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression/index';
 import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
+import { runHooks } from '../utils/run-hooks';
 import type { EosManager } from './eos-manager/index';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
-import type { CustomPartitioner, Message, ProducerBatch, ProducerRecord, RecordMetadata, TopicMessages } from './types';
+import type {
+  CustomPartitioner,
+  Message,
+  ProducerBatch,
+  ProducerHooks,
+  ProducerRecord,
+  RecordMetadata,
+  TopicMessages,
+} from './types';
 
 export interface MessageProducerOptions {
   logger: Logger;
@@ -51,6 +60,8 @@ export interface MessageProducerOptions {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
+  /** Ordered async `onSend`/`onAck` hooks. See {@link ProducerHooks}. */
+  hooks?: ProducerHooks;
 }
 
 export interface MessageProducer {
@@ -151,6 +162,7 @@ export function createMessageProducer({
   batchSize = 0,
   bufferMemory,
   deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
+  hooks,
 }: MessageProducerOptions): MessageProducer {
   const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager, nodeLatencyTracker });
   const pending: PendingSend[] = [];
@@ -433,12 +445,35 @@ export function createMessageProducer({
     validateBatch(topicMessages, resolvedAcks, resolvedCompression);
     const mergedTopicMessages = mergeCallTopicMessages(topicMessages);
 
+    // `runHooks` is async, so awaiting it always costs a microtask tick even when there is
+    // nothing to run. Guard on hooks being configured so a hookless producer keeps the exact
+    // same synchronous-until-dispatch/enqueue timing as before this feature existed.
+    const hookEvent = {
+      topicMessages: mergedTopicMessages,
+      acks: resolvedAcks,
+      timeout: resolvedTimeout,
+      compression: resolvedCompression,
+    };
+    if (hooks?.onSend?.length) {
+      await runHooks(hooks.onSend, hookEvent, 'onSend', logger);
+    }
+
     const produce =
       lingerMs <= 0
         ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression)
         : enqueue(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression);
 
-    return rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
+    const settled = rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
+    if (!hooks?.onAck?.length) return settled;
+
+    try {
+      const metadata = await settled;
+      await runHooks(hooks.onAck, { ...hookEvent, metadata }, 'onAck', logger);
+      return metadata;
+    } catch (error) {
+      await runHooks(hooks.onAck, { ...hookEvent, error }, 'onAck', logger);
+      throw error;
+    }
   }
 
   async function send({

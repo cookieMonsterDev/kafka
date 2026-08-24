@@ -7,6 +7,7 @@ import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { retrier } from '../retry/index';
 import type { EosManager } from './eos-manager/index';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
+import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -373,6 +374,85 @@ describe('producer/messageProducer', () => {
       const producer = createTestProducer(broker);
 
       await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toBeTruthy();
+    });
+  });
+
+  describe('hooks', () => {
+    it('fires onSend before dispatch and onAck with metadata after a successful send, in registration order', async () => {
+      const broker = fakeBroker(1);
+      const order: string[] = [];
+      const onSendFirst = vi.fn((_event: ProducerSendHookEvent) => {
+        order.push('onSend-1');
+      });
+      const onSendSecond = vi.fn((_event: ProducerSendHookEvent) => {
+        order.push('onSend-2');
+      });
+      const onAckFirst = vi.fn((_event: ProducerAckHookEvent) => {
+        order.push('onAck-1');
+      });
+      const onAckSecond = vi.fn((_event: ProducerAckHookEvent) => {
+        order.push('onAck-2');
+      });
+      const producer = createTestProducer(broker, {
+        hooks: { onSend: [onSendFirst, onSendSecond], onAck: [onAckFirst, onAckSecond] },
+      });
+
+      const metadata = await producer.send({ topic, messages: [{ value: 'a' }] });
+
+      expect(order).toEqual(['onSend-1', 'onSend-2', 'onAck-1', 'onAck-2']);
+      expect(onSendFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          acks: -1,
+          topicMessages: [{ topic, messages: [{ value: 'a' }] }],
+        }),
+      );
+      expect(onAckFirst).toHaveBeenCalledWith(expect.objectContaining({ metadata }));
+      const ackEvent = onAckFirst.mock.calls[0]?.[0];
+      expect(ackEvent?.error).toBeUndefined();
+    });
+
+    it('fires onAck with the error, not metadata, when the send fails - and still rejects', async () => {
+      const broker = fakeBroker(1);
+      const sendError = new KafkaNonRetriableError('boom');
+      broker.produce.mockImplementation(() => Promise.reject(sendError));
+      const onAck = vi.fn((_event: ProducerAckHookEvent) => undefined);
+      const producer = createTestProducer(broker, { hooks: { onAck: [onAck] } });
+
+      await expect(producer.send({ topic, messages: [{ value: 'a' }] })).rejects.toThrow(sendError);
+
+      expect(onAck).toHaveBeenCalledWith(expect.objectContaining({ error: sendError }));
+      const event = onAck.mock.calls[0]?.[0];
+      expect(event?.metadata).toBeUndefined();
+    });
+
+    it('does not fail the send when an onSend or onAck hook throws', async () => {
+      const broker = fakeBroker(1);
+      const throwingOnSend = vi.fn(() => {
+        throw new Error('onSend boom');
+      });
+      const throwingOnAck = vi.fn(() => {
+        throw new Error('onAck boom');
+      });
+      const producer = createTestProducer(broker, {
+        hooks: { onSend: [throwingOnSend], onAck: [throwingOnAck] },
+      });
+
+      await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toBeTruthy();
+      expect(throwingOnSend).toHaveBeenCalledTimes(1);
+      expect(throwingOnAck).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fail send() when a throwing onAck hook runs on the failure path', async () => {
+      const broker = fakeBroker(1);
+      const sendError = new KafkaNonRetriableError('boom');
+      broker.produce.mockImplementation(() => Promise.reject(sendError));
+      const throwingOnAck = vi.fn(() => {
+        throw new Error('onAck boom');
+      });
+      const producer = createTestProducer(broker, { hooks: { onAck: [throwingOnAck] } });
+
+      await expect(producer.send({ topic, messages: [{ value: 'a' }] })).rejects.toThrow(sendError);
+      expect(throwingOnAck).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -8,7 +8,7 @@ import { waitFor } from '../utils/wait';
 import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
 import { Runner } from './runner';
-import type { EachBatchHandler, KafkaMessage } from './types';
+import type { EachBatchHandler, KafkaMessage, OnConsumeEvent } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -478,6 +478,111 @@ describe('consumer/runner', () => {
     await runner.stop();
     expect(consumerGroup.commitOffsets).toHaveBeenCalledTimes(1);
     runner = undefined;
+  });
+
+  describe('hooks', () => {
+    it('fires onConsume in registration order before eachMessage, once per message', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const order: string[] = [];
+      const first = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume-1');
+      });
+      const second = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume-2');
+      });
+      const eachMessage = vi.fn(async () => {
+        order.push('eachMessage');
+      });
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [first, second] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, {
+        partition,
+        highWatermark: 5n,
+        messages: [kafkaMessage(1n), kafkaMessage(2n)],
+      });
+      await runner.handleBatch(batch);
+
+      expect(order).toEqual(['onConsume-1', 'onConsume-2', 'eachMessage', 'onConsume-1', 'onConsume-2', 'eachMessage']);
+      expect(first).toHaveBeenCalledWith(
+        expect.objectContaining({ topic: topicName, partition, message: expect.any(Object) }),
+      );
+      const event = first.mock.calls[0]?.[0];
+      expect(event?.batch).toBeUndefined();
+    });
+
+    it('fires onConsume once per batch, before eachBatch', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const order: string[] = [];
+      const onConsume = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume');
+      });
+      const eachBatch = vi.fn(async () => {
+        order.push('eachBatch');
+      });
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [onConsume] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, {
+        partition,
+        highWatermark: 5n,
+        messages: [kafkaMessage(1n), kafkaMessage(2n)],
+      });
+      await runner.handleBatch(batch);
+
+      expect(order).toEqual(['onConsume', 'eachBatch']);
+      expect(onConsume).toHaveBeenCalledTimes(1);
+      const event = onConsume.mock.calls[0]?.[0];
+      expect(event?.message).toBeUndefined();
+      expect(event?.batch).toBe(batch);
+    });
+
+    it('does not fail eachMessage processing when an onConsume hook throws', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const throwingHook = vi.fn(() => {
+        throw new Error('onConsume boom');
+      });
+      const eachMessage = vi.fn(async () => undefined);
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [throwingHook] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [kafkaMessage(4n)] });
+      await expect(runner.handleBatch(batch)).resolves.toBeUndefined();
+
+      expect(throwingHook).toHaveBeenCalledTimes(1);
+      expect(eachMessage).toHaveBeenCalledTimes(1);
+      expect(consumerGroup.resolveOffset).toHaveBeenCalledWith({ topic: topicName, partition, offset: 4n });
+    });
   });
 
   it('does not commit on stop when autoCommit is false', async () => {

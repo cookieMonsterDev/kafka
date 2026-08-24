@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
-import { createCluster, createTopic, newLogger, secureRandom, waitForConsumerToJoinGroup } from '../../helpers/index';
+import { createProducer } from '../../../src/producer/index';
+import {
+  createCluster,
+  createTopic,
+  generateMessages,
+  newLogger,
+  secureRandom,
+  waitForConsumerToJoinGroup,
+  waitForMessages,
+} from '../../helpers/index';
 
 describe('consumer.subscribe', () => {
   let topicName: string;
@@ -36,6 +45,34 @@ describe('consumer.subscribe', () => {
     await expect(
       consumer!.subscribe({ topic: new RegExp(`^${topicName}$`), fromBeginning: true }),
     ).resolves.toBeUndefined();
+  });
+
+  it('consumes from topics that match a regex subscription', async () => {
+    const producer = createProducer({ cluster: createCluster(), logger: newLogger() });
+    const prefix = `rgx-${secureRandom().slice(0, 8)}`;
+    const matching = `${prefix}-a-${secureRandom()}`;
+    const otherMatching = `${prefix}-b-${secureRandom()}`;
+    await createTopic({ topic: matching });
+    await createTopic({ topic: otherMatching });
+
+    try {
+      await producer.connect();
+      await consumer!.subscribe({ topic: new RegExp(`^${prefix}-`), fromBeginning: true });
+      const consumed: string[] = [];
+      const join = waitForConsumerToJoinGroup(consumer!);
+      await consumer!.run({
+        eachMessage: async (event) => {
+          consumed.push(event.topic);
+        },
+      });
+      await join;
+      await producer.send({ acks: 1, topic: matching, messages: generateMessages({ number: 1 }) });
+      await producer.send({ acks: 1, topic: otherMatching, messages: generateMessages({ number: 1 }) });
+      await waitForMessages(consumed, { number: 2 });
+      expect(new Set(consumed)).toEqual(new Set([matching, otherMatching]));
+    } finally {
+      await producer.disconnect();
+    }
   });
 
   it('rejects a second subscribe while the consumer is running', async () => {

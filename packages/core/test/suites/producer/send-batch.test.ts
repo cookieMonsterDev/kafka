@@ -108,4 +108,23 @@ describe('producer.sendBatch', () => {
       producer.sendBatch({ acks: 1, topicMessages: [{ topic: '', messages: [{ value: 'v' }] }] }),
     ).rejects.toThrow('Invalid topic');
   });
+
+  it('uses the producer-level acks default when sendBatch omits acks', async () => {
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      acks: 1,
+      logger: newLogger(),
+    });
+    await producer.connect();
+    await expect(
+      producer.sendBatch({
+        topicMessages: [{ topic: firstTopic, messages: [{ key: 'k', value: 'v' }] }],
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ topicName: firstTopic, partition: 0, errorCode: 0, baseOffset: 0n }),
+      ]),
+    );
+  });
 });

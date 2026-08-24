@@ -149,4 +149,12 @@ describe('admin.offsets', () => {
     await waitForMessages(consumed, { number: 3 });
     expect(consumed.map((entry) => entry.offset)).toEqual([7n, 8n, 9n]);
   });
+
+  it('returns the unknown-offset sentinel for a group that has never committed', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    await admin.connect();
+    const offsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
+    expect(offsets[0]?.partitions[0]).toEqual(expect.objectContaining({ partition: 0, offset: -1n }));
+  });
 });

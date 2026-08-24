@@ -122,4 +122,47 @@ describe('consumer.pauseResume', () => {
     consumer!.resume([{ topic: topicName }]);
     await waitForMessages(consumed, { number: before + 2 });
   });
+
+  it('pauses the current partition from the eachMessage handler', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    let resume: (() => void) | undefined;
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+        if (event.partition === 0 && resume == null) {
+          resume = event.pause();
+        }
+      },
+    });
+    await join;
+
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        { key: 'a', value: 'a', partition: 0 },
+        { key: 'b', value: 'b', partition: 1 },
+      ],
+    });
+    await waitForMessages(consumed, { number: 2 });
+
+    const before = consumed.length;
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        { key: 'c', value: 'c', partition: 0 },
+        { key: 'd', value: 'd', partition: 1 },
+      ],
+    });
+    await waitForMessages(consumed, { number: before + 1 });
+    expect(consumed.slice(before).every((event) => event.partition === 1)).toBe(true);
+
+    resume?.();
+    await waitForMessages(consumed, { number: before + 2 });
+  });
 });

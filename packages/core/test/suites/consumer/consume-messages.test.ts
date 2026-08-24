@@ -182,6 +182,80 @@ describe('consumer.consumeMessages', () => {
     expect(new Set(consumed.map((event) => event.topic))).toEqual(new Set([topicName, otherTopic]));
   });
 
+  testIfKafkaAtLeast_0_11('round-trips Buffer keys, values, timestamps, and header lists', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+
+    const timestamp = Date.now() - 5_000;
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        {
+          key: Buffer.from('bin-key'),
+          value: Buffer.from('bin-value'),
+          timestamp,
+          headers: { 'x-trace': ['one', 'two'], 'x-empty': Buffer.from('') },
+        },
+        { key: 'empty', value: '' },
+      ],
+    });
+    await waitForMessages(consumed, { number: 2 });
+
+    const binary = consumed[0]?.message;
+    expect(binary?.key?.equals(Buffer.from('bin-key'))).toBe(true);
+    expect(binary?.value?.equals(Buffer.from('bin-value'))).toBe(true);
+    expect(binary?.timestamp).toBe(BigInt(timestamp));
+    const trace = binary?.headers['x-trace'];
+    const traceValues = (Array.isArray(trace) ? trace : [trace]).map((value) => value?.toString());
+    expect(traceValues).toEqual(['one', 'two']);
+    expect(consumed[1]?.message.value?.toString()).toBe('');
+    expect(consumed[1]?.message.value).not.toBeNull();
+  });
+
+  it('ignores a second run() while already running', async () => {
+    await consumer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({ eachMessage: async () => undefined });
+    await join;
+    await expect(consumer!.run({ eachMessage: async () => undefined })).resolves.toBeUndefined();
+  });
+
+  it('allows subscribe after stop()', async () => {
+    const otherTopic = `test-topic-${secureRandom()}`;
+    await createTopic({ topic: otherTopic });
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({ eachMessage: async () => undefined });
+    await join;
+    await consumer!.stop();
+    await expect(consumer!.subscribe({ topic: otherTopic, fromBeginning: true })).resolves.toBeUndefined();
+
+    const consumed: EachMessagePayload[] = [];
+    const rejoin = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await rejoin;
+    await producer!.send({ acks: 1, topic: otherTopic, messages: [{ key: 'k', value: 'from-other' }] });
+    await waitForMessages(consumed, { number: 1 });
+    expect(consumed[0]?.topic).toBe(otherTopic);
+  });
+
   it('resumes fetching after stop() then run() again', async () => {
     await consumer!.connect();
     await producer!.connect();

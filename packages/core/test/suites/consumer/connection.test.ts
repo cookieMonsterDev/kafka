@@ -33,6 +33,28 @@ describe('consumer.connection', () => {
     await expect(consumer.connect()).resolves.toBeUndefined();
   });
 
+  it('rejects connect when the signal is already aborted', async () => {
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId: `group-${secureRandom()}`,
+      logger: newLogger(),
+    });
+    await expect(consumer.connect({ signal: AbortSignal.abort() })).rejects.toThrow(/aborted/i);
+    await expect(consumer.connect()).resolves.toBeUndefined();
+  });
+
+  it('rejects run when the signal is already aborted', async () => {
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId: `group-${secureRandom()}`,
+      logger: newLogger(),
+    });
+    await consumer.connect();
+    await expect(consumer.run({ signal: AbortSignal.abort(), eachMessage: async () => undefined })).rejects.toThrow(
+      /aborted/i,
+    );
+  });
+
   it('connects over SSL', async () => {
     consumer = createConsumer({
       cluster: createCluster(sslConnectionOpts(), sslBrokers()),

@@ -7,6 +7,7 @@ import {
   newLogger,
   secureRandom,
   testIfKafkaAtLeast_0_11,
+  testIfKafkaAtLeast_1_0,
   waitFor,
 } from '../../helpers/index';
 
@@ -132,5 +133,33 @@ describe('admin.topics', () => {
     await admin.connect();
     const metadata = await admin.fetchTopicMetadata({ topics: [] });
     expect(Array.isArray(metadata.topics)).toBe(true);
+  });
+
+  testIfKafkaAtLeast_0_11('validates topic creation without creating the topic', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    await expect(
+      admin.createTopics({
+        validateOnly: true,
+        waitForLeaders: false,
+        topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+      }),
+    ).resolves.toBe(true);
+    expect(await admin.listTopics()).not.toContain(topicName);
+  });
+
+  testIfKafkaAtLeast_1_0('validates partition expansion without changing the topic', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    await admin.createTopics({
+      waitForLeaders: true,
+      topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
+    });
+    await admin.createPartitions({
+      validateOnly: true,
+      topicPartitions: [{ topic: topicName, count: 4 }],
+    });
+    const metadata = await admin.fetchTopicMetadata({ topics: [topicName] });
+    expect(metadata.topics.find((entry) => entry.name === topicName)?.partitions).toHaveLength(1);
   });
 });

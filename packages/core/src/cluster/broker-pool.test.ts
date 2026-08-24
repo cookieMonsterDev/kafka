@@ -227,4 +227,124 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.brokers['99']).toBeUndefined();
     });
   });
+
+  describe('applyLeaderUpdate', () => {
+    function metadataFixture(partitionMetadata: { partitionId: number; leader: number }[]) {
+      return {
+        brokers: [{ nodeId: 1, host: 'broker-1', port: 9092, rack: null }],
+        topicMetadata: [
+          {
+            topic: 'orders',
+            topicErrorCode: 0,
+            isInternal: false,
+            partitionMetadata: partitionMetadata.map((p) => ({
+              partitionErrorCode: 0,
+              partitionId: p.partitionId,
+              leader: p.leader,
+              replicas: [],
+              isr: [],
+            })),
+          },
+        ],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+    }
+
+    it('patches the cached partition leader without a Metadata RPC', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(true);
+      expect(brokerPool.metadata.topicMetadata[0]!.partitionMetadata[0]).toMatchObject({
+        leader: 2,
+        leaderEpoch: 5,
+      });
+    });
+
+    it('registers a new broker from NodeEndpoints without a Metadata RPC', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async (destination) => fakeConnectionPool({ host: destination?.host })),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+        nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+      });
+
+      expect(applied).toBe(true);
+      expect(brokerPool.brokers['2']).toBeDefined();
+      expect(brokerPool.brokers['2']!.connectionPool.host).toBe('broker-2');
+      expect(brokerPool.metadata.brokers).toContainEqual({
+        nodeId: 2,
+        host: 'broker-2',
+        port: 9093,
+        rack: null,
+      });
+    });
+
+    it('returns false without patching when there is no cached metadata yet', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(false);
+    });
+
+    it('returns false when the partition is not in the cached metadata', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 99,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(false);
+    });
+
+    it('ignores a negative leaderId (no known leader) and does not patch', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: -1, leaderEpoch: -1 },
+      });
+
+      expect(applied).toBe(false);
+      expect(brokerPool.metadata.topicMetadata[0]!.partitionMetadata[0]!.leader).toBe(1);
+    });
+  });
 });

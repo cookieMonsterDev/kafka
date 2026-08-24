@@ -1,6 +1,12 @@
 import { Decoder } from '../../../decoder';
 import type { ResponseDefinition } from '../../../schema';
-import { decodeRecordSet, parseFetchResponse, readTopicName } from '../shared';
+import {
+  decodeRecordSet,
+  parseFetchResponse,
+  readTopicName,
+  type FetchNodeEndpoint,
+  type LeaderIdAndEpoch,
+} from '../shared';
 import type { DecodedRecordBatch } from '../../../records/batch';
 
 export interface FetchPartitionResponseV11 {
@@ -12,6 +18,8 @@ export interface FetchPartitionResponseV11 {
   abortedTransactions: { producerId: bigint; firstOffset: bigint }[];
   preferredReadReplica: number;
   messages: DecodedRecordBatch['records'];
+  /** KIP-951 (v12+); always `null` pre-v12, where the wire has no tagged fields to carry it. */
+  currentLeader: LeaderIdAndEpoch | null;
 }
 
 export interface FetchTopicResponseV11 {
@@ -27,6 +35,8 @@ export interface FetchResponseV11Body {
   errorCode: number;
   sessionId: number;
   responses: FetchTopicResponseV11[];
+  /** KIP-951 (v16+); always `[]` pre-v16, where the wire has no top-level tagged fields. */
+  nodeEndpoints: FetchNodeEndpoint[];
 }
 
 async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV11> {
@@ -42,6 +52,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
     })),
     preferredReadReplica: decoder.readInt32(),
     messages: await decodeRecordSet(decoder),
+    currentLeader: null,
   };
 }
 
@@ -74,7 +85,7 @@ export const fetchResponseV11: ResponseDefinition<FetchResponseV11Body> = {
     const errorCode = decoder.readInt16();
     const sessionId = decoder.readInt32();
     const responses = await decoder.readArrayAsync(decodeTopicResponse);
-    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses };
+    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses, nodeEndpoints: [] };
   },
   parse: parseFetchResponse,
 };

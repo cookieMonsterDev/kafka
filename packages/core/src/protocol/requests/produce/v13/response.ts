@@ -1,21 +1,24 @@
+import { Decoder } from '../../../decoder';
+import { compactArray, field, flexibleObject, int32, object, uuid, type ResponseDefinition } from '../../../schema';
 import {
-  compactArray,
-  compactNullableString,
-  defineResponse,
-  field,
-  flexibleObject,
-  int16,
-  int32,
-  int64,
-  uuid,
-  type ResponseDefinition,
-} from '../../../schema';
-import { parseProduceResponse, resolveProduceTopicName, type ProduceRequestOptions } from '../shared';
-import type { ProduceResponseV9Body } from '../v9/response';
+  parseProduceResponse,
+  readProduceResponseNodeEndpoints,
+  resolveProduceTopicName,
+  type ProduceRequestOptions,
+} from '../shared';
+import { producePartitionSchemaV9, type ProduceResponseV9Body } from '../v9/response';
 
 export interface ProduceResponseV13Body extends ProduceResponseV9Body {
   topics: (ProduceResponseV9Body['topics'][number] & { topicId: Buffer })[];
 }
+
+const bodySchema = object([
+  field(
+    'topics',
+    compactArray(flexibleObject([field('topicId', uuid), field('partitions', compactArray(producePartitionSchemaV9))])),
+  ),
+  field('throttleTime', int32),
+]);
 
 /**
  * Produce Response (Version: 13) => [responses] throttle_time_ms TAG_BUFFER
@@ -25,52 +28,19 @@ export interface ProduceResponseV13Body extends ProduceResponseV9Body {
  *                            [record_errors] error_message TAG_BUFFER
  *
  * Topic names are replaced with topic IDs (KIP-516). `decode` restores `topicName` from the
- * request's `topicData` so `RecordMetadata` stays name-based.
+ * request's `topicData` so `RecordMetadata` stays name-based. CurrentLeader (partition tag 0)
+ * and NodeEndpoints (response tag 0) are decoded (KIP-951), same as v9+.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-const bodySchema = flexibleObject([
-  field(
-    'topics',
-    compactArray(
-      flexibleObject([
-        field('topicId', uuid),
-        field(
-          'partitions',
-          compactArray(
-            flexibleObject([
-              field('partition', int32),
-              field('errorCode', int16),
-              field('baseOffset', int64),
-              field('logAppendTime', int64),
-              field('logStartOffset', int64),
-              field(
-                'recordErrors',
-                compactArray(
-                  flexibleObject([field('batchIndex', int32), field('batchIndexErrorMessage', compactNullableString)]),
-                ),
-              ),
-              field('errorMessage', compactNullableString),
-            ]),
-          ),
-        ),
-      ]),
-    ),
-  ),
-  field('throttleTime', int32),
-]);
-
-const raw = defineResponse({
-  schema: bodySchema,
-  parse: parseProduceResponse,
-});
-
 export function produceResponseV13(
   options: Pick<ProduceRequestOptions, 'topicData'> = { topicData: [] },
 ): ResponseDefinition<ProduceResponseV13Body> {
   return {
     decode: async (rawData) => {
-      const decoded = await raw.decode(rawData);
+      const decoder = new Decoder(rawData);
+      const decoded = bodySchema.read(decoder);
+      const nodeEndpoints = readProduceResponseNodeEndpoints(decoder);
       return {
         ...decoded,
         topics: decoded.topics.map((topic, index) => ({
@@ -79,6 +49,7 @@ export function produceResponseV13(
         })),
         throttleTime: 0,
         clientSideThrottleTime: decoded.throttleTime,
+        nodeEndpoints,
       };
     },
     parse: parseProduceResponse,

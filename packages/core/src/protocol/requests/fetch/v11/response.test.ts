@@ -38,6 +38,7 @@ describe('protocol/requests/fetch/v11/response', () => {
               logStartOffset: 0n,
               abortedTransactions: [],
               preferredReadReplica: 0,
+              currentLeader: null,
               messages: [0, 1, 2].map((i) => ({
                 offset: BigInt(i),
                 magicByte: 2,
@@ -53,6 +54,7 @@ describe('protocol/requests/fetch/v11/response', () => {
           ],
         },
       ],
+      nodeEndpoints: [],
     });
 
     await expect(fetchResponseV11.parse(data)).resolves.toBeTruthy();

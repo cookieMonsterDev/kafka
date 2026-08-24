@@ -74,6 +74,7 @@ describe('producer/sendMessages', () => {
       addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      applyLeaderUpdate: vi.fn().mockResolvedValue(true),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
       findTopicId: vi.fn().mockReturnValue(undefined),
       findLeaderForPartitions: vi.fn().mockImplementation((_topic: string, partitions: readonly number[]) => {
@@ -163,6 +164,44 @@ describe('producer/sendMessages', () => {
       expect(cluster.refreshMetadata).toHaveBeenCalled();
     });
   }
+
+  it('recovers the leader from a CurrentLeader hint instead of a full metadata refresh (KIP-951)', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
+    const error = createErrorFromCode(code, {
+      topic,
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+    brokers[1].produce
+      .mockImplementationOnce(() => Promise.reject(error))
+      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
+
+    expect(cluster.applyLeaderUpdate).toHaveBeenCalledWith({
+      topic,
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+    expect(cluster.refreshMetadata).not.toHaveBeenCalled();
+    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+  });
 
   it('refreshes metadata if partition metadata is empty', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };

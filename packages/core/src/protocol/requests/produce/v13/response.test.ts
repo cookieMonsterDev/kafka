@@ -46,12 +46,14 @@ describe('protocol/requests/produce/v13/response', () => {
               logStartOffset: 0n,
               recordErrors: [],
               errorMessage: null,
+              currentLeader: null,
             },
           ],
         },
       ],
       throttleTime: 0,
       clientSideThrottleTime: 20,
+      nodeEndpoints: [],
     });
   });
 

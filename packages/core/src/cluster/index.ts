@@ -21,7 +21,7 @@ import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import { Lock } from '../utils/lock';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
-import { BrokerPool } from './broker-pool';
+import { BrokerPool, type ApplyLeaderUpdateOptions } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
 
 type MetadataBroker = ClusterMetadata['brokers'][number];
@@ -210,6 +210,14 @@ export class Cluster {
 
   removeBroker({ host, port }: { host: string; port: number }): void {
     this.brokerPool.removeBroker({ host, port });
+  }
+
+  /**
+   * KIP-951: patches the cached partition leader from a Produce/Fetch error response instead of
+   * a full `refreshMetadata`. Returns whether the cached metadata was actually patched.
+   */
+  async applyLeaderUpdate(options: ApplyLeaderUpdateOptions): Promise<boolean> {
+    return this.brokerPool.applyLeaderUpdate(options);
   }
 
   async refreshMetadata(): Promise<void> {

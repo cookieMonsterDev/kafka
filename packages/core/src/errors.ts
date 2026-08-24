@@ -73,10 +73,28 @@ export class KafkaNonRetriableError extends KafkaError {
   }
 }
 
+/** KIP-951: the partition's current leader, reported on a stale-leader error response. */
+export interface CurrentLeader {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+/** KIP-951: a broker address the client may not already have cached metadata for. */
+export interface NodeEndpoint {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
 export interface KafkaProtocolErrorOptions {
   retriable?: boolean;
   topic?: string;
   partition?: number;
+  /** KIP-951: set when the Produce/Fetch response carried a `CurrentLeader` tagged field. */
+  currentLeader?: CurrentLeader;
+  /** KIP-951: broker addresses accompanying `currentLeader`, when the client doesn't know them yet. */
+  nodeEndpoints?: readonly NodeEndpoint[];
 }
 
 /**
@@ -89,6 +107,8 @@ export class KafkaProtocolError extends KafkaError {
   readonly code: number | undefined;
   readonly topic: string | undefined;
   readonly partition: number | undefined;
+  readonly currentLeader: CurrentLeader | undefined;
+  readonly nodeEndpoints: readonly NodeEndpoint[] | undefined;
 
   constructor(
     e: ErrorLike & { retriable?: boolean; type?: string; code?: number },
@@ -106,6 +126,8 @@ export class KafkaProtocolError extends KafkaError {
     this.code = e.code;
     this.topic = topic;
     this.partition = partition;
+    this.currentLeader = options.currentLeader;
+    this.nodeEndpoints = options.nodeEndpoints;
   }
 }
 
@@ -114,13 +136,10 @@ export class KafkaOffsetOutOfRange extends KafkaProtocolError {
   override readonly topic: string | undefined;
   override readonly partition: number | undefined;
 
-  constructor(
-    e: ConstructorParameters<typeof KafkaProtocolError>[0],
-    { topic, partition }: { topic?: string; partition?: number },
-  ) {
-    super(e);
-    this.topic = topic;
-    this.partition = partition;
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], options: KafkaProtocolErrorOptions) {
+    super(e, options);
+    this.topic = options.topic;
+    this.partition = options.partition;
   }
 }
 

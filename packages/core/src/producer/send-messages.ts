@@ -192,7 +192,17 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
         if (rejection) throw rejection.reason;
         return collectResponse();
       } catch (e) {
-        const error = e as Error & { name: string; host?: string; port?: number; retriable?: boolean; type?: string };
+        const error = e as Error & {
+          name: string;
+          host?: string;
+          port?: number;
+          retriable?: boolean;
+          type?: string;
+          topic?: string;
+          partition?: number;
+          currentLeader?: { leaderId: number; leaderEpoch: number };
+          nodeEndpoints?: { nodeId: number; host: string; port: number; rack: string | null }[];
+        };
 
         if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
           cluster.removeBroker({ host: error.host, port: error.port });
@@ -203,6 +213,35 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           await cluster.connect();
           await cluster.refreshMetadata();
           throw error;
+        }
+
+        // KIP-951: the Produce response itself named the new leader (and its address, if the
+        // client didn't already have it cached). Patch the cache locally instead of paying for a
+        // full Metadata round trip before the retrier's next attempt.
+        if (
+          staleMetadata(error) &&
+          error.topic != null &&
+          error.partition != null &&
+          error.currentLeader != null &&
+          error.currentLeader.leaderId >= 0
+        ) {
+          const patched = await cluster.applyLeaderUpdate({
+            topic: error.topic,
+            partition: error.partition,
+            currentLeader: error.currentLeader,
+            nodeEndpoints: error.nodeEndpoints ?? [],
+          });
+
+          if (patched) {
+            logger.debug(`Recovered leader from Produce response, skipping metadata refresh: ${error.message}`, {
+              retryCount,
+              retryTime,
+              topic: error.topic,
+              partition: error.partition,
+              leaderId: error.currentLeader.leaderId,
+            });
+            throw error;
+          }
         }
 
         // This is necessary in case the metadata is stale and the number of partitions for this

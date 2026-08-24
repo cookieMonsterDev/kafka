@@ -1,4 +1,4 @@
-import { KafkaProtocolError } from '../errors';
+import { KafkaProtocolError, type KafkaProtocolErrorOptions } from '../errors';
 
 export interface ErrorCodeEntry {
   type: string;
@@ -857,7 +857,7 @@ export function failure(code: number): boolean {
 
 export function createErrorFromCode(
   code: number,
-  extras: { topic?: string; partition?: number } = {},
+  extras: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> = {},
 ): KafkaProtocolError {
   const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code);
   return new KafkaProtocolError(entry, extras);

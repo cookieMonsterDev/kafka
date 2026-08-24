@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { MemberAssignment } from './assigner-protocol';
 import { ConsumerGroup, nextAdaptiveMaxBytes } from './consumer-group';
@@ -321,6 +322,56 @@ describe('consumer/consumer-group', () => {
     expect(groupJoins).toHaveLength(2);
     expect(groupJoins[1]?.payload.memberAssignment).toEqual({ topic1: [0] });
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+  });
+
+  it('recovers the leader from a CurrentLeader hint instead of a metadata refresh and rejoin (KIP-951)', async () => {
+    const consumerGroup = createGroup();
+    const applyLeaderUpdate = vi.fn().mockResolvedValue(true);
+    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.cluster = { applyLeaderUpdate, refreshMetadata } as unknown as Cluster;
+    const joinAndSync = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.joinAndSync = joinAndSync;
+
+    const code = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
+    const error = createErrorFromCode(code, {
+      topic: 'topic1',
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+
+    await consumerGroup.recoverFromFetch(error);
+
+    expect(applyLeaderUpdate).toHaveBeenCalledWith({
+      topic: 'topic1',
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+    expect(refreshMetadata).not.toHaveBeenCalled();
+    expect(joinAndSync).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a full metadata refresh and rejoin when the leader patch misses (KIP-951)', async () => {
+    const consumerGroup = createGroup();
+    const applyLeaderUpdate = vi.fn().mockResolvedValue(false);
+    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.cluster = { applyLeaderUpdate, refreshMetadata } as unknown as Cluster;
+    const joinAndSync = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.joinAndSync = joinAndSync;
+
+    const code = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
+    const error = createErrorFromCode(code, {
+      topic: 'topic1',
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+    });
+
+    await consumerGroup.recoverFromFetch(error);
+
+    expect(applyLeaderUpdate).toHaveBeenCalled();
+    expect(refreshMetadata).toHaveBeenCalled();
+    expect(joinAndSync).toHaveBeenCalled();
   });
 
   it('caches getActiveTopicPartitions until pause, resume, or assign', () => {

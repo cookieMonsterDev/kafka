@@ -26,7 +26,7 @@ Error
 │   │   ├── KafkaPartialMessageError
 │   │   ├── KafkaGroupCoordinatorNotFound
 │   │   ├── KafkaNotImplemented
-│   │   ├── KafkaTimeout → KafkaLockTimeout
+│   │   ├── KafkaTimeout → KafkaLockTimeout, KafkaDeliveryTimeoutError
 │   │   ├── KafkaUnsupportedMagicByteInMessageSet
 │   │   ├── KafkaInvariantViolation
 │   │   ├── KafkaInvalidVarIntError / KafkaInvalidLongError
@@ -53,18 +53,19 @@ Every `KafkaError` has `name`, `retriable`, optional `helpUrl`, and `cause`.
 
 ## When they fire
 
-| Class                             | Typical cause                                      |
-| --------------------------------- | -------------------------------------------------- |
-| `KafkaProtocolError`              | Broker returned an error code                      |
-| `KafkaOffsetOutOfRange`           | Fetch offset not in log                            |
-| `KafkaConnectionError`            | Socket / broker unreachable                        |
-| `KafkaRequestTimeoutError`        | In-flight request exceeded `requestTimeout`        |
-| `KafkaSASLAuthenticationError`    | SASL handshake failed                              |
-| `KafkaServerDoesNotSupportApiKey` | Broker `ApiVersions` has no overlap for a used API |
-| `KafkaNumberOfRetriesExceeded`    | Retrier exhausted (`retryCount`, `retryTime`)      |
-| `KafkaCreateTopicError`           | CreateTopics failed for that topic name            |
-| `KafkaUpdateFeaturesError`        | UpdateFeatures failed for that feature name        |
-| `KafkaNoBrokerAvailableError`     | Pool has no connected broker                       |
+| Class                             | Typical cause                                                            |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `KafkaProtocolError`              | Broker returned an error code                                            |
+| `KafkaOffsetOutOfRange`           | Fetch offset not in log                                                  |
+| `KafkaConnectionError`            | Socket / broker unreachable                                              |
+| `KafkaRequestTimeoutError`        | In-flight request exceeded `requestTimeout`                              |
+| `KafkaSASLAuthenticationError`    | SASL handshake failed                                                    |
+| `KafkaServerDoesNotSupportApiKey` | Broker `ApiVersions` has no overlap for a used API                       |
+| `KafkaNumberOfRetriesExceeded`    | Retrier exhausted (`retryCount`, `retryTime`)                            |
+| `KafkaDeliveryTimeoutError`       | Producer `deliveryTimeoutMs` elapsed before a `send`/`sendBatch` settled |
+| `KafkaCreateTopicError`           | CreateTopics failed for that topic name                                  |
+| `KafkaUpdateFeaturesError`        | UpdateFeatures failed for that feature name                              |
+| `KafkaNoBrokerAvailableError`     | Pool has no connected broker                                             |
 
 ## Protocol codes (common)
 

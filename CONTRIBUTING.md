@@ -137,7 +137,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
 
-Releases are not done from topic PRs. Merge `develop` into `master` (merge commit, not squash) when you want to publish. See [Releasing](#releasing) and the one-time GitHub settings guide ([`.github/branch-setup.md`](.github/branch-setup.md)).
+Releases are not done from topic PRs. Merge `develop` into `master` (merge commit, not squash) when you want to publish. See [Releasing](#releasing).
 
 ### Review expectations
 
@@ -245,8 +245,6 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
 3. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
 4. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
-
-One-time GitHub/npm/Pages settings: [`.github/branch-setup.md`](.github/branch-setup.md).
 
 ## Adding a package
 

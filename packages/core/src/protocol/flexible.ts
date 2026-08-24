@@ -29,7 +29,7 @@ const FIRST_FLEXIBLE_VERSION: Readonly<Record<number, number>> = Object.freeze({
   [API_KEYS.DeleteTopics]: 4,
   [API_KEYS.DeleteRecords]: 2,
   [API_KEYS.InitProducerId]: 3,
-  [API_KEYS.OffsetForLeaderEpoch]: 3,
+  [API_KEYS.OffsetForLeaderEpoch]: 4,
   [API_KEYS.AddPartitionsToTxn]: 3,
   [API_KEYS.AddOffsetsToTxn]: 3,
   [API_KEYS.EndTxn]: 3,

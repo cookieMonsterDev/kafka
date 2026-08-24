@@ -4,9 +4,11 @@ import { Encoder } from '../../encoder';
 import { OffsetForLeaderEpoch } from './index';
 import { offsetForLeaderEpochRequestV0 } from './v0/request';
 import { offsetForLeaderEpochResponseV0 } from './v0/response';
+import { offsetForLeaderEpochRequestV1 } from './v1/request';
 import { offsetForLeaderEpochRequestV2 } from './v2/request';
 import { offsetForLeaderEpochRequestV3 } from './v3/request';
-import { offsetForLeaderEpochResponseV3 } from './v3/response';
+import { offsetForLeaderEpochRequestV4 } from './v4/request';
+import { offsetForLeaderEpochResponseV4 } from './v4/response';
 
 const sampleTopics = [{ topic: 'orders', partitions: [{ partition: 0, currentLeaderEpoch: 3, leaderEpoch: 5 }] }];
 
@@ -46,22 +48,42 @@ describe('protocol/requests/offset-for-leader-epoch', () => {
     await expect(response.parse(decoded)).resolves.toEqual(decoded);
   });
 
-  it('round-trips a v2 request encode and response decode, including throttleTime', async () => {
+  it('round-trips a v1 request encode, which drops current_leader_epoch like v0', async () => {
+    const { request, response } = OffsetForLeaderEpoch.protocol({ version: 1 })({ topics: sampleTopics });
+
+    expect(request.apiVersion).toBe(1);
+    const encoded = await request.encode();
+    // Same wire format as v0 - `current_leader_epoch` isn't added to the request until v2.
+    const expectedRequest = new Encoder().writeArray([
+      new Encoder().writeString('orders').writeArray([new Encoder().writeInt32(0).writeInt32(5)]),
+    ]);
+    expect(encoded.buffer).toEqual(expectedRequest.buffer);
+
+    const responseBuffer = new Encoder().writeArray([
+      new Encoder()
+        .writeString('orders')
+        .writeArray([new Encoder().writeInt16(0).writeInt32(0).writeInt32(5).writeInt64(42n)]),
+    ]).buffer;
+    const decoded = await response.decode(responseBuffer);
+    expect(decoded).toEqual({
+      topics: [{ topic: 'orders', partitions: [{ errorCode: 0, partition: 0, leaderEpoch: 5, endOffset: 42n }] }],
+    });
+  });
+
+  it('round-trips a v2 request encode and response decode, including throttleTime and current_leader_epoch, but no replica_id', async () => {
     const { request, response } = OffsetForLeaderEpoch.protocol({ version: 2 })({
       topics: [{ topic: 'orders', partitions: [{ partition: 0, leaderEpoch: 5 }] }],
     });
 
     expect(request.apiVersion).toBe(2);
     const encoded = await request.encode();
-    const expectedRequest = new Encoder()
-      .writeInt32(-1)
-      .writeArray([
-        new Encoder().writeString('orders').writeArray([new Encoder().writeInt32(0).writeInt32(-1).writeInt32(5)]),
-      ]);
+    // No leading replica_id - that field isn't added to the request until v3.
+    const expectedRequest = new Encoder().writeArray([
+      new Encoder().writeString('orders').writeArray([new Encoder().writeInt32(0).writeInt32(-1).writeInt32(5)]),
+    ]);
     expect(encoded.buffer).toEqual(expectedRequest.buffer);
 
     const decoder = new Decoder(encoded.buffer);
-    expect(decoder.readInt32()).toBe(-1);
     expect(decoder.readInt32()).toBe(1);
     expect(decoder.readString()).toBe('orders');
     expect(decoder.readInt32()).toBe(1);
@@ -85,8 +107,28 @@ describe('protocol/requests/offset-for-leader-epoch', () => {
     await expect(response.parse(decoded)).resolves.toEqual(decoded);
   });
 
-  it('encodes v3 topic names with a compact (uvarint) length prefix, not int16', async () => {
-    const definition = offsetForLeaderEpochRequestV3({
+  it('round-trips a v3 request encode, which adds replica_id but stays classic (non-flexible) encoding', async () => {
+    const { request } = OffsetForLeaderEpoch.protocol({ version: 3 })({ replicaId: -1, topics: sampleTopics });
+
+    expect(request.apiVersion).toBe(3);
+    const encoded = await request.encode();
+    const expectedRequest = new Encoder()
+      .writeInt32(-1)
+      .writeArray([
+        new Encoder().writeString('orders').writeArray([new Encoder().writeInt32(0).writeInt32(3).writeInt32(5)]),
+      ]);
+    expect(encoded.buffer).toEqual(expectedRequest.buffer);
+
+    // Classic STRING is int16 length, not the compact (uvarint) form v4 introduces.
+    const decoder = new Decoder(encoded.buffer);
+    expect(decoder.readInt32()).toBe(-1);
+    expect(decoder.readInt32()).toBe(1);
+    expect(decoder.readInt16()).toBe('orders'.length);
+    expect(decoder.readBytes('orders'.length)?.toString()).toBe('orders');
+  });
+
+  it('encodes v4 topic names with a compact (uvarint) length prefix, not int16', async () => {
+    const definition = offsetForLeaderEpochRequestV4({
       replicaId: -1,
       topics: [{ topic: 'orders', partitions: [{ partition: 0, currentLeaderEpoch: -1, leaderEpoch: 5 }] }],
     });
@@ -141,19 +183,35 @@ describe('protocol/requests/offset-for-leader-epoch', () => {
     expect(fromFamily.buffer).toEqual(fromFactory.buffer);
   });
 
+  it('v1 request factory matches the family encoder', async () => {
+    const fromFamily = await OffsetForLeaderEpoch.protocol({ version: 1 })({ topics: sampleTopics }).request.encode();
+    const fromFactory = await offsetForLeaderEpochRequestV1({
+      topics: [{ topic: 'orders', partitions: [{ partition: 0, leaderEpoch: 5 }] }],
+    }).encode();
+    expect(fromFamily.buffer).toEqual(fromFactory.buffer);
+  });
+
   it('v2 request factory matches the family encoder', async () => {
-    const fromFamily = await OffsetForLeaderEpoch.protocol({ version: 2 })({
+    const fromFamily = await OffsetForLeaderEpoch.protocol({ version: 2 })({ topics: sampleTopics }).request.encode();
+    const fromFactory = await offsetForLeaderEpochRequestV2({
+      topics: [{ topic: 'orders', partitions: [{ partition: 0, currentLeaderEpoch: 3, leaderEpoch: 5 }] }],
+    }).encode();
+    expect(fromFamily.buffer).toEqual(fromFactory.buffer);
+  });
+
+  it('v3 request factory matches the family encoder', async () => {
+    const fromFamily = await OffsetForLeaderEpoch.protocol({ version: 3 })({
       replicaId: -1,
       topics: sampleTopics,
     }).request.encode();
-    const fromFactory = await offsetForLeaderEpochRequestV2({
+    const fromFactory = await offsetForLeaderEpochRequestV3({
       replicaId: -1,
       topics: [{ topic: 'orders', partitions: [{ partition: 0, currentLeaderEpoch: 3, leaderEpoch: 5 }] }],
     }).encode();
     expect(fromFamily.buffer).toEqual(fromFactory.buffer);
   });
 
-  it('decodes a flexible v3 response', async () => {
+  it('decodes a flexible v4 response', async () => {
     const encoded = new Encoder()
       .writeInt32(0)
       .writeUVarInt(2)
@@ -166,7 +224,7 @@ describe('protocol/requests/offset-for-leader-epoch', () => {
       .writeUVarInt(0)
       .writeUVarInt(0)
       .writeUVarInt(0);
-    const decoded = await offsetForLeaderEpochResponseV3.decode(encoded.buffer);
+    const decoded = await offsetForLeaderEpochResponseV4.decode(encoded.buffer);
     expect(decoded).toEqual({
       throttleTime: 0,
       topics: [{ topic: 'orders', partitions: [{ errorCode: 0, partition: 0, leaderEpoch: 5, endOffset: 42n }] }],

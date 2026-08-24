@@ -25,6 +25,7 @@ import { SeekOffsets } from './seek-offsets';
 import { SubscriptionState } from './subscription-state';
 import type {
   Assigner,
+  ConsumerHooks,
   MemberAssignment as MemberAssignmentMap,
   Offsets,
   OffsetsByTopicPartition,
@@ -148,6 +149,8 @@ export interface ConsumerGroupOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /** Ordered async `onCommit` hook, forwarded to this group's `OffsetManager`. */
+  hooks?: ConsumerHooks;
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
@@ -197,6 +200,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupInstanceId: string | null;
   /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
   useConsumerProtocol: boolean;
+  hooks: ConsumerHooks | undefined;
   shuttingDown = false;
 
   seekOffset = new SeekOffsets();
@@ -249,6 +253,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     metadataMaxAge,
     groupInstanceId,
     groupProtocol = 'classic',
+    hooks,
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
@@ -273,6 +278,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
     this.useConsumerProtocol = groupProtocol === 'consumer';
+    this.hooks = hooks;
     this.#adaptiveMaxBytes = maxBytes;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
@@ -516,6 +522,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       groupId,
       generationId,
       memberId,
+      logger: this.logger,
+      hooks: this.hooks,
     });
   }
 

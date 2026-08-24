@@ -30,6 +30,7 @@ import {
 import { Runner } from './runner';
 import type {
   Assigner,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   EachBatchHandler,
@@ -43,6 +44,7 @@ import { parseOffset } from './types';
 export type { AutoOffsetReset, TopicOffsetConfiguration } from './offset-reset';
 export type {
   Assigner,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   EachBatchHandler,
@@ -51,6 +53,10 @@ export type {
   EachMessagePayload,
   GroupDescription,
   KafkaMessage,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
@@ -116,6 +122,8 @@ export interface ConsumerOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /** Ordered async `onConsume`/`onCommit` hooks. See {@link ConsumerHooks}. */
+  hooks?: ConsumerHooks;
 }
 
 /**
@@ -177,6 +185,7 @@ export function createConsumer({
   groupInstanceId,
   autoOffsetReset,
   groupProtocol = 'classic',
+  hooks,
 }: ConsumerOptions): Consumer {
   if (!groupId) {
     throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
@@ -360,6 +369,7 @@ export function createConsumer({
         autoCommitInterval,
         autoCommitThreshold,
         groupProtocol,
+        hooks,
       });
 
       runner = new Runner({
@@ -376,6 +386,7 @@ export function createConsumer({
         concurrency,
         prefetchMaxBatches,
         prefetchMaxBytes,
+        hooks,
       });
 
       await runner.start();

@@ -144,6 +144,35 @@ been measured yet (e.g. right after a rebalance). Disable it with
 `createPartitioner: () => Partitioners.StickyPartitioner({ adaptive: false })`.
 A custom partitioner can read the same signal via `PartitionerArgs.nodeLatency`.
 
+## Hooks
+
+`hooks` is a set of ordered async callbacks, not an interceptor SPI - there is
+no `ProducerInterceptor` class to implement. `onSend` fires once per
+`send()`/`sendBatch()` call, before the record(s) are dispatched to a broker
+(or enqueued, if `lingerMs > 0`); `onAck` fires once per call after it
+settles, with `metadata` set on success or `error` set on failure. Each array
+runs in registration order, one hook is always awaited before the next
+starts, and a hook that throws is caught, logged, and never affects the
+underlying send - it neither fails a successful send nor swallows a real
+failure.
+
+```ts
+const producer = kafka.producer({
+  hooks: {
+    onSend: [({ topicMessages }) => console.log('sending', topicMessages.length, 'topic(s)')],
+    onAck: [
+      ({ metadata, error }) => {
+        if (error) console.error('send failed', error);
+        else console.log('acked', metadata?.length, 'partition(s)');
+      },
+    ],
+  },
+});
+```
+
+Transactional producers reuse the same `hooks` passed to `kafka.producer()`
+for every `transaction()`.
+
 ## Idempotence and abort
 
 `idempotent` defaults to `false` — an explicit opt-in. `send()` and

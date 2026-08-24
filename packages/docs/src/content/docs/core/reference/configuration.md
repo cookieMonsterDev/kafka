@@ -54,6 +54,7 @@ See [Security](../../guides/security/).
 | `retry`                  | 5, or unlimited if idempotent | [retries](https://kafka.apache.org/43/configuration/producer-configs/#retries)                                                                                                                                                                |
 | `deliveryTimeoutMs`      | `120000`                      | End-to-end deadline for one `send`/`sendBatch` call — `lingerMs`, any `bufferMemory` wait, and every retry, together. `0` disables it. [delivery.timeout.ms](https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms) |
 | `maxRequestSize`         | `1048576`                     | Cap, in bytes, on the uncompressed records of one Produce request. Enforced client-side before the broker ever sees the request. [max.request.size](https://kafka.apache.org/43/configuration/producer-configs/#max.request.size)             |
+| `hooks`                  | unset                         | Ordered async `onSend`/`onAck` hooks (not an interceptor SPI). See [Producer hooks](../../guides/producer/#hooks)                                                                                                                             |
 
 ## `throughputPreset()`
 
@@ -100,6 +101,7 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 | `maxBytes`             | `10485760`       | [fetch.max.bytes](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes)                                                      |
 | `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                  |
 | `retry`                | `{ retries: 5 }` |                                                                                                                                                     |
+| `hooks`                | unset            | Ordered async `onConsume`/`onCommit` hooks (not an interceptor SPI). See [Consumer hooks](../../guides/consumer/#hooks)                             |
 
 ## `ShareConsumerConfig`
 

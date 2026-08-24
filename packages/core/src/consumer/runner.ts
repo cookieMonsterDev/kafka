@@ -3,11 +3,12 @@ import { isKafkaError, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { retrier, type RetryOptions } from '../retry/index';
+import { runHooks } from '../utils/run-hooks';
 import type { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
-import type { EachBatchHandler, EachMessageHandler, Offsets } from './types';
+import type { ConsumerHooks, EachBatchHandler, EachMessageHandler, Offsets } from './types';
 import { DEFAULT_PREFETCH_MAX_BATCHES, DEFAULT_PREFETCH_MAX_BYTES, estimatePrefetchBytes } from './worker-queue';
 
 const CONSUMING_START = 'consuming-start';
@@ -27,6 +28,8 @@ export interface RunnerOptions {
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
   autoCommit?: boolean;
+  /** Ordered async `onConsume` hook. See {@link ConsumerHooks}. */
+  hooks?: ConsumerHooks;
 }
 
 export class Runner extends EventEmitter {
@@ -40,6 +43,7 @@ export class Runner extends EventEmitter {
   retrier: ReturnType<typeof retrier>;
   onCrash: (reason: Error) => void | Promise<void>;
   autoCommit: boolean;
+  hooks: ConsumerHooks | undefined;
   fetchManager: FetchManager<Batch>;
   running = false;
   shuttingDown = false;
@@ -61,6 +65,7 @@ export class Runner extends EventEmitter {
     onCrash,
     retry,
     autoCommit = true,
+    hooks,
   }: RunnerOptions) {
     super();
     this.logger = logger.namespace('Runner');
@@ -73,6 +78,7 @@ export class Runner extends EventEmitter {
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
+    this.hooks = hooks;
     this.fetchManager = createFetchManager<Batch>({
       logger: this.logger,
       getNodeIds: () => this.consumerGroup.getNodeIds(),
@@ -284,6 +290,9 @@ export class Runner extends EventEmitter {
       }
 
       try {
+        if (this.hooks?.onConsume?.length) {
+          await runHooks(this.hooks.onConsume, { topic, partition, message }, 'onConsume', this.logger);
+        }
         await eachMessage({
           topic,
           partition,
@@ -329,6 +338,9 @@ export class Runner extends EventEmitter {
     };
 
     try {
+      if (this.hooks?.onConsume?.length) {
+        await runHooks(this.hooks.onConsume, { topic, partition, batch }, 'onConsume', this.logger);
+      }
       await eachBatch({
         batch,
         resolveOffset: (offset) => {

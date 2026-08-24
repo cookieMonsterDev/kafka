@@ -3,11 +3,14 @@ import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { createErrorFromCode } from '../../protocol/error-codes';
 import { sleep } from '../../utils/wait';
+import type { ConsumerHooks } from '../types';
 import { OffsetManager } from './index';
 
 const NOT_COORDINATOR_FOR_GROUP_CODE = 16;
+const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function createOffsetManager(
   overrides: {
@@ -23,6 +26,7 @@ function createOffsetManager(
     autoCommitThreshold?: number | null;
     groupId?: string;
     topicConfigurations?: OffsetManager['topicConfigurations'];
+    hooks?: ConsumerHooks;
   } = {},
 ): OffsetManager {
   const memberAssignment = overrides.memberAssignment ?? { topic1: [0, 1, 2, 3], topic2: [0, 1, 2, 3, 4, 5] };
@@ -52,6 +56,8 @@ function createOffsetManager(
     groupId: overrides.groupId ?? 'groupId',
     generationId: 1,
     memberId: 'memberId',
+    logger: silentLogger,
+    hooks: overrides.hooks,
   });
 }
 
@@ -205,6 +211,75 @@ describe('consumer/offset-manager', () => {
         groupGenerationId: 1,
         topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 42n }] }],
       });
+    });
+
+    it('fires onCommit hooks in order with the committed topics after a successful commit', async () => {
+      const offsetCommit = vi.fn();
+      const order: string[] = [];
+      const first = vi.fn((_event: { error?: unknown }) => {
+        order.push('first');
+      });
+      const second = vi.fn((_event: { error?: unknown }) => {
+        order.push('second');
+      });
+      const offsetManager = createOffsetManager({
+        memberAssignment: { 'topic-1': [0] },
+        coordinator: { offsetCommit },
+        hooks: { onCommit: [first, second] },
+      });
+
+      const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 42n }] }] };
+      await offsetManager.commitOffsets(offsets);
+
+      expect(order).toEqual(['first', 'second']);
+      expect(first).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groupId: 'groupId',
+          memberId: 'memberId',
+          groupGenerationId: 1,
+          topics: offsets.topics,
+        }),
+      );
+      const event = first.mock.calls[0]?.[0];
+      expect(event?.error).toBeUndefined();
+    });
+
+    it('fires onCommit hooks with the error when the commit fails, without altering the rejection', async () => {
+      const commitError = new Error('commit failed');
+      const offsetCommit = vi.fn(() => {
+        throw commitError;
+      });
+      const onCommit = vi.fn();
+      const offsetManager = createOffsetManager({
+        memberAssignment: { 'topic-1': [0] },
+        coordinator: { offsetCommit },
+        hooks: { onCommit: [onCommit] },
+      });
+
+      const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 42n }] }] };
+      await expect(offsetManager.commitOffsets(offsets)).rejects.toBe(commitError);
+
+      expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ topics: offsets.topics, error: commitError }));
+    });
+
+    it('does not fail the commit when an onCommit hook throws', async () => {
+      const offsetCommit = vi.fn();
+      const throwingHook = vi.fn(() => {
+        throw new Error('hook boom');
+      });
+      const nextHook = vi.fn();
+      const offsetManager = createOffsetManager({
+        memberAssignment: { 'topic-1': [0] },
+        coordinator: { offsetCommit },
+        hooks: { onCommit: [throwingHook, nextHook] },
+      });
+
+      const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 42n }] }] };
+      await expect(offsetManager.commitOffsets(offsets)).resolves.toBeUndefined();
+
+      expect(offsetCommit).toHaveBeenCalledTimes(1);
+      expect(throwingHook).toHaveBeenCalledTimes(1);
+      expect(nextHook).toHaveBeenCalledTimes(1);
     });
 
     it('refreshes metadata on NOT_COORDINATOR_FOR_GROUP protocol error', async () => {

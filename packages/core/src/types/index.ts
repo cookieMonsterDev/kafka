@@ -11,6 +11,7 @@ import type {
 } from '../consumer/index';
 import type {
   Assigner,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   EachBatchHandler,
@@ -18,6 +19,10 @@ import type {
   EachMessageHandler,
   EachMessagePayload,
   KafkaMessage,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
@@ -38,8 +43,13 @@ import type {
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
+  ProducerAckHook,
+  ProducerAckHookEvent,
   ProducerBatch,
+  ProducerHooks,
   ProducerRecord,
+  ProducerSendHook,
+  ProducerSendHookEvent,
   RecordMetadata,
   TopicMessages,
 } from '../producer/types';
@@ -234,6 +244,12 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
    */
   maxRequestSize?: number;
+  /**
+   * Ordered async hooks around the send path, not an interceptor SPI: `onSend` fires before a
+   * `send()`/`sendBatch()` call is dispatched, `onAck` after it settles. Each array runs in
+   * registration order; a throwing hook is caught and logged, never failing the send.
+   */
+  hooks?: ProducerHooks;
 }
 
 /**
@@ -315,6 +331,13 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: GroupProtocol;
+  /**
+   * Ordered async hooks around the consume/commit path, not an interceptor SPI: `onConsume`
+   * fires before `eachMessage`/`eachBatch` runs, `onCommit` after an offset-commit attempt
+   * settles (auto-commit or manual `commitOffsets`). Each array runs in registration order; a
+   * throwing hook is caught and logged, never failing consumption or the commit.
+   */
+  hooks?: ConsumerHooks;
 }
 
 export type GroupProtocol = 'classic' | 'consumer';
@@ -359,6 +382,7 @@ export type {
   Batch,
   CompressionType,
   Consumer,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   ConsumerSubscribeTopic,
@@ -378,14 +402,23 @@ export type {
   Logger,
   Message,
   NodeLatencyReader,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
   PartitionMetadata,
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
   Producer,
+  ProducerAckHook,
+  ProducerAckHookEvent,
   ProducerBatch,
+  ProducerHooks,
   ProducerRecord,
+  ProducerSendHook,
+  ProducerSendHookEvent,
   RecordHeaders,
   RecordMetadata,
   SaslAuthenticationProvider,

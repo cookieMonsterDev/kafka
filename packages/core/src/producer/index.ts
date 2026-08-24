@@ -13,7 +13,7 @@ import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } fro
 import { createMessageProducer } from './message-producer';
 import { createNodeLatencyTracker } from './node-latency-tracker';
 import { DefaultPartitioner } from './partitioners/index';
-import type { CustomPartitioner, ProducerBatch, ProducerRecord, RecordMetadata } from './types';
+import type { CustomPartitioner, ProducerBatch, ProducerHooks, ProducerRecord, RecordMetadata } from './types';
 
 export interface ProducerOptions {
   cluster: Cluster;
@@ -31,6 +31,8 @@ export interface ProducerOptions {
   bufferMemory?: number;
   deliveryTimeoutMs?: number;
   maxRequestSize?: number;
+  /** Ordered async `onSend`/`onAck` hooks, also used by every {@link Transaction} this producer starts. */
+  hooks?: ProducerHooks;
 }
 
 /**
@@ -96,6 +98,7 @@ export function createProducer({
   bufferMemory,
   deliveryTimeoutMs,
   maxRequestSize,
+  hooks,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -139,6 +142,7 @@ export function createProducer({
     bufferMemory,
     deliveryTimeoutMs,
     maxRequestSize,
+    hooks,
   };
 
   const { send, sendBatch, flush } = createMessageProducer({

@@ -52,6 +52,7 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
     isInitialized: vi.fn().mockReturnValue(false),
     initProducerId: vi.fn().mockResolvedValue(undefined),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
+    markTransactionAbortable: vi.fn(),
     acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
     releasePartitionGates: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -428,6 +429,28 @@ describe('producer/sendMessages', () => {
 
     expect(eosManager.initProducerId).toHaveBeenCalledTimes(1);
     expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks the transaction abort-only on TRANSACTION_ABORTABLE (KIP-890)', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'TRANSACTION_ABORTABLE')!.code;
+    brokers[1].produce.mockRejectedValue(createErrorFromCode(code));
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
+
+    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
   });
 
   it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {

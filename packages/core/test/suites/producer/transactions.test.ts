@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
+import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
+import type { InstrumentationEvent } from '../../../src/instrumentation/event';
+import { NETWORK_REQUEST, type NetworkRequestEvent } from '../../../src/network/instrumentation-events';
 import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
@@ -9,6 +12,8 @@ import {
   waitForConsumerToJoinGroup,
   waitForMessages,
   testIfKafkaAtLeast_0_11,
+  testIfKafkaAtLeast_4_0,
+  testIfKafkaAtMost_3_6,
 } from '../../helpers/index';
 
 describe('producer.transactions', () => {
@@ -117,5 +122,66 @@ describe('producer.transactions', () => {
     await expect(tx2.commit()).resolves.toBeUndefined();
     expect(tx2.isActive()).toBe(false);
     await first.disconnect();
+  });
+
+  /** KIP-890 part 2: transaction V2 (Produce v12+, Kafka 4.0+) lets Produce itself cover AddPartitionsToTxn. */
+  function countAddPartitionsToTxnRequests() {
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const counter = { value: 0 };
+    instrumentationEmitter.addListener(NETWORK_REQUEST, (event: InstrumentationEvent<NetworkRequestEvent>) => {
+      if (event.payload.apiName === 'AddPartitionsToTxn') counter.value += 1;
+    });
+    return { counter, instrumentationEmitter };
+  }
+
+  testIfKafkaAtLeast_4_0('does not send AddPartitionsToTxn under transaction V2', async () => {
+    const tracker = countAddPartitionsToTxnRequests();
+    producer = createProducer({
+      cluster: createCluster({ instrumentationEmitter: tracker.instrumentationEmitter }),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId: `group-${secureRandom()}`,
+      maxWaitTimeInMs: 100,
+      logger: newLogger(),
+    });
+    await producer.connect();
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: unknown[] = [];
+    const join = waitForConsumerToJoinGroup(consumer);
+    await consumer.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v2-committed' }] });
+    await transaction.commit();
+    await waitForMessages(consumed, { number: 1 });
+
+    expect(tracker.counter.value).toBe(0);
+  });
+
+  testIfKafkaAtMost_3_6('still sends AddPartitionsToTxn on brokers older than transaction V2', async () => {
+    const tracker = countAddPartitionsToTxnRequests();
+    producer = createProducer({
+      cluster: createCluster({ instrumentationEmitter: tracker.instrumentationEmitter }),
+      logger: newLogger(),
+      idempotent: true,
+      transactionalId,
+    });
+    await producer.connect();
+
+    const transaction = await producer.transaction();
+    await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v1-committed' }] });
+    await transaction.commit();
+
+    expect(tracker.counter.value).toBeGreaterThan(0);
   });
 });

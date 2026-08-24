@@ -29,6 +29,22 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     machine.transitionTo(TRANSACTION_STATES.READY);
   });
 
+  it('allows TRANSACTING to go abort-only (KIP-890 TRANSACTION_ABORTABLE) and only out via abort', () => {
+    const machine = new TransactionStateMachine({ logger: silentLogger });
+    machine.transitionTo(TRANSACTION_STATES.READY);
+    machine.transitionTo(TRANSACTION_STATES.TRANSACTING);
+    machine.transitionTo(TRANSACTION_STATES.ABORTABLE);
+    expect(machine.state()).toBe(TRANSACTION_STATES.ABORTABLE);
+
+    expect(() => machine.transitionTo(TRANSACTION_STATES.COMMITTING)).toThrow(
+      new KafkaNonRetriableError('Transaction state exception: Invalid transition ABORTABLE --> COMMITTING'),
+    );
+
+    machine.transitionTo(TRANSACTION_STATES.ABORTING);
+    machine.transitionTo(TRANSACTION_STATES.READY);
+    expect(machine.state()).toBe(TRANSACTION_STATES.READY);
+  });
+
   it('emits a transition event with from/to on every successful transition', () => {
     const machine = new TransactionStateMachine({ logger: silentLogger });
     const listener = vi.fn();

@@ -62,4 +62,35 @@ describe('consumer.instrumentation', () => {
 
     expect(events).toEqual(expect.arrayContaining(['connect', 'group_join', 'fetch', 'disconnect']));
   });
+
+  it('emits heartbeat, batch process, commit, and stop events', async () => {
+    const events: string[] = [];
+    consumer!.on(consumer!.events.HEARTBEAT, () => {
+      events.push('heartbeat');
+    });
+    consumer!.on(consumer!.events.START_BATCH_PROCESS, () => {
+      events.push('start_batch');
+    });
+    consumer!.on(consumer!.events.END_BATCH_PROCESS, () => {
+      events.push('end_batch');
+    });
+    consumer!.on(consumer!.events.COMMIT_OFFSETS, () => {
+      events.push('commit');
+    });
+    consumer!.on(consumer!.events.STOP, () => {
+      events.push('stop');
+    });
+
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({ eachMessage: async () => undefined });
+    await join;
+    await producer!.send({ acks: 1, topic: topicName, messages: [{ key: 'k', value: 'v' }] });
+    await waitForNextEvent(consumer!, consumer!.events.END_BATCH_PROCESS);
+    await consumer!.stop();
+
+    expect(events).toEqual(expect.arrayContaining(['start_batch', 'end_batch', 'commit', 'stop']));
+  });
 });

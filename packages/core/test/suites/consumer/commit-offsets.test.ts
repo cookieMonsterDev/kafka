@@ -71,4 +71,25 @@ describe('consumer.commitOffsets', () => {
     const offsets = await admin!.fetchOffsets({ groupId, topics: [topicName] });
     expect(offsets[0]?.partitions[0]?.offset).toBe(5n);
   });
+
+  it('commits offset metadata that fetchOffsets can read back', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await admin!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: unknown[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 2 }) });
+    await waitForMessages(consumed, { number: 2 });
+    await consumer!.commitOffsets([{ topic: topicName, partition: 0, offset: 2n, metadata: 'checkpoint' }]);
+
+    const offsets = await admin!.fetchOffsets({ groupId, topics: [topicName] });
+    expect(offsets[0]?.partitions[0]).toEqual(expect.objectContaining({ offset: 2n, metadata: 'checkpoint' }));
+  });
 });

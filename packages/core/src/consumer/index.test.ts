@@ -139,4 +139,60 @@ describe('consumer', () => {
 
     expect(addMultipleTargetTopics).toHaveBeenCalledWith(['events']);
   });
+
+  it('rejects subscribe when topics is not an array', async () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    await expect(consumer.subscribe({ topics: 'events' as never })).rejects.toThrow(
+      'Argument "topics" must be an array',
+    );
+  });
+
+  it('rejects subscribe when a topic entry is neither a string nor a RegExp', async () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    await expect(consumer.subscribe({ topics: [42 as never] })).rejects.toThrow(/Invalid topic/);
+    await expect(consumer.subscribe({ topic: 42 as never })).rejects.toThrow(/Invalid topic/);
+  });
+
+  it('rejects subscribe when both topic and topics are missing', async () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    await expect(consumer.subscribe({} as never)).rejects.toThrow('Missing required argument "topics"');
+  });
+
+  it('rejects pause and resume before run and on invalid topic/partitions', () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    expect(() => consumer.pause([{ topic: '' }])).toThrow('Invalid topic');
+    expect(() => consumer.pause([{ topic: 't', partitions: Number.NaN as never }])).toThrow(
+      /Array of valid partitions required to pause/,
+    );
+    expect(() => consumer.pause([{ topic: 't' }])).toThrow(
+      'Consumer group was not initialized, consumer#run must be called first',
+    );
+    expect(() => consumer.resume([{ topic: '' }])).toThrow('Invalid topic');
+    expect(() => consumer.resume([{ topic: 't', partitions: Number.NaN as never }])).toThrow(
+      /Array of valid partitions required to resume/,
+    );
+    expect(() => consumer.resume([{ topic: 't' }])).toThrow(
+      'Consumer group was not initialized, consumer#run must be called first',
+    );
+  });
+
+  it('rejects commitOffsets with a negative offset or non-string metadata', async () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    await expect(consumer.commitOffsets([{ topic: 't', partition: 0, offset: -1n }])).rejects.toThrow(
+      'Offset must not be a negative number',
+    );
+    await expect(
+      consumer.commitOffsets([{ topic: 't', partition: 0, offset: 1n, metadata: 1 as never }]),
+    ).rejects.toThrow('Invalid offset metadata');
+    await expect(consumer.commitOffsets([{ topic: '', partition: 0, offset: 1n }])).rejects.toThrow('Invalid topic');
+    await expect(consumer.commitOffsets([{ topic: 't', partition: Number.NaN, offset: 1n }])).rejects.toThrow(
+      'Invalid partition',
+    );
+  });
+
+  it('rejects seek with a missing topic or non-numeric partition', () => {
+    const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+    expect(() => consumer.seek({ topic: '', partition: 0, offset: 1n })).toThrow('Invalid topic');
+    expect(() => consumer.seek({ topic: 't', partition: Number.NaN, offset: 1n })).toThrow('Invalid partition');
+  });
 });

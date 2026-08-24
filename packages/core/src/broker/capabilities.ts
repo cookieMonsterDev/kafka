@@ -33,3 +33,12 @@ export function supportsAclPatternType(versions: BrokerVersions): boolean {
   const describeAcls = advertised(versions, API_KEYS.DescribeAcls);
   return describeAcls != null && describeAcls.maxVersion >= 1;
 }
+
+/**
+ * KIP-890 transaction protocol V2: Produce itself covers `AddPartitionsToTxn`, and the producer
+ * epoch bumps on every transaction. Both land together on Produce v12 (Kafka 4.0).
+ */
+export function supportsTransactionV2(versions: BrokerVersions): boolean {
+  const produce = advertised(versions, API_KEYS.Produce);
+  return produce != null && produce.maxVersion >= 12;
+}

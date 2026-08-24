@@ -1,3 +1,4 @@
+import { supportsTransactionV2 } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
 import { INT_32_MAX_VALUE } from '../../constants';
@@ -43,6 +44,8 @@ export interface EosManager {
   updateSequence: (topic: string, partition: number, increment: number) => void;
   beginTransaction: () => void;
   addPartitionsToTransaction: (topicData: readonly EosManagerTopicPartitions[]) => Promise<void>;
+  /** KIP-890: mark the current transaction abort-only after a `TRANSACTION_ABORTABLE` produce error. No-op outside an active transaction. */
+  markTransactionAbortable: () => void;
   commit: () => Promise<void>;
   abort: () => Promise<void>;
   isInitialized: () => boolean;
@@ -122,6 +125,12 @@ export function createEosManager({
 
   function findTransactionCoordinator(): Promise<Broker> {
     return cluster.findGroupCoordinator({ groupId: transactionalId!, coordinatorType: COORDINATOR_TYPES.TRANSACTION });
+  }
+
+  /** KIP-890 part 2: Produce v12+ (Kafka 4.0+) covers AddPartitionsToTxn and bumps the epoch every transaction. */
+  function isTransactionV2Enabled(): boolean {
+    const versions = cluster.brokerPool.versions;
+    return versions != null && supportsTransactionV2(versions);
   }
 
   function transactionalGuard(): void {
@@ -275,7 +284,9 @@ export function createEosManager({
 
     const topics = [...newTopicPartitions.entries()].map(([topic, partitions]) => ({ topic, partitions }));
 
-    if (topics.length > 0) {
+    // KIP-890 part 2: transaction V2 lets Produce itself cover AddPartitionsToTxn, so the
+    // partitions are marked below without the extra round trip to the transaction coordinator.
+    if (topics.length > 0 && !isTransactionV2Enabled()) {
       const broker = await findTransactionCoordinator();
       await broker.addPartitionsToTxn({ transactionalId: transactionalId!, producerId, producerEpoch, topics });
     }
@@ -283,6 +294,14 @@ export function createEosManager({
     for (const { topic, partitions } of topics) {
       const addedPartitions = transactionTopicPartitions.get(topic)!;
       for (const partition of partitions) addedPartitions.add(partition);
+    }
+  }
+
+  /** No-op outside TRANSACTING so a race with an in-flight commit/abort can't throw from an invalid transition. */
+  function markTransactionAbortable(): void {
+    if (!transactional) return;
+    if (stateMachine.state() === TRANSACTION_STATES.TRANSACTING) {
+      stateMachine.transitionTo(TRANSACTION_STATES.ABORTABLE);
     }
   }
 
@@ -302,6 +321,12 @@ export function createEosManager({
     const broker = await findTransactionCoordinator();
     await broker.endTxn({ producerId, producerEpoch, transactionalId: transactionalId!, transactionResult });
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
+
+    // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
+    // fencing recovery), so the next transaction starts from a fresh epoch.
+    if (isTransactionV2Enabled()) {
+      await initProducerId();
+    }
   }
 
   async function commit(): Promise<void> {
@@ -456,6 +481,7 @@ export function createEosManager({
       updateSequence,
       beginTransaction,
       addPartitionsToTransaction,
+      markTransactionAbortable,
       commit,
       abort,
       isInitialized,
@@ -471,7 +497,7 @@ export function createEosManager({
       addPartitionsToTransaction: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
       sendOffsets: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
       commit: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
-      abort: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
+      abort: { legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.ABORTABLE] },
     },
   );
 }

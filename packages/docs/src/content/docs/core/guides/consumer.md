@@ -85,6 +85,73 @@ JoinGroup groups. Isolation defaults to `read_committed`
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
 
+## Rebalance callbacks
+
+`run()` accepts three optional callbacks for observing group membership
+changes. Each is `(topicPartitions: { topic: string; partition: number }[]) =>
+void | Promise<void>` and is called with only the partitions actually moving
+in that rebalance step, not the full assignment:
+
+```ts
+await consumer.run({
+  onPartitionsRevoked: async (partitions) => {
+    // Commit offsets for these partitions before they're fetched by anyone else.
+    console.log('revoked', partitions);
+  },
+  onPartitionsAssigned: async (partitions) => {
+    console.log('assigned', partitions);
+  },
+  onPartitionsLost: async (partitions) => {
+    console.log('lost', partitions);
+  },
+  eachMessage: async ({ topic, partition, message }) => {
+    /* ... */
+  },
+});
+```
+
+- **`onPartitionsRevoked`** fires with the partitions this member is giving
+  up, before the consumer fetches from its new assignment (revoke happens
+  before reassignment). For the round-robin default and the other eager
+  assigners, a rebalance revokes the member's entire prior assignment, so this
+  fires with everything the member held, immediately followed by
+  `onPartitionsAssigned` with the entire new assignment. For the
+  cooperative-sticky assigner (KIP-429), only the subset actually being given
+  up this round is reported - partitions the member keeps across the
+  rebalance are never passed to this callback. See
+  [Assigners and isolation](#assigners-and-isolation).
+- **`onPartitionsAssigned`** fires with the partitions newly gained once the
+  member has installed its new assignment. Same eager-vs-incremental split as
+  above: the entire new assignment for eager assigners, only the newly gained
+  subset for cooperative-sticky.
+- **`onPartitionsLost`** fires **instead of** `onPartitionsRevoked` when the
+  member's assignment was lost without a clean revoke - its session expired,
+  or it was fenced out of the group (`UNKNOWN_MEMBER_ID` / broker rejects a
+  stale generation) before it had a chance to leave gracefully. This is the
+  signal to _abandon_ any pending offset commit for those partitions rather
+  than attempt it: a lost partition may already be owned by another member,
+  so committing against it can race the new owner's progress or simply get
+  rejected. `onPartitionsRevoked`, by contrast, always fires while the member
+  is still a recognized part of the group, so committing there is safe. A
+  callback never receives both events for the same partitions in the same
+  rebalance.
+- KIP-848's `ConsumerGroupHeartbeat` protocol reconciles assignments
+  incrementally at the wire level, so `onPartitionsRevoked` /
+  `onPartitionsAssigned` report the same kind of incremental diff there as
+  they do for cooperative-sticky, regardless of `groupProtocol`.
+- Each callback is awaited before the consumer proceeds -
+  `onPartitionsRevoked` (or `onPartitionsLost`) completes before the new
+  assignment is installed, and `onPartitionsAssigned` completes before the
+  consumer fetches from it. An error thrown by a callback is logged and does
+  not abort the rebalance or the rejoin; a broken user-supplied callback
+  should not be able to break group membership.
+- These callbacks are additive: `events.REBALANCING` and `events.GROUP_JOIN`
+  (via `consumer.on(...)`) keep firing exactly as before. `REBALANCING`
+  signals "the group needs a rejoin"; `GROUP_JOIN` reports the outcome once
+  membership stabilizes. The callbacks above tell you specifically which
+  partitions moved and why, without parsing group state yourself. Ecosystem
+  term for the same protocol concept: Java's `ConsumerRebalanceListener`.
+
 ## Share groups (KIP-932)
 
 `kafka.shareConsumer({ groupId })` is a separate API from `consumer()`. Records

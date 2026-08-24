@@ -125,6 +125,7 @@ export type {
   ProducerBatch,
   ProducerConfig,
   ProducerRecord,
+  RebalanceListener,
   RecordHeaders,
   RecordMetadata,
   RetryOptions,

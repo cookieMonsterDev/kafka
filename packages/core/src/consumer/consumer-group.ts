@@ -28,6 +28,7 @@ import type {
   MemberAssignment as MemberAssignmentMap,
   Offsets,
   OffsetsByTopicPartition,
+  RebalanceListener,
   TopicPartition,
   TopicPartitionOffset,
   TopicPartitions,
@@ -120,6 +121,11 @@ function revokedPartitions(
     .filter(({ partitions }) => partitions.length > 0);
 }
 
+/** `{ topic, partitions: number[] }[]` -> `{ topic, partition }[]`, for the rebalance callbacks. */
+function flattenTopicPartitions(topicPartitions: readonly TopicPartitions[]): TopicPartition[] {
+  return topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => ({ topic, partition })));
+}
+
 export interface ConsumerGroupOptions {
   retry?: RetryOptions;
   cluster: Cluster;
@@ -148,6 +154,12 @@ export interface ConsumerGroupOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /** See {@link ConsumerRunConfig.onPartitionsRevoked}. */
+  onPartitionsRevoked?: RebalanceListener;
+  /** See {@link ConsumerRunConfig.onPartitionsAssigned}. */
+  onPartitionsAssigned?: RebalanceListener;
+  /** See {@link ConsumerRunConfig.onPartitionsLost}. */
+  onPartitionsLost?: RebalanceListener;
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
@@ -170,6 +182,13 @@ export interface ConsumerGroupHandle {
   resume: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   isPaused: (topic: string, partition: number) => boolean;
   hasSeekOffset: (topicPartition: TopicPartition) => boolean;
+  /**
+   * Declares the member's current assignment lost without a clean revoke (session expiry,
+   * fencing) and fires `onPartitionsLost` with it instead of `onPartitionsRevoked`. Callers
+   * invoke this as soon as they detect `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`, before
+   * rejoining, so a subsequent rebalance doesn't also report the same partitions as revoked.
+   */
+  notifyPartitionsLost: () => Promise<void>;
 }
 
 export class ConsumerGroup implements ConsumerGroupHandle {
@@ -197,6 +216,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupInstanceId: string | null;
   /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
   useConsumerProtocol: boolean;
+  onPartitionsRevoked: RebalanceListener | undefined;
+  onPartitionsAssigned: RebalanceListener | undefined;
+  onPartitionsLost: RebalanceListener | undefined;
   shuttingDown = false;
 
   seekOffset = new SeekOffsets();
@@ -249,6 +271,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     metadataMaxAge,
     groupInstanceId,
     groupProtocol = 'classic',
+    onPartitionsRevoked,
+    onPartitionsAssigned,
+    onPartitionsLost,
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
@@ -273,6 +298,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
     this.useConsumerProtocol = groupProtocol === 'consumer';
+    this.onPartitionsRevoked = onPartitionsRevoked;
+    this.onPartitionsAssigned = onPartitionsAssigned;
+    this.onPartitionsLost = onPartitionsLost;
     this.#adaptiveMaxBytes = maxBytes;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
@@ -434,11 +462,22 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       partitions: decodedAssignment[topic] ?? [],
     }));
 
+    const previousAssignment = this.assigned();
     const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
-    const partitionsToRevoke =
-      selectedAssigner?.protocolType === 'cooperative'
-        ? revokedPartitions(this.assigned(), currentMemberAssignment)
-        : [];
+    const isCooperative = selectedAssigner?.protocolType === 'cooperative';
+    // Cooperative-sticky (KIP-429) settles over two JoinGroup/SyncGroup rounds: this round's
+    // `currentMemberAssignment` already leaves foreign-owned partitions unassigned (see
+    // `applyCooperativeConstraint` in sticky-assigner.ts), so `partitionsToRevoke` is only the
+    // subset this member is actually giving up - not its whole previous assignment. A classic
+    // (eager) rebalance has no such settling round: the member's entire prior assignment is
+    // revoked and its entire new assignment is granted in one round.
+    const partitionsToRevoke = isCooperative ? revokedPartitions(previousAssignment, currentMemberAssignment) : [];
+    const revoked = isCooperative ? partitionsToRevoke : previousAssignment;
+    const gained = isCooperative
+      ? revokedPartitions(currentMemberAssignment, previousAssignment)
+      : currentMemberAssignment;
+
+    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
 
     await this.#installAssignment(currentMemberAssignment);
 
@@ -452,6 +491,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       ),
     );
 
+    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
+
     if (partitionsToRevoke.length > 0) {
       this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
         groupId,
@@ -462,6 +503,49 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
 
     return partitionsToRevoke.length > 0;
+  }
+
+  /**
+   * Invokes a rebalance listener with the partitions moving in this step (skipped when none are
+   * moving). Ordered async - the caller awaits this before proceeding - but errors are caught and
+   * logged here rather than propagated: a broken user-supplied listener must not abort a
+   * rebalance that would otherwise succeed, mirroring how this codebase treats other user-hook
+   * failures (see the P3-04 `runHooks` convention for producer/consumer hooks).
+   */
+  async #notify(
+    listener: RebalanceListener | undefined,
+    topicPartitions: readonly TopicPartitions[],
+    name: string,
+  ): Promise<void> {
+    if (!listener) return;
+    const flat = flattenTopicPartitions(topicPartitions);
+    if (flat.length === 0) return;
+
+    try {
+      await listener(flat);
+    } catch (e) {
+      const error = e as Error;
+      this.logger.error(`Rebalance listener "${name}" threw an error`, { error: error.message, stack: error.stack });
+    }
+  }
+
+  /**
+   * Declares the current assignment lost without a clean revoke and fires `onPartitionsLost`
+   * with it (instead of `onPartitionsRevoked`). Callers must invoke this as soon as they detect
+   * the member was fenced out of the group (`UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`) -
+   * before rejoining - both so the callback reflects reality (a lost partition may already be
+   * owned by someone else; a pending offset commit for it should typically be abandoned) and so
+   * the next successful rebalance's revoke/assign diff doesn't also report these same partitions
+   * as revoked, since the local assignment is cleared here.
+   */
+  async notifyPartitionsLost(): Promise<void> {
+    const lost = this.assigned();
+    if (lost.length === 0) return;
+
+    this.subscriptionState.assign([]);
+    this.#invalidateActiveTopicPartitions();
+
+    await this.#notify(this.onPartitionsLost, lost, 'onPartitionsLost');
   }
 
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
@@ -655,9 +739,20 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       memberAssignment: currentMemberAssignment,
     });
 
+    // KIP-848 reconciliation is inherently incremental at the wire level - the broker sends this
+    // member's full current target assignment on every change, and the client diffs it against
+    // what it already held, same as a cooperative-sticky settling round above.
+    const previousAssignment = this.assigned();
+    const revoked = revokedPartitions(previousAssignment, currentMemberAssignment);
+    const gained = revokedPartitions(currentMemberAssignment, previousAssignment);
+
+    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
+
     await this.#installAssignment(currentMemberAssignment);
     this.#ownedTopicPartitions = owned;
     this.#ownedPartitionsDirty = true;
+
+    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
 
     if (wasJoined) this.#emitGroupJoin(0);
   }
@@ -739,6 +834,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         }
 
         if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
+          // The coordinator no longer recognizes this member: it was fenced out of the group
+          // (session timeout, or another member took its generation) before it ever got a chance
+          // to leave and revoke cleanly. Whatever it held may already be reassigned elsewhere, so
+          // report it lost - not revoked - before resetting and rejoining from scratch.
+          await this.notifyPartitionsLost();
           if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
           this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
           this.#includeJoinFields = true;

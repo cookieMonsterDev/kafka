@@ -99,6 +99,10 @@ describe('consumer/consumer-group', () => {
     consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     const groupJoins: unknown[] = [];
     consumerGroup.instrumentationEmitter.addListener(GROUP_JOIN, (event) => groupJoins.push(event));
+    const onPartitionsRevoked = vi.fn();
+    const onPartitionsAssigned = vi.fn();
+    consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
+    consumerGroup.onPartitionsAssigned = onPartitionsAssigned;
 
     await consumerGroup.joinAndSync();
 
@@ -108,6 +112,15 @@ describe('consumer/consumer-group', () => {
     expect(onAssignment).toHaveBeenNthCalledWith(2, { topic1: [0, 2] });
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 2] }]);
     expect(groupJoins).toHaveLength(1);
+
+    // Cooperative-sticky incremental rebalance: only the partition actually given up (1) is
+    // reported revoked - partition 0, kept across both rounds, is never reported. Only the
+    // partition actually gained (2) is reported assigned - it never fires for round 1, where
+    // nothing was gained.
+    expect(onPartitionsRevoked).toHaveBeenCalledTimes(1);
+    expect(onPartitionsRevoked).toHaveBeenCalledWith([{ topic: 'topic1', partition: 1 }]);
+    expect(onPartitionsAssigned).toHaveBeenCalledTimes(1);
+    expect(onPartitionsAssigned).toHaveBeenCalledWith([{ topic: 'topic1', partition: 2 }]);
   });
 
   it('keeps eager assignment changes to one join and sync generation', async () => {
@@ -140,12 +153,171 @@ describe('consumer/consumer-group', () => {
     consumerGroup.cluster = cluster;
     consumerGroup.assigners = [assigner];
     consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    const callOrder: string[] = [];
+    const onPartitionsRevoked = vi.fn(() => {
+      callOrder.push('revoked');
+    });
+    const onPartitionsAssigned = vi.fn(() => {
+      callOrder.push('assigned');
+    });
+    consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
+    consumerGroup.onPartitionsAssigned = onPartitionsAssigned;
 
     await consumerGroup.joinAndSync();
 
     expect(joinGroup).toHaveBeenCalledTimes(1);
     expect(syncGroup).toHaveBeenCalledTimes(1);
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [2] }]);
+
+    // Classic (eager) full rebalance: the entire prior assignment is reported revoked, then the
+    // entire new assignment is reported assigned, revoke strictly before assign.
+    expect(onPartitionsRevoked).toHaveBeenCalledWith([
+      { topic: 'topic1', partition: 0 },
+      { topic: 'topic1', partition: 1 },
+    ]);
+    expect(onPartitionsAssigned).toHaveBeenCalledWith([{ topic: 'topic1', partition: 2 }]);
+    expect(callOrder).toEqual(['revoked', 'assigned']);
+  });
+
+  it('does not call onPartitionsRevoked/onPartitionsAssigned on the very first join (nothing was previously held)', async () => {
+    const joinGroup = vi.fn(async () => ({
+      generationId: 1,
+      leaderId: 'other-member',
+      memberId: 'member-1',
+      members: [],
+      groupProtocol: 'eager',
+    }));
+    const syncGroup = vi.fn(async () => ({
+      memberAssignment: MemberAssignment.encode({ version: 0, assignment: { topic1: [0] } }),
+    }));
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, syncGroup })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.assigners = [
+      {
+        name: 'eager',
+        version: 0,
+        protocolType: 'eager',
+        assign: vi.fn(async () => []),
+        protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
+      },
+    ];
+    const onPartitionsRevoked = vi.fn();
+    const onPartitionsAssigned = vi.fn();
+    consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
+    consumerGroup.onPartitionsAssigned = onPartitionsAssigned;
+
+    await consumerGroup.joinAndSync();
+
+    expect(onPartitionsRevoked).not.toHaveBeenCalled();
+    expect(onPartitionsAssigned).toHaveBeenCalledWith([{ topic: 'topic1', partition: 0 }]);
+  });
+
+  it('logs and continues past a throwing onPartitionsRevoked/onPartitionsAssigned callback', async () => {
+    const joinGroup = vi.fn(async () => ({
+      generationId: 1,
+      leaderId: 'other-member',
+      memberId: 'member-1',
+      members: [],
+      groupProtocol: 'eager',
+    }));
+    const syncGroup = vi.fn(async () => ({
+      memberAssignment: MemberAssignment.encode({ version: 0, assignment: { topic1: [2] } }),
+    }));
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup, syncGroup })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }, { partitionId: 2 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.assigners = [
+      {
+        name: 'eager',
+        version: 0,
+        protocolType: 'eager',
+        assign: vi.fn(async () => []),
+        protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
+      },
+    ];
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    consumerGroup.onPartitionsRevoked = vi.fn(() => {
+      throw new Error('boom from onPartitionsRevoked');
+    });
+    const onPartitionsAssigned = vi.fn();
+    consumerGroup.onPartitionsAssigned = onPartitionsAssigned;
+
+    // A throwing rebalance listener is logged and swallowed, not propagated: it must not abort a
+    // rebalance that would otherwise succeed (same "ordered async, errors isolated" policy this
+    // codebase already applies to other user-supplied hooks).
+    await expect(consumerGroup.joinAndSync()).resolves.toBeUndefined();
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [2] }]);
+    expect(onPartitionsAssigned).toHaveBeenCalledWith([{ topic: 'topic1', partition: 2 }]);
+  });
+
+  it('fires onPartitionsLost (not onPartitionsRevoked) when the coordinator has already forgotten this member', async () => {
+    const joinGroup = vi.fn(async () => {
+      throw createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
+    });
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+      committedOffsets: vi.fn(() => ({})),
+    } as unknown as Cluster;
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      retry: { retries: 0 },
+    });
+    consumerGroup.cluster = cluster;
+    consumerGroup.memberId = 'stale-member';
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    const onPartitionsRevoked = vi.fn();
+    const onPartitionsLost = vi.fn();
+    consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
+    consumerGroup.onPartitionsLost = onPartitionsLost;
+
+    await expect(consumerGroup.joinAndSync()).rejects.toThrow();
+
+    expect(onPartitionsRevoked).not.toHaveBeenCalled();
+    expect(onPartitionsLost).toHaveBeenCalledTimes(1);
+    expect(onPartitionsLost).toHaveBeenCalledWith([
+      { topic: 'topic1', partition: 0 },
+      { topic: 'topic1', partition: 1 },
+    ]);
+    // The lost assignment is cleared so a later successful rejoin doesn't also report it revoked.
+    expect(consumerGroup.assigned()).toEqual([]);
+  });
+
+  it('notifyPartitionsLost is a no-op with nothing assigned', async () => {
+    const consumerGroup = createGroup();
+    const onPartitionsLost = vi.fn();
+    consumerGroup.onPartitionsLost = onPartitionsLost;
+
+    await consumerGroup.notifyPartitionsLost();
+
+    expect(onPartitionsLost).not.toHaveBeenCalled();
   });
 
   it('uses JoinGroup when groupProtocol is omitted', async () => {
@@ -313,9 +485,21 @@ describe('consumer/consumer-group', () => {
       autoCommitThreshold: null,
       groupProtocol: 'consumer',
     });
+    const onPartitionsRevoked = vi.fn();
+    const onPartitionsAssigned = vi.fn();
+    consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
+    consumerGroup.onPartitionsAssigned = onPartitionsAssigned;
 
     await consumerGroup.joinAndSync();
     expect(groupJoins).toHaveLength(1);
+    // First join: nothing was previously held, so onPartitionsRevoked doesn't fire; the whole
+    // initial assignment is reported gained.
+    expect(onPartitionsRevoked).not.toHaveBeenCalled();
+    expect(onPartitionsAssigned).toHaveBeenCalledWith([
+      { topic: 'topic1', partition: 0 },
+      { topic: 'topic1', partition: 1 },
+    ]);
+    onPartitionsAssigned.mockClear();
 
     consumerGroup.lastRequest = 0;
     await consumerGroup.heartbeat({ interval: 0 });
@@ -323,6 +507,11 @@ describe('consumer/consumer-group', () => {
     expect(groupJoins).toHaveLength(2);
     expect(groupJoins[1]?.payload.memberAssignment).toEqual({ topic1: [0] });
     expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+
+    // KIP-848 reconciliation is incremental at the wire level: the target assignment shrank from
+    // {0,1} to {0}, so only partition 1 is reported revoked and nothing is reported gained.
+    expect(onPartitionsRevoked).toHaveBeenCalledWith([{ topic: 'topic1', partition: 1 }]);
+    expect(onPartitionsAssigned).not.toHaveBeenCalled();
   });
 
   it('recovers the leader from a CurrentLeader hint instead of a metadata refresh and rejoin (KIP-951)', async () => {

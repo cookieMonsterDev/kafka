@@ -52,8 +52,13 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 | `autoCommitThreshold`            |         | messages                                                                          |
 | `partitionsConsumedConcurrently` | `1`     | Parallel partitions                                                               |
 | `signal`                         |         | Abort to stop                                                                     |
+| `onPartitionsRevoked`            |         | Partitions given up this rebalance, before fetching the new assignment            |
+| `onPartitionsAssigned`           |         | Partitions newly gained this rebalance                                            |
+| `onPartitionsLost`               |         | Fires instead of `onPartitionsRevoked` when the assignment was lost, not revoked  |
 
-`stream()` cannot run alongside `run()`.
+`stream()` cannot run alongside `run()`. See
+[Rebalance callbacks](../../guides/consumer/#rebalance-callbacks) for the
+revoked-vs-lost distinction and error-handling policy.
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.
 The default concurrency is `1`. Spread `throughputPreset().consumer` into `run()`

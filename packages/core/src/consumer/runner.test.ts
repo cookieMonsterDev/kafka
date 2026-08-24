@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaNotImplemented, KafkaNumberOfRetriesExceeded, KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
-import { createErrorFromCode } from '../protocol/error-codes';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
 import { waitFor } from '../utils/wait';
 import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
+import { REBALANCING } from './instrumentation-events';
 import { Runner } from './runner';
 import type { EachBatchHandler, KafkaMessage } from './types';
 
@@ -74,6 +75,7 @@ describe('consumer/runner', () => {
       pause: vi.fn(),
       resume: vi.fn(),
       hasSeekOffset: vi.fn().mockReturnValue(false),
+      notifyPartitionsLost: vi.fn(async () => undefined),
       ...overrides,
     } as unknown as ConsumerGroupHandle;
   }
@@ -98,6 +100,58 @@ describe('consumer/runner', () => {
     await runner.start();
     expect(runner.scheduleFetchManager).toHaveBeenCalled();
     expect(onCrash).not.toHaveBeenCalled();
+  });
+
+  it('still emits REBALANCING and rejoins (not lost) when a fetch reports the group is rebalancing', async () => {
+    const error = rebalancingError();
+    const consumerGroup = fakeConsumerGroup({
+      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+    });
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const rebalancingEvents: unknown[] = [];
+    instrumentationEmitter.addListener(REBALANCING, (event) => rebalancingEvents.push(event));
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter,
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+      retry: { retries: 0 },
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.joinAndSync).mock.calls.length > 1 || false);
+
+    expect(rebalancingEvents).toHaveLength(1);
+    // REBALANCE_IN_PROGRESS is a normal mid-membership signal to rejoin, not a fenced/kicked
+    // member - the current assignment must not be reported lost for it.
+    expect(consumerGroup.notifyPartitionsLost).not.toHaveBeenCalled();
+  });
+
+  it('reports the current assignment lost (not revoked) before rejoining after UNKNOWN_MEMBER_ID', async () => {
+    const error = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
+    const consumerGroup = fakeConsumerGroup({
+      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+    });
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+      retry: { retries: 0 },
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.notifyPartitionsLost).mock.calls.length > 0 || false);
+
+    expect(consumerGroup.notifyPartitionsLost).toHaveBeenCalledTimes(1);
+    expect(consumerGroup.memberId).toBeNull();
+    expect(consumerGroup.joinAndSync).toHaveBeenCalledTimes(2);
   });
 
   it('commits offsets during handleBatch', async () => {

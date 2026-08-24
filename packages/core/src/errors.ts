@@ -20,6 +20,7 @@ export type KafkaErrorName =
   | 'KafkaNotImplemented'
   | 'KafkaTimeout'
   | 'KafkaLockTimeout'
+  | 'KafkaDeliveryTimeoutError'
   | 'KafkaUnsupportedMagicByteInMessageSet'
   | 'KafkaDeleteTopicRecordsError'
   | 'KafkaInvariantViolation'
@@ -320,6 +321,22 @@ export class KafkaTimeout extends KafkaNonRetriableError {
 
 export class KafkaLockTimeout extends KafkaTimeout {
   override readonly name: KafkaErrorName = 'KafkaLockTimeout';
+}
+
+/**
+ * `deliveryTimeoutMs` elapsed before a produce settled — end-to-end, across linger, buffer-memory
+ * waits, and every retry, not any single RPC. Non-retriable: the point is to stop retrying once
+ * the deadline is up, even if the underlying attempt is still in flight (it isn't cancelled).
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+ */
+export class KafkaDeliveryTimeoutError extends KafkaTimeout {
+  override readonly name: KafkaErrorName = 'KafkaDeliveryTimeoutError';
+  readonly deliveryTimeoutMs: number;
+
+  constructor(deliveryTimeoutMs: number) {
+    super(`Delivery timeout of ${deliveryTimeoutMs}ms exceeded before the record was acknowledged`);
+    this.deliveryTimeoutMs = deliveryTimeoutMs;
+  }
 }
 
 export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableError {

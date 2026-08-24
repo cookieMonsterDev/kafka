@@ -119,6 +119,7 @@ export class Kafka {
     lingerMs,
     batchSize,
     bufferMemory,
+    deliveryTimeoutMs,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({
@@ -146,6 +147,7 @@ export class Kafka {
       lingerMs,
       batchSize,
       bufferMemory,
+      deliveryTimeoutMs,
     });
   }
 

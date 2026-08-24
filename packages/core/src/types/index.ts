@@ -212,6 +212,17 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
    */
   bufferMemory?: number;
+  /**
+   * End-to-end deadline for one `send`/`sendBatch` call, covering `lingerMs`, any
+   * `bufferMemory` wait, and every retry attempt together - not any single RPC. Once it
+   * elapses, the call rejects with `KafkaDeliveryTimeoutError` regardless of retries
+   * remaining; the in-flight attempt, if any, is not cancelled. Default 120_000; 0 (or
+   * below) disables the deadline. Keep it comfortably above `lingerMs` plus the per-call
+   * `timeout` (or the broker could still be waiting on acks when this fires) and above
+   * `retry.maxRetryTime` times however many retries you expect to need.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+   */
+  deliveryTimeoutMs?: number;
 }
 
 /**

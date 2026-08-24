@@ -52,6 +52,38 @@ installed). Built-in codecs remain overridable via `CompressionCodecs`.
 Prefer GZIP or ZSTD under load; Snappy and LZ4 are also safe for the event
 loop now that they are off-thread.
 
+## Delivery timeout and retries
+
+`deliveryTimeoutMs` (default `120000`) is an end-to-end deadline for one
+`send()` / `sendBatch()` call — it covers `lingerMs`, any wait for
+`bufferMemory` to free up, and every retry attempt together, not any single
+RPC. Once it elapses the call rejects with `KafkaDeliveryTimeoutError`,
+regardless of how many retries `retry` still has left; the in-flight attempt,
+if any, is not cancelled, so a late response can still land on the broker
+after the caller has already moved on. Pass `0` to disable it.
+
+This is a different knob from the per-call `timeout` on `send()` /
+`sendBatch()` (default `30000`), which is the wire-level deadline the _broker_
+uses for that one Produce request before it responds — it doesn't bound
+retries or linger at all. Keep `deliveryTimeoutMs` comfortably above
+`lingerMs` plus that per-call `timeout`, and above `retry.maxRetryTime`
+times however many retries you actually expect to need, or the deadline can
+fire while a perfectly healthy retry is still in flight.
+
+```ts
+import { KafkaDeliveryTimeoutError } from '@cookiemonsterdev/kafka-core';
+
+const producer = kafka.producer({ deliveryTimeoutMs: 30_000, retry: { retries: 3 } });
+
+try {
+  await producer.send({ topic: 'events', messages: [{ value: 'hello' }] });
+} catch (error) {
+  if (error instanceof KafkaDeliveryTimeoutError) {
+    // Gave up waiting - the message may or may not have reached the broker.
+  }
+}
+```
+
 ## Partitioners
 
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass

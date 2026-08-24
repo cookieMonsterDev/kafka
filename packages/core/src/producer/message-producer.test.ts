@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Cluster, PartitionMetadata } from '../cluster/index';
-import { KafkaNonRetriableError, KafkaTimeout } from '../errors';
+import { KafkaConnectionError, KafkaDeliveryTimeoutError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
@@ -292,5 +292,87 @@ describe('producer/messageProducer', () => {
     const assertion = expect(second).rejects.toBeInstanceOf(KafkaTimeout);
     await vi.advanceTimersByTimeAsync(50);
     await assertion;
+  });
+
+  describe('deliveryTimeoutMs', () => {
+    it('rejects with KafkaDeliveryTimeoutError once the deadline elapses, without waiting out the send', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => new Promise(() => {})); // never settles
+      const producer = createTestProducer(broker, { deliveryTimeoutMs: 500 });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+    });
+
+    it('does not reject before the deadline while the produce is still pending', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => new Promise(() => {}));
+      const producer = createTestProducer(broker, { deliveryTimeoutMs: 500 });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      let settled = false;
+      sendPromise.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+
+      await vi.advanceTimersByTimeAsync(499);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(settled).toBe(true);
+      await expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+    });
+
+    it('counts time spent waiting in the linger buffer against the deadline', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 10_000, deliveryTimeoutMs: 500 });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+      // The linger timer (10s) never got a chance to fire before the 500ms deadline won.
+      expect(broker.produce).not.toHaveBeenCalled();
+    });
+
+    it('rejects while retries are still scheduled, ahead of the retrier giving up on its own', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
+      const producer = createTestProducer(broker, {
+        retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
+        deliveryTimeoutMs: 500,
+      });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+      // Only the first attempt had time to run before the deadline beat the retrier to it.
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+    });
+
+    it('a non-positive deliveryTimeoutMs disables the deadline', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { deliveryTimeoutMs: 0 });
+
+      await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toBeTruthy();
+    });
+
+    it('does not reject a send that settles well before the (default) deadline', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker);
+
+      await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toBeTruthy();
+    });
   });
 });

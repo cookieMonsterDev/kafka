@@ -65,6 +65,7 @@ export {
   KafkaNotImplemented,
   KafkaTimeout,
   KafkaLockTimeout,
+  KafkaDeliveryTimeoutError,
   KafkaUnsupportedMagicByteInMessageSet,
   KafkaDeleteTopicRecordsError,
   KafkaInvariantViolation,

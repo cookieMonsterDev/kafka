@@ -1,6 +1,6 @@
 import { supportsHeaders, supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
-import { KafkaError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
+import { KafkaDeliveryTimeoutError, KafkaError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression/index';
@@ -40,6 +40,14 @@ export interface MessageProducerOptions {
    * Ignored when lingerMs is 0. @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
    */
   bufferMemory?: number;
+  /**
+   * End-to-end deadline for one send/sendBatch call: linger wait, buffer-memory wait, and every
+   * retry attempt, together. Once it elapses, the call rejects with `KafkaDeliveryTimeoutError`
+   * regardless of retries remaining. Default 120_000; 0 (or below) disables the deadline.
+   * The already in-flight attempt, if any, is not cancelled - same as `signal` abort.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+   */
+  deliveryTimeoutMs?: number;
 }
 
 export interface MessageProducer {
@@ -52,6 +60,21 @@ export interface MessageProducer {
 const DEFAULT_ACKS = -1;
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_LINGER_MS = 0;
+const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
+
+/**
+ * Races `promise` against `deliveryTimeoutMs`. Doesn't cancel the underlying send - the retrier
+ * has no abort hook - but the caller sees the rejection as soon as the deadline is up instead of
+ * waiting out however many retries are left, same "reject, don't cancel" contract as `rejectOnAbort`.
+ */
+function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
+  if (!(deliveryTimeoutMs > 0)) return promise;
+
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs)), deliveryTimeoutMs);
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
 
 interface PendingSend {
   topicMessages: TopicMessages[];
@@ -123,6 +146,7 @@ export function createMessageProducer({
   lingerMs = DEFAULT_LINGER_MS,
   batchSize = 0,
   bufferMemory,
+  deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
 }: MessageProducerOptions): MessageProducer {
   const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager });
   const pending: PendingSend[] = [];
@@ -410,7 +434,7 @@ export function createMessageProducer({
         ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression)
         : enqueue(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression);
 
-    return rejectOnAbort(produce, signal);
+    return rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
   }
 
   async function send({

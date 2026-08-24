@@ -215,6 +215,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   readonly #topicNameById = new Map<string, string>();
   #activeTopicPartitions: Record<string, Set<number>> | null = null;
   #adaptiveMaxBytes: number;
+  /** KIP-320: the leader epoch each assigned partition was last fetched under, for truncation detection. */
+  #lastFetchedLeaderEpoch: Record<string, Record<number, number>> = {};
 
   constructor({
     retry,
@@ -828,20 +830,32 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const activeTopicPartitions = this.getActiveTopicPartitions();
 
       const requests = topicPartitions
-        .map(({ topic, partitions }) => ({
-          topic,
-          topicId: this.cluster.findTopicId(topic),
-          partitions: partitions
-            .filter(
-              (partition) =>
-                committedOffsets[topic]?.[partition] != null && activeTopicPartitions[topic]?.has(partition) === true,
-            )
-            .map((partition) => ({
-              partition,
-              fetchOffset: offsetManager.nextOffset(topic, partition),
-              maxBytes: this.maxBytesPerPartition,
-            })),
-        }))
+        .map(({ topic, partitions }) => {
+          const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic);
+
+          return {
+            topic,
+            topicId: this.cluster.findTopicId(topic),
+            partitions: partitions
+              .filter(
+                (partition) =>
+                  committedOffsets[topic]?.[partition] != null && activeTopicPartitions[topic]?.has(partition) === true,
+              )
+              .map((partition) => {
+                const leaderEpoch = partitionMetadata.find((p) => p.partitionId === partition)?.leaderEpoch;
+                if (leaderEpoch != null && leaderEpoch >= 0) {
+                  (this.#lastFetchedLeaderEpoch[topic] ??= {})[partition] = leaderEpoch;
+                }
+
+                return {
+                  partition,
+                  currentLeaderEpoch: leaderEpoch,
+                  fetchOffset: offsetManager.nextOffset(topic, partition),
+                  maxBytes: this.maxBytesPerPartition,
+                };
+              }),
+          };
+        })
         .filter(({ partitions }) => partitions.length > 0);
 
       if (requests.length === 0) {
@@ -953,6 +967,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           partition: error.partition,
           leaderId: error.currentLeader.leaderId,
         });
+
+        if (error.type === 'FENCED_LEADER_EPOCH' || error.type === 'UNKNOWN_LEADER_EPOCH') {
+          await this.recoverFromTruncation({ topic: error.topic, partition: error.partition });
+        }
+
         return;
       }
     }
@@ -982,6 +1001,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
 
     if (error.name === 'KafkaOffsetOutOfRange') {
+      if (
+        error.topic != null &&
+        error.partition != null &&
+        (await this.recoverFromTruncation({ topic: error.topic, partition: error.partition }))
+      ) {
+        return;
+      }
+
       await this.recoverFromOffsetOutOfRange(error);
       return;
     }
@@ -1024,6 +1051,58 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         topic: e.topic,
         partition: e.partition,
       });
+    }
+  }
+
+  /**
+   * KIP-320: after a leader change, ask the new leader for the end offset of the epoch this
+   * consumer last fetched under. Seeks there only when the current fetch position is past it -
+   * i.e. the broker's log was truncated out from under it - since a plain leader election
+   * (no truncation) still resolves the epoch to an end offset at or beyond that position.
+   * Returns `false` (the caller falls back to its own recovery) when there is no previously
+   * fetched epoch to validate, the partition has no known leader, or the broker predates
+   * OffsetForLeaderEpoch.
+   */
+  async recoverFromTruncation({ topic, partition }: { topic: string; partition: number }): Promise<boolean> {
+    const lastFetchedEpoch = this.#lastFetchedLeaderEpoch[topic]?.[partition];
+    if (lastFetchedEpoch == null || lastFetchedEpoch < 0) return false;
+
+    const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic).find((p) => p.partitionId === partition);
+    if (!partitionMetadata || partitionMetadata.leader == null) return false;
+
+    try {
+      const broker = await this.cluster.findBroker({ nodeId: String(partitionMetadata.leader) });
+      const { topics } = await broker.offsetForLeaderEpoch({
+        topics: [
+          {
+            topic,
+            partitions: [
+              { partition, currentLeaderEpoch: partitionMetadata.leaderEpoch, leaderEpoch: lastFetchedEpoch },
+            ],
+          },
+        ],
+      });
+
+      const endOffset = topics[0]?.partitions[0]?.endOffset;
+      const offsetManager = this.#requireOffsetManager();
+      if (endOffset == null || endOffset < 0n || offsetManager.nextOffset(topic, partition) <= endOffset) {
+        return false;
+      }
+
+      this.logger.warn('Detected log truncation, seeking to the leader epoch end offset', {
+        groupId: this.groupId,
+        memberId: this.memberId,
+        topic,
+        partition,
+        lastFetchedEpoch,
+        endOffset,
+      });
+
+      await offsetManager.seek({ topic, partition, offset: endOffset });
+      delete this.#lastFetchedLeaderEpoch[topic]?.[partition];
+      return true;
+    } catch {
+      return false;
     }
   }
 

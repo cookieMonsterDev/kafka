@@ -50,10 +50,12 @@ describe('protocol/requests/fetch/v13/response', () => {
               abortedTransactions: [],
               preferredReadReplica: -1,
               messages: [],
+              currentLeader: null,
             },
           ],
         },
       ],
+      nodeEndpoints: [],
     });
   });
 

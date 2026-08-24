@@ -1,6 +1,13 @@
 import { Decoder } from '../../../decoder';
 import { uuid, type ResponseDefinition } from '../../../schema';
-import { decodeCompactRecordSet, parseFetchResponse, resolveFetchTopicName, type FetchRequestOptions } from '../shared';
+import {
+  decodeCompactRecordSet,
+  parseFetchResponse,
+  readFetchPartitionTaggedFields,
+  readFetchResponseNodeEndpoints,
+  resolveFetchTopicName,
+  type FetchRequestOptions,
+} from '../shared';
 import type { FetchPartitionResponseV11, FetchResponseV11Body, FetchTopicResponseV11 } from '../v11/response';
 
 export type FetchPartitionResponseV13 = FetchPartitionResponseV11;
@@ -36,7 +43,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
     }) ?? [];
   const preferredReadReplica = decoder.readInt32();
   const messages = await decodeCompactRecordSet(decoder);
-  decoder.readTaggedFields();
+  const currentLeader = readFetchPartitionTaggedFields(decoder);
   return {
     partition,
     errorCode,
@@ -46,6 +53,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
     abortedTransactions,
     preferredReadReplica,
     messages,
+    currentLeader,
   };
 }
 
@@ -55,8 +63,8 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
  *     topic_id => UUID
  *
  * Topic names are replaced with topic IDs (KIP-516). `decode` restores `topicName` from the
- * request so consumers stay name-based. DivergingEpoch / CurrentLeader / SnapshotId (v12+) and
- * NodeEndpoints (v16+) are tagged fields and are skipped.
+ * request so consumers stay name-based. DivergingEpoch (tag 0) and SnapshotId (tag 2, v12+)
+ * stay skipped; CurrentLeader (tag 1, v12+) and NodeEndpoints (v16+) are decoded (KIP-951).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
@@ -75,7 +83,7 @@ export function fetchResponseV13(
         d.readTaggedFields();
         return { topicId, partitions };
       });
-      decoder.readTaggedFields();
+      const nodeEndpoints = readFetchResponseNodeEndpoints(decoder);
       return {
         throttleTime: 0,
         clientSideThrottleTime,
@@ -86,6 +94,7 @@ export function fetchResponseV13(
           topicId: topic.topicId,
           partitions: topic.partitions,
         })),
+        nodeEndpoints,
       };
     },
     parse: parseFetchResponse,

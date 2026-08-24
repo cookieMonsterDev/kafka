@@ -7,6 +7,7 @@ import { Encoder } from '../../encoder';
 import { ISOLATION_LEVEL } from '../../enums/isolation-level';
 import {
   compactArray,
+  compactNullableString,
   compactString,
   field,
   flexibleObject,
@@ -95,6 +96,78 @@ export function resolveFetchTopicName(topicId: Buffer, index: number, topics: re
 
 const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSET_OUT_OF_RANGE')?.code;
 
+export interface LeaderIdAndEpoch {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+export interface FetchNodeEndpoint {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
+const fetchNodeEndpointSchema = flexibleObject([
+  field('nodeId', int32),
+  field('host', compactString),
+  field('port', int32),
+  field('rack', compactNullableString),
+]);
+const fetchNodeEndpointsArraySchema = compactArray(fetchNodeEndpointSchema);
+
+/**
+ * Reads a Fetch partition's trailing tagged fields (v12+): DivergingEpoch (tag 0, KIP-320),
+ * CurrentLeader (tag 1, KIP-951), and SnapshotId (tag 2, KIP-595). Only CurrentLeader is
+ * surfaced today; DivergingEpoch and SnapshotId stay skipped until truncation detection needs
+ * them. Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
+ * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readFetchPartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
+  let currentLeader: LeaderIdAndEpoch | null = null;
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 1) {
+      currentLeader = { leaderId: fieldDecoder.readInt32(), leaderEpoch: fieldDecoder.readInt32() };
+    }
+  }
+
+  return currentLeader;
+}
+
+/**
+ * Reads the Fetch response's trailing tagged fields: NodeEndpoints (tag 0, v16+, KIP-951) — the
+ * broker addresses for any `currentLeader.leaderId` values in the response the client may not
+ * already have cached.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readFetchResponseNodeEndpoints(decoder: Decoder): FetchNodeEndpoint[] {
+  let nodeEndpoints: FetchNodeEndpoint[] = [];
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 0) {
+      nodeEndpoints = fetchNodeEndpointsArraySchema.read(fieldDecoder);
+    }
+  }
+
+  return nodeEndpoints;
+}
+
 /**
  * Shared by every Fetch response version: scan partitions for the first failure.
  * `OFFSET_OUT_OF_RANGE` becomes {@link KafkaOffsetOutOfRange} with topic and partition.
@@ -103,7 +176,11 @@ const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSE
  */
 export async function parseFetchResponse<
   T extends {
-    responses: readonly { topicName: string; partitions: readonly { errorCode: number; partition: number }[] }[];
+    responses: readonly {
+      topicName: string;
+      partitions: readonly { errorCode: number; partition: number; currentLeader?: LeaderIdAndEpoch | null }[];
+    }[];
+    nodeEndpoints?: readonly FetchNodeEndpoint[];
   },
 >(data: T): Promise<T> {
   const [firstError] = data.responses.flatMap(({ topicName, partitions }) =>
@@ -113,11 +190,12 @@ export async function parseFetchResponse<
   );
 
   if (firstError) {
-    const { errorCode, topic, partition } = firstError;
+    const { errorCode, topic, partition, currentLeader } = firstError;
+    const extras = { topic, partition, currentLeader: currentLeader ?? undefined, nodeEndpoints: data.nodeEndpoints };
     if (errorCode === OFFSET_OUT_OF_RANGE_ERROR_CODE) {
-      throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), { topic, partition });
+      throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), extras);
     }
-    throw createErrorFromCode(errorCode, { topic, partition });
+    throw createErrorFromCode(errorCode, extras);
   }
 
   return data;

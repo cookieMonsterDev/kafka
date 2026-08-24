@@ -1,19 +1,84 @@
+import { Decoder } from '../../../decoder';
 import {
   compactArray,
   compactNullableString,
   compactString,
-  defineResponse,
   field,
   flexibleObject,
   int16,
   int32,
   int64,
+  object,
+  taggedFields,
+  type FieldCodec,
   type ResponseDefinition,
 } from '../../../schema';
-import { parseProduceResponse } from '../shared';
-import type { ProduceResponseV8Body } from '../v8/response';
+import {
+  parseProduceResponse,
+  readProducePartitionTaggedFields,
+  readProduceResponseNodeEndpoints,
+  type LeaderIdAndEpoch,
+  type ProduceNodeEndpoint,
+} from '../shared';
+import type { ProduceRecordError } from '../v8/response';
 
-export type ProduceResponseV9Body = ProduceResponseV8Body;
+export interface ProducePartitionResponseV9 {
+  partition: number;
+  errorCode: number;
+  baseOffset: bigint;
+  logAppendTime: bigint;
+  logStartOffset: bigint;
+  recordErrors: ProduceRecordError[];
+  errorMessage: string | null;
+  /** KIP-951, tag 0 (v10+); `null` on a v9 broker or when the leader hasn't changed. */
+  currentLeader: LeaderIdAndEpoch | null;
+}
+
+export interface ProduceResponseV9Body {
+  topics: {
+    topicName: string;
+    partitions: ProducePartitionResponseV9[];
+  }[];
+  throttleTime: number;
+  clientSideThrottleTime: number;
+  /** KIP-951, tag 0 (v10+); `[]` on a v9 broker or when no unknown leader was reported. */
+  nodeEndpoints: ProduceNodeEndpoint[];
+}
+
+const partitionBodySchema = object([
+  field('partition', int32),
+  field('errorCode', int16),
+  field('baseOffset', int64),
+  field('logAppendTime', int64),
+  field('logStartOffset', int64),
+  field(
+    'recordErrors',
+    compactArray(flexibleObject([field('batchIndex', int32), field('batchIndexErrorMessage', compactNullableString)])),
+  ),
+  field('errorMessage', compactNullableString),
+]);
+
+/**
+ * Like `flexibleObject()`, but the trailing TAG_BUFFER carries KIP-951's CurrentLeader (tag 0)
+ * instead of being skipped.
+ */
+export const producePartitionSchemaV9: FieldCodec<ProducePartitionResponseV9> = {
+  write: (e, value) => {
+    partitionBodySchema.write(e, value);
+    taggedFields.write(e, null);
+  },
+  read: (d) => ({ ...partitionBodySchema.read(d), currentLeader: readProducePartitionTaggedFields(d) }),
+};
+
+const bodySchema = object([
+  field(
+    'topics',
+    compactArray(
+      flexibleObject([field('topicName', compactString), field('partitions', compactArray(producePartitionSchemaV9))]),
+    ),
+  ),
+  field('throttleTime', int32),
+]);
 
 /**
  * Produce Response (Version: 9) => [responses] throttle_time_ms TAG_BUFFER
@@ -32,50 +97,18 @@ export type ProduceResponseV9Body = ProduceResponseV8Body;
  *       error_message => COMPACT_NULLABLE_STRING
  *   throttle_time_ms => INT32
  *
- * Flexible version of v8 (KIP-482). throttle_time_ms stays INT32.
+ * Flexible version of v8 (KIP-482). throttle_time_ms stays INT32. CurrentLeader (partition tag
+ * 0) and NodeEndpoints (response tag 0) are decoded from v10+ (KIP-951); a v9 broker never sends
+ * either tag, so both default to their "no leader change" values.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-const bodySchema = flexibleObject([
-  field(
-    'topics',
-    compactArray(
-      flexibleObject([
-        field('topicName', compactString),
-        field(
-          'partitions',
-          compactArray(
-            flexibleObject([
-              field('partition', int32),
-              field('errorCode', int16),
-              field('baseOffset', int64),
-              field('logAppendTime', int64),
-              field('logStartOffset', int64),
-              field(
-                'recordErrors',
-                compactArray(
-                  flexibleObject([field('batchIndex', int32), field('batchIndexErrorMessage', compactNullableString)]),
-                ),
-              ),
-              field('errorMessage', compactNullableString),
-            ]),
-          ),
-        ),
-      ]),
-    ),
-  ),
-  field('throttleTime', int32),
-]);
-
-const raw = defineResponse({
-  schema: bodySchema,
-  parse: parseProduceResponse,
-});
-
 export const produceResponseV9: ResponseDefinition<ProduceResponseV9Body> = {
   decode: async (rawData) => {
-    const decoded = await raw.decode(rawData);
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
+    const decoder = new Decoder(rawData);
+    const decoded = bodySchema.read(decoder);
+    const nodeEndpoints = readProduceResponseNodeEndpoints(decoder);
+    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime, nodeEndpoints };
   },
   parse: parseProduceResponse,
 };

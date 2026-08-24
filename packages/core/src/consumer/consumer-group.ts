@@ -923,8 +923,39 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       port?: number;
       topic?: string;
       partition?: number;
+      currentLeader?: { leaderId: number; leaderEpoch: number };
+      nodeEndpoints?: { nodeId: number; host: string; port: number; rack: string | null }[];
       unknownPartitions?: unknown;
     };
+
+    // KIP-951: the Fetch response itself named the new leader (and its address, if the client
+    // didn't already have it cached). Patch the cache locally and retry - no Metadata RPC, no
+    // group rejoin, since the assignment itself hasn't changed.
+    if (
+      STALE_METADATA_ERRORS.includes(error.type ?? '') &&
+      error.topic != null &&
+      error.partition != null &&
+      error.currentLeader != null &&
+      error.currentLeader.leaderId >= 0
+    ) {
+      const patched = await this.cluster.applyLeaderUpdate({
+        topic: error.topic,
+        partition: error.partition,
+        currentLeader: error.currentLeader,
+        nodeEndpoints: error.nodeEndpoints ?? [],
+      });
+
+      if (patched) {
+        this.logger.debug('Recovered leader from Fetch response, skipping metadata refresh', {
+          groupId: this.groupId,
+          memberId: this.memberId,
+          topic: error.topic,
+          partition: error.partition,
+          leaderId: error.currentLeader.leaderId,
+        });
+        return;
+      }
+    }
 
     if (STALE_METADATA_ERRORS.includes(error.type ?? '') || error.name === 'KafkaTopicMetadataNotLoaded') {
       this.logger.debug('Stale cluster metadata, refreshing...', {

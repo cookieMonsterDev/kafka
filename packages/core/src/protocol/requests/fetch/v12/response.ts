@@ -1,6 +1,11 @@
 import { Decoder } from '../../../decoder';
 import type { ResponseDefinition } from '../../../schema';
-import { decodeCompactRecordSet, parseFetchResponse } from '../shared';
+import {
+  decodeCompactRecordSet,
+  parseFetchResponse,
+  readFetchPartitionTaggedFields,
+  readFetchResponseNodeEndpoints,
+} from '../shared';
 import type { FetchPartitionResponseV11, FetchResponseV11Body, FetchTopicResponseV11 } from '../v11/response';
 
 export type FetchPartitionResponseV12 = FetchPartitionResponseV11;
@@ -30,7 +35,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
     }) ?? [];
   const preferredReadReplica = decoder.readInt32();
   const messages = await decodeCompactRecordSet(decoder);
-  decoder.readTaggedFields();
+  const currentLeader = readFetchPartitionTaggedFields(decoder);
   return {
     partition,
     errorCode,
@@ -40,6 +45,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
     abortedTransactions,
     preferredReadReplica,
     messages,
+    currentLeader,
   };
 }
 
@@ -62,8 +68,9 @@ async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponse
  *                   [aborted_transactions] preferred_read_replica records TAG_BUFFER
  *       records => COMPACT_RECORDS
  *
- * First flexible Fetch response. DivergingEpoch / CurrentLeader / SnapshotId are tagged fields
- * (tags 0–2) and are skipped. Topic names remain through v12.
+ * First flexible Fetch response. DivergingEpoch (tag 0) and SnapshotId (tag 2) are tagged
+ * fields that stay skipped; CurrentLeader (tag 1, KIP-951) is decoded. Topic names remain
+ * through v12.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
@@ -74,8 +81,8 @@ export const fetchResponseV12: ResponseDefinition<FetchResponseV12Body> = {
     const errorCode = decoder.readInt16();
     const sessionId = decoder.readInt32();
     const responses = await readCompactArrayAsync(decoder, decodeTopicResponse);
-    decoder.readTaggedFields();
-    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses };
+    const nodeEndpoints = readFetchResponseNodeEndpoints(decoder);
+    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses, nodeEndpoints };
   },
   parse: parseFetchResponse,
 };

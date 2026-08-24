@@ -19,6 +19,27 @@ function hasBrokerBeenReplaced(
   );
 }
 
+/** KIP-951: the partition's current leader, reported on a stale-leader error response. */
+export interface CurrentLeader {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+/** KIP-951: a broker address the client may not already have cached metadata for. */
+export interface NodeEndpointUpdate {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
+export interface ApplyLeaderUpdateOptions {
+  topic: string;
+  partition: number;
+  currentLeader: CurrentLeader;
+  nodeEndpoints?: readonly NodeEndpointUpdate[];
+}
+
 export interface BrokerPoolOptions {
   connectionPoolBuilder: ConnectionPoolBuilder;
   logger: Logger;
@@ -214,6 +235,52 @@ export class BrokerPool {
     if (shouldRefresh) {
       await this.refreshMetadata(topics);
     }
+  }
+
+  /**
+   * KIP-951: patches the cached partition leader (and any accompanying broker addresses) from a
+   * Produce/Fetch error response's `CurrentLeader` / `NodeEndpoints` tagged fields, without a
+   * Metadata RPC. Returns whether the cached partition metadata was actually found and patched -
+   * callers should fall back to `refreshMetadata` when it returns `false`.
+   */
+  async applyLeaderUpdate({
+    topic,
+    partition,
+    currentLeader,
+    nodeEndpoints = [],
+  }: ApplyLeaderUpdateOptions): Promise<boolean> {
+    if (currentLeader.leaderId < 0 || !this.metadata) return false;
+
+    for (const endpoint of nodeEndpoints) {
+      const key = String(endpoint.nodeId);
+      const existing = this.brokers[key];
+      if (existing && !hasBrokerBeenReplaced(existing, endpoint)) continue;
+
+      const replaced = this.brokers[key];
+      this.brokers[key] = this.#createBroker({
+        logger: this.rootLogger,
+        versions: this.versions,
+        connectionPool: await this.connectionPoolBuilder.build(endpoint),
+        nodeId: endpoint.nodeId,
+      });
+      if (replaced) await replaced.disconnect();
+
+      const brokerIndex = this.metadata.brokers.findIndex((broker) => broker.nodeId === endpoint.nodeId);
+      const brokerEntry = { nodeId: endpoint.nodeId, host: endpoint.host, port: endpoint.port, rack: endpoint.rack };
+      if (brokerIndex === -1) {
+        this.metadata.brokers.push(brokerEntry);
+      } else {
+        this.metadata.brokers[brokerIndex] = brokerEntry;
+      }
+    }
+
+    const topicMetadata = this.metadata.topicMetadata.find((entry) => entry.topic === topic);
+    const partitionMetadata = topicMetadata?.partitionMetadata.find((entry) => entry.partitionId === partition);
+    if (!partitionMetadata) return false;
+
+    partitionMetadata.leader = currentLeader.leaderId;
+    if (currentLeader.leaderEpoch >= 0) partitionMetadata.leaderEpoch = currentLeader.leaderEpoch;
+    return true;
   }
 
   getNodeIds(): string[] {

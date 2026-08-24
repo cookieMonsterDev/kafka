@@ -16,6 +16,9 @@ import type {
 } from '../types';
 import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
+import type { OffsetManagerHandle } from './offset-manager-handle';
+
+export type { OffsetManagerHandle } from './offset-manager-handle';
 
 function indexTopics(topics: readonly string[]): Record<string, Record<string, bigint>> {
   return topics.reduce<Record<string, Record<string, bigint>>>((obj, topic) => {
@@ -45,7 +48,7 @@ export interface OffsetManagerOptions {
  * Kafka's committed offset is the next offset to read, not the last consumed one.
  * `resolveOffset({ offset })` therefore stores `offset + 1n`.
  */
-export class OffsetManager {
+export class OffsetManager implements OffsetManagerHandle {
   cluster: Cluster;
   coordinator: Broker;
   memberAssignment: MemberAssignment;

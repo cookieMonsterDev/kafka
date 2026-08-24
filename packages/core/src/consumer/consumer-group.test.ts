@@ -961,4 +961,193 @@ describe('consumer/consumer-group', () => {
       );
     });
   });
+
+  describe('assign() mode', () => {
+    function createAssignGroup(
+      overrides: {
+        groupId?: string | null;
+        cluster?: Record<string, unknown>;
+        findGroupCoordinator?: ReturnType<typeof vi.fn>;
+      } = {},
+    ): {
+      consumerGroup: ConsumerGroup;
+      findGroupCoordinator: ReturnType<typeof vi.fn>;
+    } {
+      const findGroupCoordinator = overrides.findGroupCoordinator ?? vi.fn();
+      const cluster = {
+        connect: vi.fn(async () => undefined),
+        refreshMetadata: vi.fn(async () => undefined),
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findGroupCoordinator,
+        findTopicPartitionMetadata: vi.fn(() => [
+          { partitionId: 0, leader: 1 },
+          { partitionId: 1, leader: 1 },
+        ]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: vi.fn(async () => ({ responses: [], sessionId: 0 })) })),
+        fetchTopicsOffset: vi.fn(async () => [{ topic: 'topic1', partitions: [{ partition: 0, offset: 0n }] }]),
+        defaultOffset: vi.fn(() => 0n),
+        ...overrides.cluster,
+      } as unknown as Cluster;
+
+      const consumerGroup = new ConsumerGroup({
+        logger: silentLogger,
+        topics: ['topic1'],
+        topicConfigurations: {},
+        cluster,
+        groupId: overrides.groupId === undefined ? null : overrides.groupId,
+        assignedPartitions: [{ topic: 'topic1', partitions: [0] }],
+        assigners: [],
+        sessionTimeout: 30_000,
+        rebalanceTimeout: 60_000,
+        maxBytesPerPartition: 1024,
+        minBytes: 1,
+        maxBytes: 1024,
+        maxWaitTimeInMs: 100,
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+        rackId: '',
+        metadataMaxAge: 300_000,
+        autoCommit: false,
+        autoCommitInterval: null,
+        autoCommitThreshold: null,
+      });
+
+      return { consumerGroup, findGroupCoordinator };
+    }
+
+    it('installs the fixed assignment without any JoinGroup/SyncGroup RPC', async () => {
+      const { consumerGroup, findGroupCoordinator } = createAssignGroup();
+
+      await consumerGroup.joinAndSync();
+
+      expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+      expect(findGroupCoordinator).not.toHaveBeenCalled();
+      expect(consumerGroup.memberId).toBeNull();
+      expect(consumerGroup.generationId).toBeNull();
+    });
+
+    it('does not emit GROUP_JOIN', async () => {
+      const { consumerGroup } = createAssignGroup();
+      const groupJoins: unknown[] = [];
+      consumerGroup.instrumentationEmitter.addListener(GROUP_JOIN, (event) => groupJoins.push(event));
+
+      await consumerGroup.joinAndSync();
+
+      expect(groupJoins).toHaveLength(0);
+    });
+
+    it('heartbeat() and heartbeatDue() are no-ops', async () => {
+      const { consumerGroup } = createAssignGroup();
+      await consumerGroup.joinAndSync();
+
+      expect(consumerGroup.heartbeatDue(0)).toBe(false);
+      await expect(consumerGroup.heartbeat({ interval: 0 })).resolves.toBeUndefined();
+    });
+
+    it('leave() does not perform a group leave RPC', async () => {
+      const { consumerGroup, findGroupCoordinator } = createAssignGroup();
+      await consumerGroup.joinAndSync();
+
+      await consumerGroup.leave();
+
+      expect(findGroupCoordinator).not.toHaveBeenCalled();
+    });
+
+    it('fetches the assigned partitions from the broker without a group coordinator lookup', async () => {
+      const brokerFetch = vi.fn(async () => ({
+        responses: [
+          {
+            topicName: 'topic1',
+            partitions: [{ partition: 0, preferredReadReplica: -1, highWatermark: 10n, messages: [] }],
+          },
+        ],
+        sessionId: 0,
+      }));
+      const { consumerGroup, findGroupCoordinator } = createAssignGroup({
+        cluster: { findBroker: vi.fn(async () => ({ fetch: brokerFetch })) },
+      });
+
+      await consumerGroup.joinAndSync();
+      const batches = await consumerGroup.fetch('1');
+
+      expect(findGroupCoordinator).not.toHaveBeenCalled();
+      expect(brokerFetch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topics: [expect.objectContaining({ topic: 'topic1' })],
+        }),
+      );
+      expect(batches).toHaveLength(1);
+      expect(batches[0]?.topic).toBe('topic1');
+    });
+
+    it('without a configured groupId, resolves the initial position from autoOffsetReset (default latest)', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'topic1', partitions: [{ partition: 0, offset: 123n }] }]);
+      const { consumerGroup } = createAssignGroup({ cluster: { fetchTopicsOffset } });
+      await consumerGroup.joinAndSync();
+
+      await consumerGroup.fetch('1');
+
+      expect(fetchTopicsOffset).toHaveBeenCalledWith([
+        { topic: 'topic1', partitions: [{ partition: 0 }], fromBeginning: false },
+      ]);
+    });
+
+    it('pause/resume/seek work exactly like subscribe-mode', async () => {
+      const { consumerGroup } = createAssignGroup();
+      await consumerGroup.joinAndSync();
+
+      consumerGroup.pause([{ topic: 'topic1', partitions: [0] }]);
+      expect(consumerGroup.isPaused('topic1', 0)).toBe(true);
+      expect(consumerGroup.paused()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+
+      consumerGroup.resume([{ topic: 'topic1', partitions: [0] }]);
+      expect(consumerGroup.isPaused('topic1', 0)).toBe(false);
+
+      consumerGroup.seek({ topic: 'topic1', partition: 0, offset: 500n });
+      expect(consumerGroup.hasSeekOffset({ topic: 'topic1', partition: 0 })).toBe(true);
+    });
+
+    it('seek overrides the fetch offset on the next fetch', async () => {
+      const brokerFetch = vi.fn(async () => ({ responses: [], sessionId: 0 }));
+      const { consumerGroup } = createAssignGroup({
+        cluster: { findBroker: vi.fn(async () => ({ fetch: brokerFetch })) },
+      });
+      await consumerGroup.joinAndSync();
+
+      consumerGroup.seek({ topic: 'topic1', partition: 0, offset: 777n });
+      await consumerGroup.fetch('1');
+
+      expect(brokerFetch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topics: [expect.objectContaining({ partitions: [expect.objectContaining({ fetchOffset: 777n })] })],
+        }),
+      );
+    });
+
+    it('commitOffsets throws a clear error without a configured groupId', async () => {
+      const { consumerGroup } = createAssignGroup({ groupId: null });
+      await consumerGroup.joinAndSync();
+      consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 5n });
+
+      await expect(consumerGroup.commitOffsets()).rejects.toThrow(/without a configured groupId/);
+    });
+
+    it('commitOffsets works as a standalone consumer when a groupId is configured', async () => {
+      const offsetCommit = vi.fn(async () => undefined);
+      const findGroupCoordinator = vi.fn(async () => ({ offsetCommit }));
+      const { consumerGroup } = createAssignGroup({
+        groupId: 'my-group',
+        cluster: { findGroupCoordinator },
+      });
+      await consumerGroup.joinAndSync();
+      consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 5n });
+
+      await consumerGroup.commitOffsets();
+
+      expect(offsetCommit).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'my-group', memberId: '', groupGenerationId: -1 }),
+      );
+    });
+  });
 });

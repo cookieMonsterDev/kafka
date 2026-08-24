@@ -268,9 +268,12 @@ export interface ProducerConfig {
 export interface ConsumerConfig {
   /**
    * Consumer group id. Members that share this id partition assigned topics among themselves.
+   * Required to use {@link Consumer.subscribe}. Optional for {@link Consumer.assign}, which
+   * fetches without group membership; set it there only if you plan to call
+   * {@link Consumer.commitOffsets}.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.id
    */
-  groupId: string;
+  groupId?: string;
   partitionAssigners?: PartitionAssigner[];
   metadataMaxAge?: number;
   /**

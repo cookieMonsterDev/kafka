@@ -19,7 +19,8 @@ import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
 import { FetchSessionHandler } from './fetch-session';
 import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
-import { OffsetManager } from './offset-manager/index';
+import { AssignedOffsetManager } from './offset-manager/assigned-offset-manager';
+import { OffsetManager, type OffsetManagerHandle } from './offset-manager/index';
 import type { TopicOffsetConfiguration } from './offset-reset';
 import { SeekOffsets } from './seek-offsets';
 import { SubscriptionState } from './subscription-state';
@@ -130,7 +131,8 @@ function flattenTopicPartitions(topicPartitions: readonly TopicPartitions[]): To
 export interface ConsumerGroupOptions {
   retry?: RetryOptions;
   cluster: Cluster;
-  groupId: string;
+  /** `null` when the consumer has no configured `groupId` (only possible in `assign()` mode). */
+  groupId: string | null;
   topics: readonly string[];
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
   logger: Logger;
@@ -169,11 +171,16 @@ export interface ConsumerGroupOptions {
   onPartitionsAssigned?: RebalanceListener;
   /** See {@link ConsumerRunConfig.onPartitionsLost}. */
   onPartitionsLost?: RebalanceListener;
+  /**
+   * `consumer.assign()` mode: fetch exactly these partitions, skipping JoinGroup/SyncGroup,
+   * ConsumerGroupHeartbeat, and rebalancing entirely.
+   */
+  assignedPartitions?: readonly TopicPartitions[];
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
 export interface ConsumerGroupHandle {
-  groupId: string;
+  groupId: string | null;
   memberId: string | null;
   shuttingDown?: boolean;
   connect: () => Promise<void>;
@@ -202,7 +209,7 @@ export interface ConsumerGroupHandle {
 
 export class ConsumerGroup implements ConsumerGroupHandle {
   cluster: Cluster;
-  groupId: string;
+  groupId: string | null;
   topics: string[];
   topicsSubscribed: string[];
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
@@ -241,7 +248,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupProtocol: string | null = null;
   partitionsPerSubscribedTopic: Map<string, number[]> | null = null;
   preferredReadReplicasPerTopicPartition: Record<string, Record<number, PreferredReadReplica>> = {};
-  offsetManager: OffsetManager | null = null;
+  offsetManager: OffsetManagerHandle | null = null;
   subscriptionState = new SubscriptionState();
   lastRequest = Date.now();
   heartbeatIntervalMs: number | null = null;
@@ -258,6 +265,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #lastFetchedLeaderEpoch: Record<string, Record<number, number>> = {};
   /** KIP-227: one incremental fetch session per broker node. */
   #fetchSessionHandlers = new Map<string, FetchSessionHandler>();
+  /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
+  readonly #assignMode: boolean;
+  readonly #fixedAssignment: TopicPartitions[] | null;
 
   constructor({
     retry,
@@ -287,9 +297,14 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     onPartitionsRevoked,
     onPartitionsAssigned,
     onPartitionsLost,
+    assignedPartitions,
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
+    this.#assignMode = assignedPartitions != null;
+    this.#fixedAssignment = assignedPartitions
+      ? assignedPartitions.map(({ topic, partitions }) => ({ topic, partitions: [...partitions] }))
+      : null;
     this.topics = [...topics];
     this.topicsSubscribed = [...topics];
     this.topicConfigurations = topicConfigurations;
@@ -319,6 +334,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.#adaptiveMaxBytes = maxBytes;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
+      if (this.#assignMode) return;
+
       if (this.useConsumerProtocol) {
         await this.#heartbeatConsumerProtocol({ interval });
         return;
@@ -327,7 +344,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const { groupId: id, generationId, memberId } = this;
       const now = Date.now();
 
-      if (memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
+      if (id && memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
         const payload = {
           groupId: id,
           memberId,
@@ -357,6 +374,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async #join(): Promise<void> {
     const { groupId, sessionTimeout, rebalanceTimeout } = this;
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
+    }
     this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
 
     const groupData = await this.coordinator.joinGroup({
@@ -380,7 +400,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     await this.#closeFetchSessions();
 
     const { groupId, memberId, coordinator } = this;
-    if (!memberId || !coordinator) return;
+    if (!memberId || !coordinator || !groupId) return;
 
     if (this.useConsumerProtocol) {
       if (this.#consumerProtocolJoined) {
@@ -407,7 +427,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     let assignment: { memberId: string; memberAssignment: Buffer }[] = [];
     const { groupId, generationId, memberId, members, groupProtocol, topicsSubscribed, coordinator } = this;
 
-    if (!coordinator || generationId == null || memberId == null) {
+    if (!coordinator || !groupId || generationId == null || memberId == null) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -565,7 +585,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
     const { groupId, generationId, memberId, coordinator } = this;
-    if (!coordinator || generationId == null || memberId == null) {
+    if (!this.#assignMode && (!coordinator || generationId == null || memberId == null)) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -597,27 +617,55 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
 
+    const memberAssignment = currentMemberAssignment.reduce<MemberAssignmentMap>(
+      (partitionsByTopic, { topic, partitions }) => {
+        partitionsByTopic[topic] = partitions;
+        return partitionsByTopic;
+      },
+      {},
+    );
+
+    if (this.#assignMode) {
+      if (this.offsetManager instanceof AssignedOffsetManager) {
+        this.offsetManager.updateAssignment(memberAssignment);
+      } else {
+        this.offsetManager = new AssignedOffsetManager({
+          cluster: this.cluster,
+          groupId,
+          topicConfigurations: this.topicConfigurations,
+          assignment: memberAssignment,
+          instrumentationEmitter: this.instrumentationEmitter,
+        });
+      }
+      return;
+    }
+
     this.offsetManager = new OffsetManager({
       cluster: this.cluster,
       topicConfigurations: this.topicConfigurations,
       instrumentationEmitter: this.instrumentationEmitter,
-      memberAssignment: currentMemberAssignment.reduce<MemberAssignmentMap>(
-        (partitionsByTopic, { topic, partitions }) => {
-          partitionsByTopic[topic] = partitions;
-          return partitionsByTopic;
-        },
-        {},
-      ),
+      memberAssignment,
       autoCommit: this.autoCommit,
       autoCommitInterval: this.autoCommitInterval,
       autoCommitThreshold: this.autoCommitThreshold,
-      coordinator,
-      groupId,
-      generationId,
-      memberId,
+      coordinator: coordinator!,
+      groupId: groupId!,
+      generationId: generationId!,
+      memberId: memberId!,
       logger: this.logger,
       hooks: this.hooks,
     });
+  }
+
+  /**
+   * `assign()` mode: install the user-supplied partitions directly, skipping JoinGroup/SyncGroup
+   * entirely. Refreshes metadata first so `#installAssignment`'s partition-awareness check has
+   * current data.
+   */
+  async #installFixedAssignment(): Promise<void> {
+    await this.cluster.refreshMetadata();
+    await this.#installAssignment(this.#fixedAssignment ?? []);
+    this.logger.info('Assigned partitions, no group membership', { assignment: this.#fixedAssignment });
   }
 
   #ensureMemberId(): string {
@@ -653,7 +701,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async #refreshTopicIdMapFromDescribe(): Promise<void> {
     const { coordinator, groupId, memberId } = this;
-    if (!coordinator) return;
+    if (!coordinator || !groupId) return;
 
     const { groups } = await coordinator.consumerGroupDescribe({
       groupIds: [groupId],
@@ -682,7 +730,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     ackDepth?: number;
   }): Promise<void> {
     const { groupId, coordinator } = this;
-    if (!coordinator) {
+    if (!coordinator || !groupId) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -791,7 +839,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   async #joinConsumerProtocol(): Promise<void> {
-    this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
+    const groupId = this.groupId;
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
+    }
+    this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
     this.#includeJoinFields = true;
     this.#ownedPartitionsDirty = false;
     this.#ownedTopicPartitions = [];
@@ -820,6 +872,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (this.shuttingDown) return;
 
       try {
+        if (this.#assignMode) {
+          await this.#installFixedAssignment();
+          return;
+        }
+
         if (this.useConsumerProtocol) {
           await this.#joinConsumerProtocol();
         } else {
@@ -868,7 +925,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     });
   }
 
-  #requireOffsetManager(): OffsetManager {
+  #requireOffsetManager(): OffsetManagerHandle {
     if (!this.offsetManager) {
       throw new KafkaNonRetriableError('Offset manager is not initialized');
     }
@@ -928,6 +985,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   heartbeatDue(interval: number): boolean {
+    if (this.#assignMode) return false;
+
     if (this.useConsumerProtocol) {
       if (!this.coordinator) return false;
       const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
@@ -1319,7 +1378,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   checkForStaleAssignment(): void {
-    if (!this.partitionsPerSubscribedTopic) return;
+    // assign() mode assignment is fixed by the caller; there is no rejoin to trigger, so a
+    // partition-count change on the topic is not this consumer's concern to reconcile.
+    if (this.#assignMode || !this.partitionsPerSubscribedTopic) return;
 
     const newPartitionsPerSubscribedTopic = this.generatePartitionsPerSubscribedTopic();
 

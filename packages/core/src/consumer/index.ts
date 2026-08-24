@@ -95,7 +95,12 @@ export interface ConsumerSubscribeTopic {
 
 export interface ConsumerOptions {
   cluster: Cluster;
-  groupId: string;
+  /**
+   * Consumer group id. Required to use {@link Consumer.subscribe}. Optional for
+   * {@link Consumer.assign}, which fetches without group membership; configure it there only if
+   * you plan to call {@link Consumer.commitOffsets}.
+   */
+  groupId?: string;
   retry?: ConsumerRetryOptions;
   logger: Logger;
   partitionAssigners?: PartitionAssigner[];
@@ -140,6 +145,13 @@ export interface Consumer {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;
   subscribe: (subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic) => Promise<void>;
+  /**
+   * Assign exact partitions to fetch, with no group membership: no JoinGroup/SyncGroup,
+   * ConsumerGroupHeartbeat, or rebalancing. Mutually exclusive with {@link Consumer.subscribe} -
+   * calling one after the other throws. `groupId` is not required unless you also call
+   * {@link Consumer.commitOffsets}. See the "Assign mode" guide for the offset-commit policy.
+   */
+  assign: (topicPartitions: readonly { topic: string; partition: number }[]) => Promise<void>;
   stop: () => Promise<void>;
   run: (config?: ConsumerRunConfig) => Promise<void>;
   /** Async iteration over fetched batches. Cannot run alongside {@link Consumer.run}. */
@@ -194,20 +206,23 @@ export function createConsumer({
   hooks,
   checkCrcs = true,
 }: ConsumerOptions): Consumer {
-  if (!groupId) {
-    throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
-  }
-
   const logger = rootLogger.namespace('Consumer');
   const instrumentationEmitter = rootInstrumentationEmitter ?? new InstrumentationEventEmitter();
   const assigners: Assigner[] = partitionAssigners.map((createAssigner) =>
-    createAssigner({ groupId, logger, cluster }),
+    createAssigner({ groupId: groupId ?? '', logger, cluster }),
   );
 
   const topics: Record<string, TopicOffsetConfiguration> = {};
   let runner: Runner | null = null;
   let consumerGroup: ConsumerGroup | null = null;
   let restartTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * `subscribe()` (group membership, rebalanced assignment) and `assign()` (fixed partitions,
+   * no group membership) are mutually exclusive; `run`/`stream` require one of them first.
+   */
+  let mode: 'unset' | 'subscribe' | 'assign' = 'unset';
+  let assignment: TopicPartitions[] = [];
 
   if (groupProtocol !== 'consumer' && heartbeatInterval >= sessionTimeout) {
     throw new KafkaNonRetriableError(
@@ -260,9 +275,21 @@ export function createConsumer({
   };
 
   const subscribe = async (subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void> => {
+    if (mode === 'assign') {
+      throw new KafkaNonRetriableError(
+        'Cannot call subscribe() after assign(); a consumer must use either subscribe() or assign(), not both.',
+      );
+    }
+
     if (consumerGroup) {
       throw new KafkaNonRetriableError('Cannot subscribe to topic while consumer is running');
     }
+
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string to use subscribe().');
+    }
+
+    mode = 'subscribe';
 
     const topicConfiguration = topicOffsetConfigurationFromSubscribe(subscription, autoOffsetReset);
     const isTopicName = (entry: unknown): entry is string | RegExp =>
@@ -329,6 +356,61 @@ export function createConsumer({
     await cluster.addMultipleTargetTopics(topicsToSubscribe);
   };
 
+  /**
+   * Assign exact partitions to fetch, skipping group membership entirely: no JoinGroup/SyncGroup,
+   * no ConsumerGroupHeartbeat, no rebalancing. Mutually exclusive with {@link subscribe}.
+   *
+   * Initial position per partition (see the "Assign mode" guide for the full policy): an earlier
+   * {@link seek} always wins; otherwise, when `groupId` is configured, the group's committed
+   * offset if one exists; otherwise `autoOffsetReset` (default `latest`).
+   */
+  const assign = async (topicPartitions: readonly { topic: string; partition: number }[]): Promise<void> => {
+    if (mode === 'subscribe') {
+      throw new KafkaNonRetriableError(
+        'Cannot call assign() after subscribe(); a consumer must use either subscribe() or assign(), not both.',
+      );
+    }
+
+    if (consumerGroup) {
+      throw new KafkaNonRetriableError('Cannot assign partitions while consumer is running');
+    }
+
+    const isTopicPartitionList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
+    if (!isTopicPartitionList(topicPartitions)) {
+      throw new KafkaNonRetriableError('Argument "topicPartitions" must be an array');
+    }
+
+    const partitionsByTopic: Record<string, Set<number>> = {};
+    for (const entry of topicPartitions) {
+      const topic = entry?.topic;
+      if (typeof topic !== 'string' || !topic) {
+        throw new KafkaNonRetriableError(`Invalid topic ${String(topic)}`);
+      }
+
+      const partition = entry?.partition;
+      if (typeof partition !== 'number' || Number.isNaN(partition)) {
+        throw new KafkaNonRetriableError(`Invalid partition, expected a number received ${String(partition)}`);
+      }
+
+      (partitionsByTopic[topic] ??= new Set()).add(partition);
+    }
+
+    mode = 'assign';
+
+    const topicConfiguration: TopicOffsetConfiguration = autoOffsetReset != null ? { autoOffsetReset } : {};
+    const topicNames = Object.keys(partitionsByTopic);
+    for (const name of topicNames) {
+      topics[name] = topicConfiguration;
+    }
+
+    assignment = topicNames.map((topic) => ({
+      topic,
+      partitions: [...(partitionsByTopic[topic] ?? [])].sort((a, b) => a - b),
+    }));
+
+    await cluster.addMultipleTargetTopics(topicNames);
+  };
+
   const run = async ({
     autoCommit = true,
     autoCommitInterval = null,
@@ -350,42 +432,90 @@ export function createConsumer({
       return;
     }
 
+    if (mode === 'unset') {
+      throw new KafkaNonRetriableError('Consumer must call subscribe() or assign() before run().');
+    }
+
     if (signal?.aborted) {
       throw abortError(signal);
     }
 
-    const start = async (onCrash: (reason: Error) => Promise<void>): Promise<void> => {
-      logger.info('Starting', { groupId });
+    // assign() mode never auto-commits: there is no consumer group to own the offsets, so
+    // committing only ever happens through an explicit commitOffsets() call (which itself
+    // requires a configured groupId). autoCommit/autoCommitInterval/autoCommitThreshold from
+    // `run()` are ignored in this mode.
+    const runnerAutoCommit = mode === 'assign' ? false : autoCommit;
+    if (mode === 'assign' && (autoCommitInterval != null || autoCommitThreshold != null)) {
+      logger.warn(
+        'autoCommitInterval/autoCommitThreshold have no effect in assign() mode; call commitOffsets() explicitly instead',
+        { groupId },
+      );
+    }
 
-      consumerGroup = new ConsumerGroup({
-        logger: rootLogger,
-        topics: Object.keys(topics),
-        topicConfigurations: topics,
-        retry,
-        cluster,
-        groupId,
-        assigners,
-        sessionTimeout,
-        rebalanceTimeout,
-        maxBytesPerPartition,
-        minBytes,
-        maxBytes,
-        maxWaitTimeInMs,
-        instrumentationEmitter,
-        isolationLevel,
-        groupInstanceId,
-        rackId,
-        metadataMaxAge,
-        autoCommit,
-        autoCommitInterval,
-        autoCommitThreshold,
-        groupProtocol,
-        hooks,
-        checkCrcs,
-        onPartitionsRevoked,
-        onPartitionsAssigned,
-        onPartitionsLost,
-      });
+    const start = async (onCrash: (reason: Error) => Promise<void>): Promise<void> => {
+      logger.info('Starting', { groupId, mode });
+
+      consumerGroup =
+        mode === 'assign'
+          ? new ConsumerGroup({
+              logger: rootLogger,
+              topics: assignment.map(({ topic }) => topic),
+              topicConfigurations: topics,
+              assignedPartitions: assignment,
+              retry,
+              cluster,
+              groupId: groupId ?? null,
+              assigners,
+              sessionTimeout,
+              rebalanceTimeout,
+              maxBytesPerPartition,
+              minBytes,
+              maxBytes,
+              maxWaitTimeInMs,
+              instrumentationEmitter,
+              isolationLevel,
+              groupInstanceId,
+              rackId,
+              metadataMaxAge,
+              autoCommit: false,
+              autoCommitInterval,
+              autoCommitThreshold,
+              groupProtocol,
+              hooks,
+              checkCrcs,
+              onPartitionsRevoked,
+              onPartitionsAssigned,
+              onPartitionsLost,
+            })
+          : new ConsumerGroup({
+              logger: rootLogger,
+              topics: Object.keys(topics),
+              topicConfigurations: topics,
+              retry,
+              cluster,
+              groupId: groupId ?? null,
+              assigners,
+              sessionTimeout,
+              rebalanceTimeout,
+              maxBytesPerPartition,
+              minBytes,
+              maxBytes,
+              maxWaitTimeInMs,
+              instrumentationEmitter,
+              isolationLevel,
+              groupInstanceId,
+              rackId,
+              metadataMaxAge,
+              autoCommit,
+              autoCommitInterval,
+              autoCommitThreshold,
+              groupProtocol,
+              hooks,
+              checkCrcs,
+              onPartitionsRevoked,
+              onPartitionsAssigned,
+              onPartitionsLost,
+            });
 
       runner = new Runner({
         logger: rootLogger,
@@ -393,7 +523,7 @@ export function createConsumer({
         instrumentationEmitter,
         heartbeatInterval,
         retry,
-        autoCommit,
+        autoCommit: runnerAutoCommit,
         eachBatchAutoResolve,
         eachBatch,
         eachMessage,
@@ -612,6 +742,12 @@ export function createConsumer({
       throw new KafkaNonRetriableError('Consumer group was not initialized, consumer#run must be called first');
     }
 
+    if (mode === 'assign' && !groupId) {
+      throw new KafkaNonRetriableError(
+        'Cannot commit offsets in assign() mode without a configured groupId. Pass groupId to kafka.consumer(...) to enable commitOffsets().',
+      );
+    }
+
     await runner.commitOffsets({
       topics: Object.keys(commitsByTopic).map((topic) => ({
         topic,
@@ -651,6 +787,12 @@ export function createConsumer({
   };
 
   const describeGroup = async (): Promise<GroupDescription> => {
+    if (!groupId) {
+      throw new KafkaNonRetriableError(
+        'Consumer groupId must be configured to use describeGroup(). Pass groupId to kafka.consumer(...).',
+      );
+    }
+
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const describeRetrier = retrier(retry);
     return describeRetrier(async () => {
@@ -727,6 +869,7 @@ export function createConsumer({
     connect,
     disconnect,
     subscribe,
+    assign,
     stop,
     run,
     stream,

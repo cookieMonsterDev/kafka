@@ -17,6 +17,7 @@ import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { sleep } from '../utils/wait';
 import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
+import { FetchSessionHandler } from './fetch-session';
 import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
 import { OffsetManager } from './offset-manager/index';
 import type { TopicOffsetConfiguration } from './offset-reset';
@@ -217,6 +218,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #adaptiveMaxBytes: number;
   /** KIP-320: the leader epoch each assigned partition was last fetched under, for truncation detection. */
   #lastFetchedLeaderEpoch: Record<string, Record<number, number>> = {};
+  /** KIP-227: one incremental fetch session per broker node. */
+  #fetchSessionHandlers = new Map<string, FetchSessionHandler>();
 
   constructor({
     retry,
@@ -326,6 +329,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   async leave(): Promise<void> {
+    await this.#closeFetchSessions();
+
     const { groupId, memberId, coordinator } = this;
     if (!memberId || !coordinator) return;
 
@@ -864,15 +869,22 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       }
 
       const broker = await this.cluster.findBroker({ nodeId });
-      const { responses } = await broker.fetch({
+      const fetchSession = this.#fetchSessionHandlerFor(nodeId);
+      const sessionRequest = fetchSession.buildRequest(requests);
+      const { responses, sessionId } = await broker.fetch({
         replicaId: CONSUMER_REPLICA_ID,
         maxWaitTime: this.maxWaitTime,
         minBytes: this.minBytes,
         maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
-        topics: requests,
+        topics: sessionRequest.topics,
+        forgottenTopics: sessionRequest.forgottenTopics,
+        sessionId: sessionRequest.sessionId,
+        sessionEpoch: sessionRequest.sessionEpoch,
+        topicsForResponse: requests,
         rackId: this.rackId,
       });
+      fetchSession.handleResponse(sessionId ?? 0);
 
       const batches = responses.flatMap(({ topicName, partitions }) => {
         const topicRequestData = requests.find(({ topic }) => topic === topicName);
@@ -925,9 +937,59 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
       return batches;
     } catch (e) {
+      // The request as sent already advanced the session's local bookkeeping (buildRequest runs
+      // before the RPC). If the RPC itself failed - a session error (FETCH_SESSION_ID_NOT_FOUND /
+      // INVALID_FETCH_SESSION_EPOCH), or anything else - the broker's actual session state is no
+      // longer known to match, so start over with a full fetch next time.
+      this.#fetchSessionHandlerFor(nodeId).reset();
       await this.recoverFromFetch(e);
       return [];
     }
+  }
+
+  #fetchSessionHandlerFor(nodeId: string): FetchSessionHandler {
+    let handler = this.#fetchSessionHandlers.get(nodeId);
+    if (!handler) {
+      handler = new FetchSessionHandler();
+      this.#fetchSessionHandlers.set(nodeId, handler);
+    }
+    return handler;
+  }
+
+  /** KIP-227: best-effort close of every open per-broker fetch session; the broker evicts idle sessions anyway. */
+  async #closeFetchSessions(): Promise<void> {
+    const handlers = [...this.#fetchSessionHandlers.entries()];
+    this.#fetchSessionHandlers.clear();
+
+    await Promise.all(
+      handlers.map(async ([nodeId, handler]) => {
+        const closeRequest = handler.closeRequest();
+        if (!closeRequest) return;
+
+        try {
+          const broker = await this.cluster.findBroker({ nodeId });
+          await broker.fetch({
+            replicaId: CONSUMER_REPLICA_ID,
+            maxWaitTime: 0,
+            minBytes: 0,
+            maxBytes: 0,
+            isolationLevel: this.isolationLevel,
+            topics: closeRequest.topics,
+            forgottenTopics: closeRequest.forgottenTopics,
+            sessionId: closeRequest.sessionId,
+            sessionEpoch: closeRequest.sessionEpoch,
+            rackId: this.rackId,
+          });
+        } catch (error) {
+          this.logger.debug('Failed to close fetch session, the broker will evict it once idle', {
+            groupId: this.groupId,
+            memberId: this.memberId,
+            nodeId,
+            error: (error as Error).message,
+          });
+        }
+      }),
+    );
   }
 
   async recoverFromFetch(e: unknown): Promise<void> {
@@ -941,6 +1003,18 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       nodeEndpoints?: { nodeId: number; host: string; port: number; rack: string | null }[];
       unknownPartitions?: unknown;
     };
+
+    // KIP-227: the broker no longer recognizes this fetch session (evicted, or our epoch fell out
+    // of sync). `fetch()` already reset the session handler for this node, so the next fetch is a
+    // full one that opens a fresh session - nothing else to do.
+    if (error.type === 'FETCH_SESSION_ID_NOT_FOUND' || error.type === 'INVALID_FETCH_SESSION_EPOCH') {
+      this.logger.debug('Fetch session invalidated by broker, retrying with a full fetch', {
+        groupId: this.groupId,
+        memberId: this.memberId,
+        error: error.message,
+      });
+      return;
+    }
 
     // KIP-951: the Fetch response itself named the new leader (and its address, if the client
     // didn't already have it cached). Patch the cache locally and retry - no Metadata RPC, no

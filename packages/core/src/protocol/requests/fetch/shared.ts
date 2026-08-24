@@ -66,6 +66,14 @@ export interface FetchRequestOptions {
   forgottenTopics?: ForgottenTopic[];
   /** v11+ only (KIP-392 fetch from closest replica); earlier request versions ignore this. */
   rackId?: string;
+  /**
+   * v13+ responses (KIP-516) carry topic IDs, not names; `topicName` on each response entry is
+   * resolved by matching the response's id against a topics list. An incremental fetch session
+   * (KIP-227) can return data for a topic that isn't in this request's own `topics` (it's part of
+   * the session but happened to be unchanged this round), so name resolution needs the caller's
+   * *full* desired topic set here - not just what's on the wire. Falls back to `topics`.
+   */
+  topicsForResponse?: readonly FetchTopicRequest[];
 }
 
 /** First Fetch version that addresses topics by UUID instead of name (KIP-516). */
@@ -169,13 +177,17 @@ export function readFetchResponseNodeEndpoints(decoder: Decoder): FetchNodeEndpo
 }
 
 /**
- * Shared by every Fetch response version: scan partitions for the first failure.
+ * Shared by every Fetch response version: check the session-level error first (v7+, KIP-227 —
+ * e.g. `FETCH_SESSION_ID_NOT_FOUND` / `INVALID_FETCH_SESSION_EPOCH`, where `responses` is empty
+ * and there is nothing partition-level to report), then scan partitions for the first failure.
  * `OFFSET_OUT_OF_RANGE` becomes {@link KafkaOffsetOutOfRange} with topic and partition.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export async function parseFetchResponse<
   T extends {
+    /** v7+ only; absent on earlier response versions, which have no session-level error. */
+    errorCode?: number;
     responses: readonly {
       topicName: string;
       partitions: readonly { errorCode: number; partition: number; currentLeader?: LeaderIdAndEpoch | null }[];
@@ -183,6 +195,10 @@ export async function parseFetchResponse<
     nodeEndpoints?: readonly FetchNodeEndpoint[];
   },
 >(data: T): Promise<T> {
+  if (data.errorCode != null && failure(data.errorCode)) {
+    throw createErrorFromCode(data.errorCode);
+  }
+
   const [firstError] = data.responses.flatMap(({ topicName, partitions }) =>
     partitions
       .filter((partition) => failure(partition.errorCode))

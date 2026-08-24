@@ -40,6 +40,8 @@ export interface ApplyLeaderUpdateOptions {
   nodeEndpoints?: readonly NodeEndpointUpdate[];
 }
 
+export type MetadataRecovery = 'rebootstrap' | 'none';
+
 export interface BrokerPoolOptions {
   connectionPoolBuilder: ConnectionPoolBuilder;
   logger: Logger;
@@ -47,6 +49,7 @@ export interface BrokerPoolOptions {
   allowAutoTopicCreation?: boolean;
   authenticationTimeout?: number;
   metadataMaxAge?: number;
+  metadataRecovery?: MetadataRecovery;
 }
 
 /**
@@ -60,6 +63,7 @@ export class BrokerPool {
   readonly logger: Logger;
   readonly connectionPoolBuilder: ConnectionPoolBuilder;
   readonly metadataMaxAge: number;
+  readonly metadataRecovery: MetadataRecovery;
   readonly retrier: ReturnType<typeof retrier>;
 
   brokers: Record<string, Broker> = {};
@@ -82,10 +86,12 @@ export class BrokerPool {
     allowAutoTopicCreation,
     authenticationTimeout,
     metadataMaxAge,
+    metadataRecovery,
   }: BrokerPoolOptions) {
     this.rootLogger = logger;
     this.connectionPoolBuilder = connectionPoolBuilder;
     this.metadataMaxAge = metadataMaxAge ?? 0;
+    this.metadataRecovery = metadataRecovery ?? 'rebootstrap';
     this.logger = logger.namespace('BrokerPool');
     this.retrier = retrier(retry);
 
@@ -163,12 +169,12 @@ export class BrokerPool {
   }
 
   async refreshMetadata(topics: readonly string[]): Promise<void> {
-    const broker = await this.findConnectedBroker();
-    const seedHost = this.seedBroker!.connectionPool.host;
-    const seedPort = this.seedBroker!.connectionPool.port;
-
     await this.retrier(async (bail, _retryCount, _retryTime) => {
       try {
+        const broker = await this.findConnectedBroker();
+        const seedHost = this.seedBroker!.connectionPool.host;
+        const seedPort = this.seedBroker!.connectionPool.port;
+
         this.metadata = await broker.metadata([...topics]);
         this.metadataExpireAt = Date.now() + this.metadataMaxAge;
 
@@ -216,13 +222,42 @@ export class BrokerPool {
 
         this.brokers = nextBrokers;
       } catch (e) {
-        const error = e as Error & { type?: string };
+        const error = e as Error & { type?: string; name?: string };
+
+        if (
+          this.metadataRecovery === 'rebootstrap' &&
+          (error.type === 'REBOOTSTRAP_REQUIRED' || error.name === 'KafkaConnectionError')
+        ) {
+          this.logger.warn('Rediscovering the cluster from the bootstrap broker list', {
+            reason: error.type ?? error.name,
+          });
+          await this.rebootstrap();
+          throw new KafkaProtocolError({ message: error.message, retriable: true });
+        }
+
         if (staleMetadata(error)) {
           throw error;
         }
         bail(error);
       }
     });
+  }
+
+  /**
+   * KIP-1102: drops every discovered broker and cached metadata, then rebuilds a seed broker
+   * from the original bootstrap list and reconnects. `connectionPoolBuilder.build()` without a
+   * destination always draws from that original list rather than brokers this pool has since
+   * discovered, so this is a genuine return to the seeds - not a retry against brokers already
+   * known to be stale or unreachable.
+   */
+  async rebootstrap(): Promise<void> {
+    await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
+    this.brokers = {};
+    this.metadata = null;
+    this.metadataExpireAt = null;
+
+    await this.createSeedBroker();
+    await this.connect();
   }
 
   async refreshMetadataIfNecessary(topics: readonly string[]): Promise<void> {

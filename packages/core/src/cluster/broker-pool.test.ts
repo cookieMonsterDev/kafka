@@ -228,6 +228,117 @@ describe('cluster/BrokerPool', () => {
     });
   });
 
+  describe('rebootstrap (KIP-1102)', () => {
+    function apiVersionsResponse() {
+      return {
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+      };
+    }
+
+    function rebootstrapRequiredError() {
+      return Object.assign(new Error('Client metadata is stale'), {
+        name: 'KafkaProtocolError',
+        type: 'REBOOTSTRAP_REQUIRED',
+        retriable: false,
+      });
+    }
+
+    it('rebootstrap disconnects known brokers, clears metadata, and rebuilds the seed from the bootstrap list', async () => {
+      const oldSeedPool = fakeConnectionPool({ host: 'old-seed', port: 9092 });
+      const newSeedPool = fakeConnectionPool({ host: 'new-seed', port: 9092 });
+      const staleBrokerDestroy = vi.fn().mockResolvedValue(undefined);
+      const staleBrokerPool = fakeConnectionPool({ host: 'stale-broker', port: 9094, destroy: staleBrokerDestroy });
+
+      const pools = [oldSeedPool, newSeedPool];
+      let buildCount = 0;
+      const build = vi.fn(async () => pools[buildCount++]!);
+
+      const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(build), logger: silentLogger });
+      await brokerPool.createSeedBroker();
+      brokerPool.brokers = { '99': new Broker({ connectionPool: staleBrokerPool, logger: silentLogger }) };
+      brokerPool.metadata = {
+        brokers: [],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 0,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+
+      await brokerPool.rebootstrap();
+
+      expect(staleBrokerDestroy).toHaveBeenCalledOnce();
+      expect(brokerPool.brokers).toEqual({});
+      expect(brokerPool.metadata).toBeNull();
+      expect(brokerPool.seedBroker!.connectionPool.host).toBe('new-seed');
+      expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('refreshMetadata rebootstraps from the seed list on REBOOTSTRAP_REQUIRED and recovers', async () => {
+      const staleSeedPool = fakeConnectionPool({ host: 'stale-seed', port: 9092 });
+      const freshSeedPool = fakeConnectionPool({ host: 'fresh-seed', port: 9092 });
+
+      staleSeedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse()) // apiVersions negotiated on the initial connect()
+        .mockRejectedValueOnce(rebootstrapRequiredError()); // the Metadata RPC itself signals rebootstrap
+
+      const metadataResponse = {
+        brokers: [{ nodeId: 1, host: 'fresh-seed', port: 9092, rack: null }],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+      freshSeedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse()) // apiVersions negotiated while rebootstrapping
+        .mockResolvedValueOnce(metadataResponse); // Metadata succeeds against the fresh seed
+
+      const pools = [staleSeedPool, freshSeedPool];
+      let buildCount = 0;
+      const build = vi.fn(async () => pools[buildCount++]!);
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(build),
+        logger: silentLogger,
+        retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await brokerPool.connect();
+      await brokerPool.refreshMetadata([]);
+
+      expect(brokerPool.seedBroker!.connectionPool.host).toBe('fresh-seed');
+      expect(brokerPool.metadata).toEqual(metadataResponse);
+      expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('metadataRecovery: "none" does not rebootstrap and surfaces REBOOTSTRAP_REQUIRED as non-retriable', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse())
+        .mockRejectedValueOnce(rebootstrapRequiredError());
+
+      const build = vi.fn(async () => seedPool);
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(build),
+        logger: silentLogger,
+        metadataRecovery: 'none',
+        retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await brokerPool.connect();
+      await expect(brokerPool.refreshMetadata([])).rejects.toThrow();
+      expect(build).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('applyLeaderUpdate', () => {
     function metadataFixture(partitionMetadata: { partitionId: number; leader: number }[]) {
       return {

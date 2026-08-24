@@ -5,12 +5,12 @@ packages:
 # Single source of truth for shared dependency versions.
 # Packages reference these with "typescript": "catalog:".
 catalog:
-  typescript: ^6.0.3
-  astro: ^7.2.2
-  vite: ^8.2.1
-  vitest: ^4.1.10
-  '@vitest/coverage-v8': ^4.1.10
-  '@types/node': ^24.13.3
+  typescript: ^7.0.2
+  astro: ^7.2.4
+  vite: ^8.2.2
+  vitest: ^4.1.11
+  '@vitest/coverage-v8': ^4.1.11
+  '@types/node': ^26.2.0
 
 # Link local packages into node_modules instead of fetching them from the registry.
 linkWorkspacePackages: true

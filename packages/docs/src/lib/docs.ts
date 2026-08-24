@@ -7,6 +7,18 @@ export type DocsPackage = (typeof DOCS_PACKAGES)[number];
 
 export const DEFAULT_DOCS_PACKAGE: DocsPackage = 'core';
 
+/** Display names for the sidebar package switcher. Add a row when a package grows a docs tree. */
+export const DOCS_PACKAGE_META: Record<DocsPackage, { label: string; blurb: string }> = {
+  core: {
+    label: 'Core',
+    blurb: 'Node.js client',
+  },
+};
+
+export function isDocsPackage(value: string): value is DocsPackage {
+  return (DOCS_PACKAGES as readonly string[]).includes(value);
+}
+
 export const SECTION_ORDER = ['start', 'guides', 'reference', 'integrations', 'migration'] as const;
 
 export type DocsSection = (typeof SECTION_ORDER)[number];
@@ -41,13 +53,16 @@ export function inDocsPackage(entry: DocsEntry, pkg: string): boolean {
   return entry.id === pkg || entry.id.startsWith(`${pkg}/`);
 }
 
-export function docsPackageFromPathname(pathname: string): string {
+export function docsPackageFromPathname(pathname: string): DocsPackage {
   const parts = pathname.split('/').filter(Boolean);
   const docsIndex = parts.indexOf('docs');
   const candidate = docsIndex >= 0 ? parts[docsIndex + 1] : undefined;
-  return candidate != null && (DOCS_PACKAGES as readonly string[]).includes(candidate)
-    ? candidate
-    : DEFAULT_DOCS_PACKAGE;
+  return candidate != null && isDocsPackage(candidate) ? candidate : DEFAULT_DOCS_PACKAGE;
+}
+
+export function packageHomeHref(entries: DocsEntry[], pkg: DocsPackage): string {
+  const first = groupDocs(entries, pkg)[0]?.entries[0];
+  return first != null ? hrefFor(first) : withBase(`/docs/${pkg}/`);
 }
 
 export function sortDocs(entries: DocsEntry[]): DocsEntry[] {

@@ -1,0 +1,25 @@
+---
+import { getCollection } from 'astro:content'
+import { PackageSwitcherSelect } from '@/components/package-switcher-select'
+import {
+  DOCS_PACKAGE_META,
+  DOCS_PACKAGES,
+  docsPackageFromPathname,
+  packageHomeHref,
+} from '@/lib/docs'
+
+interface Props {
+  class?: string
+}
+
+const pathname = Astro.url.pathname
+const current = docsPackageFromPathname(pathname)
+const entries = await getCollection('docs')
+const packages = DOCS_PACKAGES.map((id) => ({
+  id,
+  ...DOCS_PACKAGE_META[id],
+  href: packageHomeHref(entries, id),
+}))
+---
+
+<PackageSwitcherSelect client:load className={Astro.props.class} packages={packages} value={current} />

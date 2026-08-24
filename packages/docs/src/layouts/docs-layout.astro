@@ -2,6 +2,7 @@
 import type { MarkdownHeading } from 'astro'
 import BaseLayout from '@/layouts/BaseLayout.astro'
 import DocsSidebar from '@/components/docs-sidebar.astro'
+import PackageSwitcher from '@/components/package-switcher.astro'
 import TableOfContents from '@/components/table-of-contents.astro'
 import PrevNext from '@/components/prev-next.astro'
 
@@ -18,22 +19,18 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
 ---
 
 <BaseLayout title={title} description={description} docs>
-  <div slot="mobile-nav" class="flex h-full flex-col">
+  <div slot="mobile-nav">
     <DocsSidebar />
-    <a
-      href="https://github.com/cookieMonsterDev/kafka"
-      class="text-muted-foreground hover:text-foreground mt-8 px-2 text-sm"
-      rel="noopener noreferrer"
-    >
-      GitHub
-    </a>
   </div>
 
   <div class="flex w-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
     <aside
-      class="bg-sidebar hidden w-60 shrink-0 overflow-y-auto overscroll-contain px-3 py-8 lg:block lg:min-h-0"
+      class="bg-sidebar hidden w-60 shrink-0 flex-col overflow-hidden px-3 py-8 lg:flex lg:min-h-0"
     >
-      <DocsSidebar />
+      <PackageSwitcher class="mb-6 shrink-0" />
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <DocsSidebar />
+      </div>
     </aside>
 
     <div

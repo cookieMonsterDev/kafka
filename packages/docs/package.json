@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-docs",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Astro documentation site for @cookiemonsterdev/kafka-core, published to GitHub Pages.",
   "type": "module",
@@ -22,7 +22,7 @@
     "release:dry-run": "node ../../scripts/run-semantic-release.mjs docs --dry-run"
   },
   "dependencies": {
-    "@astrojs/react": "^6.0.2",
+    "@astrojs/react": "^6.0.4",
     "@cookiemonsterdev/kafka-core": "workspace:^",
     "@fontsource-variable/geist": "^5.3.0",
     "@tailwindcss/typography": "^0.5.20",

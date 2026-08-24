@@ -86,11 +86,16 @@ export function nextAdaptiveMaxBytes({
   return safeCurrent;
 }
 
+/**
+ * Sums each message's on-wire `byteSize` rather than its decoded `key`/`value` lengths — the
+ * latter would force every message's `value`/`headers` to decode on every fetch (they're lazy;
+ * see `DecodedRecord`), defeating that laziness for every `eachBatch`/`eachMessage` consumer.
+ */
 function estimateFetchedBytes(batches: readonly Batch[]): number {
   let bytes = 0;
   for (const batch of batches) {
     for (const message of batch.rawMessages) {
-      bytes += (message.key?.byteLength ?? 0) + (message.value?.byteLength ?? 0);
+      bytes += message.byteSize;
     }
   }
   return bytes;

@@ -33,6 +33,7 @@ function kafkaMessage(offset: bigint, valueSize = 0): KafkaMessage {
     headers: {},
     isControlRecord: false,
     batchContext: defaultBatchContext,
+    byteSize: valueSize > 0 ? valueSize : 1,
   };
 }
 
@@ -135,8 +136,8 @@ describe('consumer/worker-queue prefetch', () => {
     expect(partitions).toEqual([0]);
   });
 
-  it('estimates prefetch bytes from record payloads', () => {
+  it('estimates prefetch bytes from each message byteSize', () => {
     expect(estimatePrefetchBytes({ messages: [] })).toBe(1);
-    expect(estimatePrefetchBytes({ messages: [{ value: Buffer.alloc(10) }, { key: Buffer.alloc(5) }] })).toBe(15);
+    expect(estimatePrefetchBytes({ messages: [{ byteSize: 10 }, { byteSize: 5 }] })).toBe(15);
   });
 });

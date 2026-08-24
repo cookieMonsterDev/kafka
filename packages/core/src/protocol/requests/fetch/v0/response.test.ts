@@ -16,6 +16,7 @@ const messageSetRecord = (i: number, crc: number) => ({
   headers: {},
   isControlRecord: false,
   batchContext: expect.objectContaining({ magicByte: 0, firstOffset: BigInt(i), producerId: -1n }),
+  byteSize: 31,
 });
 
 describe('protocol/requests/fetch/v0/response', () => {

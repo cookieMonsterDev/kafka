@@ -40,6 +40,7 @@ function kafkaMessage(offset: bigint): KafkaMessage {
     headers: {},
     isControlRecord: false,
     batchContext: defaultBatchContext,
+    byteSize: 0,
   };
 }
 

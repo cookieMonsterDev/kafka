@@ -603,4 +603,107 @@ describe('consumer/consumer-group', () => {
     expect(nextAdaptiveMaxBytes({ current: 100, used: 0, min: 100, max: 10_000 })).toBe(100);
     expect(nextAdaptiveMaxBytes({ current: 8000, used: 8000, min: 100, max: 9000 })).toBe(9000);
   });
+
+  describe('KIP-227 fetch sessions', () => {
+    function createGroupWithBroker(brokerFetch: ReturnType<typeof vi.fn>): { consumerGroup: ConsumerGroup } {
+      const cluster = {
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, leaderEpoch: 4 }]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+      } as unknown as Cluster;
+
+      const consumerGroup = new ConsumerGroup({
+        logger: silentLogger,
+        topics: ['topic1'],
+        topicConfigurations: {},
+        cluster,
+        groupId: 'group',
+        assigners: [],
+        sessionTimeout: 30_000,
+        rebalanceTimeout: 60_000,
+        maxBytesPerPartition: 1024,
+        minBytes: 1,
+        maxBytes: 1024,
+        maxWaitTimeInMs: 100,
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+        rackId: '',
+        metadataMaxAge: 300_000,
+        autoCommit: true,
+        autoCommitInterval: null,
+        autoCommitThreshold: null,
+      });
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.offsetManager = {
+        committedOffsets: () => ({ topic1: { 0: 0n } }),
+        nextOffset: () => 100n,
+        seek: vi.fn(async () => undefined),
+        resolveOffsets: vi.fn(async () => undefined),
+      } as unknown as OffsetManager;
+
+      return { consumerGroup };
+    }
+
+    it('opens a session with sessionId 0 and reuses the granted id on the next fetch', async () => {
+      const brokerFetch = vi
+        .fn()
+        .mockResolvedValueOnce({ responses: [], sessionId: 77 })
+        .mockResolvedValueOnce({ responses: [], sessionId: 77 });
+      const { consumerGroup } = createGroupWithBroker(brokerFetch);
+
+      await consumerGroup.fetch('1');
+      expect(brokerFetch).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ sessionId: 0, sessionEpoch: 0, forgottenTopics: [] }),
+      );
+
+      await consumerGroup.fetch('1');
+      expect(brokerFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sessionId: 77, sessionEpoch: 1, topics: [], forgottenTopics: [] }),
+      );
+
+      // The full desired set must still reach the wire request even when the incremental
+      // `topics` omits an unchanged partition - it's what the v13+ response decoder uses to
+      // resolve topicId back to a name for data the broker returns outside of `topics`.
+      const secondCallArgs = brokerFetch.mock.calls[1]?.[0] as { topicsForResponse: { topic: string }[] };
+      expect(secondCallArgs.topicsForResponse).toEqual([expect.objectContaining({ topic: 'topic1' })]);
+    });
+
+    it('resets the session and sends a full fetch again after the broker rejects it', async () => {
+      const code = ERROR_CODES.find((entry) => entry.type === 'FETCH_SESSION_ID_NOT_FOUND')!.code;
+      const brokerFetch = vi
+        .fn()
+        .mockResolvedValueOnce({ responses: [], sessionId: 77 })
+        .mockRejectedValueOnce(createErrorFromCode(code))
+        .mockResolvedValueOnce({ responses: [], sessionId: 91 });
+      const { consumerGroup } = createGroupWithBroker(brokerFetch);
+
+      await consumerGroup.fetch('1');
+      await consumerGroup.fetch('1');
+      await consumerGroup.fetch('1');
+
+      expect(brokerFetch).toHaveBeenNthCalledWith(3, expect.objectContaining({ sessionId: 0, sessionEpoch: 0 }));
+      expect(brokerFetch.mock.calls[2]?.[0]?.topics).toHaveLength(1);
+    });
+
+    it('closes the open fetch session on leave()', async () => {
+      const brokerFetch = vi.fn().mockResolvedValueOnce({ responses: [], sessionId: 55 }).mockResolvedValueOnce({
+        responses: [],
+        sessionId: 55,
+      });
+      const { consumerGroup } = createGroupWithBroker(brokerFetch);
+      consumerGroup.memberId = null;
+      consumerGroup.coordinator = null;
+
+      await consumerGroup.fetch('1');
+      await consumerGroup.leave();
+
+      expect(brokerFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ sessionId: 55, sessionEpoch: -1, topics: [], forgottenTopics: [] }),
+      );
+    });
+  });
 });

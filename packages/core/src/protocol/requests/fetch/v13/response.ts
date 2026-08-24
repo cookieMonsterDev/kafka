@@ -69,8 +69,9 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export function fetchResponseV13(
-  options: Pick<FetchRequestOptions, 'topics'> = { topics: [] },
+  options: Pick<FetchRequestOptions, 'topics' | 'topicsForResponse'> = { topics: [] },
 ): ResponseDefinition<FetchResponseV13Body> {
+  const resolutionTopics = options.topicsForResponse ?? options.topics;
   return {
     decode: async (rawData) => {
       const decoder = new Decoder(rawData);
@@ -90,7 +91,7 @@ export function fetchResponseV13(
         errorCode,
         sessionId,
         responses: responses.map((topic, index) => ({
-          topicName: resolveFetchTopicName(topic.topicId, index, options.topics),
+          topicName: resolveFetchTopicName(topic.topicId, index, resolutionTopics),
           topicId: topic.topicId,
           partitions: topic.partitions,
         })),

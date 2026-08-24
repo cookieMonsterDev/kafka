@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
 import type { ShareGroup } from './share-group';
 import { ShareRunner } from './share-runner';
@@ -245,5 +246,83 @@ describe('share-consumer/share-runner', () => {
     const elapsed = Date.now() - started;
     await runner.stop();
     expect(elapsed).toBeLessThan(80);
+  });
+
+  it('forgets a partition dropped from the assignment on the next share fetch for that node', async () => {
+    const shareFetch = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
+    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
+    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
+    let assignedPartitions = [0, 1];
+    const { shareGroup } = createShareGroup({
+      filterPartitionsByNode: vi.fn(() => [{ topic: 'events', partitions: assignedPartitions }]),
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker,
+      },
+    });
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      onCrash: vi.fn(),
+    });
+
+    type ShareFetchCallArgs = { forgottenTopics: { topicId: Buffer; partitions: number[] }[] };
+    const findForgetCall = () =>
+      (shareFetch.mock.calls as [ShareFetchCallArgs][]).find(([opts]) => opts.forgottenTopics.length > 0);
+
+    await runner.start();
+    await vi.waitFor(() => expect(shareFetch).toHaveBeenCalled());
+    expect(findForgetCall()).toBeUndefined();
+
+    assignedPartitions = [0];
+    await vi.waitFor(() => expect(findForgetCall()).toBeDefined());
+    runner.shuttingDown = true;
+    await runner.stop();
+
+    expect(findForgetCall()?.[0]?.forgottenTopics).toEqual([{ topicId: TOPIC_ID, partitions: [1] }]);
+  });
+
+  it('resets the share session epoch after the broker invalidates it, then retries fresh', async () => {
+    const code = ERROR_CODES.find((entry) => entry.type === 'INVALID_SHARE_SESSION_EPOCH')!.code;
+    const shareFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ errorCode: 0, responses: [] })
+      .mockRejectedValueOnce(createErrorFromCode(code))
+      .mockResolvedValueOnce({ errorCode: 0, responses: [] });
+    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
+    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker,
+      },
+    });
+
+    const onCrash = vi.fn();
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    await runner.start();
+    // The mock's fourth call (unconfigured) returns `undefined`, which crashes the runner - a
+    // deterministic stopping point once the three configured responses above have been used.
+    await vi.waitFor(() => expect(onCrash).toHaveBeenCalled());
+    runner.shuttingDown = true;
+    await runner.stop();
+
+    expect(shareFetch.mock.calls[0]?.[0]?.shareSessionEpoch).toBe(0);
+    expect(shareFetch.mock.calls[1]?.[0]?.shareSessionEpoch).toBe(1);
+    expect(shareFetch.mock.calls[2]?.[0]?.shareSessionEpoch).toBe(0);
   });
 });

@@ -8,6 +8,7 @@ import {
   SHARE_SESSION_INITIAL_EPOCH,
   type ShareAcquireMode,
   type ShareFetchAcknowledgementBatchInput,
+  type ShareFetchForgottenTopicInput,
 } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
@@ -79,6 +80,8 @@ export class ShareRunner {
   running = false;
   shuttingDown = false;
   #shareSessionEpochByNode = new Map<string, number>();
+  /** What each node's share session last had, so unassigned partitions can be forgotten (KIP-227-style). */
+  #shareSessionPartitionsByNode = new Map<string, Map<string, Set<number>>>();
   #pendingAcks: PendingAck[] = [];
 
   constructor({
@@ -217,6 +220,10 @@ export class ShareRunner {
     if (!memberId) return [];
 
     const shareSessionEpoch = this.#shareSessionEpochByNode.get(nodeId) ?? SHARE_SESSION_INITIAL_EPOCH;
+    const previousPartitions = this.#shareSessionPartitionsByNode.get(nodeId);
+    const currentPartitions = new Map(topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)]));
+    const forgottenTopics = this.#forgottenTopicsFor(previousPartitions, currentPartitions);
+
     const takenAcks: PendingAck[] = [];
     const topics = topicPartitions
       .map(({ topic, partitions }) => {
@@ -252,10 +259,11 @@ export class ShareRunner {
           shareAcquireMode: this.#shareAcquireMode,
           isRenewAck: takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics,
-          forgottenTopics: [],
+          forgottenTopics,
         }),
       );
       this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
+      this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
 
       const batches: ShareBatch[] = [];
       for (const { topicId, partitions } of response.responses) {
@@ -273,8 +281,38 @@ export class ShareRunner {
       return batches.filter((batch) => !this.#isStale(batch));
     } catch (error) {
       this.#pendingAcks.push(...takenAcks);
+      // The session state we just tried to send may no longer match what the broker has -
+      // start the next fetch for this node with a fresh (epoch 0) session. `#retrier` wraps an
+      // exhausted-retries error in `KafkaNumberOfRetriesExceeded`, so the protocol error's `type`
+      // may only be reachable via `.cause`.
+      const errorLike = error as { type?: string; cause?: { type?: string } };
+      const type = errorLike.type ?? errorLike.cause?.type;
+      if (type === 'SHARE_SESSION_NOT_FOUND' || type === 'INVALID_SHARE_SESSION_EPOCH') {
+        this.#shareSessionEpochByNode.delete(nodeId);
+        this.#shareSessionPartitionsByNode.delete(nodeId);
+      }
       throw error;
     }
+  }
+
+  /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */
+  #forgottenTopicsFor(
+    previous: Map<string, Set<number>> | undefined,
+    current: Map<string, Set<number>>,
+  ): ShareFetchForgottenTopicInput[] {
+    if (!previous) return [];
+
+    const forgottenTopics: ShareFetchForgottenTopicInput[] = [];
+    for (const [topic, previousPartitions] of previous) {
+      const currentTopicPartitions = current.get(topic);
+      const removed = [...previousPartitions].filter((partition) => !currentTopicPartitions?.has(partition));
+      if (removed.length === 0) continue;
+
+      const topicId = this.#shareGroup.cluster.findTopicId(topic);
+      if (!topicId) continue;
+      forgottenTopics.push({ topicId, partitions: removed });
+    }
+    return forgottenTopics;
   }
 
   async #resolveTopicName(topicId: Buffer): Promise<string> {
@@ -380,6 +418,7 @@ export class ShareRunner {
     if (!memberId) {
       this.#pendingAcks = [];
       this.#shareSessionEpochByNode.clear();
+      this.#shareSessionPartitionsByNode.clear();
       return;
     }
 
@@ -401,6 +440,7 @@ export class ShareRunner {
 
     this.#pendingAcks = [];
     this.#shareSessionEpochByNode.clear();
+    this.#shareSessionPartitionsByNode.clear();
   }
 
   #acknowledgementTopicsForNode(nodeId: string): {

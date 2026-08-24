@@ -1,17 +1,15 @@
 ---
 title: Compatibility
-description: Broker versions, Java-client defaults, the implemented surface, and APIs this client does not implement
+description: Broker support and constructor defaults, the implemented surface, and APIs this client does not implement
 order: 8
 section: reference
 ---
 
-`@cookiemonsterdev/kafka-core` is a TypeScript producer/consumer/admin client. It is **not** a
-Java-client equivalent and does not claim full Kafka 4.x Java-client parity.
+`@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for
+Node.js that speaks the Kafka wire protocol directly — no JVM.
 
 The client negotiates protocol versions from `ApiVersions`. The support floor
-is **Kafka 0.10+**. Official Apache Kafka compatibility tables describe Java
-client jars; this library talks to brokers through overlapping protocol
-versions instead. See
+is **Kafka 0.10+**. See
 [Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/)
 and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
 
@@ -45,22 +43,23 @@ versions still use topic names. `admin.describeTopicPartitions`
 | 4.1, 4.2                       | Compose files in tree; default-branch CI    |
 | 4.3                            | Covered by integration tests; CI PRs run it |
 
-## Defaults vs the Java client
+## Constructor defaults
 
-These defaults are kept on purpose. They are **not** the Java 4.3 defaults.
+These defaults are product choices, kept on purpose for this minor.
 
-| Setting              | Java 4.3                                  | This client                                                                                                                                                                                                                   |
-| -------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enable.idempotence` | `true` (since 3.0)                        | `idempotent: false`                                                                                                                                                                                                           |
-| `isolation.level`    | `read_uncommitted`                        | `read_committed` (`readUncommitted: false`)                                                                                                                                                                                   |
-| `linger.ms`          | 5 ms (since 4.0); the Java client batches | `lingerMs` defaults to 0 (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
-| `max.in.flight`      | 5                                         | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                                                 |
-| Partitioner          | Sticky until `batch.size` (4.x)           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                                                |
-| Partition assigner   | Range + CooperativeSticky                 | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                                               |
-| Compression          | gzip, snappy, lz4, zstd                   | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                                                  |
+| Setting               | This client                                                                                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                                                       |
+| `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                                                         |
+| `lingerMs`            | `0` (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
+| `maxInFlightRequests` | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                            |
+| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it)                                                                                                           |
+| Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                          |
+| Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                             |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
-and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/) for
+the equivalent broker-facing property names.
 
 The opt-in sticky partitioner keeps unkeyed records on one partition for each
 Produce batch formed by this client's `lingerMs` / `batchSize` model, then
@@ -101,8 +100,8 @@ Full walkthrough: [Throughput](../../guides/throughput/).
 
 ## Next major defaults
 
-The **next major** will change these constructor defaults to match Java 4.x.
-This minor does **not** flip them.
+The **next major** will change these constructor defaults to planned
+throughput-oriented values. This minor does **not** flip them.
 
 | Setting               | This minor                      | Next major |
 | --------------------- | ------------------------------- | ---------- |
@@ -122,7 +121,7 @@ not a backlog.
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
 JoinGroup/SyncGroup remains the default membership protocol. Set
-`groupProtocol: 'consumer'` (Java `group.protocol`) to opt into KIP-848
+`groupProtocol: 'consumer'` (broker property `group.protocol`) to opt into KIP-848
 ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
 incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via each group coordinator on Kafka 4.0+. `admin.describeClassicGroups`

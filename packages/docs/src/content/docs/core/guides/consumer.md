@@ -72,16 +72,15 @@ round-robin default and the other eager assigners still revoke their full
 assignment during a rebalance.
 
 Classic JoinGroup/SyncGroup remains the default. Set
-`groupProtocol: 'consumer'` (Java `group.protocol`) to opt into the KIP-848
-consumer protocol on Kafka 4.0+: membership and incremental assignment use
-`ConsumerGroupHeartbeat` instead of JoinGroup/SyncGroup. The broker assigns
-partitions (no client assignor). `heartbeatInterval` and `sessionTimeout` are
-unused for membership; `rebalanceTimeout` is still sent as the revoke budget.
-Use `admin.describeConsumerGroups` for KIP-848 groups and
-`admin.describeClassicGroups` (alias of `describeGroups`) for classic
+`groupProtocol: 'consumer'` (broker property `group.protocol`) to opt into
+the KIP-848 consumer protocol on Kafka 4.0+: membership and incremental
+assignment use `ConsumerGroupHeartbeat` instead of JoinGroup/SyncGroup. The
+broker assigns partitions (no client assignor). `heartbeatInterval` and
+`sessionTimeout` are unused for membership; `rebalanceTimeout` is still sent
+as the revoke budget. Use `admin.describeConsumerGroups` for KIP-848 groups
+and `admin.describeClassicGroups` (alias of `describeGroups`) for classic
 JoinGroup groups. Isolation defaults to `read_committed`
-(`readUncommitted: false`); Java default `isolation.level` is `read_uncommitted`.
-See [Compatibility](../../reference/compatibility/),
+(`readUncommitted: false`). See [Compatibility](../../reference/compatibility/),
 [KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).

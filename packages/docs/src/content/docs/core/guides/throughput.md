@@ -64,6 +64,6 @@ async API; it is not a hard dependency.
 await cost. The run default for `partitionsConsumedConcurrently` remains `1`
 (ordering). The preset raises it to `4`.
 
-The **next major** will change constructor defaults to Java 4.x-aligned
-`lingerMs: 5`, `batchSize: 16384`, and `maxInFlightRequests: 5`. This minor
-keeps `lingerMs: 0`. See [Breaking changes](../../migration/breaking-changes/).
+The **next major** will change constructor defaults to `lingerMs: 5`,
+`batchSize: 16384`, and `maxInFlightRequests: 5`. This minor keeps
+`lingerMs: 0`. See [Breaking changes](../../migration/breaking-changes/).

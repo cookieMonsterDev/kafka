@@ -43,8 +43,8 @@ Source:
 ## GSSAPI / Kerberos
 
 Opt-in. Handshake mechanism name is `GSSAPI`. `serviceName` defaults to
-`kafka` (Java `sasl.kerberos.service.name`). The broker must advertise GSSAPI
-and you need a reachable KDC plus a ticket or keytab.
+`kafka` (broker property `sasl.kerberos.service.name`). The broker must
+advertise GSSAPI and you need a reachable KDC plus a ticket or keytab.
 
 ```ts
 const kafka = new Kafka({

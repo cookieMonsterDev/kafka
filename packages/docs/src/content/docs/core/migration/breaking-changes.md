@@ -5,9 +5,10 @@ order: 1
 section: migration
 ---
 
-`@cookiemonsterdev/kafka-core` is a TypeScript client, not a drop-in for the
-Java client or for KafkaJS. This page lists the differences that break copy-paste.
-Defaults vs Java are tabulated under [Compatibility](../../reference/compatibility/).
+`@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for
+Node.js that speaks the Kafka wire protocol directly. This page lists the
+differences that break copy-paste from other Node clients. Constructor
+defaults are tabulated under [Compatibility](../../reference/compatibility/).
 
 ## Offsets are `bigint`
 
@@ -40,7 +41,7 @@ throws. GZIP, Snappy, LZ4, and ZSTD are built in; codecs remain overridable via
 
 ## Environment variables
 
-These names are `KAFKA_*`, not `KAFKAJS_*`.
+All environment variables use a `KAFKA_*` prefix.
 
 | Variable                                  | Effect                                                             |
 | ----------------------------------------- | ------------------------------------------------------------------ |
@@ -58,7 +59,7 @@ client config. See [Testing](../../guides/testing/).
 ## Next major: linger, batch size, and in-flight defaults
 
 This minor keeps `lingerMs: 0` (one Produce per `send()`). The **next major**
-will change constructor defaults to match Java 4.x:
+will change constructor defaults to planned throughput-oriented values:
 
 | Setting               | This minor     | Next major |
 | --------------------- | -------------- | ---------- |

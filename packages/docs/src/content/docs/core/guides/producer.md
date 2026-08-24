@@ -37,9 +37,9 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
 call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
-request. Set `lingerMs` / `batchSize` to batch, or spread
-[`throughputPreset()`](./throughput/). Java 4.0 default `linger.ms` is 5 ms;
-the **next major** of this client will match that (see
+request — latency-first. Set `lingerMs` / `batchSize` to batch, or spread
+[`throughputPreset()`](./throughput/). The **next major** of this client will
+default `lingerMs` to 5 (see
 [Breaking changes](../../migration/breaking-changes/)). See
 [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
@@ -58,14 +58,14 @@ The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass
 `createPartitioner: Partitioners.LegacyPartitioner` for pre-2.0 key routing.
 For KIP-794 uniform sticky routing, opt in with
 `createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
-honored, keyed records continue to use Java-compatible murmur2, and unkeyed
-records share a partition for each producer batch before rotating uniformly.
-The default remains unchanged. See [Compatibility](../../reference/compatibility/).
+honored, keyed records use murmur2 routing, and unkeyed records share a
+partition for each producer batch before rotating uniformly. The default
+remains unchanged. See [Compatibility](../../reference/compatibility/).
 
 ## Idempotence and abort
 
-`idempotent` defaults to `false` (Java 3.0+ defaults `enable.idempotence` to
-`true`). `send()` and `sendBatch()` accept `signal` to abort the wait.
+`idempotent` defaults to `false` — an explicit opt-in. `send()` and
+`sendBatch()` accept `signal` to abort the wait.
 
 ```ts
 await producer.send({ topic: 'events', messages: [{ value: 'hello' }], signal });

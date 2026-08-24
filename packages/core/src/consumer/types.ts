@@ -74,6 +74,33 @@ export interface ConsumerRunConfig {
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
   signal?: AbortSignal;
+  /**
+   * Called with the partitions this member is giving up, before the consumer fetches from its
+   * new assignment (revoke-before-reassign). For a classic (eager) rebalance this is the
+   * member's entire prior assignment; for a cooperative-sticky incremental rebalance it is only
+   * the subset actually being given up this round - partitions the member keeps across the
+   * rebalance are not reported. Not called when partitions are lost without a clean revoke, see
+   * {@link ConsumerRunConfig.onPartitionsLost}. Awaited before the next assignment is installed;
+   * an error thrown here is logged and does not abort the rebalance.
+   */
+  onPartitionsRevoked?: RebalanceListener;
+  /**
+   * Called with the partitions newly gained by this member once it has (re)joined the group and
+   * installed its new assignment. For a classic rebalance this is the member's entire new
+   * assignment; for a cooperative-sticky incremental rebalance it is only the partitions not
+   * already held before this rebalance. An error thrown here is logged and does not abort the
+   * rebalance.
+   */
+  onPartitionsAssigned?: RebalanceListener;
+  /**
+   * Called instead of `onPartitionsRevoked` when this member's assignment was lost without a
+   * clean revoke - e.g. its session expired, or it was fenced out of the group
+   * (`UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`) before it had a chance to leave gracefully. A
+   * lost partition may already be owned by another member, so any pending offset commit for it
+   * should typically be abandoned rather than attempted. An error thrown here is logged and does
+   * not abort the rejoin.
+   */
+  onPartitionsLost?: RebalanceListener;
 }
 
 export interface TopicPartitions {
@@ -85,6 +112,15 @@ export interface TopicPartition {
   topic: string;
   partition: number;
 }
+
+/**
+ * Rebalance callback for {@link ConsumerRunConfig.onPartitionsRevoked},
+ * {@link ConsumerRunConfig.onPartitionsAssigned}, and {@link ConsumerRunConfig.onPartitionsLost}.
+ * Called with only the partitions actually moving in that rebalance step (see each option's doc
+ * comment). Ecosystem term for the equivalent protocol concept: Java's `ConsumerRebalanceListener`.
+ * @see https://kafka.apache.org/43/design/design/
+ */
+export type RebalanceListener = (topicPartitions: TopicPartition[]) => void | Promise<void>;
 
 export interface TopicPartitionOffset extends TopicPartition {
   offset: bigint;

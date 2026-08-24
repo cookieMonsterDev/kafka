@@ -215,6 +215,10 @@ export class Runner extends EventEmitter {
             error: error.message,
           });
 
+          // Discovered mid-fetch, not mid-join: the member was fenced out before it could leave
+          // and revoke cleanly, so its current assignment is lost, not revoked.
+          await this.consumerGroup.notifyPartitionsLost();
+
           if (error.type === 'UNKNOWN_MEMBER_ID') this.consumerGroup.memberId = null;
           await this.consumerGroup.joinAndSync();
           return;

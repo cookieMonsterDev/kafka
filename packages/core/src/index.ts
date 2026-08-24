@@ -137,6 +137,7 @@ export type {
   ProducerRecord,
   ProducerSendHook,
   ProducerSendHookEvent,
+  RebalanceListener,
   RecordHeaders,
   RecordMetadata,
   RetryOptions,

@@ -58,6 +58,7 @@ export type {
   OnConsumeEvent,
   OnConsumeHook,
   PartitionAssigner,
+  RebalanceListener,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
@@ -340,6 +341,9 @@ export function createConsumer({
     eachBatch = null,
     eachMessage = null,
     signal,
+    onPartitionsRevoked,
+    onPartitionsAssigned,
+    onPartitionsLost,
   }: ConsumerRunConfig = {}): Promise<void> => {
     if (consumerGroup) {
       logger.warn('consumer#run was called, but the consumer is already running', { groupId });
@@ -378,6 +382,9 @@ export function createConsumer({
         groupProtocol,
         hooks,
         checkCrcs,
+        onPartitionsRevoked,
+        onPartitionsAssigned,
+        onPartitionsLost,
       });
 
       runner = new Runner({

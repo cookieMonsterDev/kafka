@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Cluster, PartitionMetadata } from '../cluster/index';
-import { KafkaConnectionError, KafkaDeliveryTimeoutError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
+import {
+  KafkaConnectionError,
+  KafkaDeliveryTimeoutError,
+  KafkaMessageTooLargeError,
+  KafkaNonRetriableError,
+  KafkaTimeout,
+} from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
@@ -373,6 +379,72 @@ describe('producer/messageProducer', () => {
       const producer = createTestProducer(broker);
 
       await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toBeTruthy();
+    });
+  });
+
+  describe('maxRequestSize', () => {
+    function messagesFromCall(broker: ReturnType<typeof fakeBroker>, callIndex: number): unknown[] {
+      const arg = broker.produce.mock.calls[callIndex]?.[0] as {
+        topicData: Array<{ partitions: Array<{ messages: Array<{ value: unknown }> }> }>;
+      };
+      return arg.topicData[0]?.partitions[0]?.messages.map((message) => message.value) ?? [];
+    }
+
+    it('rejects a single record over maxRequestSize immediately, without buffering or dispatching it', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 50, maxRequestSize: 10 });
+
+      await expect(producer.send({ topic, messages: [{ value: 'a'.repeat(11) }] })).rejects.toBeInstanceOf(
+        KafkaMessageTooLargeError,
+      );
+      expect(broker.produce).not.toHaveBeenCalled();
+    });
+
+    it('rejects a whole call whose combined records exceed maxRequestSize even when no record alone does', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { maxRequestSize: 10 });
+
+      await expect(
+        producer.send({ topic, messages: [{ value: 'abcde' }, { value: 'fghij' }, { value: 'k' }] }),
+      ).rejects.toBeInstanceOf(KafkaMessageTooLargeError);
+      expect(broker.produce).not.toHaveBeenCalled();
+    });
+
+    it('defaults to 1 MiB (1_048_576 bytes)', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker);
+
+      await expect(producer.send({ topic, messages: [{ value: 'a'.repeat(1_048_576) }] })).resolves.toBeTruthy();
+      await expect(producer.send({ topic, messages: [{ value: 'a'.repeat(1_048_577) }] })).rejects.toBeInstanceOf(
+        KafkaMessageTooLargeError,
+      );
+    });
+
+    it('is configurable', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { maxRequestSize: 5 });
+
+      await expect(producer.send({ topic, messages: [{ value: 'abcde' }] })).resolves.toBeTruthy();
+      await expect(producer.send({ topic, messages: [{ value: 'abcdef' }] })).rejects.toBeInstanceOf(
+        KafkaMessageTooLargeError,
+      );
+    });
+
+    it('splits a linger-buffered batch that would exceed maxRequestSize into multiple Produce requests, none over the cap', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 10_000, maxRequestSize: 10 });
+
+      const first = producer.send({ topic, messages: [{ value: 'abcde' }] }); // 5 bytes
+      const second = producer.send({ topic, messages: [{ value: 'fghij' }] }); // combined 10, exactly fits
+      await Promise.resolve(); // let the two above settle into (and possibly flush from) the buffer
+      const third = producer.send({ topic, messages: [{ value: 'klmno' }] }); // starts a fresh batch
+
+      await producer.flush();
+      await Promise.all([first, second, third]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(2);
+      expect(messagesFromCall(broker, 0)).toEqual(['abcde', 'fghij']);
+      expect(messagesFromCall(broker, 1)).toEqual(['klmno']);
     });
   });
 });

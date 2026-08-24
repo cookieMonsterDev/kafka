@@ -21,6 +21,7 @@ export type KafkaErrorName =
   | 'KafkaTimeout'
   | 'KafkaLockTimeout'
   | 'KafkaDeliveryTimeoutError'
+  | 'KafkaMessageTooLargeError'
   | 'KafkaUnsupportedMagicByteInMessageSet'
   | 'KafkaDeleteTopicRecordsError'
   | 'KafkaInvariantViolation'
@@ -336,6 +337,40 @@ export class KafkaDeliveryTimeoutError extends KafkaTimeout {
   constructor(deliveryTimeoutMs: number) {
     super(`Delivery timeout of ${deliveryTimeoutMs}ms exceeded before the record was acknowledged`);
     this.deliveryTimeoutMs = deliveryTimeoutMs;
+  }
+}
+
+export interface KafkaMessageTooLargeErrorOptions {
+  /** Uncompressed size in bytes of the offending record, or the whole call's records combined. */
+  size: number;
+  maxRequestSize: number;
+  topic?: string;
+}
+
+/**
+ * A record - or the uncompressed sum of every record in one `send`/`sendBatch` call, or the
+ * records the linger buffer had already accumulated for the next Produce - exceeded
+ * `maxRequestSize` (default 1 MiB). Raised client-side, before the record ever occupies a linger
+ * slot or reaches the network, so it is distinct from the broker's `MESSAGE_TOO_LARGE` protocol
+ * error (`KafkaProtocolError` with `type: 'MESSAGE_TOO_LARGE'`), which the broker can only return
+ * after it has already accepted bytes on the wire.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+ */
+export class KafkaMessageTooLargeError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaMessageTooLargeError';
+  readonly size: number;
+  readonly maxRequestSize: number;
+  readonly topic: string | undefined;
+
+  constructor({ size, maxRequestSize, topic }: KafkaMessageTooLargeErrorOptions) {
+    const details = topic != null ? ` for topic "${topic}"` : '';
+    super(
+      `Record(s)${details} total ${size} bytes uncompressed, exceeding maxRequestSize (${maxRequestSize} bytes). ` +
+        'Reduce the message size, send fewer records per call, or raise maxRequestSize',
+    );
+    this.size = size;
+    this.maxRequestSize = maxRequestSize;
+    this.topic = topic;
   }
 }
 

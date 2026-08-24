@@ -27,6 +27,7 @@ Error
 │   │   ├── KafkaGroupCoordinatorNotFound
 │   │   ├── KafkaNotImplemented
 │   │   ├── KafkaTimeout → KafkaLockTimeout, KafkaDeliveryTimeoutError
+│   │   ├── KafkaMessageTooLargeError
 │   │   ├── KafkaUnsupportedMagicByteInMessageSet
 │   │   ├── KafkaInvariantViolation
 │   │   ├── KafkaInvalidVarIntError / KafkaInvalidLongError
@@ -63,6 +64,7 @@ Every `KafkaError` has `name`, `retriable`, optional `helpUrl`, and `cause`.
 | `KafkaServerDoesNotSupportApiKey` | Broker `ApiVersions` has no overlap for a used API                       |
 | `KafkaNumberOfRetriesExceeded`    | Retrier exhausted (`retryCount`, `retryTime`)                            |
 | `KafkaDeliveryTimeoutError`       | Producer `deliveryTimeoutMs` elapsed before a `send`/`sendBatch` settled |
+| `KafkaMessageTooLargeError`       | A record, or a call's records combined, exceeded `maxRequestSize`        |
 | `KafkaCreateTopicError`           | CreateTopics failed for that topic name                                  |
 | `KafkaUpdateFeaturesError`        | UpdateFeatures failed for that feature name                              |
 | `KafkaNoBrokerAvailableError`     | Pool has no connected broker                                             |
@@ -72,19 +74,19 @@ Every `KafkaError` has `name`, `retriable`, optional `helpUrl`, and `cause`.
 `KafkaProtocolError.type` / `.code` match these entries. `retriable` on the
 class follows the table.
 
-| Code | Type                         | Retriable | Meaning                             |
-| ---- | ---------------------------- | --------- | ----------------------------------- |
-| 1    | `OFFSET_OUT_OF_RANGE`        | no        | Offset not in the log               |
-| 3    | `UNKNOWN_TOPIC_OR_PARTITION` | yes       | Broker does not host this partition |
-| 5    | `LEADER_NOT_AVAILABLE`       | yes       | Leader election in progress         |
-| 6    | `NOT_LEADER_OR_FOLLOWER`     | yes       | Wrong replica for this request      |
-| 7    | `REQUEST_TIMED_OUT`          | yes       | Broker timed out                    |
-| 10   | `MESSAGE_TOO_LARGE`          | no        | Record larger than max message size |
-| 16   | `NOT_ENOUGH_REPLICAS`        | yes       | ISR too small for acks              |
-| 19   | `INVALID_TOPIC_EXCEPTION`    | no        | Illegal topic name                  |
-| 27   | `REBALANCE_IN_PROGRESS`      | yes       | Group rebalancing                   |
-| 29   | `TOPIC_AUTHORIZATION_FAILED` | no        | ACL                                 |
-| 33   | `UNSUPPORTED_VERSION`        | no        | API version not supported           |
+| Code | Type                         | Retriable | Meaning                                                                                                                             |
+| ---- | ---------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `OFFSET_OUT_OF_RANGE`        | no        | Offset not in the log                                                                                                               |
+| 3    | `UNKNOWN_TOPIC_OR_PARTITION` | yes       | Broker does not host this partition                                                                                                 |
+| 5    | `LEADER_NOT_AVAILABLE`       | yes       | Leader election in progress                                                                                                         |
+| 6    | `NOT_LEADER_OR_FOLLOWER`     | yes       | Wrong replica for this request                                                                                                      |
+| 7    | `REQUEST_TIMED_OUT`          | yes       | Broker timed out                                                                                                                    |
+| 10   | `MESSAGE_TOO_LARGE`          | no        | Broker rejected a request already sent - see `KafkaMessageTooLargeError` for the client-side `maxRequestSize` check that runs first |
+| 16   | `NOT_ENOUGH_REPLICAS`        | yes       | ISR too small for acks                                                                                                              |
+| 19   | `INVALID_TOPIC_EXCEPTION`    | no        | Illegal topic name                                                                                                                  |
+| 27   | `REBALANCE_IN_PROGRESS`      | yes       | Group rebalancing                                                                                                                   |
+| 29   | `TOPIC_AUTHORIZATION_FAILED` | no        | ACL                                                                                                                                 |
+| 33   | `UNSUPPORTED_VERSION`        | no        | API version not supported                                                                                                           |
 
 The file lists every protocol code the client knows. Prefer `error instanceof
 KafkaProtocolError` and then `error.type`, not string matching on `message`.

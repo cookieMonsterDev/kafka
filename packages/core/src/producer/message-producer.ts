@@ -1,6 +1,12 @@
 import { supportsHeaders, supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
-import { KafkaDeliveryTimeoutError, KafkaError, KafkaNonRetriableError, KafkaTimeout } from '../errors';
+import {
+  KafkaDeliveryTimeoutError,
+  KafkaError,
+  KafkaMessageTooLargeError,
+  KafkaNonRetriableError,
+  KafkaTimeout,
+} from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression/index';
@@ -51,6 +57,15 @@ export interface MessageProducerOptions {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
+  /**
+   * Cap on the uncompressed bytes of one Produce request. A single record over the cap rejects
+   * immediately at `send`/`sendBatch` call time with `KafkaMessageTooLargeError`, before it ever
+   * occupies a linger slot. Records accumulating in the linger buffer are flushed before a new
+   * call would push the pending total past the cap, so no single flush groups more than
+   * `maxRequestSize` bytes together. Default 1_048_576 (1 MiB), matching Java's default.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+   */
+  maxRequestSize?: number;
 }
 
 export interface MessageProducer {
@@ -64,6 +79,8 @@ const DEFAULT_ACKS = -1;
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_LINGER_MS = 0;
 const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
+/** Java `max.request.size` default. @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size */
+const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 
 /**
  * Races `promise` against `deliveryTimeoutMs`. Doesn't cancel the underlying send - the retrier
@@ -151,12 +168,17 @@ export function createMessageProducer({
   batchSize = 0,
   bufferMemory,
   deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
+  maxRequestSize = DEFAULT_MAX_REQUEST_SIZE,
 }: MessageProducerOptions): MessageProducer {
   const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager, nodeLatencyTracker });
   const pending: PendingSend[] = [];
   let lingerTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInProgress: Promise<void> | null = null;
   let bufferedBytes = 0;
+  // Bytes of the entries currently sitting in `pending`, i.e. what the *next* flush would group
+  // into one Produce request. Distinct from `bufferedBytes`, which also counts bytes still
+  // in-flight from a previous flush that hasn't released its bufferMemory reservation yet.
+  let pendingBytes = 0;
   const bufferWaiters: BufferWaiter[] = [];
 
   function validateConnectionStatus(): void {
@@ -199,6 +221,24 @@ export function createMessageProducer({
           `Invalid message without value for topic "${topic}": ${JSON.stringify(messageWithoutValue)}`,
         );
       }
+
+      // Single record over the cap fails fast here, at call time - it never occupies a linger
+      // slot or reaches `dispatch`/the network layer.
+      for (const message of messages) {
+        const size = messageBytes(message);
+        if (size > maxRequestSize) {
+          throw new KafkaMessageTooLargeError({ size, maxRequestSize, topic });
+        }
+      }
+    }
+
+    // The whole call's records, even if individually under the cap, still have to fit in one
+    // Produce request. This client doesn't split a single send/sendBatch call's records across
+    // multiple requests, so - same as an over-bufferMemory call below - it rejects rather than
+    // silently forwarding a request the broker would answer with MESSAGE_TOO_LARGE.
+    const totalBytes = topicMessagesBytes(topicMessages);
+    if (totalBytes > maxRequestSize) {
+      throw new KafkaMessageTooLargeError({ size: totalBytes, maxRequestSize });
     }
 
     validateConnectionStatus();
@@ -312,7 +352,36 @@ export function createMessageProducer({
   }
 
   function shouldFlushBySize(): boolean {
-    return lingerMs > 0 && batchSize > 0 && bufferedBytes >= batchSize;
+    if (lingerMs <= 0) return false;
+    if (batchSize > 0 && bufferedBytes >= batchSize) return true;
+    // Flush as soon as the linger buffer alone holds a full request's worth of bytes, rather
+    // than letting it grow well past maxRequestSize while waiting out the rest of lingerMs.
+    return pendingBytes >= maxRequestSize;
+  }
+
+  /**
+   * Packs `entries` into groups whose bytes stay within `maxRequestSize`, in order. Every entry
+   * fits alone (a call whose own total exceeds the cap is rejected up front in `validateBatch`),
+   * so this only has to cut a *combined* linger batch back down - "send what fits, keep the rest
+   * for the next request" - never split a single entry.
+   */
+  function chunkPendingEntries(entries: readonly PendingSend[]): PendingSend[][] {
+    const chunks: PendingSend[][] = [];
+    let current: PendingSend[] = [];
+    let currentBytes = 0;
+
+    for (const entry of entries) {
+      if (current.length > 0 && currentBytes + entry.bytes > maxRequestSize) {
+        chunks.push(current);
+        current = [];
+        currentBytes = 0;
+      }
+      current.push(entry);
+      currentBytes += entry.bytes;
+    }
+
+    if (current.length > 0) chunks.push(current);
+    return chunks;
   }
 
   async function sendGrouped(entries: readonly PendingSend[]): Promise<void> {
@@ -349,9 +418,15 @@ export function createMessageProducer({
   async function doFlush(): Promise<void> {
     clearLingerTimer();
     const entries = pending.splice(0);
+    pendingBytes = 0;
     if (entries.length === 0) return;
     try {
-      await sendGrouped(entries);
+      // Sequential, not Promise.all: chunks can share a topic-partition (two send() calls routed
+      // to the same partition), and sending them concurrently would race their sequence-number
+      // assignment for idempotent/transactional producers and could reorder delivery generally.
+      for (const chunk of chunkPendingEntries(entries)) {
+        await sendGrouped(chunk);
+      }
     } finally {
       let flushedBytes = 0;
       for (const entry of entries) {
@@ -409,6 +484,7 @@ export function createMessageProducer({
       reject,
       bytes,
     });
+    pendingBytes += bytes;
 
     if (shouldFlushBySize()) {
       void startFlush();

@@ -84,6 +84,47 @@ try {
 }
 ```
 
+## maxRequestSize
+
+`maxRequestSize` (default `1_048_576`, 1 MiB) caps the uncompressed bytes of
+one Produce request. It's enforced client-side, before a record ever occupies
+a linger slot or reaches the network — a different failure than the broker's
+`MESSAGE_TOO_LARGE` protocol error, which only fires after the broker has
+already accepted bytes on the wire (see [Errors](../../reference/errors/)).
+
+Two checks apply:
+
+- A single record whose own size already exceeds `maxRequestSize` rejects
+  immediately at the `send()` / `sendBatch()` call, with
+  `KafkaMessageTooLargeError`. So does a call whose records, combined, exceed
+  the cap even though none alone does — this client doesn't split one call's
+  records across multiple requests.
+- With `lingerMs` and `batchSize` batching multiple calls together, a
+  combined batch that would otherwise exceed `maxRequestSize` is sent as
+  multiple Produce requests instead of one oversized one — each call's own
+  records land in one request, in order, none over the cap.
+
+```ts
+import { KafkaMessageTooLargeError } from '@cookiemonsterdev/kafka-core';
+
+const producer = kafka.producer({ maxRequestSize: 1_048_576 });
+
+try {
+  await producer.send({ topic: 'events', messages: [{ value: hugePayload }] });
+} catch (error) {
+  if (error instanceof KafkaMessageTooLargeError) {
+    // error.size / error.maxRequestSize - split the payload or raise the cap.
+  }
+}
+```
+
+Keep `maxRequestSize` at or above `batchSize` — a `batchSize` larger than
+`maxRequestSize` still triggers a flush before the buffer grows past the cap,
+but records will spend less time batching. Compression happens per Produce
+request, after this check, so `maxRequestSize` measures the same uncompressed
+bytes `bufferMemory` accounts for, not the compressed request actually sent
+over the wire.
+
 ## Partitioners
 
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass

@@ -30,6 +30,7 @@ export interface ProducerOptions {
   batchSize?: number;
   bufferMemory?: number;
   deliveryTimeoutMs?: number;
+  maxRequestSize?: number;
 }
 
 /**
@@ -94,6 +95,7 @@ export function createProducer({
   batchSize,
   bufferMemory,
   deliveryTimeoutMs,
+  maxRequestSize,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -136,6 +138,7 @@ export function createProducer({
     batchSize,
     bufferMemory,
     deliveryTimeoutMs,
+    maxRequestSize,
   };
 
   const { send, sendBatch, flush } = createMessageProducer({

@@ -120,6 +120,7 @@ export class Kafka {
     batchSize,
     bufferMemory,
     deliveryTimeoutMs,
+    maxRequestSize,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const cluster = this.#createCluster({
@@ -148,6 +149,7 @@ export class Kafka {
       batchSize,
       bufferMemory,
       deliveryTimeoutMs,
+      maxRequestSize,
     });
   }
 

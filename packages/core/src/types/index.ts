@@ -224,6 +224,16 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
+  /**
+   * Cap, in bytes, on the uncompressed records of one Produce request. A single record over the
+   * cap rejects immediately at `send`/`sendBatch` call time with `KafkaMessageTooLargeError`,
+   * before it ever occupies a linger slot; a linger-buffered batch that would otherwise combine
+   * past the cap is flushed as multiple requests instead, none over the cap. Default 1_048_576
+   * (1 MiB), matching Java's default. Distinct from the broker's `MESSAGE_TOO_LARGE` protocol
+   * error, which only fires after the broker has accepted bytes on the wire.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+   */
+  maxRequestSize?: number;
 }
 
 /**

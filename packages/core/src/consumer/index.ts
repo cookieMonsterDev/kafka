@@ -116,6 +116,11 @@ export interface ConsumerOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /**
+   * Verify each fetched record batch's CRC on decode. Default `true`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   */
+  checkCrcs?: boolean;
 }
 
 /**
@@ -177,6 +182,7 @@ export function createConsumer({
   groupInstanceId,
   autoOffsetReset,
   groupProtocol = 'classic',
+  checkCrcs = true,
 }: ConsumerOptions): Consumer {
   if (!groupId) {
     throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
@@ -360,6 +366,7 @@ export function createConsumer({
         autoCommitInterval,
         autoCommitThreshold,
         groupProtocol,
+        checkCrcs,
       });
 
       runner = new Runner({

@@ -54,7 +54,7 @@ function toDecodedRecord(message: DecodedMessage & { timestamp?: bigint }): Deco
   };
 }
 
-function decodeEntry(decoder: Decoder): DecodedMessage {
+function decodeEntry(decoder: Decoder, checkCrcs: boolean): DecodedMessage {
   if (!decoder.canReadInt64()) {
     throw new KafkaPartialMessageError(
       `Tried to decode a partial message: There isn't enough bytes to read the offset`,
@@ -70,14 +70,18 @@ function decodeEntry(decoder: Decoder): DecodedMessage {
   }
 
   const size = decoder.readInt32();
-  return decodeMessage(offset, size, decoder);
+  return decodeMessage(offset, size, decoder, checkCrcs);
 }
 
-function decodeEntries(decoder: Decoder, compressedMessage: DecodedMessageSetRecord): DecodedMessageSetRecord[] {
+function decodeEntries(
+  decoder: Decoder,
+  compressedMessage: DecodedMessageSetRecord,
+  checkCrcs: boolean,
+): DecodedMessageSetRecord[] {
   const messages: DecodedMessageSetRecord[] = [];
 
   while (decoder.offset < decoder.buffer.length) {
-    messages.push(toDecodedRecord(decodeEntry(decoder)));
+    messages.push(toDecodedRecord(decodeEntry(decoder, checkCrcs)));
   }
 
   if (compressedMessage.magicByte > 0 && compressedMessage.offset >= 0n) {
@@ -105,14 +109,18 @@ function decodeEntries(decoder: Decoder, compressedMessage: DecodedMessageSetRec
  * read (Fetch v4+ magic-byte dispatch). Partial trailing messages and mixed-format upgrades
  * (magic 2 inside a MessageSet) stop the loop so the next fetch can finish the batch.
  */
-export async function decodeMessageSet(primaryDecoder: Decoder, size?: number): Promise<DecodedMessageSetRecord[]> {
+export async function decodeMessageSet(
+  primaryDecoder: Decoder,
+  size?: number,
+  checkCrcs = true,
+): Promise<DecodedMessageSetRecord[]> {
   const messages: DecodedMessageSetRecord[] = [];
   const messageSetSize = size ?? primaryDecoder.readInt32();
   const messageSetDecoder = primaryDecoder.slice(messageSetSize);
 
   while (messageSetDecoder.offset < messageSetSize) {
     try {
-      const message = toDecodedRecord(decodeEntry(messageSetDecoder));
+      const message = toDecodedRecord(decodeEntry(messageSetDecoder, checkCrcs));
       const codec = lookupCodecByAttributes(message.attributes);
 
       if (codec) {
@@ -120,7 +128,7 @@ export async function decodeMessageSet(primaryDecoder: Decoder, size?: number): 
           throw new Error('Invariant violated: compressed MessageSet entry has a null value');
         }
         const buffer = await codec.decompress(message.value);
-        messages.push(...decodeEntries(new Decoder(buffer), message));
+        messages.push(...decodeEntries(new Decoder(buffer), message, checkCrcs));
       } else {
         messages.push(message);
       }

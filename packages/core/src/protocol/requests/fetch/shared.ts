@@ -59,6 +59,8 @@ export interface FetchRequestOptions {
   minBytes: number;
   maxBytes: number;
   isolationLevel?: number;
+  /** Verify each decoded record batch's CRC. Default `true` when omitted. */
+  checkCrcs?: boolean;
   topics: FetchTopicRequest[];
   /** v7+ only (KIP-227 incremental fetch sessions); earlier request versions ignore these. */
   sessionId?: number;
@@ -234,7 +236,7 @@ const RECORD_BATCH_MAGIC = 2;
  *
  * @see https://kafka.apache.org/43/implementation/messages/
  */
-export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
+export async function decodeRecordSet(decoder: Decoder, checkCrcs?: boolean): Promise<DecodedRecordBatch['records']> {
   const messagesSize = decoder.readInt32();
   if (messagesSize <= 0 || !decoder.canReadBytes(messagesSize)) {
     return [];
@@ -242,24 +244,30 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
 
   const messagesBuffer = decoder.readBytes(messagesSize);
   if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
-  return decodeRecordSetBuffer(messagesBuffer);
+  return decodeRecordSetBuffer(messagesBuffer, checkCrcs);
 }
 
 /**
  * Fetch v12+ uses COMPACT_RECORDS (unsigned varint length `N+1`) instead of INT32-prefixed RECORDS.
  */
-export async function decodeCompactRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
+export async function decodeCompactRecordSet(
+  decoder: Decoder,
+  checkCrcs?: boolean,
+): Promise<DecodedRecordBatch['records']> {
   const messagesBuffer = decoder.readUVarIntBytes();
   if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
-  return decodeRecordSetBuffer(messagesBuffer);
+  return decodeRecordSetBuffer(messagesBuffer, checkCrcs);
 }
 
-async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRecordBatch['records']> {
+async function decodeRecordSetBuffer(
+  messagesBuffer: Buffer,
+  checkCrcs?: boolean,
+): Promise<DecodedRecordBatch['records']> {
   const messagesDecoder = new Decoder(messagesBuffer);
   const magicByte = messagesBuffer.readInt8(MAGIC_OFFSET);
 
   if (magicByte !== RECORD_BATCH_MAGIC) {
-    return decodeMessageSet(messagesDecoder, messagesBuffer.length);
+    return decodeMessageSet(messagesDecoder, messagesBuffer.length, checkCrcs);
   }
 
   const records: DecodedRecordBatch['records'] = [];
@@ -273,7 +281,7 @@ async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRec
   const RECORD_BATCH_HEADER_SIZE = 57;
   while (messagesDecoder.canReadBytes(RECORD_BATCH_HEADER_SIZE)) {
     try {
-      const batch = await decodeRecordBatch(messagesDecoder);
+      const batch = await decodeRecordBatch(messagesDecoder, { checkCrcs });
       records.push(...batch.records);
     } catch (e) {
       // The tail of the record batches can have incomplete records due to how max_bytes works.

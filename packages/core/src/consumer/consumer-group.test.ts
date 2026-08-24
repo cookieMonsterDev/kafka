@@ -448,6 +448,72 @@ describe('consumer/consumer-group', () => {
     expect(seek).toHaveBeenCalledWith({ topic: 'topic1', partition: 0, offset: 50n });
   });
 
+  it('passes checkCrcs to broker.fetch, defaulting to true when omitted', async () => {
+    const brokerFetch = vi.fn().mockResolvedValue({ responses: [] });
+    const cluster = {
+      refreshMetadataIfNecessary: vi.fn(async () => undefined),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, leaderEpoch: 4 }]),
+      findTopicId: vi.fn(() => undefined),
+      findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+    } as unknown as Cluster;
+
+    const consumerGroup = createGroup();
+    consumerGroup.cluster = cluster;
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.offsetManager = {
+      committedOffsets: () => ({ topic1: { 0: 100n } }),
+      nextOffset: () => 100n,
+      resolveOffsets: vi.fn(async () => undefined),
+    } as unknown as OffsetManager;
+
+    await consumerGroup.fetch('1');
+
+    expect(brokerFetch).toHaveBeenCalledWith(expect.objectContaining({ checkCrcs: true }));
+  });
+
+  it('passes checkCrcs: false to broker.fetch when the consumer group was configured with it', async () => {
+    const brokerFetch = vi.fn().mockResolvedValue({ responses: [] });
+    const cluster = {
+      refreshMetadataIfNecessary: vi.fn(async () => undefined),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, leaderEpoch: 4 }]),
+      findTopicId: vi.fn(() => undefined),
+      findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+    } as unknown as Cluster;
+
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      checkCrcs: false,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+    });
+    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.offsetManager = {
+      committedOffsets: () => ({ topic1: { 0: 100n } }),
+      nextOffset: () => 100n,
+      resolveOffsets: vi.fn(async () => undefined),
+    } as unknown as OffsetManager;
+
+    await consumerGroup.fetch('1');
+
+    expect(brokerFetch).toHaveBeenCalledWith(expect.objectContaining({ checkCrcs: false }));
+  });
+
   it('does not seek when the epoch end offset is at or beyond the current fetch position (no truncation)', async () => {
     const cluster = {
       refreshMetadataIfNecessary: vi.fn(async () => undefined),

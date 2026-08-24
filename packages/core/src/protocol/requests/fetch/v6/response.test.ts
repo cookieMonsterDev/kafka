@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v6/response', () => {
   it('decodes a real fixture (wire shape identical to v5)', async () => {
-    const data = await fetchResponseV6.decode(Buffer.from(v6ResponseFixture.data));
+    const data = await fetchResponseV6().decode(Buffer.from(v6ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -52,6 +52,6 @@ describe('protocol/requests/fetch/v6/response', () => {
       ],
     });
 
-    await expect(fetchResponseV6.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV6().parse(data)).resolves.toBeTruthy();
   });
 });

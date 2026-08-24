@@ -22,6 +22,7 @@ export type KafkaErrorName =
   | 'KafkaLockTimeout'
   | 'KafkaDeliveryTimeoutError'
   | 'KafkaUnsupportedMagicByteInMessageSet'
+  | 'KafkaCorruptRecordError'
   | 'KafkaDeleteTopicRecordsError'
   | 'KafkaInvariantViolation'
   | 'KafkaInvalidVarIntError'
@@ -341,6 +342,25 @@ export class KafkaDeliveryTimeoutError extends KafkaTimeout {
 
 export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaUnsupportedMagicByteInMessageSet';
+}
+
+/**
+ * The decoded bytes don't match the record's checksum: a RecordBatch v2 CRC-32C mismatch, or a
+ * legacy MessageSet (magic 0/1) CRC-32 mismatch. Raised only when `ConsumerConfig.checkCrcs` is
+ * `true` (the default). Non-retriable: the bytes on the wire were corrupted, so retrying the same
+ * fetch would not help.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+ */
+export class KafkaCorruptRecordError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaCorruptRecordError';
+  readonly expectedCrc: number;
+  readonly computedCrc: number;
+
+  constructor(message: string, { expectedCrc, computedCrc }: { expectedCrc: number; computedCrc: number }) {
+    super(message);
+    this.expectedCrc = expectedCrc;
+    this.computedCrc = computedCrc;
+  }
 }
 
 export interface DeleteTopicRecordPartition {

@@ -148,6 +148,12 @@ export interface ConsumerGroupOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /**
+   * Verify each fetched record batch's CRC on decode; `false` skips the check for throughput.
+   * Default `true`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   */
+  checkCrcs?: boolean;
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
@@ -192,6 +198,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   autoCommitInterval: number | null;
   autoCommitThreshold: number | null;
   isolationLevel: IsolationLevel;
+  checkCrcs: boolean;
   rackId: string;
   metadataMaxAge: number;
   groupInstanceId: string | null;
@@ -245,6 +252,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     autoCommitInterval,
     autoCommitThreshold,
     isolationLevel,
+    checkCrcs = true,
     rackId,
     metadataMaxAge,
     groupInstanceId,
@@ -269,6 +277,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.autoCommitInterval = autoCommitInterval;
     this.autoCommitThreshold = autoCommitThreshold;
     this.isolationLevel = isolationLevel;
+    this.checkCrcs = checkCrcs;
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
@@ -882,6 +891,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         minBytes: this.minBytes,
         maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
+        checkCrcs: this.checkCrcs,
         topics: sessionRequest.topics,
         forgottenTopics: sessionRequest.forgottenTopics,
         sessionId: sessionRequest.sessionId,

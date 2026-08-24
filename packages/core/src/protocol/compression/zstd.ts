@@ -1,5 +1,5 @@
 import { promisify } from 'node:util';
-import { zstdCompress, zstdDecompress } from 'node:zlib';
+import { constants as zlibConstants, zstdCompress, zstdDecompress } from 'node:zlib';
 import { KafkaNonRetriableError } from '../../errors';
 import type { CompressionCodec } from './index';
 import { MAX_DECOMPRESSED_SIZE } from './limits';
@@ -23,8 +23,9 @@ export async function decompressZstd(buffer: Buffer, maxOutputLength = MAX_DECOM
 
 /** Node 24 ships zstd natively (`node:zlib`), so unlike Snappy/LZ4 this needs no extra package. */
 export const zstdCodec: CompressionCodec = {
-  async compress(encoder) {
-    return compress(encoder.buffer);
+  async compress(encoder, level) {
+    if (level == null) return compress(encoder.buffer);
+    return compress(encoder.buffer, { params: { [zlibConstants.ZSTD_c_compressionLevel]: level } });
   },
   async decompress(buffer) {
     return decompressZstd(buffer);

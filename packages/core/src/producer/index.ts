@@ -26,6 +26,7 @@ export interface ProducerOptions {
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   acks?: number;
   compression?: CompressionType;
+  compressionLevel?: number;
   lingerMs?: number;
   batchSize?: number;
   bufferMemory?: number;
@@ -90,6 +91,7 @@ export function createProducer({
   instrumentationEmitter: rootInstrumentationEmitter,
   acks,
   compression,
+  compressionLevel,
   lingerMs = 0,
   batchSize,
   bufferMemory,
@@ -132,6 +134,7 @@ export function createProducer({
     getConnectionStatus: () => connectionStatus,
     defaultAcks: acks,
     defaultCompression: compression,
+    defaultCompressionLevel: compressionLevel,
     lingerMs,
     batchSize,
     bufferMemory,

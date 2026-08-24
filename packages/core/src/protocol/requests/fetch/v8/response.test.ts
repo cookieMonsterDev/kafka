@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v8/response', () => {
   it('decodes a real fixture, remapping throttleTime to clientSideThrottleTime', async () => {
-    const data = await fetchResponseV8.decode(Buffer.from(v8ResponseFixture.data));
+    const data = await fetchResponseV8().decode(Buffer.from(v8ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -55,6 +55,6 @@ describe('protocol/requests/fetch/v8/response', () => {
       ],
     });
 
-    await expect(fetchResponseV8.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV8().parse(data)).resolves.toBeTruthy();
   });
 });

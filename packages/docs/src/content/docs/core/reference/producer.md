@@ -29,8 +29,10 @@ Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-co
 
 ## `send` / `sendBatch`
 
-`ProducerRecord`: `topic`, `messages`, optional `acks`, `timeout`, `compression`.
-`ProducerBatch` is the same options with `topicMessages` for several topics.
+`ProducerRecord`: `topic`, `messages`, optional `acks`, `timeout`, `compression`,
+`compressionLevel`. `ProducerBatch` is the same options with `topicMessages`
+for several topics. `compressionLevel` overrides the producer's own default
+for that one call; see [Throughput](../../guides/throughput/#compression-level).
 
 ### `Message`
 

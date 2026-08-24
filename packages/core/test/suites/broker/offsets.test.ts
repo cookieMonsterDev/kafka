@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import { MemberMetadata } from '../../../src/consumer/assigner-protocol';
 import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
+import { EARLIEST_OFFSET, LATEST_OFFSET } from '../../../src/constants';
 import {
   advertisedAddress,
   createConnectionPool,
@@ -103,5 +104,46 @@ describe('broker.offsets', () => {
     expect(fetched.responses[0]?.partitions[0]?.offset).toBe(1n);
 
     await coordinator.leaveGroup({ groupId, memberId: join.memberId });
+  });
+
+  it('lists earliest and latest offsets after a produce', async () => {
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => seedBroker!.metadata([topicName]));
+    const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
+    const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
+    leader = new Broker({
+      connectionPool: createConnectionPool(advertisedAddress(brokerData.host, brokerData.port)),
+      logger: newLogger(),
+    });
+    await leader.connect();
+
+    await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      leader!.produce({
+        acks: 1,
+        timeout: 30_000,
+        topicData: [
+          {
+            topic: topicName,
+            partitions: [
+              {
+                partition: 0,
+                messages: [
+                  { key: 'a', value: '1' },
+                  { key: 'b', value: '2' },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    const earliest = await leader.listOffsets({
+      topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: BigInt(EARLIEST_OFFSET) }] }],
+    });
+    const latest = await leader.listOffsets({
+      topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: BigInt(LATEST_OFFSET) }] }],
+    });
+    expect(earliest.responses[0]?.partitions[0]?.offset).toBe(0n);
+    expect(latest.responses[0]?.partitions[0]?.offset).toBe(2n);
   });
 });

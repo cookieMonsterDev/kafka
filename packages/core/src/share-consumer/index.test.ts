@@ -50,4 +50,20 @@ describe('share-consumer', () => {
     });
     expect(typeof consumer.logger().info).toBe('function');
   });
+
+  it('rejects connect when the signal is already aborted', async () => {
+    const connect = vi.fn(async () => undefined);
+    const cluster = { connect, disconnect: vi.fn(async () => undefined) } as unknown as Cluster;
+    const consumer = createShareConsumer({ cluster, groupId: 'share-1', logger: silentLogger });
+    await expect(consumer.connect({ signal: AbortSignal.abort() })).rejects.toThrow(/aborted/i);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects through Symbol.asyncDispose without starting a runner', async () => {
+    const disconnect = vi.fn(async () => undefined);
+    const cluster = { connect: vi.fn(async () => undefined), disconnect } as unknown as Cluster;
+    const consumer = createShareConsumer({ cluster, groupId: 'share-1', logger: silentLogger });
+    await consumer[Symbol.asyncDispose]();
+    expect(disconnect).toHaveBeenCalled();
+  });
 });

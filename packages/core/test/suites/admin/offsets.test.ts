@@ -89,4 +89,64 @@ describe('admin.offsets', () => {
     const offsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
     expect(offsets[0]?.partitions[0]?.offset).toBe(BigInt(EARLIEST_OFFSET));
   });
+
+  it('resets offsets to latest and resolves them to the high watermark', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    await admin.resetOffsets({ groupId, topic: topicName, earliest: false });
+    const sentinels = await admin.fetchOffsets({ groupId, topics: [topicName] });
+    expect(sentinels[0]?.partitions[0]?.offset).toBe(-1n);
+
+    const resolved = await admin.fetchOffsets({ groupId, topics: [topicName], resolveOffsets: true });
+    expect(resolved[0]?.partitions[0]?.offset).toBe(5n);
+  });
+
+  it('looks up offsets by timestamp and falls back to the high watermark', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    const fromStart = await admin.fetchTopicOffsetsByTimestamp(topicName, 0n);
+    expect(fromStart).toEqual([{ partition: 0, offset: 0n }]);
+
+    const fromFuture = await admin.fetchTopicOffsetsByTimestamp(topicName, 4_102_444_800_000n);
+    expect(fromFuture).toEqual([{ partition: 0, offset: 5n }]);
+  });
+
+  it('sets a committed offset that a new consumer member picks up', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 10 }) });
+    await admin.setOffsets({ groupId, topic: topicName, partitions: [{ partition: 0, offset: 7n }] });
+
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      logger: newLogger(),
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName });
+    const consumed: { offset: bigint }[] = [];
+    const join = waitForConsumerToJoinGroup(consumer);
+    await consumer.run({
+      eachMessage: async (event) => {
+        consumed.push({ offset: event.message.offset });
+      },
+    });
+    await join;
+    await waitForMessages(consumed, { number: 3 });
+    expect(consumed.map((entry) => entry.offset)).toEqual([7n, 8n, 9n]);
+  });
 });

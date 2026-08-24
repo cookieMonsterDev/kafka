@@ -62,4 +62,47 @@ describe('consumer.seek', () => {
     await waitForMessages(consumed, { number: 3 });
     expect(consumed[0]?.message.offset).toBe(7n);
   });
+
+  it('accepts numeric and string offsets', async () => {
+    await producer!.connect();
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    await consumer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+    consumer!.seek({ topic: topicName, partition: 0, offset: 3 });
+    await waitForMessages(consumed, { number: 2 });
+    expect(consumed[0]?.message.offset).toBe(3n);
+
+    consumed.length = 0;
+    consumer!.seek({ topic: topicName, partition: 0, offset: '4' });
+    await waitForMessages(consumed, { number: 1 });
+    expect(consumed[0]?.message.offset).toBe(4n);
+  });
+
+  it('seeks backward after starting from the high watermark', async () => {
+    await producer!.connect();
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 3 }) });
+
+    await consumer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: false });
+    const consumed: EachMessagePayload[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+    consumer!.seek({ topic: topicName, partition: 0, offset: 0n });
+    await waitForMessages(consumed, { number: 3 });
+    expect(consumed.map((event) => event.message.offset)).toEqual([0n, 1n, 2n]);
+  });
 });

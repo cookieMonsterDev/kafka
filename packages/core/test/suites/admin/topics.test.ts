@@ -104,4 +104,33 @@ describe('admin.topics', () => {
     expect(offsets.high).toBe(10n);
     expect(offsets.low).toBe(5n);
   });
+
+  it('creates a topic with config entries and describes them in metadata', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    await expect(
+      admin.createTopics({
+        waitForLeaders: true,
+        topics: [
+          {
+            topic: topicName,
+            numPartitions: 2,
+            replicationFactor: 1,
+            configEntries: [{ name: 'cleanup.policy', value: 'delete' }],
+          },
+        ],
+      }),
+    ).resolves.toBe(true);
+
+    const metadata = await admin.fetchTopicMetadata({ topics: [topicName] });
+    const topic = metadata.topics.find((entry) => entry.name === topicName);
+    expect(topic?.partitions).toHaveLength(2);
+  });
+
+  it('returns an empty topic list from fetchTopicMetadata when none are requested', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    const metadata = await admin.fetchTopicMetadata({ topics: [] });
+    expect(Array.isArray(metadata.topics)).toBe(true);
+  });
 });

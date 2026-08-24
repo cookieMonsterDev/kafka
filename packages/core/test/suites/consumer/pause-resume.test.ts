@@ -78,4 +78,48 @@ describe('consumer.pauseResume', () => {
     consumer!.resume([{ topic: topicName, partitions: [0] }]);
     await waitForMessages(consumed, { number: before + 2 });
   });
+
+  it('pauses every partition of a topic when partitions are omitted', async () => {
+    await consumer!.connect();
+    await producer!.connect();
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        { key: 'a', value: 'a', partition: 0 },
+        { key: 'b', value: 'b', partition: 1 },
+      ],
+    });
+    await waitForMessages(consumed, { number: 2 });
+
+    consumer!.pause([{ topic: topicName }]);
+    const paused = consumer!.paused();
+    expect(paused).toEqual(expect.arrayContaining([expect.objectContaining({ topic: topicName })]));
+    expect(paused[0]?.partitions.sort((a, b) => a - b)).toEqual([0, 1]);
+
+    const before = consumed.length;
+    await producer!.send({
+      acks: 1,
+      topic: topicName,
+      messages: [
+        { key: 'c', value: 'c', partition: 0 },
+        { key: 'd', value: 'd', partition: 1 },
+      ],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(consumed.length).toBe(before);
+
+    consumer!.resume([{ topic: topicName }]);
+    await waitForMessages(consumed, { number: before + 2 });
+  });
 });

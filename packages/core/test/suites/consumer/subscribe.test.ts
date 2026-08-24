@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
-import { createCluster, createTopic, newLogger, secureRandom } from '../../helpers/index';
+import { createCluster, createTopic, newLogger, secureRandom, waitForConsumerToJoinGroup } from '../../helpers/index';
 
 describe('consumer.subscribe', () => {
   let topicName: string;
@@ -12,6 +12,7 @@ describe('consumer.subscribe', () => {
     consumer = createConsumer({
       cluster: createCluster(),
       groupId: `group-${secureRandom()}`,
+      maxWaitTimeInMs: 100,
       logger: newLogger(),
     });
     await consumer.connect();
@@ -35,5 +36,17 @@ describe('consumer.subscribe', () => {
     await expect(
       consumer!.subscribe({ topic: new RegExp(`^${topicName}$`), fromBeginning: true }),
     ).resolves.toBeUndefined();
+  });
+
+  it('rejects a second subscribe while the consumer is running', async () => {
+    const other = `test-topic-${secureRandom()}`;
+    await createTopic({ topic: other });
+    await consumer!.subscribe({ topic: topicName, fromBeginning: true });
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({ eachMessage: async () => undefined });
+    await join;
+    await expect(consumer!.subscribe({ topic: other })).rejects.toThrow(
+      'Cannot subscribe to topic while consumer is running',
+    );
   });
 });

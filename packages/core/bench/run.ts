@@ -1,6 +1,7 @@
 import { benchEncodeRecordBatch } from './encode-record-batch';
 import { benchDecodeFetchPayload } from './decode-fetch-payload';
 import { benchConnectionFraming } from './connection-framing';
+import { benchEncoderBufferPool } from './encoder-buffer-pool';
 import { benchProduceLinger } from './produce-linger';
 import { benchConsumeHandlers } from './consume-handlers';
 
@@ -13,6 +14,8 @@ export async function main(): Promise<void> {
   await benchDecodeFetchPayload();
   console.log('');
   await benchConnectionFraming();
+  console.log('');
+  await benchEncoderBufferPool();
   console.log('');
   await benchProduceLinger();
   console.log('');

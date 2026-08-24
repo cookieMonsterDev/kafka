@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
 import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
 import type { InstrumentationEvent } from '../../../src/instrumentation/event';
-import { NETWORK_REQUEST, type NetworkRequestEvent } from '../../../src/network/instrumentation-events';
+import {
+  NETWORK_REQUEST,
+  type NetworkEventMap,
+  type NetworkRequestEvent,
+} from '../../../src/network/instrumentation-events';
 import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
@@ -126,7 +130,7 @@ describe('producer.transactions', () => {
 
   /** KIP-890 part 2: transaction V2 (Produce v12+, Kafka 4.0+) lets Produce itself cover AddPartitionsToTxn. */
   function countAddPartitionsToTxnRequests() {
-    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
     const counter = { value: 0 };
     instrumentationEmitter.addListener(NETWORK_REQUEST, (event: InstrumentationEvent<NetworkRequestEvent>) => {
       if (event.payload.apiName === 'AddPartitionsToTxn') counter.value += 1;

@@ -33,7 +33,7 @@ export function encodeMessageSet({
     // starting at 0 so the broker can skip recompression.
     encoder.writeInt64(isCompressed ? i : -1);
     encoder.writeInt32(message.size());
-    encoder.writeEncoder(message);
+    encoder.writeEncoder(message, { release: true });
   });
 
   return encoder;

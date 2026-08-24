@@ -40,6 +40,8 @@ export interface MessageProducerOptions {
   defaultAcks?: number;
   /** Used when send/sendBatch omit compression. Omit for none. */
   defaultCompression?: CompressionType;
+  /** Used when send/sendBatch omit compressionLevel. @see ProducerRecord.compressionLevel */
+  defaultCompressionLevel?: number;
   /**
    * Delay in ms to wait for more records before sending a Produce request.
    * Default 0 (send immediately). Java 4.0+ defaults to 5.
@@ -112,6 +114,7 @@ interface PendingSend {
   topics: Set<string>;
   acks: number;
   compression: CompressionType | undefined;
+  compressionLevel: number | undefined;
   timeout: number;
   resolve: (metadata: RecordMetadata[]) => void;
   reject: (error: unknown) => void;
@@ -155,7 +158,8 @@ function mergeTopicMessages(entries: readonly PendingSend[]): TopicMessages[] {
 
 function groupKey(entry: PendingSend): string {
   const compression = entry.compression ?? COMPRESSION_TYPES.None;
-  return `${entry.acks}\0${compression}\0${entry.timeout}`;
+  const compressionLevel = entry.compressionLevel ?? '';
+  return `${entry.acks}\0${compression}\0${compressionLevel}\0${entry.timeout}`;
 }
 
 interface BufferWaiter {
@@ -175,6 +179,7 @@ export function createMessageProducer({
   getConnectionStatus,
   defaultAcks,
   defaultCompression,
+  defaultCompressionLevel,
   lingerMs = DEFAULT_LINGER_MS,
   batchSize = 0,
   bufferMemory,
@@ -289,8 +294,9 @@ export function createMessageProducer({
     acks: number,
     timeout: number,
     compression: CompressionType | undefined,
+    compressionLevel: number | undefined,
   ): Promise<RecordMetadata[]> {
-    return sendMessages({ acks, timeout, compression, topicMessages });
+    return sendMessages({ acks, timeout, compression, compressionLevel, topicMessages });
   }
 
   function hasBufferLimit(): boolean {
@@ -414,7 +420,13 @@ export function createMessageProducer({
         if (!first) return;
 
         try {
-          const metadata = await dispatch(mergeTopicMessages(group), first.acks, first.timeout, first.compression);
+          const metadata = await dispatch(
+            mergeTopicMessages(group),
+            first.acks,
+            first.timeout,
+            first.compression,
+            first.compressionLevel,
+          );
           for (const entry of group) {
             entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
           }
@@ -475,6 +487,7 @@ export function createMessageProducer({
     acks: number,
     timeout: number,
     compression: CompressionType | undefined,
+    compressionLevel: number | undefined,
   ): Promise<RecordMetadata[]> {
     const bytes = topicMessagesBytes(topicMessages);
     await reserveBuffer(bytes, timeout);
@@ -491,6 +504,7 @@ export function createMessageProducer({
       topics: new Set(topicMessages.map(({ topic }) => topic)),
       acks,
       compression,
+      compressionLevel,
       timeout,
       resolve,
       reject,
@@ -511,12 +525,14 @@ export function createMessageProducer({
     acks,
     timeout,
     compression,
+    compressionLevel,
     topicMessages = [],
     signal,
   }: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]> {
     const resolvedAcks = acks ?? defaultAcks ?? DEFAULT_ACKS;
     const resolvedTimeout = timeout ?? DEFAULT_TIMEOUT;
     const resolvedCompression = compression ?? defaultCompression;
+    const resolvedCompressionLevel = compressionLevel ?? defaultCompressionLevel;
 
     validateBatch(topicMessages, resolvedAcks, resolvedCompression);
     const mergedTopicMessages = mergeCallTopicMessages(topicMessages);
@@ -536,8 +552,8 @@ export function createMessageProducer({
 
     const produce =
       lingerMs <= 0
-        ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression)
-        : enqueue(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression);
+        ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression, resolvedCompressionLevel)
+        : enqueue(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression, resolvedCompressionLevel);
 
     const settled = rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
     if (!hooks?.onAck?.length) return settled;
@@ -556,11 +572,12 @@ export function createMessageProducer({
     acks,
     timeout,
     compression,
+    compressionLevel,
     topic,
     messages,
     signal,
   }: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]> {
-    return sendBatch({ acks, timeout, compression, topicMessages: [{ topic, messages }], signal });
+    return sendBatch({ acks, timeout, compression, compressionLevel, topicMessages: [{ topic, messages }], signal });
   }
 
   return { send, sendBatch, flush };

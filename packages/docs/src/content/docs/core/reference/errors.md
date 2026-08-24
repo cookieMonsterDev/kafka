@@ -29,6 +29,7 @@ Error
 │   │   ├── KafkaTimeout → KafkaLockTimeout, KafkaDeliveryTimeoutError
 │   │   ├── KafkaMessageTooLargeError
 │   │   ├── KafkaUnsupportedMagicByteInMessageSet
+│   │   ├── KafkaCorruptRecordError    expectedCrc, computedCrc
 │   │   ├── KafkaInvariantViolation
 │   │   ├── KafkaInvalidVarIntError / KafkaInvalidLongError
 │   │   └── KafkaNumberOfRetriesExceeded
@@ -68,6 +69,7 @@ Every `KafkaError` has `name`, `retriable`, optional `helpUrl`, and `cause`.
 | `KafkaCreateTopicError`           | CreateTopics failed for that topic name                                  |
 | `KafkaUpdateFeaturesError`        | UpdateFeatures failed for that feature name                              |
 | `KafkaNoBrokerAvailableError`     | Pool has no connected broker                                             |
+| `KafkaCorruptRecordError`         | Fetched batch's CRC didn't match its bytes (`checkCrcs: true`, default)  |
 
 ## Protocol codes (common)
 

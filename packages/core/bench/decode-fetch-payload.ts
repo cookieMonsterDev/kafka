@@ -54,7 +54,7 @@ export async function benchDecodeFetchPayload(): Promise<BenchStats> {
     messagesPerIter: RECORD_COUNT,
     bytesPerIter: payload.length,
     run: async () => {
-      const decoded = await fetchResponseV4.decode(payload);
+      const decoded = await fetchResponseV4().decode(payload);
       const count = decoded.responses[0]?.partitions[0]?.messages.length ?? 0;
       if (count !== RECORD_COUNT) {
         throw new Error(`expected ${RECORD_COUNT} fetch records, got ${count}`);

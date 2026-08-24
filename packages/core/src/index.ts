@@ -69,6 +69,7 @@ export {
   KafkaDeliveryTimeoutError,
   KafkaMessageTooLargeError,
   KafkaUnsupportedMagicByteInMessageSet,
+  KafkaCorruptRecordError,
   KafkaDeleteTopicRecordsError,
   KafkaInvariantViolation,
   KafkaInvalidVarIntError,

@@ -29,6 +29,13 @@ export interface ProducerRecord {
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
+  /**
+   * Passed to the active codec, when it honors one: GZIP maps it to zlib's `level` (0-9); ZSTD
+   * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
+   * compression-level concept in this client's codecs and ignore it.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   */
+  compressionLevel?: number;
 }
 
 /** Multi-topic produce request. */
@@ -40,6 +47,8 @@ export interface ProducerBatch {
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
+  /** @see ProducerRecord.compressionLevel */
+  compressionLevel?: number;
   topicMessages?: readonly TopicMessages[];
 }
 

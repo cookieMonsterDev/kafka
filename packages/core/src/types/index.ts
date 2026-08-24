@@ -203,6 +203,14 @@ export interface ProducerConfig {
    */
   compression?: CompressionType;
   /**
+   * Default compression level for send/sendBatch when the call omits compressionLevel, passed
+   * to the active codec when it honors one. GZIP maps it straight to zlib's `level` (0-9). ZSTD
+   * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
+   * compression-level concept in this client's codecs and ignore it.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   */
+  compressionLevel?: number;
+  /**
    * Delay in ms to wait for more records before sending a Produce request.
    * Default 0 (send immediately). Java 4.0+ defaults to 5.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
@@ -338,6 +346,14 @@ export interface ConsumerConfig {
    * throwing hook is caught and logged, never failing consumption or the commit.
    */
   hooks?: ConsumerHooks;
+  /**
+   * Verify each fetched record batch's CRC (RecordBatch v2 CRC-32C, or the legacy MessageSet
+   * CRC-32) and throw {@link KafkaCorruptRecordError} on mismatch. Default `true`. Set `false`
+   * to skip the check for extreme throughput - corrupted bytes on the wire (a bad disk, a buggy
+   * proxy, transport bit-flips) then go undetected instead of failing loudly.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   */
+  checkCrcs?: boolean;
 }
 
 export type GroupProtocol = 'classic' | 'consumer';

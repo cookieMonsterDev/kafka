@@ -29,31 +29,33 @@ async function readCompactArrayAsync<T>(decoder: Decoder, reader: (d: Decoder) =
   return values;
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV13> {
-  const partition = decoder.readInt32();
-  const errorCode = decoder.readInt16();
-  const highWatermark = decoder.readInt64();
-  const lastStableOffset = decoder.readInt64();
-  const logStartOffset = decoder.readInt64();
-  const abortedTransactions =
-    decoder.readUVarIntArray((d) => {
-      const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
-      d.readTaggedFields();
-      return txn;
-    }) ?? [];
-  const preferredReadReplica = decoder.readInt32();
-  const messages = await decodeCompactRecordSet(decoder);
-  const currentLeader = readFetchPartitionTaggedFields(decoder);
-  return {
-    partition,
-    errorCode,
-    highWatermark,
-    lastStableOffset,
-    logStartOffset,
-    abortedTransactions,
-    preferredReadReplica,
-    messages,
-    currentLeader,
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV13> => {
+    const partition = decoder.readInt32();
+    const errorCode = decoder.readInt16();
+    const highWatermark = decoder.readInt64();
+    const lastStableOffset = decoder.readInt64();
+    const logStartOffset = decoder.readInt64();
+    const abortedTransactions =
+      decoder.readUVarIntArray((d) => {
+        const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
+        d.readTaggedFields();
+        return txn;
+      }) ?? [];
+    const preferredReadReplica = decoder.readInt32();
+    const messages = await decodeCompactRecordSet(decoder, checkCrcs);
+    const currentLeader = readFetchPartitionTaggedFields(decoder);
+    return {
+      partition,
+      errorCode,
+      highWatermark,
+      lastStableOffset,
+      logStartOffset,
+      abortedTransactions,
+      preferredReadReplica,
+      messages,
+      currentLeader,
+    };
   };
 }
 
@@ -69,7 +71,7 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export function fetchResponseV13(
-  options: Pick<FetchRequestOptions, 'topics' | 'topicsForResponse'> = { topics: [] },
+  options: Pick<FetchRequestOptions, 'topics' | 'topicsForResponse' | 'checkCrcs'> = { topics: [] },
 ): ResponseDefinition<FetchResponseV13Body> {
   const resolutionTopics = options.topicsForResponse ?? options.topics;
   return {
@@ -80,7 +82,7 @@ export function fetchResponseV13(
       const sessionId = decoder.readInt32();
       const responses = await readCompactArrayAsync(decoder, async (d) => {
         const topicId = uuid.read(d);
-        const partitions = await readCompactArrayAsync(d, decodePartition);
+        const partitions = await readCompactArrayAsync(d, decodePartition(options.checkCrcs));
         d.readTaggedFields();
         return { topicId, partitions };
       });

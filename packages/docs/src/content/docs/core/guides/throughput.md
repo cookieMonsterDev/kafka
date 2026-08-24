@@ -65,6 +65,40 @@ default (`adaptive: true`); pass `StickyPartitioner({ adaptive: false })` as
 `createPartitioner` for the plain uniform behavior. Keyed murmur2 routing is
 unaffected either way. See [Producer](./producer/#partitioners).
 
+### Compression level
+
+`compressionLevel` (on `ProducerConfig`, or per `send()`/`sendBatch()` call) is
+passed to whichever codec `compression` selects, but only GZIP and ZSTD have a
+level to tune:
+
+- **GZIP** maps it straight to zlib's `level` (`0`-`9`; `9` is smallest output,
+  slowest to produce).
+- **ZSTD** maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly
+  `1`-`22`; Node's zstd binding accepts the same range as the reference
+  library).
+- **Snappy** and **LZ4** have no compression-level concept in either format —
+  Snappy's block format and this client's LZ4 codec (`lz4-lite`, LZ4 Frame)
+  are both fixed-effort. `compressionLevel` is a no-op for either.
+
+```ts
+const p = kafka.producer({
+  compression: CompressionTypes.GZIP,
+  compressionLevel: 6, // trade some CPU for a smaller wire payload
+});
+
+// Override per call, e.g. for a batch worth spending more CPU to shrink:
+await p.send({
+  topic: 'events',
+  messages: [{ value: largePayload }],
+  compression: CompressionTypes.ZSTD,
+  compressionLevel: 19,
+});
+```
+
+Higher levels cost CPU on every produced batch; benchmark against your actual
+payloads before raising it broadly. A per-`send()` override is usually a
+better fit than a high default when only some traffic is worth the extra CPU.
+
 ## Consume
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.
@@ -75,3 +109,25 @@ await cost. The run default for `partitionsConsumedConcurrently` remains `1`
 The **next major** will change constructor defaults to `lingerMs: 5`,
 `batchSize: 16384`, and `maxInFlightRequests: 5`. This minor keeps
 `lingerMs: 0`. See [Breaking changes](../../migration/breaking-changes/).
+
+### checkCrcs
+
+`ConsumerConfig.checkCrcs` defaults to `true`: every fetched record batch's
+CRC (RecordBatch v2 CRC-32C, or the legacy MessageSet CRC-32 on older
+brokers) is verified against the decoded bytes, and a mismatch throws
+`KafkaCorruptRecordError`.
+
+```ts
+const c = kafka.consumer({ groupId: 'load', checkCrcs: false });
+```
+
+Setting `checkCrcs: false` skips that check entirely. It saves a checksum
+pass over every batch, which can matter at extreme throughput, but it means
+**corrupted bytes on the wire go undetected**: a bad disk on the broker, a
+buggy transparent proxy, or a transport bit-flip that CRC would have caught
+is instead decoded as if it were valid data — wrong record contents,
+possibly without any error at all until something downstream notices. Only
+disable it once you have independently verified data integrity elsewhere
+(e.g. TLS already protects against in-transit corruption, and you trust the
+broker's storage layer), and prefer leaving it on unless a profile shows the
+check is actually the bottleneck.

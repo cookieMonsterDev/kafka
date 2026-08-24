@@ -27,6 +27,7 @@ export interface SendMessagesRequest {
   acks: number;
   timeout: number;
   compression?: CompressionType;
+  compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
 }
 
@@ -52,7 +53,13 @@ export function createSendMessages({
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
 }: SendMessagesOptions) {
-  return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
+  return ({
+    acks,
+    timeout,
+    compression,
+    compressionLevel,
+    topicMessages,
+  }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
@@ -170,6 +177,7 @@ export function createSendMessages({
               acks,
               timeout,
               compression,
+              compressionLevel,
               topicData,
             });
           } catch (e) {

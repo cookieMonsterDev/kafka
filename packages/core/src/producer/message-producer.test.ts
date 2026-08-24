@@ -186,6 +186,20 @@ describe('producer/messageProducer', () => {
     expect(broker.produce).toHaveBeenLastCalledWith(expect.objectContaining({ compression: COMPRESSION_TYPES.None }));
   });
 
+  it('uses producer default compressionLevel when send omits it, and lets the call override', async () => {
+    const broker = fakeBroker(1);
+    const producer = createTestProducer(broker, {
+      defaultCompression: COMPRESSION_TYPES.GZIP,
+      defaultCompressionLevel: 9,
+    });
+
+    await producer.send({ topic, messages: [{ value: 'a' }] });
+    expect(broker.produce).toHaveBeenCalledWith(expect.objectContaining({ compressionLevel: 9 }));
+
+    await producer.send({ topic, messages: [{ value: 'b' }], compressionLevel: 1 });
+    expect(broker.produce).toHaveBeenLastCalledWith(expect.objectContaining({ compressionLevel: 1 }));
+  });
+
   it('rejects an idempotent send when resolved acks is not -1', async () => {
     const broker = fakeBroker(1);
     const producer = createTestProducer(broker, { idempotent: true, defaultAcks: 1 });

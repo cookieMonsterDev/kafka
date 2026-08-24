@@ -82,6 +82,13 @@ export class Decoder {
     return value;
   }
 
+  /** Unsigned 32-bit read, e.g. the RecordBatch v2 CRC-32C field. */
+  readUInt32(): number {
+    const value = this.buffer.readUInt32BE(this.offset);
+    this.offset += INT32_SIZE;
+    return value;
+  }
+
   canReadInt64(): boolean {
     return this.canReadBytes(INT64_SIZE);
   }

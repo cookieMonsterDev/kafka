@@ -604,4 +604,149 @@ describe('consumer/runner', () => {
     expect(consumerGroup.commitOffsetsIfNecessary).not.toHaveBeenCalled();
     runner = undefined;
   });
+
+  describe('maxRecords', () => {
+    function messagesRange(count: number, startOffset = 1n): KafkaMessage[] {
+      return Array.from({ length: count }, (_, index) => kafkaMessage(startOffset + BigInt(index)));
+    }
+
+    it('defaults to 500-record slices per poll for eachMessage even when the batch is much larger', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const seenOffsets: bigint[] = [];
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async ({ message }) => {
+          seenOffsets.push(message.offset);
+        },
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(1200, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 2000n, messages });
+      await runner.handleBatch(batch);
+
+      // Every record is still delivered, in order, none dropped or duplicated across slices.
+      expect(seenOffsets).toHaveLength(1200);
+      expect(seenOffsets[0]).toBe(1n);
+      expect(seenOffsets[seenOffsets.length - 1]).toBe(1200n);
+
+      // Two internal 500-record checkpoints (after offsets 500 and 1000) plus the final commit
+      // `handleBatch` issues once `processEachMessage` returns.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
+      expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+    });
+
+    it('delivers a batch smaller than maxRecords in a single internal cycle', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const seenOffsets: bigint[] = [];
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async ({ message }) => {
+          seenOffsets.push(message.offset);
+        },
+        maxRecords: 5,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 10n, messages: messagesRange(3, 1n) });
+      await runner.handleBatch(batch);
+
+      expect(seenOffsets).toEqual([1n, 2n, 3n]);
+      // 3 < maxRecords(5): no mid-batch checkpoint, only the end-of-batch commit.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not truncate eachBatch by default even for a very large batch', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const eachBatch = vi.fn<EachBatchHandler>(async () => undefined);
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(10_000, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 20_000n, messages });
+      await runner.handleBatch(batch);
+
+      expect(eachBatch).toHaveBeenCalledTimes(1);
+      expect(eachBatch.mock.calls[0]?.[0].batch.messages).toHaveLength(10_000);
+    });
+
+    it('slices eachBatch into maxRecords-sized sub-batches when set explicitly', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const receivedSizes: number[] = [];
+      const receivedOffsets: bigint[] = [];
+      const eachBatch: EachBatchHandler = async ({ batch: slice, resolveOffset }) => {
+        receivedSizes.push(slice.messages.length);
+        for (const message of slice.messages) {
+          receivedOffsets.push(message.offset);
+          resolveOffset(message.offset);
+        }
+      };
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        maxRecords: 5,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(12, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 20n, messages });
+      await runner.handleBatch(batch);
+
+      expect(receivedSizes).toEqual([5, 5, 2]);
+      expect(receivedOffsets).toEqual(messages.map((message) => message.offset));
+      // Checkpointed between the 2 slice boundaries, plus the final commit after the last slice.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not pass maxRecords into the Fetch call, leaving maxBytes/maxBytesPerPartition untouched', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async () => undefined,
+        maxRecords: 1,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      await runner.fetch('1');
+
+      // `Runner#fetch` only ever forwards the node id: `maxRecords` never reaches the Fetch
+      // request, so the wire-level `maxBytes`/`maxBytesPerPartition` configured on the consumer
+      // group (owned by `ConsumerGroup`, not `Runner`) are never altered by it.
+      expect(consumerGroup.fetch).toHaveBeenCalledWith('1');
+      expect(consumerGroup.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
 });

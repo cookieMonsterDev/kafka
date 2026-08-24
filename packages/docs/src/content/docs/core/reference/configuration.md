@@ -5,13 +5,13 @@ order: 5
 section: reference
 ---
 
-Defaults that differ from the Java client are listed once on
-[Compatibility](./compatibility/). Source:
+Defaults are product choices for this client; see [Compatibility](./compatibility/)
+for the constructor-defaults table. Source:
 [`types/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/types/index.ts).
 
 ## `KafkaConfig`
 
-| Field                       | Default         | Java / Apache                                                                                                                                                            |
+| Field                       | Default         | Notes                                                                                                                                                                    |
 | --------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `brokers`                   | required        | Bootstrap `host:port`, or `() => string[] \| Promise<string[]>`                                                                                                          |
 | `ssl`                       | off             | `true` or `tls.ConnectionOptions`. [SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/)                                                  |
@@ -36,21 +36,21 @@ See [Security](../../guides/security/).
 
 ## `ProducerConfig`
 
-| Field                    | Default                       | Java / Apache                                                                                                                                         |
-| ------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idempotent`             | `false`                       | Java 3.0+ `enable.idempotence=true`. [enable.idempotence](https://kafka.apache.org/43/configuration/producer-configs/#enable.idempotence)             |
-| `transactionalId`        |                               | [transactional.id](https://kafka.apache.org/43/configuration/producer-configs/#transactional.id)                                                      |
-| `transactionTimeout`     |                               | [transaction.timeout.ms](https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms)                                          |
-| `acks`                   | `-1`                          | [acks](https://kafka.apache.org/43/configuration/producer-configs/#acks)                                                                              |
-| `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                                      |
-| `lingerMs`               | `0`                           | Java 4.0+ `linger.ms=5`. **Next major** defaults to `5`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)           |
-| `batchSize`              | unset                         | **Next major** defaults to `16384`. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                              |
-| `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing (enabled by `throughputPreset()`)                                                 |
-| `metadataMaxAge`         | `300000`                      |                                                                                                                                                       |
-| `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                                      |
-| `maxInFlightRequests`    | unset (`null`)                | **Next major** defaults to `5`. The preset sets `5`.                                                                                                  |
-| `bufferMemory`           | unset (unlimited)             | Soft cap on linger-buffered bytes. The preset sets 32 MiB. [buffer.memory](https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory) |
-| `retry`                  | 5, or unlimited if idempotent | [retries](https://kafka.apache.org/43/configuration/producer-configs/#retries)                                                                        |
+| Field                    | Default                       | Notes                                                                                                                                                       |
+| ------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idempotent`             | `false`                       | Explicit opt-in. [enable.idempotence](https://kafka.apache.org/43/configuration/producer-configs/#enable.idempotence)                                       |
+| `transactionalId`        |                               | [transactional.id](https://kafka.apache.org/43/configuration/producer-configs/#transactional.id)                                                            |
+| `transactionTimeout`     |                               | [transaction.timeout.ms](https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms)                                                |
+| `acks`                   | `-1`                          | [acks](https://kafka.apache.org/43/configuration/producer-configs/#acks)                                                                                    |
+| `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                                            |
+| `lingerMs`               | `0`                           | Latency-first: one Produce per `send()`. **Next major** defaults to `5`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms) |
+| `batchSize`              | unset                         | **Next major** defaults to `16384`. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                    |
+| `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing (enabled by `throughputPreset()`)                                                       |
+| `metadataMaxAge`         | `300000`                      |                                                                                                                                                             |
+| `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                                            |
+| `maxInFlightRequests`    | unset (`null`)                | **Next major** defaults to `5`. The preset sets `5`.                                                                                                        |
+| `bufferMemory`           | unset (unlimited)             | Soft cap on linger-buffered bytes. The preset sets 32 MiB. [buffer.memory](https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory)       |
+| `retry`                  | 5, or unlimited if idempotent | [retries](https://kafka.apache.org/43/configuration/producer-configs/#retries)                                                                              |
 
 ## `throughputPreset()`
 
@@ -80,7 +80,7 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 
 ## `ConsumerConfig`
 
-| Field                  | Default          | Java / Apache                                                                                                                                       |
+| Field                  | Default          | Notes                                                                                                                                               |
 | ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `groupId`              | required         | [group.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.id)                                                                    |
 | `groupProtocol`        | `'classic'`      | [group.protocol](https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol). `'consumer'` opts into KIP-848 (Kafka 4.0+)           |
@@ -88,7 +88,7 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 | `rebalanceTimeout`     | `60000`          | [max.poll.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms)                                            |
 | `heartbeatInterval`    | `3000`           | [heartbeat.interval.ms](https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms). Unused when `groupProtocol: 'consumer'` |
 | `partitionAssigners`   | `[roundRobin]`   | Classic protocol only. KIP-848 uses server-side assignment                                                                                          |
-| `readUncommitted`      | `false`          | Java `isolation.level=read_uncommitted`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level)             |
+| `readUncommitted`      | `false`          | Isolation defaults to `read_committed`. [isolation.level](https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level)              |
 | `autoOffsetReset`      |                  | [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset)                                                  |
 | `rackId`               | `''`             | [client.rack](https://kafka.apache.org/43/configuration/consumer-configs/#client.rack)                                                              |
 | `groupInstanceId`      |                  | [group.instance.id](https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id)                                                  |

@@ -120,8 +120,8 @@ partition. Requires Kafka 3.0+ (WriteTxnMarkers v1+; v0 removed in 4.0). v2
 adds optional `transactionVersion` when the broker negotiates WriteTxnMarkers v2.
 
 `forceTerminateTransaction({ transactionalId, transactionTimeout? })` fences a
-single transactional producer via InitProducerId, matching Java's convenience
-wrapper around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
+single transactional producer via InitProducerId, a convenience wrapper
+around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 
 ## ACLs, SCRAM, quotas, log dirs
 
@@ -139,11 +139,11 @@ wrapper around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 and `expireDelegationToken` are keys 38–41 (Kafka 1.1+). They target the
 active controller. HMAC values are `Buffer`; issue, expiry, and max timestamps
 are `bigint`. Owner and renewer principals are `{ principalType, name }`
-(`User` + name, matching Java `KafkaPrincipal`).
+(`User` + name).
 
 `createDelegationToken({ owner })` needs CreateDelegationToken v3 (Kafka 3.3+).
-`expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately
-(Java default). Brokers must set `delegation.token.secret.key` and accept the
+`expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately.
+Brokers must set `delegation.token.secret.key` and accept the
 request over SASL; PLAINTEXT returns `DELEGATION_TOKEN_REQUEST_NOT_ALLOWED`.
 Default integration compose files do not enable tokens. Pass the returned
 `tokenId` and `hmac` as `sasl.tokenId` / `sasl.tokenHmac` on a SCRAM client to

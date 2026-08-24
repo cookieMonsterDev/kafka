@@ -13,7 +13,7 @@ import {
   waitForMessages,
   testIfKafkaAtLeast_0_11,
   testIfKafkaAtLeast_4_0,
-  testIfKafkaAtMost_3_6,
+  testIfKafkaTransactionV1,
 } from '../../helpers/index';
 
 describe('producer.transactions', () => {
@@ -168,7 +168,7 @@ describe('producer.transactions', () => {
     expect(tracker.counter.value).toBe(0);
   });
 
-  testIfKafkaAtMost_3_6('still sends AddPartitionsToTxn on brokers older than transaction V2', async () => {
+  testIfKafkaTransactionV1('still sends AddPartitionsToTxn on brokers older than transaction V2', async () => {
     const tracker = countAddPartitionsToTxnRequests();
     producer = createProducer({
       cluster: createCluster({ instrumentationEmitter: tracker.instrumentationEmitter }),

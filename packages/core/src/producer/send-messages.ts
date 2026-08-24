@@ -8,6 +8,7 @@ import type { Retrier } from '../retry/index';
 import { createTopicData } from './create-topic-data';
 import type { EosManager, EosManagerPartition } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
+import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
 
@@ -17,6 +18,8 @@ export interface SendMessagesOptions {
   partitioner: ReturnType<CustomPartitioner>;
   eosManager: EosManager;
   retrier: Retrier;
+  /** Shared across a producer's lifetime. Defaults to a fresh tracker. */
+  nodeLatencyTracker?: NodeLatencyTracker;
 }
 
 export interface SendMessagesRequest {
@@ -41,7 +44,14 @@ function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicDa
   return partitions;
 }
 
-export function createSendMessages({ logger, cluster, partitioner, eosManager, retrier }: SendMessagesOptions) {
+export function createSendMessages({
+  logger,
+  cluster,
+  partitioner,
+  eosManager,
+  retrier,
+  nodeLatencyTracker = createNodeLatencyTracker(),
+}: SendMessagesOptions) {
   return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
@@ -75,7 +85,16 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           throw new KafkaMetadataNotLoaded('Producing to topic without metadata');
         }
 
-        next.set(topic, groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner }));
+        next.set(
+          topic,
+          groupMessagesPerPartition({
+            topic,
+            partitionMetadata,
+            messages,
+            partitioner,
+            nodeLatency: nodeLatencyTracker,
+          }),
+        );
       }
 
       for (const [topic, messagesPerPartition] of next) {
@@ -142,6 +161,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           }
 
           let response;
+          const producedAt = Date.now();
           try {
             response = await broker.produce({
               transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
@@ -162,6 +182,11 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           }
 
           const expectsResponse = acks !== 0;
+          // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
+          // write, not the node's responsiveness - only record when a response was awaited.
+          if (expectsResponse && broker.nodeId != null) {
+            nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
+          }
           const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
 
           if (expectsResponse) {

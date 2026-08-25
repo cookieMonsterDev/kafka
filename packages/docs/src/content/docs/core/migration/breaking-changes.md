@@ -82,3 +82,9 @@ await kafka.consumer({ groupId }).run({
 
 See [Throughput](../../guides/throughput/) and
 [Compatibility](../../reference/compatibility/).
+
+## `JavaCompatiblePartitioner` removed
+
+`Partitioners.JavaCompatiblePartitioner` is no longer exported. It was an
+alias of `Partitioners.DefaultPartitioner` (murmur2 keyed routing). Switch
+imports to `DefaultPartitioner`.

@@ -106,7 +106,12 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
   nextOffset(topic: string, partition: number): bigint {
     const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
     if (resolvedTopic[partition] === undefined) {
-      resolvedTopic[partition] = this.#basePositions[topic]?.[partition] ?? 0n;
+      const base = this.#basePositions[topic]?.[partition];
+      // Same as OffsetManager: do not cache a fallback 0n before resolveOffsets()/seek().
+      if (base === undefined) {
+        return 0n;
+      }
+      resolvedTopic[partition] = base;
     }
 
     let offset = resolvedTopic[partition];

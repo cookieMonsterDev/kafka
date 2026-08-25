@@ -132,6 +132,17 @@ describe('consumer/offset-manager/assigned-offset-manager', () => {
       expect(manager.nextOffset('events', 0)).toBe(7n);
     });
 
+    it('does not cache a fallback 0n before resolveOffsets runs', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 99n }] }]);
+      const manager = createManager({ groupId: null, cluster: { fetchTopicsOffset } });
+
+      expect(manager.nextOffset('events', 0)).toBe(0n);
+
+      await manager.resolveOffsets();
+
+      expect(manager.nextOffset('events', 0)).toBe(99n);
+    });
+
     it('fetches ListOffsets by timestamp when autoOffsetReset is by_duration', async () => {
       const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 4n }] }]);
       const manager = createManager({

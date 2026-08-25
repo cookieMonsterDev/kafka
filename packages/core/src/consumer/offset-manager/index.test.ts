@@ -459,4 +459,22 @@ describe('consumer/offset-manager', () => {
       );
     });
   });
+
+  describe('nextOffset', () => {
+    it('does not cache a fallback 0n before committed offsets are resolved', async () => {
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 'events', partitions: [{ partition: 0, offset: 42n }] }],
+      }));
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        coordinator: { offsetFetch },
+      });
+
+      expect(offsetManager.nextOffset('events', 0)).toBe(0n);
+
+      await offsetManager.resolveOffsets();
+
+      expect(offsetManager.nextOffset('events', 0)).toBe(42n);
+    });
+  });
 });

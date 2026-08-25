@@ -113,7 +113,8 @@ describe('consumer.groupProtocol', () => {
 
     expect(firstPartitions.size).toBeGreaterThan(0);
     expect(secondPartitions.size).toBeGreaterThan(0);
-    expect(new Set([...firstPartitions, ...secondPartitions]).size).toBeGreaterThan(0);
+    expect([...firstPartitions].some((partition) => secondPartitions.has(partition))).toBe(false);
+    expect(new Set([...firstPartitions, ...secondPartitions]).size).toBe(2);
   });
 
   testIfKafkaAtLeast_4_1(

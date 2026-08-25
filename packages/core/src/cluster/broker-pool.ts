@@ -291,11 +291,16 @@ export class BrokerPool {
   }
 
   async refreshMetadataIfNecessary(topics: readonly string[]): Promise<void> {
-    const topicsReady = this.usingBootstrapControllers
-      ? true
-      : topics.every((topic) => this.metadata!.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic));
+    const metadata = this.metadata;
+    // KIP-919 controller pools have no topic metadata; skip the topic-presence check.
+    // Otherwise require a cache hit before reading `topicMetadata` — the previous
+    // `this.metadata!` form threw when connect() had not yet loaded Metadata.
+    const topicsReady =
+      this.usingBootstrapControllers ||
+      (metadata != null &&
+        topics.every((topic) => metadata.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic)));
     const shouldRefresh =
-      this.metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
+      metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
 
     if (shouldRefresh) {
       await this.refreshMetadata(topics);

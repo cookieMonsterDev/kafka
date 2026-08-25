@@ -110,7 +110,13 @@ export class OffsetManager implements OffsetManagerHandle {
   nextOffset(topic: string, partition: number): bigint {
     const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
     if (resolvedTopic[partition] === undefined) {
-      resolvedTopic[partition] = this.committedOffsets()[topic]?.[partition] ?? 0n;
+      const committed = this.committedOffsets()[topic]?.[partition];
+      // Do not cache a fallback 0n: `position()` can run after join and before the first
+      // fetch's resolveOffsets(), and a cached 0n would then pin Fetch to the log start.
+      if (committed === undefined) {
+        return 0n;
+      }
+      resolvedTopic[partition] = committed;
     }
 
     let offset = resolvedTopic[partition];

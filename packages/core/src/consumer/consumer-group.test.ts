@@ -180,7 +180,7 @@ describe('consumer/consumer-group', () => {
     expect(callOrder).toEqual(['revoked', 'assigned']);
   });
 
-  it('does not call onPartitionsRevoked/onPartitionsAssigned on the very first join (nothing was previously held)', async () => {
+  it('does not call onPartitionsRevoked on the very first join, but reports the assignment as gained', async () => {
     const joinGroup = vi.fn(async () => ({
       generationId: 1,
       leaderId: 'other-member',

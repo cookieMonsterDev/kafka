@@ -182,6 +182,44 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.brokers['2']).not.toBe(brokerPool.seedBroker);
     });
 
+    it('refreshMetadataIfNecessary loads metadata when the cache is still empty', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      const metadataResponse = {
+        brokers: [{ nodeId: 1, host: 'seed-host', port: 9092, rack: null }],
+        topicMetadata: [
+          {
+            topic: 'orders',
+            topicErrorCode: 0,
+            isInternal: false,
+            partitionMetadata: [],
+          },
+        ],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        })
+        .mockResolvedValueOnce(metadataResponse);
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => seedPool),
+        logger: silentLogger,
+      });
+      await brokerPool.connect();
+      expect(brokerPool.metadata).toBeNull();
+
+      await expect(brokerPool.refreshMetadataIfNecessary(['orders'])).resolves.toBeUndefined();
+      expect(brokerPool.metadata?.topicMetadata.map((entry) => entry.topic)).toEqual(['orders']);
+    });
+
     it('disconnects brokers no longer present in fresh metadata', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
       const staleDestroySpy = vi.fn().mockResolvedValue(undefined);

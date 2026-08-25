@@ -31,7 +31,10 @@ request handler.
 ## Subscribe
 
 `fromBeginning: true` starts at the earliest offset when the group has no
-commit. Pass `autoOffsetReset: 'none'` to throw instead. See
+commit. Pass `autoOffsetReset: 'none'` to throw instead. Pass
+`autoOffsetReset: 'by_duration:PT1H'` (KIP-1106) to start at the first offset
+at or after `now` minus that ISO-8601 duration, resolved via ListOffsets.
+See
 [auto.offset.reset](https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset).
 
 ## eachMessage vs eachBatch vs stream

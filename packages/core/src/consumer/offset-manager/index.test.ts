@@ -396,6 +396,30 @@ describe('consumer/offset-manager', () => {
       ]);
       expect(offsetManager.committedOffsets()['events']![0]).toBe(5n);
     });
+
+    it('fetches ListOffsets by timestamp when autoOffsetReset is by_duration', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 3n }] }]);
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
+      }));
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT1H' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetFetch },
+      });
+
+      await offsetManager.resolveOffsets();
+
+      const [queries] = fetchTopicsOffset.mock.calls[0] as unknown as [
+        { topic: string; partitions: { partition: number }[]; fromTimestamp: bigint }[],
+      ];
+      expect(queries).toHaveLength(1);
+      expect(queries[0]).toMatchObject({ topic: 'events', partitions: [{ partition: 0 }] });
+      expect(typeof queries[0]?.fromTimestamp).toBe('bigint');
+      expect(queries[0]?.fromTimestamp).toBeLessThan(BigInt(Date.now()));
+      expect(offsetManager.committedOffsets()['events']![0]).toBe(3n);
+    });
   });
 
   describe('setDefaultOffset', () => {
@@ -411,6 +435,28 @@ describe('consumer/offset-manager', () => {
         new KafkaNonRetriableError('Offset reset policy is none; no committed offset for topic events partition 0'),
       );
       expect(offsetCommit).not.toHaveBeenCalled();
+    });
+
+    it('commits the ListOffsets timestamp result when autoOffsetReset is by_duration', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 9n }] }]);
+      const offsetCommit = vi.fn(async () => undefined);
+      const offsetManager = createOffsetManager({
+        memberAssignment: { events: [0] },
+        topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT1H' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetCommit },
+      });
+
+      await offsetManager.setDefaultOffset({ topic: 'events', partition: 0 });
+
+      expect(fetchTopicsOffset).toHaveBeenCalledWith([
+        expect.objectContaining({ topic: 'events', partitions: [{ partition: 0 }] }),
+      ]);
+      expect(offsetCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topics: [{ topic: 'events', partitions: [{ partition: 0, offset: 9n }] }],
+        }),
+      );
     });
   });
 });

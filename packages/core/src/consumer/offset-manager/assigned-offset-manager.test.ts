@@ -132,6 +132,24 @@ describe('consumer/offset-manager/assigned-offset-manager', () => {
       expect(manager.nextOffset('events', 0)).toBe(7n);
     });
 
+    it('fetches ListOffsets by timestamp when autoOffsetReset is by_duration', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 4n }] }]);
+      const manager = createManager({
+        groupId: null,
+        topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT30M' } },
+        cluster: { fetchTopicsOffset },
+      });
+
+      await manager.resolveOffsets();
+
+      const [queries] = fetchTopicsOffset.mock.calls[0] as unknown as [
+        { topic: string; partitions: { partition: number }[]; fromTimestamp: bigint }[],
+      ];
+      expect(queries[0]).toMatchObject({ topic: 'events', partitions: [{ partition: 0 }] });
+      expect(typeof queries[0]?.fromTimestamp).toBe('bigint');
+      expect(manager.nextOffset('events', 0)).toBe(4n);
+    });
+
     it('caches the resolved position so a second call skips both RPCs', async () => {
       const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 7n }] }]);
       const manager = createManager({ groupId: null, cluster: { fetchTopicsOffset } });
@@ -257,6 +275,28 @@ describe('consumer/offset-manager/assigned-offset-manager', () => {
         groupGenerationId: -1,
         topics: [{ topic: 'events', partitions: [{ partition: 0, offset: 0n }] }],
       });
+    });
+
+    it('with a groupId, commits the ListOffsets timestamp result when autoOffsetReset is by_duration', async () => {
+      const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 6n }] }]);
+      const offsetCommit = vi.fn(async () => undefined);
+      const manager = createManager({
+        groupId: 'my-group',
+        topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT30M' } },
+        cluster: { fetchTopicsOffset },
+        coordinator: { offsetCommit },
+      });
+
+      await manager.setDefaultOffset({ topic: 'events', partition: 0 });
+
+      expect(fetchTopicsOffset).toHaveBeenCalledWith([
+        expect.objectContaining({ topic: 'events', partitions: [{ partition: 0 }] }),
+      ]);
+      expect(offsetCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topics: [{ topic: 'events', partitions: [{ partition: 0, offset: 6n }] }],
+        }),
+      );
     });
   });
 });

@@ -127,7 +127,8 @@ incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via each group coordinator on Kafka 4.0+. `admin.describeClassicGroups`
 is an alias for `admin.describeGroups` (DescribeGroups, key 15) for classic
 JoinGroup groups. `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative-sticky
+throws if there is no committed offset. `autoOffsetReset: 'by_duration:PT1H'` (KIP-1106)
+starts at the first offset at or after `now` minus that ISO-8601 duration. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
 applies to the classic group protocol. `kafka.shareConsumer()` implements

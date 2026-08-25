@@ -78,8 +78,9 @@ export interface ConsumerSubscribeTopics {
   /** When true, start from the earliest offset if the group has no committed position. */
   fromBeginning?: boolean;
   /**
-   * Offset reset policy when there is no committed offset (Java `auto.offset.reset`).
+   * Offset reset policy when there is no committed offset (`auto.offset.reset`).
    * Wins over `fromBeginning` when set. `none` throws instead of resetting.
+   * `by_duration:PT1H` (KIP-1106) seeks to the first offset at or after `now - duration`.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
@@ -89,8 +90,9 @@ export interface ConsumerSubscribeTopic {
   topic: string | RegExp;
   fromBeginning?: boolean;
   /**
-   * Offset reset policy when there is no committed offset (Java `auto.offset.reset`).
+   * Offset reset policy when there is no committed offset (`auto.offset.reset`).
    * Wins over `fromBeginning` when set. `none` throws instead of resetting.
+   * `by_duration:PT1H` (KIP-1106) seeks to the first offset at or after `now - duration`.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
@@ -121,6 +123,7 @@ export interface ConsumerOptions {
   groupInstanceId?: string;
   /**
    * Default offset reset policy for subscriptions that omit `autoOffsetReset`.
+   * `'by_duration:PT1H'` (KIP-1106) seeks to the first offset at or after `now - duration`.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
@@ -174,7 +177,8 @@ export interface Consumer {
    * Committed offsets for the given partitions, read from the group coordinator via OffsetFetch.
    * This queries the broker directly - it does not require `run()`/`stream()`/`assign()` to have
    * started. A partition with no committed offset comes back with `offset: -1n` (Kafka's wire
-   * convention for "none") and `metadata: null`, matching what the broker returns.
+   * convention for "none") and `metadata: null`. Brokers sometimes send empty metadata as `""`;
+   * that is normalized to `null`, matching `Admin.fetchOffsets`.
    *
    * This is the live-consumer counterpart to `Admin.fetchOffsets`, which stays the out-of-band
    * tool for inspecting/resetting offsets without a running consumer.
@@ -982,7 +986,7 @@ export function createConsumer({
       const offsetsByKey = new Map<string, { offset: bigint; metadata: string | null }>();
       for (const { topic, partitions } of responses) {
         for (const { partition, offset, metadata } of partitions) {
-          offsetsByKey.set(`${topic}:${partition}`, { offset, metadata: metadata ?? null });
+          offsetsByKey.set(`${topic}:${partition}`, { offset, metadata: metadata || null });
         }
       }
 

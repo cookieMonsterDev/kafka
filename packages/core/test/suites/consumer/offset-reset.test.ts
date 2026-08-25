@@ -8,6 +8,7 @@ import {
   generateMessages,
   newLogger,
   secureRandom,
+  testIfKafkaAtLeast_4_0,
   waitForConsumerToJoinGroup,
   waitForMessages,
   waitForNextEvent,
@@ -105,4 +106,32 @@ describe('consumer.offsetReset', () => {
       message: expect.stringMatching(/Offset reset policy is none/),
     });
   });
+
+  testIfKafkaAtLeast_4_0(
+    'starts at the log start when autoOffsetReset is by_duration and the timestamp is before the log',
+    async () => {
+      await producer!.connect();
+      await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 4 }) });
+
+      consumer = createConsumer({
+        cluster: createCluster(),
+        groupId,
+        maxWaitTimeInMs: 100,
+        logger: newLogger(),
+      });
+      await consumer.connect();
+      await consumer.subscribe({ topic: topicName, autoOffsetReset: 'by_duration:P10D' });
+      const consumed: EachMessagePayload[] = [];
+      const join = waitForConsumerToJoinGroup(consumer);
+      await consumer.run({
+        eachMessage: async (event) => {
+          consumed.push(event);
+        },
+      });
+      await join;
+      await waitForMessages(consumed, { number: 4 });
+      expect(consumed[0]?.message.offset).toBe(0n);
+      expect(consumed[consumed.length - 1]?.message.offset).toBe(3n);
+    },
+  );
 });

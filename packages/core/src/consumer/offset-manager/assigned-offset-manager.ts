@@ -3,7 +3,13 @@ import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { COMMIT_OFFSETS } from '../instrumentation-events';
-import { resolveAutoOffsetReset, type AutoOffsetReset, type TopicOffsetConfiguration } from '../offset-reset';
+import {
+  isByDurationReset,
+  listOffsetsQueryForReset,
+  resolveAutoOffsetReset,
+  type AutoOffsetReset,
+  type TopicOffsetConfiguration,
+} from '../offset-reset';
 import type {
   MemberAssignment,
   Offsets,
@@ -177,7 +183,7 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
     }
 
     if (this.groupId) {
-      const defaultOffset = this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
+      const defaultOffset = await this.#defaultOffsetFor(topic, partition, reset);
       const coordinator = await this.getCoordinator();
       await coordinator.offsetCommit({
         groupId: this.groupId,
@@ -303,12 +309,12 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
       );
 
       const topicsForListOffsets = unresolvedPartitions
-        .filter((t) => t.partitions.length > 0 && resetByTopic[t.topic] !== 'none')
-        .map((t) => ({
-          topic: t.topic,
-          partitions: t.partitions,
-          fromBeginning: resetByTopic[t.topic] === 'earliest',
-        }));
+        .map((t) => {
+          const reset = resetByTopic[t.topic];
+          if (t.partitions.length === 0 || reset == null) return null;
+          return listOffsetsQueryForReset(t.topic, t.partitions, reset);
+        })
+        .filter((query): query is NonNullable<typeof query> => query != null);
 
       const topicOffsets =
         topicsForListOffsets.length > 0 ? await this.cluster.fetchTopicsOffset(topicsForListOffsets) : [];
@@ -337,5 +343,19 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
 
   committedOffsets(): Record<string, Record<string, bigint>> {
     return this.#basePositions;
+  }
+
+  async #defaultOffsetFor(topic: string, partition: number, reset: AutoOffsetReset): Promise<bigint> {
+    if (isByDurationReset(reset)) {
+      const query = listOffsetsQueryForReset(topic, [{ partition }], reset);
+      const [result] = query ? await this.cluster.fetchTopicsOffset([query]) : [];
+      const offset = result?.partitions.find((entry) => entry.partition === partition)?.offset;
+      if (offset == null) {
+        throw new KafkaNonRetriableError(`No ListOffsets result for topic ${topic} partition ${partition}`);
+      }
+      return offset;
+    }
+
+    return this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
   }
 }

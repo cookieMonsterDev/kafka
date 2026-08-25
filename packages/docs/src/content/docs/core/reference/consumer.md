@@ -41,9 +41,11 @@ Apache: [consumer configs](https://kafka.apache.org/43/configuration/consumer-co
 ```ts
 await consumer.subscribe({ topics: ['events'], fromBeginning: true });
 await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
+await consumer.subscribe({ topics: ['events'], autoOffsetReset: 'by_duration:PT1H' });
 ```
 
-`autoOffsetReset` wins over `fromBeginning` when both are set.
+`autoOffsetReset` wins over `fromBeginning` when both are set. `'by_duration:PT1H'`
+(KIP-1106) starts at the first offset at or after `now` minus that ISO-8601 duration.
 
 ## `assign`
 

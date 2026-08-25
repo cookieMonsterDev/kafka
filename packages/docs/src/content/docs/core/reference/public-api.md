@@ -28,6 +28,7 @@ there is no hand-maintained `types/index.d.ts`.
 | `FeatureUpdateUpgradeTypes`                                                           | `UPGRADE`, `SAFE_DOWNGRADE`, `UNSAFE_DOWNGRADE`                                                                                                                       | [Admin](./admin/)                                          |
 | `SHARE_ACKNOWLEDGE_TYPE`, `SHARE_ACQUIRE_MODE`                                        | Share-group ack types and acquire modes                                                                                                                               | [Consumer](./consumer/#shareconsumer)                      |
 | `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                                                                                               |                                                            |
+| `METRIC_NAMES`                                                                        | OpenTelemetry / KIP-714 metric name constants                                                                                                                         | [Observability](../../guides/observability/)               |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
 Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).

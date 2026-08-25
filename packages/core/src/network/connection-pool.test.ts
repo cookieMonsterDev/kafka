@@ -20,6 +20,8 @@ describe('network/ConnectionPool', () => {
   let pools: ConnectionPool[] = [];
 
   afterEach(async () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     await Promise.all(pools.map((p) => p.destroy()));
     pools = [];
     await Promise.all(servers.map((s) => new Promise<void>((resolve) => s.close(() => resolve()))));
@@ -33,7 +35,10 @@ describe('network/ConnectionPool', () => {
       server.listen(0, '127.0.0.1', () => resolve((server.address() as net.AddressInfo).port));
     });
 
-  const createPool = (port: number): ConnectionPool => {
+  const createPool = (
+    port: number,
+    overrides: Partial<ConstructorParameters<typeof ConnectionPool>[0]> = {},
+  ): ConnectionPool => {
     const pool = new ConnectionPool({
       host: '127.0.0.1',
       port,
@@ -41,6 +46,7 @@ describe('network/ConnectionPool', () => {
       socketFactory: createDefaultSocketFactory(),
       requestTimeout: 1000,
       connectionTimeout: 1000,
+      ...overrides,
     });
     pools.push(pool);
     return pool;
@@ -122,5 +128,63 @@ describe('network/ConnectionPool', () => {
     for (const connection of pool.pool) {
       expect(connection.isConnected()).toBe(false);
     }
+  });
+
+  it('waits reconnectBackoffMs after a failed connect before retrying', async () => {
+    vi.useFakeTimers();
+    const pool = createPool(1, {
+      reconnectBackoffMs: 200,
+      reconnectBackoffMaxMs: 1000,
+      connectionTimeout: 50,
+    });
+    const connectSpy = vi
+      .spyOn(pool.pool[0]!, 'connect')
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(true);
+
+    await expect(pool.getConnection(0)).rejects.toThrow('boom');
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+
+    const retry = pool.getConnection(0);
+    await vi.advanceTimersByTimeAsync(199);
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(200);
+    await retry;
+    expect(connectSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('grows socket setup timeout after consecutive connect failures', async () => {
+    vi.useFakeTimers();
+    const pool = createPool(1, {
+      connectionTimeout: 100,
+      reconnectBackoffMs: 50,
+      reconnectBackoffMaxMs: 10_000,
+      socketConnectionSetupTimeoutMaxMs: 10_000,
+    });
+    const connectSpy = vi.spyOn(pool.pool[0]!, 'connect').mockImplementation(() => Promise.reject(new Error('boom')));
+
+    await expect(pool.getConnection(0)).rejects.toThrow('boom');
+    expect(connectSpy.mock.calls[0]?.[0]).toBe(100);
+
+    const second = pool.getConnection(0).then(
+      () => {
+        throw new Error('expected connect to fail');
+      },
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(second).resolves.toEqual(expect.objectContaining({ message: 'boom' }));
+    expect(connectSpy.mock.calls[1]?.[0]).toBe(100);
+
+    const third = pool.getConnection(0).then(
+      () => {
+        throw new Error('expected connect to fail');
+      },
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(third).resolves.toEqual(expect.objectContaining({ message: 'boom' }));
+    expect(connectSpy.mock.calls[2]?.[0]).toBe(200);
   });
 });

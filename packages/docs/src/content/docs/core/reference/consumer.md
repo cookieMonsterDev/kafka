@@ -163,6 +163,7 @@ interface ShareConsumer {
     prefetchMaxBytes?: number;
   }): Promise<void>;
   stop(): Promise<void>;
+  clientInstanceId(): Buffer | null;
   on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
   readonly events: Record<string, string>;
   logger(): Logger;

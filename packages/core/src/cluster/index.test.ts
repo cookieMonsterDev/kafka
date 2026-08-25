@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Broker } from '../broker/index';
 import { KafkaTopicMetadataNotLoaded } from '../errors';
+import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
@@ -356,6 +357,33 @@ describe('cluster/Cluster', () => {
           offlineReplicas: [3],
         },
       ]);
+    });
+  });
+
+  describe('enableMetricsPush', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not start ClientTelemetryReporter when enableMetricsPush is false', async () => {
+      const startSpy = vi.spyOn(ClientTelemetryReporter.prototype, 'start').mockImplementation(() => {});
+      const cluster = createCluster({ enableMetricsPush: false });
+      vi.spyOn(cluster.brokerPool, 'connect').mockResolvedValue(undefined);
+
+      await cluster.connect();
+
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(cluster.clientInstanceId()).toBeNull();
+    });
+
+    it('starts ClientTelemetryReporter once when enableMetricsPush is omitted', async () => {
+      const startSpy = vi.spyOn(ClientTelemetryReporter.prototype, 'start').mockImplementation(() => {});
+      const cluster = createCluster();
+      vi.spyOn(cluster.brokerPool, 'connect').mockResolvedValue(undefined);
+
+      await cluster.connect();
+
+      expect(startSpy).toHaveBeenCalledOnce();
     });
   });
 });

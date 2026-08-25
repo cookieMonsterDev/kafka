@@ -120,7 +120,9 @@ not a backlog.
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
-JoinGroup/SyncGroup remains the default membership protocol. Set
+JoinGroup/SyncGroup remains the default membership protocol. Fetch uses
+incremental **fetch sessions** (KIP-227) on Kafka 2.3+; older brokers stay
+sessionless (`sessionId = 0`). Set
 `groupProtocol: 'consumer'` (broker property `group.protocol`) to opt into KIP-848
 ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
 incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe

@@ -106,6 +106,23 @@ better fit than a high default when only some traffic is worth the extra CPU.
 await cost. The run default for `partitionsConsumedConcurrently` remains `1`
 (ordering). The preset raises it to `4`.
 
+### Fetch sessions
+
+On Kafka **2.3+** the classic consumer keeps a per-broker **fetch session**
+(KIP-227). The first Fetch to a node lists every assigned partition; later
+Fetches send only partitions that were added, removed, or whose fetch offset
+changed, plus a `sessionId` / `sessionEpoch`. Idle partitions stay in the
+broker session without being relisted, which cuts Fetch request size when a
+consumer is assigned many partitions.
+
+Kafka **0.10–2.2** brokers do not grant sessions; those Fetches keep
+`sessionId = 0` and send the full partition list every time. The share
+consumer still sends its full topic list each round (it does use
+`forgottenTopics` and resets the session epoch on session errors).
+
+There is no client config for this — it is automatic when the broker
+advertises Fetch sessions.
+
 The **next major** will change constructor defaults to `lingerMs: 5`,
 `batchSize: 16384`, and `maxInFlightRequests: 5`. This minor keeps
 `lingerMs: 0`. See [Breaking changes](../../migration/breaking-changes/).

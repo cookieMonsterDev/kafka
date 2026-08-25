@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
+import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
 import { createProducer } from '../../../src/producer/index';
 import type { EachMessagePayload, MemberAssignment } from '../../../src/consumer/types';
 import {
@@ -155,4 +156,41 @@ describe('consumer.groupProtocol', () => {
       expect(consumed.every((event) => event.topic === topicName)).toBe(true);
     },
   );
+
+  testIfKafkaAtLeast_4_0('sends groupRemoteAssignor uniform on ConsumerGroupHeartbeat', async () => {
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    first = createConsumer({
+      cluster: createCluster({ instrumentationEmitter }),
+      groupId,
+      groupProtocol: 'consumer',
+      groupRemoteAssignor: 'uniform',
+      maxWaitTimeInMs: 100,
+      rebalanceTimeout: 15_000,
+      logger: newLogger(),
+      instrumentationEmitter,
+    });
+
+    const heartbeats: unknown[] = [];
+    first.on(first.events.REQUEST, (event) => {
+      const payload = event.payload as { apiName: string };
+      if (payload.apiName === 'ConsumerGroupHeartbeat') heartbeats.push(payload);
+    });
+
+    await first.connect();
+    await first.subscribe({ topic: topicName, fromBeginning: true });
+    const consumed: EachMessagePayload[] = [];
+    const joined = waitForAssignedPartitions(first, { label: 'uniform-assignor' });
+    await first.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await joined;
+
+    expect(heartbeats.length).toBeGreaterThan(0);
+
+    await producer!.connect();
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 2 }) });
+    await waitForMessages(consumed, { number: 2 });
+  });
 });

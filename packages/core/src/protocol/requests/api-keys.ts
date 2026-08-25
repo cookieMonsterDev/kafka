@@ -58,6 +58,7 @@ export const API_KEYS = Object.freeze({
   AlterClientQuotas: 49,
   DescribeUserScramCredentials: 50,
   AlterUserScramCredentials: 51,
+  AssignReplicasToDirs: 73,
   DescribeQuorum: 55,
   UpdateFeatures: 57,
   DescribeCluster: 60,

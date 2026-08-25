@@ -20,6 +20,7 @@ import { createShareGroupsApi } from './share-groups';
 import { createTopicsApi } from './topics';
 import { createTransactionsApi } from './transactions';
 import { createUnregisterBrokerApi } from './unregister-broker';
+import { createAssignReplicasToDirsApi } from './assign-replicas-to-dirs';
 import type { Admin, AdminOptions } from './types';
 
 export type {
@@ -65,6 +66,8 @@ export type {
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  AssignReplicasToDirsOptions,
+  AssignReplicasToDirsReplica,
   TopicConfig,
   TopicOffset,
   TransactionDescription,
@@ -110,6 +113,7 @@ export function createAdmin({
   const delegationTokens = createDelegationTokensApi(context);
   const shareGroups = createShareGroupsApi(context);
   const unregisterBrokerApi = createUnregisterBrokerApi(context);
+  const assignReplicasToDirsApi = createAssignReplicasToDirsApi(context);
 
   const on = (
     eventName: AdminEventName,
@@ -157,6 +161,7 @@ export function createAdmin({
     ...metadataQuorum,
     ...raftVoters,
     ...unregisterBrokerApi,
+    ...assignReplicasToDirsApi,
     ...transactions,
     ...delegationTokens,
     ...shareGroups,

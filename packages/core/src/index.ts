@@ -184,6 +184,8 @@ export type {
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  AssignReplicasToDirsOptions,
+  AssignReplicasToDirsReplica,
   TopicConfig,
   TopicOffset,
   ConsumerGroupDescription,

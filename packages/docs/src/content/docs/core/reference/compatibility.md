@@ -172,6 +172,8 @@ validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
 implements DescribeQuorum (key 55) v0–v2 against the active controller and requires
 KRaft 3.6+. v1 adds replica timestamps (KIP-836); v2 adds directory IDs and
 node listeners (KIP-853). `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+`admin.assignReplicasToDirs` implements AssignReplicasToDirs (key 73) v0 (KIP-858)
+and assigns replicas on a broker to log directories by 16-byte directory UUID.
 `admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of
 AddRaftVoter adds optional `ackWhenCommitted` (default `true`). These controller
 RPCs require KRaft 3.7+ when the broker advertises the API. `admin.listConfigResources`

@@ -13,6 +13,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.OffsetDelete).toBe(47);
     expect(API_KEYS.DescribeUserScramCredentials).toBe(50);
     expect(API_KEYS.AlterUserScramCredentials).toBe(51);
+    expect(API_KEYS.AssignReplicasToDirs).toBe(73);
     expect(API_KEYS.DescribeQuorum).toBe(55);
     expect(API_KEYS.UpdateFeatures).toBe(57);
     expect(API_KEYS.DescribeCluster).toBe(60);

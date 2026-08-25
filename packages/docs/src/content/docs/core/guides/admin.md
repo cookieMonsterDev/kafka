@@ -160,6 +160,6 @@ active controller.
 `describeReplicaLogDirs`, and `describeClientQuotas` / `alterClientQuotas`
 cover leader election, cluster metadata, log dirs, and quotas.
 
-On KRaft clusters, `describeMetadataQuorum`, `unregisterBroker`, `addRaftVoter`,
-and `removeRaftVoter` target the active controller. Method signatures and
-version floors: [Admin API](../../reference/admin/).
+On KRaft clusters, `describeMetadataQuorum`, `unregisterBroker`,
+`assignReplicasToDirs`, `addRaftVoter`, and `removeRaftVoter` target the active
+controller. Method signatures and version floors: [Admin API](../../reference/admin/).

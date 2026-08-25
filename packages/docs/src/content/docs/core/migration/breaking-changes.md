@@ -56,19 +56,14 @@ All environment variables use a `KAFKA_*` prefix.
 `KAFKA_VERSION` / `KAFKA_EXTERNAL` / `DO_NOT_STOP` are test runner flags, not
 client config. See [Testing](../../guides/testing/).
 
-## Next major: linger, batch size, and in-flight defaults
+## Linger, batch size, and in-flight defaults
 
-This minor keeps `lingerMs: 0` (one Produce per `send()`). The **next major**
-will change constructor defaults to planned throughput-oriented values:
+Constructor defaults are throughput-oriented: `lingerMs: 5`, `batchSize: 16384`,
+and `maxInFlightRequests: 5`. Pass `lingerMs: 0` for one Produce per `send()`.
+Pass `maxInFlightRequests: null` to uncap in-flight requests.
 
-| Setting               | This minor     | Next major |
-| --------------------- | -------------- | ---------- |
-| `lingerMs`            | `0`            | `5`        |
-| `batchSize`           | unset          | `16384`    |
-| `maxInFlightRequests` | unset (`null`) | `5`        |
-
-Until that release, spread `throughputPreset()` into `kafka.producer()` and
-`consumer.run()`:
+`throughputPreset()` still adds the sticky partitioner, a 32 MiB `bufferMemory`,
+and `partitionsConsumedConcurrently: 4` on `run()`:
 
 ```ts
 import { throughputPreset } from '@cookiemonsterdev/kafka-core';
@@ -85,8 +80,11 @@ await kafka.consumer({ groupId }).run({
 });
 ```
 
-That sets linger 5, `batchSize` 16384, sticky partitioner,
-`maxInFlightRequests` 5, and `partitionsConsumedConcurrently: 4`.
-`eachBatch` plus that concurrency is the heavy-load consume API. See
-[Throughput](../../guides/throughput/) and
+See [Throughput](../../guides/throughput/) and
 [Compatibility](../../reference/compatibility/).
+
+## `JavaCompatiblePartitioner` removed
+
+`Partitioners.JavaCompatiblePartitioner` is no longer exported. It was an
+alias of `Partitioners.DefaultPartitioner` (murmur2 keyed routing). Switch
+imports to `DefaultPartitioner`.

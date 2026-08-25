@@ -63,6 +63,8 @@ export interface ProduceRequestOptions {
   producerId?: bigint;
   producerEpoch?: number;
   compression?: CompressionType;
+  /** Passed to the active codec, when it honors one. @see EncodeRecordBatchOptions.compressionLevel */
+  compressionLevel?: number;
   topicData: ProduceTopicData[];
 }
 
@@ -85,10 +87,17 @@ async function encodePartition(
   { partition, firstSequence = 0, messages }: ProducePartitionData,
   {
     compression,
+    compressionLevel,
     transactionalId,
     producerId,
     producerEpoch,
-  }: { compression: CompressionType; transactionalId?: string | null; producerId?: bigint; producerEpoch?: number },
+  }: {
+    compression: CompressionType;
+    compressionLevel?: number;
+    transactionalId?: string | null;
+    producerId?: bigint;
+    producerEpoch?: number;
+  },
 ): Promise<{ partition: number; recordSet: Buffer }> {
   const dateNow = Date.now();
   let firstTimestamp = dateNow;
@@ -116,6 +125,7 @@ async function encodePartition(
 
   const recordBatch = await encodeRecordBatch({
     compression,
+    compressionLevel,
     firstTimestamp,
     maxTimestamp,
     producerId,
@@ -186,6 +196,7 @@ async function encodeTopicPartitions(
   partitions: ProducePartitionData[],
   options: {
     compression: CompressionType;
+    compressionLevel?: number;
     transactionalId?: string | null;
     producerId?: bigint;
     producerEpoch?: number;
@@ -202,9 +213,9 @@ async function encodeTopicPartitions(
  * topic name with a topic UUID (KIP-516).
  */
 export function createProduceRequest(apiVersion: number, options: ProduceRequestOptions): RequestDefinition {
-  const { acks, timeout, transactionalId = null, producerId, producerEpoch, topicData } = options;
+  const { acks, timeout, transactionalId = null, producerId, producerEpoch, compressionLevel, topicData } = options;
   const compression = options.compression ?? COMPRESSION_TYPES.None;
-  const partitionOptions = { compression, transactionalId, producerId, producerEpoch };
+  const partitionOptions = { compression, compressionLevel, transactionalId, producerId, producerEpoch };
   const schema = apiVersion >= 9 ? flexibleRequestBodySchema : requestBodySchema;
 
   return {

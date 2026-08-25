@@ -7,9 +7,13 @@ import {
   KafkaMetadataNotLoaded,
   KafkaTopicMetadataNotLoaded,
 } from '../errors';
+import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { ProduceMetrics } from '../instrumentation/metrics';
+import { TelemetrySnapshot } from '../instrumentation/telemetry-snapshot';
 import type { Logger } from '../loggers/index';
 import type { ConnectionOptions } from '../network/connection';
+import type { ClientDnsLookup } from '../network/dns-lookup';
 import type { SocketFactory } from '../network/socket-factory';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types';
@@ -71,6 +75,21 @@ export interface ClusterOptions {
   isolationLevel?: IsolationLevel;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   offsets?: CommittedOffsetsByGroup;
+  /**
+   * KIP-919: bootstrap from controller endpoints via DescribeCluster instead of Metadata.
+   * Admin-only; producer and consumer always discover brokers.
+   */
+  usingBootstrapControllers?: boolean;
+  connectionsMaxIdleMs?: number;
+  clientDnsLookup?: ClientDnsLookup;
+  socketConnectionSetupTimeoutMaxMs?: number;
+  reconnectBackoffMs?: number;
+  reconnectBackoffMaxMs?: number;
+  /**
+   * KIP-714: push client metrics to the broker when it advertises GetTelemetrySubscriptions.
+   * Default true. Brokers without API 71 disable the pusher automatically.
+   */
+  enableMetricsPush?: boolean;
 }
 
 /**
@@ -95,6 +114,7 @@ export class Cluster {
   readonly #refreshMetadata: () => Promise<void>;
   readonly #refreshMetadataIfNecessary: () => Promise<void>;
   readonly #findControllerBroker: () => Promise<Broker>;
+  readonly #telemetry: ClientTelemetryReporter | null;
 
   constructor({
     logger: rootLogger,
@@ -116,6 +136,13 @@ export class Cluster {
     isolationLevel,
     instrumentationEmitter = null,
     offsets = new Map(),
+    usingBootstrapControllers = false,
+    connectionsMaxIdleMs,
+    clientDnsLookup,
+    socketConnectionSetupTimeoutMaxMs,
+    reconnectBackoffMs,
+    reconnectBackoffMaxMs,
+    enableMetricsPush = true,
   }: ClusterOptions) {
     this.rootLogger = rootLogger;
     this.logger = rootLogger.namespace('Cluster');
@@ -134,6 +161,11 @@ export class Cluster {
       enforceRequestTimeout,
       maxInFlightRequests,
       reauthenticationThreshold,
+      connectionsMaxIdleMs,
+      clientDnsLookup,
+      socketConnectionSetupTimeoutMaxMs,
+      reconnectBackoffMs,
+      reconnectBackoffMaxMs,
     });
 
     this.targetTopics = new Set();
@@ -148,11 +180,25 @@ export class Cluster {
       authenticationTimeout,
       metadataMaxAge,
       metadataRecovery,
+      usingBootstrapControllers,
     });
     this.committedOffsetsByGroup = offsets;
 
+    const snapshot = new TelemetrySnapshot();
+    if (instrumentationEmitter) snapshot.bind(instrumentationEmitter);
+    this.#telemetry =
+      enableMetricsPush === false
+        ? null
+        : new ClientTelemetryReporter({
+            getBroker: () => this.brokerPool.findConnectedBroker(),
+            logger: this.rootLogger,
+            clientId,
+            snapshot,
+          });
+
     this.#connect = sharedPromiseTo(async () => {
       await this.brokerPool.connect();
+      this.#telemetry?.start();
     });
 
     this.#refreshMetadata = sharedPromiseTo(async () => {
@@ -208,7 +254,17 @@ export class Cluster {
   }
 
   async disconnect(): Promise<void> {
+    await this.#telemetry?.stop();
     await this.brokerPool.disconnect();
+  }
+
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one. */
+  clientInstanceId(): Buffer | null {
+    return this.#telemetry?.clientInstanceId() ?? null;
+  }
+
+  recordProduceMetrics(metrics: ProduceMetrics): void {
+    this.#telemetry?.recordProduce(metrics);
   }
 
   removeBroker({ host, port }: { host: string; port: number }): void {
@@ -231,11 +287,17 @@ export class Cluster {
     await this.#refreshMetadataIfNecessary();
   }
 
-  async metadata(options: { topics?: readonly string[] } = {}): Promise<ClusterMetadata | null> {
+  async metadata(
+    options: { topics?: readonly string[]; forceRefresh?: boolean } = {},
+  ): Promise<ClusterMetadata | null> {
     const topics = options.topics ?? [];
     return this.retrier(async (bail) => {
       try {
-        await this.brokerPool.refreshMetadataIfNecessary([...topics]);
+        if (options.forceRefresh) {
+          await this.brokerPool.refreshMetadata([...topics]);
+        } else {
+          await this.brokerPool.refreshMetadataIfNecessary([...topics]);
+        }
         return await this.brokerPool.withBroker(async ({ broker }) => broker.metadata([...topics]));
       } catch (e) {
         const error = e as Error & { type?: string };
@@ -516,6 +578,46 @@ export class Cluster {
     committedOffsets[topic] = committedOffsets[topic] ?? {};
     committedOffsets[topic][partition] = offset;
   }
+
+  /**
+   * Topic names from a Metadata request with an empty topic list (all topics the broker
+   * is willing to describe). Connects if needed.
+   */
+  async listTopics(): Promise<string[]> {
+    await this.connect();
+    const metadata = await this.metadata({ topics: [] });
+    if (!metadata) {
+      throw new KafkaMetadataNotLoaded('Topic metadata not loaded');
+    }
+    return metadata.topicMetadata.flatMap((topic) => (topic.topic == null ? [] : [topic.topic]));
+  }
+
+  /**
+   * Partition map for `topic` from cached cluster metadata, refreshing if stale.
+   * Connects and adds the topic to the refresh set if needed.
+   */
+  async partitionsFor(topic: string): Promise<TopicPartitionInfo[]> {
+    await this.connect();
+    await this.addTargetTopic(topic);
+    return this.findTopicPartitionMetadata(topic).map((partition) => ({
+      topic,
+      partitionId: partition.partitionId,
+      leader: partition.leader,
+      replicas: [...partition.replicas],
+      isr: [...partition.isr],
+      offlineReplicas: [...(partition.offlineReplicas ?? [])],
+    }));
+  }
+}
+
+/** Public partition description returned by {@link Cluster.partitionsFor}. */
+export interface TopicPartitionInfo {
+  topic: string;
+  partitionId: number;
+  leader: number;
+  replicas: number[];
+  isr: number[];
+  offlineReplicas: number[];
 }
 
 export type { MetadataBroker, PartitionMetadata };

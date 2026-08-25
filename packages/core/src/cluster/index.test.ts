@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Broker } from '../broker/index';
 import { KafkaTopicMetadataNotLoaded } from '../errors';
+import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
@@ -303,6 +304,86 @@ describe('cluster/Cluster', () => {
       vi.spyOn(cluster.brokerPool, 'findBroker').mockResolvedValue(broker);
 
       await expect(cluster.findBroker({ nodeId: '1' })).resolves.toBe(broker);
+    });
+  });
+
+  describe('listTopics / partitionsFor', () => {
+    it('listTopics returns named topics from a full metadata fetch', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster, 'connect').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'metadata').mockResolvedValue(
+        fakeMetadata({
+          topicMetadata: [
+            { topicErrorCode: 0, topic: 'orders', isInternal: false, partitionMetadata: [] },
+            { topicErrorCode: 0, topic: null, isInternal: true, partitionMetadata: [] },
+          ],
+        }),
+      );
+
+      await expect(cluster.listTopics()).resolves.toEqual(['orders']);
+    });
+
+    it('partitionsFor maps cached partition metadata after adding the topic', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster, 'connect').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'addTargetTopic').mockResolvedValue(undefined);
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [
+          {
+            topicErrorCode: 0,
+            topic: 'orders',
+            isInternal: false,
+            partitionMetadata: [
+              {
+                partitionErrorCode: 0,
+                partitionId: 1,
+                leader: 2,
+                replicas: [2, 3],
+                isr: [2],
+                offlineReplicas: [3],
+              },
+            ],
+          },
+        ],
+      });
+
+      await expect(cluster.partitionsFor('orders')).resolves.toEqual([
+        {
+          topic: 'orders',
+          partitionId: 1,
+          leader: 2,
+          replicas: [2, 3],
+          isr: [2],
+          offlineReplicas: [3],
+        },
+      ]);
+    });
+  });
+
+  describe('enableMetricsPush', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('does not start ClientTelemetryReporter when enableMetricsPush is false', async () => {
+      const startSpy = vi.spyOn(ClientTelemetryReporter.prototype, 'start').mockImplementation(() => {});
+      const cluster = createCluster({ enableMetricsPush: false });
+      vi.spyOn(cluster.brokerPool, 'connect').mockResolvedValue(undefined);
+
+      await cluster.connect();
+
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(cluster.clientInstanceId()).toBeNull();
+    });
+
+    it('starts ClientTelemetryReporter once when enableMetricsPush is omitted', async () => {
+      const startSpy = vi.spyOn(ClientTelemetryReporter.prototype, 'start').mockImplementation(() => {});
+      const cluster = createCluster();
+      vi.spyOn(cluster.brokerPool, 'connect').mockResolvedValue(undefined);
+
+      await cluster.connect();
+
+      expect(startSpy).toHaveBeenCalledOnce();
     });
   });
 });

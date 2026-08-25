@@ -45,17 +45,18 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 ## Constructor defaults
 
-These defaults are product choices, kept on purpose for this minor.
+These defaults are product choices.
 
-| Setting               | This client                                                                                                                                                                                              |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                                                       |
-| `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                                                         |
-| `lingerMs`            | `0` (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
-| `maxInFlightRequests` | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                            |
-| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`)                            |
-| Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                          |
-| Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                             |
+| Setting               | This client                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                            |
+| `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                              |
+| `lingerMs`            | `5`; pass `0` for one Produce per `send()`                                                                                                                                    |
+| `batchSize`           | `16384`; pass `0` to not batch by size                                                                                                                                        |
+| `maxInFlightRequests` | `5` on the producer; pass `null` to uncap. Consumer/admin connections stay uncapped unless set                                                                                |
+| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`) |
+| Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                               |
+| Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                  |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/) for
@@ -87,30 +88,17 @@ await kafka.consumer({ groupId: 'load' }).run({
 });
 ```
 
-`producer` sets `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`,
-the sticky partitioner, and a 32 MiB `bufferMemory`. `consumer` sets
+`producer` sets the sticky partitioner and a 32 MiB `bufferMemory`. Linger,
+batch size, and in-flight caps are already constructor defaults (`lingerMs: 5`,
+`batchSize: 16384`, `maxInFlightRequests: 5`). `consumer` sets
 `partitionsConsumedConcurrently: 4` on `run()` (not on `kafka.consumer()`).
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume
-API. Set `lingerMs` if you are not using the preset. Compression: GZIP and
+API. Pass `lingerMs: 0` for one Produce per `send()`. Compression: GZIP and
 ZSTD already use the zlib threadpool; Snappy and LZ4 are off-thread as well
 (optional native packages if installed).
 
 Full walkthrough: [Throughput](../../guides/throughput/).
-
-## Next major defaults
-
-The **next major** will change these constructor defaults to planned
-throughput-oriented values. This minor does **not** flip them.
-
-| Setting               | This minor                      | Next major |
-| --------------------- | ------------------------------- | ---------- |
-| `lingerMs`            | `0`                             | `5`        |
-| `batchSize`           | unset (no size flush by itself) | `16384`    |
-| `maxInFlightRequests` | unset (`null`, uncapped)        | `5`        |
-
-Use `throughputPreset()` until then. `flush()` remains. See
-[Breaking changes](../../migration/breaking-changes/).
 
 ## Implemented surface
 
@@ -120,14 +108,17 @@ not a backlog.
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
-JoinGroup/SyncGroup remains the default membership protocol. Set
+JoinGroup/SyncGroup remains the default membership protocol. Fetch uses
+incremental **fetch sessions** (KIP-227) on Kafka 2.3+; older brokers stay
+sessionless (`sessionId = 0`). Set
 `groupProtocol: 'consumer'` (broker property `group.protocol`) to opt into KIP-848
 ConsumerGroupHeartbeat on Kafka 4.0+; assignment is server-side and
 incremental. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via each group coordinator on Kafka 4.0+. `admin.describeClassicGroups`
 is an alias for `admin.describeGroups` (DescribeGroups, key 15) for classic
 JoinGroup groups. `fromBeginning` is boolean (earliest vs latest). `autoOffsetReset: 'none'`
-is supported and throws if there is no committed offset. Cooperative-sticky
+throws if there is no committed offset. `autoOffsetReset: 'by_duration:PT1H'` (KIP-1106)
+starts at the first offset at or after `now` minus that ISO-8601 duration. Cooperative-sticky
 uses KIP-429 incremental revoke semantics and performs the follow-up generation
 needed to settle partitions that move between members. This assignor support
 applies to the classic group protocol. `kafka.shareConsumer()` implements
@@ -171,6 +162,8 @@ validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
 implements DescribeQuorum (key 55) v0–v2 against the active controller and requires
 KRaft 3.6+. v1 adds replica timestamps (KIP-836); v2 adds directory IDs and
 node listeners (KIP-853). `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+`admin.assignReplicasToDirs` implements AssignReplicasToDirs (key 73) v0 (KIP-858)
+and assigns replicas on a broker to log directories by 16-byte directory UUID.
 `admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of
 AddRaftVoter adds optional `ackWhenCommitted` (default `true`). These controller
 RPCs require KRaft 3.7+ when the broker advertises the API. `admin.listConfigResources`
@@ -209,14 +202,6 @@ client APIs and are omitted here.
 `alterStreamsGroupOffsets`, `deleteStreamsGroupOffsets`, or
 `deleteStreamsGroups`.
 
-**Client telemetry (KIP-714).** No GetTelemetrySubscriptions (71) or
-PushTelemetry (72). There is no `clientInstanceId()` or `metrics()`. Java's
-deprecated `listClientMetricsResources` is covered by
-`admin.listConfigResources` (v0 lists client-metrics names).
-
-**Consumer shape.** Membership is `run()` / `stream()`, not Java `poll()`.
-The `Consumer` interface has no `assign()`, `unsubscribe()`, `assignment()`,
-or `committed()`.
-
-Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
+**Consumer shape.** Membership is `run()` / `stream()`, not a blocking `poll()`
+loop. Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
 [Breaking changes](../../migration/breaking-changes/).

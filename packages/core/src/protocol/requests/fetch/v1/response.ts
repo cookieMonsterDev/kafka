@@ -2,7 +2,7 @@ import { Decoder } from '../../../decoder';
 import { decodeMessageSet } from '../../../message-set/decoder';
 import type { ResponseDefinition } from '../../../schema';
 import type { DecodedMessageSetRecord } from '../../../message-set/decoder';
-import { parseFetchResponse, readTopicName } from '../shared';
+import { parseFetchResponse, readTopicName, type FetchRequestOptions } from '../shared';
 
 export interface FetchPartitionResponseV1 {
   partition: number;
@@ -21,17 +21,20 @@ export interface FetchResponseV1Body {
   responses: FetchTopicResponseV1[];
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV1> {
-  return {
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV1> => ({
     partition: decoder.readInt32(),
     errorCode: decoder.readInt16(),
     highWatermark: decoder.readInt64(),
-    messages: await decodeMessageSet(decoder),
-  };
+    messages: await decodeMessageSet(decoder, undefined, checkCrcs),
+  });
 }
 
-async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponseV1> {
-  return { topicName: readTopicName(decoder), partitions: await decoder.readArrayAsync(decodePartition) };
+function decodeTopicResponse(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchTopicResponseV1> => ({
+    topicName: readTopicName(decoder),
+    partitions: await decoder.readArrayAsync(decodePartition(checkCrcs)),
+  });
 }
 
 /**
@@ -46,12 +49,16 @@ async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponse
  *         high_watermark => INT64
  *       record_set => RECORDS
  */
-export const fetchResponseV1: ResponseDefinition<FetchResponseV1Body> = {
-  decode: async (rawData) => {
-    const decoder = new Decoder(rawData);
-    const throttleTime = decoder.readInt32();
-    const responses = await decoder.readArrayAsync(decodeTopicResponse);
-    return { throttleTime, responses };
-  },
-  parse: parseFetchResponse,
-};
+export function fetchResponseV1(
+  options: Pick<FetchRequestOptions, 'checkCrcs'> = {},
+): ResponseDefinition<FetchResponseV1Body> {
+  return {
+    decode: async (rawData) => {
+      const decoder = new Decoder(rawData);
+      const throttleTime = decoder.readInt32();
+      const responses = await decoder.readArrayAsync(decodeTopicResponse(options.checkCrcs));
+      return { throttleTime, responses };
+    },
+    parse: parseFetchResponse,
+  };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DefaultPartitioner, JavaCompatiblePartitioner, LegacyPartitioner, StickyPartitioner } from './index';
+import { DefaultPartitioner, LegacyPartitioner, StickyPartitioner } from './index';
 
 describe('producer/partitioners', () => {
   it('exposes the default, legacy, and sticky partitioners', () => {
@@ -8,9 +8,5 @@ describe('producer/partitioners', () => {
     expect(StickyPartitioner).toBeTypeOf('function');
     expect(LegacyPartitioner).not.toBe(DefaultPartitioner);
     expect(StickyPartitioner).not.toBe(DefaultPartitioner);
-  });
-
-  it('keeps JavaCompatiblePartitioner as an alias of DefaultPartitioner', () => {
-    expect(JavaCompatiblePartitioner).toBe(DefaultPartitioner);
   });
 });

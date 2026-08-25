@@ -29,6 +29,13 @@ export interface ProducerRecord {
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
+  /**
+   * Passed to the active codec, when it honors one: GZIP maps it to zlib's `level` (0-9); ZSTD
+   * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
+   * compression-level concept in this client's codecs and ignore it.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   */
+  compressionLevel?: number;
 }
 
 /** Multi-topic produce request. */
@@ -40,6 +47,8 @@ export interface ProducerBatch {
   acks?: number;
   timeout?: number;
   compression?: CompressionType;
+  /** @see ProducerRecord.compressionLevel */
+  compressionLevel?: number;
   topicMessages?: readonly TopicMessages[];
 }
 
@@ -82,3 +91,42 @@ export interface Partitioner {
 }
 
 export type CustomPartitioner = () => Partitioner;
+
+/**
+ * Payload for {@link ProducerHooks.onSend}. Fires once per `send()`/`sendBatch()` call - not per
+ * message and not per physical Produce request sent to a broker (a call may be split across
+ * several broker requests, or coalesced with other calls under `lingerMs`). `topicMessages` is
+ * the merged, post-validation view of what that one call is about to hand off.
+ */
+export interface ProducerSendHookEvent {
+  topicMessages: readonly TopicMessages[];
+  acks: number;
+  timeout: number;
+  compression?: CompressionType;
+}
+
+/**
+ * Payload for {@link ProducerHooks.onAck}. Fires once per `send()`/`sendBatch()` call, after that
+ * call settles: `metadata` is set on success (mirrors the call's resolved value), `error` is set
+ * if the call rejected. Exactly one of the two is present.
+ */
+export interface ProducerAckHookEvent extends ProducerSendHookEvent {
+  metadata?: RecordMetadata[];
+  error?: unknown;
+}
+
+export type ProducerSendHook = (event: ProducerSendHookEvent) => void | Promise<void>;
+export type ProducerAckHook = (event: ProducerAckHookEvent) => void | Promise<void>;
+
+/**
+ * User-supplied hooks for a producer's send path. These are plain ordered async callbacks, not
+ * an interceptor SPI: each array runs in registration order, one hook is always awaited before
+ * the next starts, and a hook that throws is caught and logged - it never fails or alters the
+ * underlying `send()`/`sendBatch()` outcome.
+ */
+export interface ProducerHooks {
+  /** Before the record(s) are dispatched to a broker (or enqueued, if `lingerMs > 0`). */
+  onSend?: readonly ProducerSendHook[];
+  /** After the call settles: `metadata` on success, `error` on failure. */
+  onAck?: readonly ProducerAckHook[];
+}

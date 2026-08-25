@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KafkaPartialMessageError, KafkaUnsupportedMagicByteInMessageSet } from '../../errors';
+import { KafkaCorruptRecordError, KafkaPartialMessageError, KafkaUnsupportedMagicByteInMessageSet } from '../../errors';
 import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import { COMPRESSION_TYPES } from '../compression/index';
@@ -114,5 +114,27 @@ describe('protocol/message/decoder', () => {
     const payload = new Encoder().writeInt32(0).writeInt8(2).writeInt8(0).writeBytes(null).writeBytes(null);
     const decoder = new Decoder(payload.buffer);
     expect(() => decodeMessage(0n, payload.buffer.length, decoder)).toThrow(KafkaUnsupportedMagicByteInMessageSet);
+  });
+
+  describe('checkCrcs', () => {
+    it('defaults to true and rejects a message whose CRC does not match its bytes', () => {
+      const encoded = encodeMessageV0({ key: Buffer.from('k'), value: Buffer.from('hello') });
+      const corrupted = Buffer.from(encoded.buffer);
+      // Flip a byte inside the value, well after the CRC field.
+      corrupted[corrupted.length - 1] = (corrupted[corrupted.length - 1] as number) ^ 0xff;
+
+      const decoder = new Decoder(corrupted);
+      expect(() => decodeMessage(0n, corrupted.length, decoder)).toThrow(KafkaCorruptRecordError);
+    });
+
+    it('checkCrcs: false skips the check and decodes the corrupted message anyway', () => {
+      const encoded = encodeMessageV0({ key: Buffer.from('k'), value: Buffer.from('hello') });
+      const corrupted = Buffer.from(encoded.buffer);
+      corrupted[corrupted.length - 1] = (corrupted[corrupted.length - 1] as number) ^ 0xff;
+
+      const decoder = new Decoder(corrupted);
+      const decoded = decodeMessage(0n, corrupted.length, decoder, false);
+      expect(decoded.value).not.toEqual(Buffer.from('hello'));
+    });
   });
 });

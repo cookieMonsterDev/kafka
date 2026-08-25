@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { InstrumentationEvent } from '../instrumentation/event';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
+import { ACKNOWLEDGE, FETCH, FETCH_START, type ShareAcknowledgePayload } from './instrumentation-events';
 import type { ShareGroup } from './share-group';
 import { ShareRunner } from './share-runner';
 
@@ -324,5 +327,173 @@ describe('share-consumer/share-runner', () => {
     expect(shareFetch.mock.calls[0]?.[0]?.shareSessionEpoch).toBe(0);
     expect(shareFetch.mock.calls[1]?.[0]?.shareSessionEpoch).toBe(1);
     expect(shareFetch.mock.calls[2]?.[0]?.shareSessionEpoch).toBe(0);
+  });
+
+  it('emits FETCH_START and FETCH around each fetch round', async () => {
+    const { shareGroup } = createShareGroup();
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const fetchStarts: unknown[] = [];
+    const fetches: unknown[] = [];
+    instrumentationEmitter.addListener(FETCH_START, (event: InstrumentationEvent<unknown>) => {
+      fetchStarts.push(event.payload);
+    });
+    instrumentationEmitter.addListener(FETCH, (event: InstrumentationEvent<unknown>) => {
+      fetches.push(event.payload);
+    });
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      instrumentationEmitter,
+      eachMessage: async () => {
+        runner.shuttingDown = true;
+      },
+      onCrash: vi.fn(),
+    });
+
+    await runner.start();
+    await vi.waitFor(() => expect(fetches.length).toBeGreaterThan(0));
+    await runner.stop();
+
+    expect(fetchStarts[0]).toEqual({ nodeId: '1' });
+    expect(fetches[0]).toEqual(
+      expect.objectContaining({ nodeId: '1', numberOfBatches: expect.any(Number), duration: expect.any(Number) }),
+    );
+  });
+
+  it('emits ACKNOWLEDGE with the acknowledged offsets and type once a fetch piggybacks them', async () => {
+    // The ack for a record acquired on fetch #1 is only sent piggybacked on fetch #2's request
+    // (there is no standalone ShareAcknowledge on the happy path) - so respond with the record
+    // once, then empty responses, and only stop once that piggybacked ACKNOWLEDGE is observed.
+    const shareFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        errorCode: 0,
+        responses: [
+          {
+            topicId: TOPIC_ID,
+            partitions: [
+              {
+                partitionIndex: 0,
+                errorCode: 0,
+                records: [
+                  {
+                    magicByte: 2,
+                    attributes: 0,
+                    timestamp: 1n,
+                    offset: 10n,
+                    key: Buffer.from('k'),
+                    value: Buffer.from('v'),
+                    headers: {},
+                    isControlRecord: false,
+                    batchContext: BATCH_CONTEXT,
+                  },
+                ],
+                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
+              },
+            ],
+          },
+        ],
+      })
+      .mockResolvedValue({ errorCode: 0, responses: [] });
+    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
+    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker,
+      },
+    });
+
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const acks: ShareAcknowledgePayload[] = [];
+    instrumentationEmitter.addListener(ACKNOWLEDGE, (event: InstrumentationEvent<unknown>) => {
+      acks.push(event.payload as ShareAcknowledgePayload);
+    });
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      instrumentationEmitter,
+      eachMessage: async ({ message }) => {
+        expect(message.offset).toBe(10n);
+      },
+      onCrash: vi.fn(),
+    });
+
+    await runner.start();
+    await vi.waitFor(() => expect(acks.length).toBeGreaterThan(0));
+    runner.shuttingDown = true;
+    await runner.stop();
+
+    expect(acks[0]).toEqual({
+      groupId: 'share-1',
+      memberId: 'member-1',
+      nodeId: '1',
+      topics: [
+        {
+          topic: 'events',
+          partitions: [
+            { partition: 0, firstOffset: 10n, lastOffset: 10n, acknowledgeType: SHARE_ACKNOWLEDGE_TYPE.ACCEPT },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('emits ACKNOWLEDGE for the explicit ShareAcknowledge sent when a share session closes', async () => {
+    // Mirrors the "fetches acquired records..." scenario: `eachMessage` shuts the runner down
+    // synchronously as it handles the record, so the ACCEPT ack is queued but the runner never
+    // gets another fetch round to piggyback it on - it is only flushed by `stop()`'s explicit
+    // ShareAcknowledge (close-session) call.
+    const { shareGroup, shareAcknowledge } = createShareGroup();
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const acks: ShareAcknowledgePayload[] = [];
+    instrumentationEmitter.addListener(ACKNOWLEDGE, (event: InstrumentationEvent<unknown>) => {
+      acks.push(event.payload as ShareAcknowledgePayload);
+    });
+
+    const handled: bigint[] = [];
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 50,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      instrumentationEmitter,
+      eachMessage: async ({ message }) => {
+        handled.push(message.offset);
+        runner.shuttingDown = true;
+      },
+      onCrash: vi.fn(),
+    });
+
+    await runner.start();
+    await vi.waitFor(() => expect(handled).toEqual([10n]));
+    await runner.stop();
+
+    expect(shareAcknowledge).toHaveBeenCalled();
+    expect(acks).toEqual([
+      {
+        groupId: 'share-1',
+        memberId: 'member-1',
+        nodeId: '1',
+        topics: [
+          {
+            topic: 'events',
+            partitions: [
+              { partition: 0, firstOffset: 10n, lastOffset: 10n, acknowledgeType: SHARE_ACKNOWLEDGE_TYPE.ACCEPT },
+            ],
+          },
+        ],
+      },
+    ]);
   });
 });

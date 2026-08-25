@@ -5,6 +5,7 @@ import type { CompressionType } from '../protocol/compression/index';
 import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier } from '../retry/index';
+import type { MetricsRecorder } from '../instrumentation/metrics';
 import { createTopicData } from './create-topic-data';
 import type { EosManager, EosManagerPartition } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
@@ -20,6 +21,7 @@ export interface SendMessagesOptions {
   retrier: Retrier;
   /** Shared across a producer's lifetime. Defaults to a fresh tracker. */
   nodeLatencyTracker?: NodeLatencyTracker;
+  metrics?: MetricsRecorder | null;
 }
 
 export interface SendMessagesRequest {
@@ -27,11 +29,30 @@ export interface SendMessagesRequest {
   acks: number;
   timeout: number;
   compression?: CompressionType;
+  compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
 }
 
 function partitionKey(topic: string, partition: number): string {
   return `${topic}\0${partition}`;
+}
+
+function payloadBytes(value: Message['key'] | Message['value']): number {
+  if (value == null) return 0;
+  if (Buffer.isBuffer(value)) return value.byteLength;
+  return Buffer.byteLength(String(value));
+}
+
+function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: number; bytes: number } {
+  let records = 0;
+  let bytes = 0;
+  for (const { messages } of topicMessages) {
+    for (const message of messages) {
+      records += 1;
+      bytes += payloadBytes(message.key) + payloadBytes(message.value);
+    }
+  }
+  return { records, bytes };
 }
 
 function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicData>): EosManagerPartition[] {
@@ -51,11 +72,19 @@ export function createSendMessages({
   eosManager,
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
+  metrics,
 }: SendMessagesOptions) {
-  return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
+  return ({
+    acks,
+    timeout,
+    compression,
+    compressionLevel,
+    topicMessages,
+  }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
+    const produceSize = topicMessagesSize(topicMessages);
 
     function collectResponse(): RecordMetadata[] {
       if (acks === 0) return [];
@@ -170,6 +199,7 @@ export function createSendMessages({
               acks,
               timeout,
               compression,
+              compressionLevel,
               topicData,
             });
           } catch (e) {
@@ -215,7 +245,10 @@ export function createSendMessages({
         const results = await Promise.allSettled(requests);
         const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
         if (rejection) throw rejection.reason;
-        return collectResponse();
+        const collected = collectResponse();
+        metrics?.recordProduce({ ...produceSize, retries: retryCount });
+        cluster.recordProduceMetrics?.({ ...produceSize, retries: retryCount });
+        return collected;
       } catch (e) {
         const error = e as Error & {
           name: string;

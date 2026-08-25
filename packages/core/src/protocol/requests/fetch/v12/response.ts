@@ -5,6 +5,7 @@ import {
   parseFetchResponse,
   readFetchPartitionTaggedFields,
   readFetchResponseNodeEndpoints,
+  type FetchRequestOptions,
 } from '../shared';
 import type { FetchPartitionResponseV11, FetchResponseV11Body, FetchTopicResponseV11 } from '../v11/response';
 
@@ -21,40 +22,44 @@ async function readCompactArrayAsync<T>(decoder: Decoder, reader: (d: Decoder) =
   return values;
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV12> {
-  const partition = decoder.readInt32();
-  const errorCode = decoder.readInt16();
-  const highWatermark = decoder.readInt64();
-  const lastStableOffset = decoder.readInt64();
-  const logStartOffset = decoder.readInt64();
-  const abortedTransactions =
-    decoder.readUVarIntArray((d) => {
-      const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
-      d.readTaggedFields();
-      return txn;
-    }) ?? [];
-  const preferredReadReplica = decoder.readInt32();
-  const messages = await decodeCompactRecordSet(decoder);
-  const currentLeader = readFetchPartitionTaggedFields(decoder);
-  return {
-    partition,
-    errorCode,
-    highWatermark,
-    lastStableOffset,
-    logStartOffset,
-    abortedTransactions,
-    preferredReadReplica,
-    messages,
-    currentLeader,
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV12> => {
+    const partition = decoder.readInt32();
+    const errorCode = decoder.readInt16();
+    const highWatermark = decoder.readInt64();
+    const lastStableOffset = decoder.readInt64();
+    const logStartOffset = decoder.readInt64();
+    const abortedTransactions =
+      decoder.readUVarIntArray((d) => {
+        const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
+        d.readTaggedFields();
+        return txn;
+      }) ?? [];
+    const preferredReadReplica = decoder.readInt32();
+    const messages = await decodeCompactRecordSet(decoder, checkCrcs);
+    const currentLeader = readFetchPartitionTaggedFields(decoder);
+    return {
+      partition,
+      errorCode,
+      highWatermark,
+      lastStableOffset,
+      logStartOffset,
+      abortedTransactions,
+      preferredReadReplica,
+      messages,
+      currentLeader,
+    };
   };
 }
 
-async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponseV12> {
-  const topicName = decoder.readUVarIntString();
-  if (topicName === null) throw new RangeError('Expected a non-null topic name, got null');
-  const partitions = await readCompactArrayAsync(decoder, decodePartition);
-  decoder.readTaggedFields();
-  return { topicName, partitions };
+function decodeTopicResponse(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchTopicResponseV12> => {
+    const topicName = decoder.readUVarIntString();
+    if (topicName === null) throw new RangeError('Expected a non-null topic name, got null');
+    const partitions = await readCompactArrayAsync(decoder, decodePartition(checkCrcs));
+    decoder.readTaggedFields();
+    return { topicName, partitions };
+  };
 }
 
 /**
@@ -74,15 +79,19 @@ async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponse
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-export const fetchResponseV12: ResponseDefinition<FetchResponseV12Body> = {
-  decode: async (rawData) => {
-    const decoder = new Decoder(rawData);
-    const clientSideThrottleTime = decoder.readInt32();
-    const errorCode = decoder.readInt16();
-    const sessionId = decoder.readInt32();
-    const responses = await readCompactArrayAsync(decoder, decodeTopicResponse);
-    const nodeEndpoints = readFetchResponseNodeEndpoints(decoder);
-    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses, nodeEndpoints };
-  },
-  parse: parseFetchResponse,
-};
+export function fetchResponseV12(
+  options: Pick<FetchRequestOptions, 'checkCrcs'> = {},
+): ResponseDefinition<FetchResponseV12Body> {
+  return {
+    decode: async (rawData) => {
+      const decoder = new Decoder(rawData);
+      const clientSideThrottleTime = decoder.readInt32();
+      const errorCode = decoder.readInt16();
+      const sessionId = decoder.readInt32();
+      const responses = await readCompactArrayAsync(decoder, decodeTopicResponse(options.checkCrcs));
+      const nodeEndpoints = readFetchResponseNodeEndpoints(decoder);
+      return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses, nodeEndpoints };
+    },
+    parse: parseFetchResponse,
+  };
+}

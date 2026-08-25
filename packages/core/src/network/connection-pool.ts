@@ -2,6 +2,12 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import type { BrokerVersions } from '../protocol/requests/index';
 import { Connection } from './connection';
 import type { ConnectionOptions, SendOptions } from './connection';
+import {
+  DEFAULT_RECONNECT_BACKOFF_MAX_MS,
+  DEFAULT_RECONNECT_BACKOFF_MS,
+  DEFAULT_SOCKET_CONNECTION_SETUP_TIMEOUT_MAX_MS,
+  exponentialBackoffMs,
+} from './defaults';
 
 const POOL_SIZE = 2;
 /** `Fetch` gets its own dedicated connection so a long poll never head-of-line blocks metadata/heartbeats/produce. */
@@ -25,6 +31,11 @@ export class ConnectionPool {
   readonly connectionTimeout: number;
   readonly clientId: string;
   readonly pool: readonly Connection[];
+  readonly #reconnectBackoffMs: number;
+  readonly #reconnectBackoffMaxMs: number;
+  readonly #socketConnectionSetupTimeoutMs: number;
+  readonly #socketConnectionSetupTimeoutMaxMs: number;
+  #reconnectFailures = 0;
 
   constructor(options: ConnectionOptions) {
     this.host = options.host;
@@ -33,6 +44,11 @@ export class ConnectionPool {
     this.sasl = options.sasl ?? null;
     this.connectionTimeout = options.connectionTimeout;
     this.clientId = options.clientId ?? 'kafka';
+    this.#socketConnectionSetupTimeoutMs = options.connectionTimeout;
+    this.#socketConnectionSetupTimeoutMaxMs =
+      options.socketConnectionSetupTimeoutMaxMs ?? DEFAULT_SOCKET_CONNECTION_SETUP_TIMEOUT_MAX_MS;
+    this.#reconnectBackoffMs = options.reconnectBackoffMs ?? DEFAULT_RECONNECT_BACKOFF_MS;
+    this.#reconnectBackoffMaxMs = options.reconnectBackoffMaxMs ?? DEFAULT_RECONNECT_BACKOFF_MAX_MS;
     this.pool = Array.from({ length: POOL_SIZE }, () => new Connection(options));
   }
 
@@ -70,7 +86,33 @@ export class ConnectionPool {
     const connection = this.pool[index]!;
 
     if (!connection.isConnected()) {
-      await connection.connect();
+      const delay = exponentialBackoffMs(
+        this.#reconnectFailures,
+        this.#reconnectBackoffMs,
+        this.#reconnectBackoffMaxMs,
+      );
+      if (delay > 0) {
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, delay);
+        });
+      }
+
+      const setupTimeout = Math.max(
+        this.#socketConnectionSetupTimeoutMs,
+        exponentialBackoffMs(
+          this.#reconnectFailures,
+          this.#socketConnectionSetupTimeoutMs,
+          this.#socketConnectionSetupTimeoutMaxMs,
+        ) || this.#socketConnectionSetupTimeoutMs,
+      );
+
+      try {
+        await connection.connect(setupTimeout);
+        this.#reconnectFailures = 0;
+      } catch (error) {
+        this.#reconnectFailures += 1;
+        throw error;
+      }
     }
 
     return connection;

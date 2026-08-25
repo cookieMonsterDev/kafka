@@ -11,6 +11,7 @@ export interface CreateSocketOptions {
   onEnd: () => void;
   onError: (err: Error) => void;
   onTimeout: () => void;
+  servername?: string;
 }
 
 /** Builds the socket via `socketFactory` and wires up the event handlers `Connection` needs. */
@@ -24,8 +25,9 @@ export function createSocket({
   onEnd,
   onError,
   onTimeout,
+  servername,
 }: CreateSocketOptions): Socket {
-  const socket = socketFactory({ host, port, ssl, onConnect });
+  const socket = socketFactory({ host, port, ssl, onConnect, servername });
 
   socket.on('data', onData);
   socket.on('end', onEnd);

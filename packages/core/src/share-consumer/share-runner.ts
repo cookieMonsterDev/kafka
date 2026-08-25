@@ -1,6 +1,7 @@
 import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
 import type { EachMessageHandler } from '../consumer/types';
 import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import {
   SHARE_ACQUIRE_MODE,
@@ -13,6 +14,7 @@ import {
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
 import { SHARE_ACKNOWLEDGE_TYPE, type ShareAcknowledgeType } from './acknowledge-types';
+import { ACKNOWLEDGE, FETCH, FETCH_START, type ShareAcknowledgeTopicPayload } from './instrumentation-events';
 import { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
 
@@ -28,6 +30,17 @@ interface PendingAck {
   firstOffset: bigint;
   lastOffset: bigint;
   acknowledgeType: ShareAcknowledgeType;
+}
+
+/** Groups a flat list of acknowledged ranges into the `ACKNOWLEDGE` event's per-topic shape. */
+function groupAcksByTopic(acks: readonly PendingAck[]): ShareAcknowledgeTopicPayload[] {
+  const byTopic = new Map<string, ShareAcknowledgeTopicPayload['partitions']>();
+  for (const { topic, partition, firstOffset, lastOffset, acknowledgeType } of acks) {
+    const partitions = byTopic.get(topic) ?? [];
+    partitions.push({ partition, firstOffset, lastOffset, acknowledgeType });
+    byTopic.set(topic, partitions);
+  }
+  return [...byTopic.entries()].map(([topic, partitions]) => ({ topic, partitions }));
 }
 
 export interface EachShareBatchPayload {
@@ -58,6 +71,7 @@ export interface ShareRunnerOptions {
   prefetchMaxBytes?: number;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
+  instrumentationEmitter?: InstrumentationEventEmitter | null;
 }
 
 export class ShareRunner {
@@ -76,6 +90,7 @@ export class ShareRunner {
   readonly #onCrash: (reason: Error) => void | Promise<void>;
   readonly #retrier: ReturnType<typeof retrier>;
   readonly #fetchManager: FetchManager<ShareBatch>;
+  readonly #instrumentationEmitter: InstrumentationEventEmitter;
 
   running = false;
   shuttingDown = false;
@@ -102,8 +117,10 @@ export class ShareRunner {
     prefetchMaxBytes,
     onCrash,
     retry,
+    instrumentationEmitter,
   }: ShareRunnerOptions) {
     this.#logger = logger.namespace('ShareRunner');
+    this.#instrumentationEmitter = instrumentationEmitter ?? new InstrumentationEventEmitter();
     this.#shareGroup = shareGroup;
     this.#eachMessage = eachMessage;
     this.#eachBatch = eachBatch;
@@ -212,6 +229,21 @@ export class ShareRunner {
   async #fetchFromNode(nodeId: string): Promise<ShareBatch[]> {
     if (!this.running || this.shuttingDown) return [];
 
+    const startFetch = Date.now();
+    this.#instrumentationEmitter.emit(FETCH_START, { nodeId });
+
+    const batches = await this.#doFetchFromNode(nodeId);
+
+    this.#instrumentationEmitter.emit(FETCH, {
+      numberOfBatches: batches.length,
+      duration: Date.now() - startFetch,
+      nodeId,
+    });
+
+    return batches;
+  }
+
+  async #doFetchFromNode(nodeId: string): Promise<ShareBatch[]> {
     await this.#shareGroup.cluster.refreshMetadataIfNecessary();
     const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
     if (topicPartitions.length === 0) return [];
@@ -264,6 +296,15 @@ export class ShareRunner {
       );
       this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
       this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
+
+      if (takenAcks.length > 0) {
+        this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+          groupId: this.#shareGroup.groupId,
+          memberId,
+          nodeId,
+          topics: groupAcksByTopic(takenAcks),
+        });
+      }
 
       const batches: ShareBatch[] = [];
       for (const { topicId, partitions } of response.responses) {
@@ -425,6 +466,7 @@ export class ShareRunner {
     const nodeIds = new Set([...this.#shareSessionEpochByNode.keys(), ...this.#shareGroup.getNodeIds()]);
     for (const nodeId of nodeIds) {
       try {
+        const acksForNode = this.#acksForNode(nodeId);
         const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
         await broker.shareAcknowledge({
           groupId: this.#shareGroup.groupId,
@@ -433,6 +475,15 @@ export class ShareRunner {
           isRenewAck: this.#pendingAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics: this.#acknowledgementTopicsForNode(nodeId),
         });
+
+        if (acksForNode.length > 0) {
+          this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+            groupId: this.#shareGroup.groupId,
+            memberId,
+            nodeId,
+            topics: groupAcksByTopic(acksForNode),
+          });
+        }
       } catch {
         // Closing is best-effort; leave() still runs after this.
       }
@@ -441,6 +492,15 @@ export class ShareRunner {
     this.#pendingAcks = [];
     this.#shareSessionEpochByNode.clear();
     this.#shareSessionPartitionsByNode.clear();
+  }
+
+  /** The pending acks that apply to `nodeId`'s currently assigned partitions. */
+  #acksForNode(nodeId: string): PendingAck[] {
+    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
+    const partitionSet = new Set(
+      topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => `${topic}:${partition}`)),
+    );
+    return this.#pendingAcks.filter((ack) => partitionSet.has(`${ack.topic}:${ack.partition}`));
   }
 
   #acknowledgementTopicsForNode(nodeId: string): {

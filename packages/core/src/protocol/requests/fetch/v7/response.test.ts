@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v7/response', () => {
   it('decodes a real fixture, including the session_id/error_code header', async () => {
-    const data = await fetchResponseV7.decode(Buffer.from(v7ResponseFixture.data));
+    const data = await fetchResponseV7().decode(Buffer.from(v7ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -54,6 +54,6 @@ describe('protocol/requests/fetch/v7/response', () => {
       ],
     });
 
-    await expect(fetchResponseV7.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV7().parse(data)).resolves.toBeTruthy();
   });
 });

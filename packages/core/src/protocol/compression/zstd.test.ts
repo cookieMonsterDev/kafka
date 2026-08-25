@@ -28,4 +28,18 @@ describe('protocol/compression/zstd', () => {
     await expect(decompressZstd(Buffer.from('not zstd'))).rejects.toThrow();
     await expect(decompressZstd(Buffer.from('not zstd'))).rejects.not.toBeInstanceOf(KafkaNonRetriableError);
   });
+
+  it('honors compressionLevel: level 1 produces a larger output than level 19 for compressible data', async () => {
+    // A single repeated token compresses to the same minimal size at every level, so use data
+    // with enough distinct-but-recurring structure that higher search effort (a higher level)
+    // measurably finds better matches.
+    const payload = Array.from({ length: 8000 }, (_, i) => `record-${i % 37}-value-${(i * 7) % 53}`).join(',');
+    const encoder = new Encoder().writeBuffer(Buffer.from(payload));
+    const fast = await zstdCodec.compress(encoder, 1);
+    const best = await zstdCodec.compress(encoder, 19);
+
+    expect(fast.length).toBeGreaterThan(best.length);
+    expect(await zstdCodec.decompress(fast)).toEqual(encoder.buffer);
+    expect(await zstdCodec.decompress(best)).toEqual(encoder.buffer);
+  });
 });

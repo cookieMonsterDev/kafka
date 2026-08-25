@@ -49,4 +49,12 @@ describe('protocol/compression/lz4', () => {
     const decompressed = await Promise.all(compressed.map((buf) => lz4Codec.decompress(buf)));
     expect(decompressed.map((buf) => buf.toString())).toEqual(payloads.map((encoder) => encoder.buffer.toString()));
   });
+
+  it('ignores a compressionLevel argument (LZ4 has no compression-level concept here)', async () => {
+    const encoder = new Encoder().writeString('hello kafka');
+    const withLevel = await lz4Codec.compress(encoder, 9);
+    const withoutLevel = await lz4Codec.compress(new Encoder().writeString('hello kafka'));
+    expect(withLevel).toEqual(withoutLevel);
+    expect(await lz4Codec.decompress(withLevel)).toEqual(encoder.buffer);
+  });
 });

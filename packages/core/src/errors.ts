@@ -21,7 +21,9 @@ export type KafkaErrorName =
   | 'KafkaTimeout'
   | 'KafkaLockTimeout'
   | 'KafkaDeliveryTimeoutError'
+  | 'KafkaMessageTooLargeError'
   | 'KafkaUnsupportedMagicByteInMessageSet'
+  | 'KafkaCorruptRecordError'
   | 'KafkaDeleteTopicRecordsError'
   | 'KafkaInvariantViolation'
   | 'KafkaInvalidVarIntError'
@@ -339,8 +341,61 @@ export class KafkaDeliveryTimeoutError extends KafkaTimeout {
   }
 }
 
+export interface KafkaMessageTooLargeErrorOptions {
+  /** Uncompressed size in bytes of the offending record, or the whole call's records combined. */
+  size: number;
+  maxRequestSize: number;
+  topic?: string;
+}
+
+/**
+ * A record - or the uncompressed sum of every record in one `send`/`sendBatch` call, or the
+ * records the linger buffer had already accumulated for the next Produce - exceeded
+ * `maxRequestSize` (default 1 MiB). Raised client-side, before the record ever occupies a linger
+ * slot or reaches the network, so it is distinct from the broker's `MESSAGE_TOO_LARGE` protocol
+ * error (`KafkaProtocolError` with `type: 'MESSAGE_TOO_LARGE'`), which the broker can only return
+ * after it has already accepted bytes on the wire.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+ */
+export class KafkaMessageTooLargeError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaMessageTooLargeError';
+  readonly size: number;
+  readonly maxRequestSize: number;
+  readonly topic: string | undefined;
+
+  constructor({ size, maxRequestSize, topic }: KafkaMessageTooLargeErrorOptions) {
+    const details = topic != null ? ` for topic "${topic}"` : '';
+    super(
+      `Record(s)${details} total ${size} bytes uncompressed, exceeding maxRequestSize (${maxRequestSize} bytes). ` +
+        'Reduce the message size, send fewer records per call, or raise maxRequestSize',
+    );
+    this.size = size;
+    this.maxRequestSize = maxRequestSize;
+    this.topic = topic;
+  }
+}
+
 export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaUnsupportedMagicByteInMessageSet';
+}
+
+/**
+ * The decoded bytes don't match the record's checksum: a RecordBatch v2 CRC-32C mismatch, or a
+ * legacy MessageSet (magic 0/1) CRC-32 mismatch. Raised only when `ConsumerConfig.checkCrcs` is
+ * `true` (the default). Non-retriable: the bytes on the wire were corrupted, so retrying the same
+ * fetch would not help.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+ */
+export class KafkaCorruptRecordError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaCorruptRecordError';
+  readonly expectedCrc: number;
+  readonly computedCrc: number;
+
+  constructor(message: string, { expectedCrc, computedCrc }: { expectedCrc: number; computedCrc: number }) {
+    super(message);
+    this.expectedCrc = expectedCrc;
+    this.computedCrc = computedCrc;
+  }
 }
 
 export interface DeleteTopicRecordPartition {

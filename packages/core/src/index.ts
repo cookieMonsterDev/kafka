@@ -9,18 +9,12 @@ export { Kafka } from './client';
 
 import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
 import { cooperativeSticky, range, roundRobin, sticky } from './consumer/assigners/index';
-import {
-  DefaultPartitioner,
-  JavaCompatiblePartitioner,
-  LegacyPartitioner,
-  StickyPartitioner,
-} from './producer/partitioners/index';
+import { DefaultPartitioner, LegacyPartitioner, StickyPartitioner } from './producer/partitioners/index';
 
 export const PartitionAssigners = Object.freeze({ roundRobin, range, sticky, cooperativeSticky });
 export const AssignerProtocol = Object.freeze({ MemberMetadata, MemberAssignment });
 export const Partitioners = Object.freeze({
   DefaultPartitioner,
-  JavaCompatiblePartitioner,
   LegacyPartitioner,
   StickyPartitioner,
 });
@@ -67,7 +61,9 @@ export {
   KafkaTimeout,
   KafkaLockTimeout,
   KafkaDeliveryTimeoutError,
+  KafkaMessageTooLargeError,
   KafkaUnsupportedMagicByteInMessageSet,
+  KafkaCorruptRecordError,
   KafkaDeleteTopicRecordsError,
   KafkaInvariantViolation,
   KafkaInvalidVarIntError,
@@ -92,11 +88,13 @@ export type {
   ConnectOptions,
   Consumer,
   ConsumerConfig,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   ConsumerSubscribeTopic,
   ConsumerSubscribeTopics,
   CustomPartitioner,
+  ClientDnsLookup,
   EachBatchHandler,
   EachBatchPayload,
   EachMessageHandler,
@@ -104,6 +102,7 @@ export type {
   EachShareBatchHandler,
   EachShareBatchPayload,
   GroupProtocol,
+  GroupRemoteAssignor,
   GssTokenChallenge,
   GssTokenProvider,
   GssTokenStep,
@@ -116,15 +115,26 @@ export type {
   Message,
   NodeLatencyReader,
   OauthbearerProviderResponse,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
   PartitionMetadata,
+  TopicPartitionInfo,
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
   Producer,
+  ProducerAckHook,
+  ProducerAckHookEvent,
   ProducerBatch,
   ProducerConfig,
+  ProducerHooks,
   ProducerRecord,
+  ProducerSendHook,
+  ProducerSendHookEvent,
+  RebalanceListener,
   RecordHeaders,
   RecordMetadata,
   RetryOptions,
@@ -141,6 +151,7 @@ export type {
   ScramSaslOptions,
   SocketFactory,
   TopicMessages,
+  TopicPartition,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
@@ -169,6 +180,8 @@ export type {
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  AssignReplicasToDirsOptions,
+  AssignReplicasToDirsReplica,
   TopicConfig,
   TopicOffset,
   ConsumerGroupDescription,
@@ -196,3 +209,13 @@ export type {
 } from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';
 export type { MetadataRecovery } from './cluster/broker-pool';
+export type {
+  KafkaCounter,
+  KafkaHistogram,
+  KafkaMeter,
+  KafkaMetricAttributes,
+  KafkaMetrics,
+  KafkaMetricsConfig,
+  KafkaUpDownCounter,
+} from './instrumentation/metrics';
+export { METRIC_NAMES } from './instrumentation/metrics';

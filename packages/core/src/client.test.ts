@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Kafka } from './client';
-import { KafkaNonRetriableError } from './errors';
 import { logLevel, Partitioners, type KafkaConfig } from './index';
 
 function createClient(overrides: Partial<KafkaConfig> = {}): Kafka {
@@ -25,17 +24,21 @@ describe('Kafka', () => {
     expect(typeof producer.flush).toBe('function');
     expect(typeof producer.connect).toBe('function');
     expect(typeof producer.disconnect).toBe('function');
+    expect(typeof producer.listTopics).toBe('function');
+    expect(typeof producer.partitionsFor).toBe('function');
     expect(typeof producer[Symbol.asyncDispose]).toBe('function');
     expect(producer.isIdempotent()).toBe(false);
   });
 
-  it('creates a consumer that requires a groupId', () => {
-    expect(() => createClient().consumer({ groupId: '' })).toThrow(KafkaNonRetriableError);
+  it('creates a consumer; groupId is optional at construction (required by subscribe())', () => {
+    expect(() => createClient().consumer({})).not.toThrow();
 
     const consumer = createClient().consumer({ groupId: 'test-group' });
     expect(typeof consumer.subscribe).toBe('function');
     expect(typeof consumer.run).toBe('function');
     expect(typeof consumer.stream).toBe('function');
+    expect(typeof consumer.listTopics).toBe('function');
+    expect(typeof consumer.partitionsFor).toBe('function');
     expect(typeof consumer[Symbol.asyncDispose]).toBe('function');
   });
 
@@ -44,6 +47,8 @@ describe('Kafka', () => {
     expect(typeof shareConsumer.subscribe).toBe('function');
     expect(typeof shareConsumer.run).toBe('function');
     expect(typeof shareConsumer.stop).toBe('function');
+    expect(typeof shareConsumer.on).toBe('function');
+    expect(shareConsumer.events).toBeDefined();
     expect(typeof shareConsumer[Symbol.asyncDispose]).toBe('function');
   });
 
@@ -113,5 +118,37 @@ describe('Kafka', () => {
   it('accepts a brokers function', () => {
     const kafka = createClient({ brokers: () => ['localhost:9092'] });
     expect(typeof kafka.producer().send).toBe('function');
+  });
+
+  it('accepts a metrics meter without installing OpenTelemetry', () => {
+    const meter = {
+      createCounter: () => ({ add: () => undefined }),
+      createHistogram: () => ({ record: () => undefined }),
+      createUpDownCounter: () => ({ add: () => undefined }),
+    };
+    expect(() => createClient({ metrics: { meter } }).producer()).not.toThrow();
+  });
+
+  it('accepts connection idle, DNS, and reconnect knobs', () => {
+    expect(() =>
+      createClient({
+        connectionsMaxIdleMs: 60_000,
+        clientDnsLookup: 'canonicalBootstrap',
+        socketConnectionSetupTimeoutMaxMs: 15_000,
+        reconnectBackoffMs: 100,
+        reconnectBackoffMaxMs: 2_000,
+      }).producer(),
+    ).not.toThrow();
+  });
+
+  it('accepts producer maxInFlightRequests including null to uncap', () => {
+    expect(() => createClient().producer()).not.toThrow();
+    expect(() => createClient().producer({ maxInFlightRequests: 5 })).not.toThrow();
+    expect(() => createClient().producer({ maxInFlightRequests: null })).not.toThrow();
+  });
+
+  it('accepts bootstrapControllers on admin()', () => {
+    const admin = createClient().admin({ bootstrapControllers: ['localhost:9093'] });
+    expect(typeof admin.describeMetadataQuorum).toBe('function');
   });
 });

@@ -19,15 +19,18 @@ import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
 import { FetchSessionHandler } from './fetch-session';
 import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
-import { OffsetManager } from './offset-manager/index';
+import { AssignedOffsetManager } from './offset-manager/assigned-offset-manager';
+import { OffsetManager, type OffsetManagerHandle } from './offset-manager/index';
 import type { TopicOffsetConfiguration } from './offset-reset';
 import { SeekOffsets } from './seek-offsets';
 import { SubscriptionState } from './subscription-state';
 import type {
   Assigner,
+  ConsumerHooks,
   MemberAssignment as MemberAssignmentMap,
   Offsets,
   OffsetsByTopicPartition,
+  RebalanceListener,
   TopicPartition,
   TopicPartitionOffset,
   TopicPartitions,
@@ -120,10 +123,16 @@ function revokedPartitions(
     .filter(({ partitions }) => partitions.length > 0);
 }
 
+/** `{ topic, partitions: number[] }[]` -> `{ topic, partition }[]`, for the rebalance callbacks. */
+function flattenTopicPartitions(topicPartitions: readonly TopicPartitions[]): TopicPartition[] {
+  return topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => ({ topic, partition })));
+}
+
 export interface ConsumerGroupOptions {
   retry?: RetryOptions;
   cluster: Cluster;
-  groupId: string;
+  /** `null` when the consumer has no configured `groupId` (only possible in `assign()` mode). */
+  groupId: string | null;
   topics: readonly string[];
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
   logger: Logger;
@@ -148,11 +157,52 @@ export interface ConsumerGroupOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /**
+   * Server-side partition assignor to request under the KIP-848 consumer protocol
+   * (`serverAssignor` on ConsumerGroupHeartbeat). Only meaningful when `groupProtocol` is
+   * `'consumer'`; set with `groupProtocol: 'classic'` it is ignored (logged at debug level),
+   * the same as this codebase's other consumer-protocol-only options.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   */
+  groupRemoteAssignor?: 'uniform' | 'range';
+  /**
+   * Server-side regex subscription (KIP-848 `SubscriptionPattern`) sent as `subscribedTopicRegex`
+   * on ConsumerGroupHeartbeat instead of a client-resolved topic list. Only meaningful when
+   * `groupProtocol` is `'consumer'`; set with `groupProtocol: 'classic'` it is ignored (logged at
+   * debug level). Kafka matches this pattern as RE2 server-side, which is not 1:1 with a JS
+   * `RegExp` - callers should stick to RE2-compatible patterns.
+   */
+  subscribedTopicRegex?: string | null;
+  /**
+   * Offset-reset configuration applied to a topic the broker assigns through
+   * `subscribedTopicRegex` (its name is unknown until the assignment arrives, so it cannot be
+   * looked up in `topicConfigurations` by name ahead of time).
+   */
+  defaultTopicConfiguration?: TopicOffsetConfiguration;
+  /** Ordered async `onCommit` hook, forwarded to this group's `OffsetManager`. */
+  hooks?: ConsumerHooks;
+  /**
+   * Verify each fetched record batch's CRC on decode; `false` skips the check for throughput.
+   * Default `true`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   */
+  checkCrcs?: boolean;
+  /** See {@link ConsumerRunConfig.onPartitionsRevoked}. */
+  onPartitionsRevoked?: RebalanceListener;
+  /** See {@link ConsumerRunConfig.onPartitionsAssigned}. */
+  onPartitionsAssigned?: RebalanceListener;
+  /** See {@link ConsumerRunConfig.onPartitionsLost}. */
+  onPartitionsLost?: RebalanceListener;
+  /**
+   * `consumer.assign()` mode: fetch exactly these partitions, skipping JoinGroup/SyncGroup,
+   * ConsumerGroupHeartbeat, and rebalancing entirely.
+   */
+  assignedPartitions?: readonly TopicPartitions[];
 }
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
 export interface ConsumerGroupHandle {
-  groupId: string;
+  groupId: string | null;
   memberId: string | null;
   shuttingDown?: boolean;
   connect: () => Promise<void>;
@@ -170,11 +220,22 @@ export interface ConsumerGroupHandle {
   resume: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   isPaused: (topic: string, partition: number) => boolean;
   hasSeekOffset: (topicPartition: TopicPartition) => boolean;
+  /**
+   * Declares the member's current assignment lost without a clean revoke (session expiry,
+   * fencing) and fires `onPartitionsLost` with it instead of `onPartitionsRevoked`. Callers
+   * invoke this as soon as they detect `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`, before
+   * rejoining, so a subsequent rebalance doesn't also report the same partitions as revoked.
+   */
+  notifyPartitionsLost: () => Promise<void>;
+  /** Next fetch offset for `topic`/`partition`, or `null` when it isn't currently assigned. */
+  position: (topic: string, partition: number) => bigint | null;
+  /** Latest high watermark seen on a Fetch response for `topic`/`partition`, or `null` if none yet. */
+  highWatermark: (topic: string, partition: number) => bigint | null;
 }
 
 export class ConsumerGroup implements ConsumerGroupHandle {
   cluster: Cluster;
-  groupId: string;
+  groupId: string | null;
   topics: string[];
   topicsSubscribed: string[];
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
@@ -192,11 +253,22 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   autoCommitInterval: number | null;
   autoCommitThreshold: number | null;
   isolationLevel: IsolationLevel;
+  checkCrcs: boolean;
   rackId: string;
   metadataMaxAge: number;
   groupInstanceId: string | null;
   /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
   useConsumerProtocol: boolean;
+  /** `serverAssignor` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
+  groupRemoteAssignor: 'uniform' | 'range' | null;
+  /** `subscribedTopicRegex` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
+  subscribedTopicRegex: string | null;
+  /** Fallback offset-reset config for topics assigned only via `subscribedTopicRegex`. */
+  defaultTopicConfiguration: TopicOffsetConfiguration | null;
+  hooks: ConsumerHooks | undefined;
+  onPartitionsRevoked: RebalanceListener | undefined;
+  onPartitionsAssigned: RebalanceListener | undefined;
+  onPartitionsLost: RebalanceListener | undefined;
   shuttingDown = false;
 
   seekOffset = new SeekOffsets();
@@ -208,7 +280,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupProtocol: string | null = null;
   partitionsPerSubscribedTopic: Map<string, number[]> | null = null;
   preferredReadReplicasPerTopicPartition: Record<string, Record<number, PreferredReadReplica>> = {};
-  offsetManager: OffsetManager | null = null;
+  offsetManager: OffsetManagerHandle | null = null;
   subscriptionState = new SubscriptionState();
   lastRequest = Date.now();
   heartbeatIntervalMs: number | null = null;
@@ -225,6 +297,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #lastFetchedLeaderEpoch: Record<string, Record<number, number>> = {};
   /** KIP-227: one incremental fetch session per broker node. */
   #fetchSessionHandlers = new Map<string, FetchSessionHandler>();
+  /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
+  readonly #assignMode: boolean;
+  readonly #fixedAssignment: TopicPartitions[] | null;
+  /** Latest `highWatermark` seen on a Fetch response, per topic/partition. Backs {@link currentLag}. */
+  #highWatermarks: Record<string, Record<number, bigint>> = {};
 
   constructor({
     retry,
@@ -245,13 +322,26 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     autoCommitInterval,
     autoCommitThreshold,
     isolationLevel,
+    checkCrcs = true,
     rackId,
     metadataMaxAge,
     groupInstanceId,
     groupProtocol = 'classic',
+    groupRemoteAssignor,
+    subscribedTopicRegex,
+    defaultTopicConfiguration,
+    hooks,
+    onPartitionsRevoked,
+    onPartitionsAssigned,
+    onPartitionsLost,
+    assignedPartitions,
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
+    this.#assignMode = assignedPartitions != null;
+    this.#fixedAssignment = assignedPartitions
+      ? assignedPartitions.map(({ topic, partitions }) => ({ topic, partitions: [...partitions] }))
+      : null;
     this.topics = [...topics];
     this.topicsSubscribed = [...topics];
     this.topicConfigurations = topicConfigurations;
@@ -269,13 +359,37 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.autoCommitInterval = autoCommitInterval;
     this.autoCommitThreshold = autoCommitThreshold;
     this.isolationLevel = isolationLevel;
+    this.checkCrcs = checkCrcs;
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
     this.groupInstanceId = groupInstanceId ?? null;
     this.useConsumerProtocol = groupProtocol === 'consumer';
+    this.hooks = hooks;
+    this.onPartitionsRevoked = onPartitionsRevoked;
+    this.onPartitionsAssigned = onPartitionsAssigned;
+    this.onPartitionsLost = onPartitionsLost;
     this.#adaptiveMaxBytes = maxBytes;
 
+    if (groupRemoteAssignor != null && !this.useConsumerProtocol) {
+      this.logger.debug('groupRemoteAssignor is only used with groupProtocol "consumer"; ignoring', {
+        groupRemoteAssignor,
+        groupProtocol,
+      });
+    }
+    this.groupRemoteAssignor = this.useConsumerProtocol ? (groupRemoteAssignor ?? null) : null;
+
+    if (subscribedTopicRegex != null && !this.useConsumerProtocol) {
+      this.logger.debug('subscribedTopicRegex is only used with groupProtocol "consumer"; ignoring', {
+        subscribedTopicRegex,
+        groupProtocol,
+      });
+    }
+    this.subscribedTopicRegex = this.useConsumerProtocol ? (subscribedTopicRegex ?? null) : null;
+    this.defaultTopicConfiguration = this.useConsumerProtocol ? (defaultTopicConfiguration ?? null) : null;
+
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
+      if (this.#assignMode) return;
+
       if (this.useConsumerProtocol) {
         await this.#heartbeatConsumerProtocol({ interval });
         return;
@@ -284,7 +398,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const { groupId: id, generationId, memberId } = this;
       const now = Date.now();
 
-      if (memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
+      if (id && memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
         const payload = {
           groupId: id,
           memberId,
@@ -314,6 +428,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async #join(): Promise<void> {
     const { groupId, sessionTimeout, rebalanceTimeout } = this;
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
+    }
     this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
 
     const groupData = await this.coordinator.joinGroup({
@@ -337,7 +454,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     await this.#closeFetchSessions();
 
     const { groupId, memberId, coordinator } = this;
-    if (!memberId || !coordinator) return;
+    if (!memberId || !coordinator || !groupId) return;
 
     if (this.useConsumerProtocol) {
       if (this.#consumerProtocolJoined) {
@@ -364,7 +481,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     let assignment: { memberId: string; memberAssignment: Buffer }[] = [];
     const { groupId, generationId, memberId, members, groupProtocol, topicsSubscribed, coordinator } = this;
 
-    if (!coordinator || generationId == null || memberId == null) {
+    if (!coordinator || !groupId || generationId == null || memberId == null) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -434,11 +551,22 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       partitions: decodedAssignment[topic] ?? [],
     }));
 
+    const previousAssignment = this.assigned();
     const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
-    const partitionsToRevoke =
-      selectedAssigner?.protocolType === 'cooperative'
-        ? revokedPartitions(this.assigned(), currentMemberAssignment)
-        : [];
+    const isCooperative = selectedAssigner?.protocolType === 'cooperative';
+    // Cooperative-sticky (KIP-429) settles over two JoinGroup/SyncGroup rounds: this round's
+    // `currentMemberAssignment` already leaves foreign-owned partitions unassigned (see
+    // `applyCooperativeConstraint` in sticky-assigner.ts), so `partitionsToRevoke` is only the
+    // subset this member is actually giving up - not its whole previous assignment. A classic
+    // (eager) rebalance has no such settling round: the member's entire prior assignment is
+    // revoked and its entire new assignment is granted in one round.
+    const partitionsToRevoke = isCooperative ? revokedPartitions(previousAssignment, currentMemberAssignment) : [];
+    const revoked = isCooperative ? partitionsToRevoke : previousAssignment;
+    const gained = isCooperative
+      ? revokedPartitions(currentMemberAssignment, previousAssignment)
+      : currentMemberAssignment;
+
+    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
 
     await this.#installAssignment(currentMemberAssignment);
 
@@ -452,6 +580,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       ),
     );
 
+    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
+
     if (partitionsToRevoke.length > 0) {
       this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
         groupId,
@@ -464,9 +594,52 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     return partitionsToRevoke.length > 0;
   }
 
+  /**
+   * Invokes a rebalance listener with the partitions moving in this step (skipped when none are
+   * moving). Ordered async - the caller awaits this before proceeding - but errors are caught and
+   * logged here rather than propagated: a broken user-supplied listener must not abort a
+   * rebalance that would otherwise succeed, mirroring how this codebase treats other user-hook
+   * failures (see the P3-04 `runHooks` convention for producer/consumer hooks).
+   */
+  async #notify(
+    listener: RebalanceListener | undefined,
+    topicPartitions: readonly TopicPartitions[],
+    name: string,
+  ): Promise<void> {
+    if (!listener) return;
+    const flat = flattenTopicPartitions(topicPartitions);
+    if (flat.length === 0) return;
+
+    try {
+      await listener(flat);
+    } catch (e) {
+      const error = e as Error;
+      this.logger.error(`Rebalance listener "${name}" threw an error`, { error: error.message, stack: error.stack });
+    }
+  }
+
+  /**
+   * Declares the current assignment lost without a clean revoke and fires `onPartitionsLost`
+   * with it (instead of `onPartitionsRevoked`). Callers must invoke this as soon as they detect
+   * the member was fenced out of the group (`UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`) -
+   * before rejoining - both so the callback reflects reality (a lost partition may already be
+   * owned by someone else; a pending offset commit for it should typically be abandoned) and so
+   * the next successful rebalance's revoke/assign diff doesn't also report these same partitions
+   * as revoked, since the local assignment is cleared here.
+   */
+  async notifyPartitionsLost(): Promise<void> {
+    const lost = this.assigned();
+    if (lost.length === 0) return;
+
+    this.subscriptionState.assign([]);
+    this.#invalidateActiveTopicPartitions();
+
+    await this.#notify(this.onPartitionsLost, lost, 'onPartitionsLost');
+  }
+
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
     const { groupId, generationId, memberId, coordinator } = this;
-    if (!coordinator || generationId == null || memberId == null) {
+    if (!this.#assignMode && (!coordinator || generationId == null || memberId == null)) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -498,25 +671,55 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
 
+    const memberAssignment = currentMemberAssignment.reduce<MemberAssignmentMap>(
+      (partitionsByTopic, { topic, partitions }) => {
+        partitionsByTopic[topic] = partitions;
+        return partitionsByTopic;
+      },
+      {},
+    );
+
+    if (this.#assignMode) {
+      if (this.offsetManager instanceof AssignedOffsetManager) {
+        this.offsetManager.updateAssignment(memberAssignment);
+      } else {
+        this.offsetManager = new AssignedOffsetManager({
+          cluster: this.cluster,
+          groupId,
+          topicConfigurations: this.topicConfigurations,
+          assignment: memberAssignment,
+          instrumentationEmitter: this.instrumentationEmitter,
+        });
+      }
+      return;
+    }
+
     this.offsetManager = new OffsetManager({
       cluster: this.cluster,
       topicConfigurations: this.topicConfigurations,
       instrumentationEmitter: this.instrumentationEmitter,
-      memberAssignment: currentMemberAssignment.reduce<MemberAssignmentMap>(
-        (partitionsByTopic, { topic, partitions }) => {
-          partitionsByTopic[topic] = partitions;
-          return partitionsByTopic;
-        },
-        {},
-      ),
+      memberAssignment,
       autoCommit: this.autoCommit,
       autoCommitInterval: this.autoCommitInterval,
       autoCommitThreshold: this.autoCommitThreshold,
-      coordinator,
-      groupId,
-      generationId,
-      memberId,
+      coordinator: coordinator!,
+      groupId: groupId!,
+      generationId: generationId!,
+      memberId: memberId!,
+      logger: this.logger,
+      hooks: this.hooks,
     });
+  }
+
+  /**
+   * `assign()` mode: install the user-supplied partitions directly, skipping JoinGroup/SyncGroup
+   * entirely. Refreshes metadata first so `#installAssignment`'s partition-awareness check has
+   * current data.
+   */
+  async #installFixedAssignment(): Promise<void> {
+    await this.cluster.refreshMetadata();
+    await this.#installAssignment(this.#fixedAssignment ?? []);
+    this.logger.info('Assigned partitions, no group membership', { assignment: this.#fixedAssignment });
   }
 
   #ensureMemberId(): string {
@@ -552,7 +755,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async #refreshTopicIdMapFromDescribe(): Promise<void> {
     const { coordinator, groupId, memberId } = this;
-    if (!coordinator) return;
+    if (!coordinator || !groupId) return;
 
     const { groups } = await coordinator.consumerGroupDescribe({
       groupIds: [groupId],
@@ -581,7 +784,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     ackDepth?: number;
   }): Promise<void> {
     const { groupId, coordinator } = this;
-    if (!coordinator) {
+    if (!coordinator || !groupId) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -605,6 +808,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
       rebalanceTimeoutMs: includeJoinFields ? this.rebalanceTimeout : -1,
       subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+      subscribedTopicRegex: includeJoinFields ? this.subscribedTopicRegex : null,
+      serverAssignor: includeJoinFields ? this.groupRemoteAssignor : null,
       topicPartitions: isJoining ? [] : includeOwnedPartitions ? this.#ownedTopicPartitions : null,
     });
 
@@ -644,6 +849,12 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     const owned: ConsumerGroupHeartbeatTopicPartitions[] = [];
     for (const { topicId, partitions } of response.assignment.topicPartitions) {
       const topic = await this.#resolveTopicName(topicId);
+      // Topics assigned only through `subscribedTopicRegex` were unknown at subscribe time, so
+      // they have no entry in `topicConfigurations` by name yet - apply the regex subscription's
+      // offset-reset config the first time each such topic is seen.
+      if (this.defaultTopicConfiguration && !(topic in this.topicConfigurations)) {
+        this.topicConfigurations[topic] = this.defaultTopicConfiguration;
+      }
       currentMemberAssignment.push({ topic, partitions });
       owned.push({ topicId, partitions });
     }
@@ -655,9 +866,20 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       memberAssignment: currentMemberAssignment,
     });
 
+    // KIP-848 reconciliation is inherently incremental at the wire level - the broker sends this
+    // member's full current target assignment on every change, and the client diffs it against
+    // what it already held, same as a cooperative-sticky settling round above.
+    const previousAssignment = this.assigned();
+    const revoked = revokedPartitions(previousAssignment, currentMemberAssignment);
+    const gained = revokedPartitions(currentMemberAssignment, previousAssignment);
+
+    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
+
     await this.#installAssignment(currentMemberAssignment);
     this.#ownedTopicPartitions = owned;
     this.#ownedPartitionsDirty = true;
+
+    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
 
     if (wasJoined) this.#emitGroupJoin(0);
   }
@@ -679,7 +901,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   async #joinConsumerProtocol(): Promise<void> {
-    this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
+    const groupId = this.groupId;
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
+    }
+    this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
     this.#includeJoinFields = true;
     this.#ownedPartitionsDirty = false;
     this.#ownedTopicPartitions = [];
@@ -708,6 +934,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (this.shuttingDown) return;
 
       try {
+        if (this.#assignMode) {
+          await this.#installFixedAssignment();
+          return;
+        }
+
         if (this.useConsumerProtocol) {
           await this.#joinConsumerProtocol();
         } else {
@@ -739,6 +970,11 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         }
 
         if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
+          // The coordinator no longer recognizes this member: it was fenced out of the group
+          // (session timeout, or another member took its generation) before it ever got a chance
+          // to leave and revoke cleanly. Whatever it held may already be reassigned elsewhere, so
+          // report it lost - not revoked - before resetting and rejoining from scratch.
+          await this.notifyPartitionsLost();
           if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
           this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
           this.#includeJoinFields = true;
@@ -746,12 +982,21 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           throw new KafkaError(error);
         }
 
-        bail(error);
+        // Only short-circuit the retrier for genuinely non-retriable errors (e.g. auth
+        // failures, invalid group state). Retriable protocol errors like
+        // COORDINATOR_LOAD_IN_PROGRESS or NOT_COORDINATOR must fall through so the retrier can
+        // retry them instead of failing the join immediately.
+        if ((error as { retriable?: boolean }).retriable === false) {
+          bail(error);
+          return;
+        }
+
+        throw error;
       }
     });
   }
 
-  #requireOffsetManager(): OffsetManager {
+  #requireOffsetManager(): OffsetManagerHandle {
     if (!this.offsetManager) {
       throw new KafkaNonRetriableError('Offset manager is not initialized');
     }
@@ -811,6 +1056,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   heartbeatDue(interval: number): boolean {
+    if (this.#assignMode) return false;
+
     if (this.useConsumerProtocol) {
       if (!this.coordinator) return false;
       const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
@@ -882,6 +1129,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         minBytes: this.minBytes,
         maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
+        checkCrcs: this.checkCrcs,
         topics: sessionRequest.topics,
         forgottenTopics: sessionRequest.forgottenTopics,
         sessionId: sessionRequest.sessionId,
@@ -928,6 +1176,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
               ({ partition: id }) => id === partitionData.partition,
             );
             if (!partitionRequestData) return [];
+
+            (this.#highWatermarks[topicName] ??= {})[partition] = partitionData.highWatermark;
 
             return [new Batch(topicName, partitionRequestData.fetchOffset, partitionData)];
           });
@@ -1201,7 +1451,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   checkForStaleAssignment(): void {
-    if (!this.partitionsPerSubscribedTopic) return;
+    // assign() mode assignment is fixed by the caller; there is no rejoin to trigger, so a
+    // partition-count change on the topic is not this consumer's concern to reconcile.
+    if (this.#assignMode || !this.partitionsPerSubscribedTopic) return;
 
     const newPartitionsPerSubscribedTopic = this.generatePartitionsPerSubscribedTopic();
 
@@ -1239,6 +1491,26 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   hasSeekOffset({ topic, partition }: TopicPartition): boolean {
     return this.seekOffset.has(topic, partition);
+  }
+
+  /**
+   * Next fetch offset for `topic`/`partition` - the offset of the next record this consumer
+   * would read. Returns `null` when the partition is not currently assigned to this consumer,
+   * rather than throwing, since "not assigned" is an expected state (e.g. after a rebalance).
+   */
+  position(topic: string, partition: number): bigint | null {
+    const isAssigned = this.assigned().some((tp) => tp.topic === topic && tp.partitions.includes(partition));
+    if (!isAssigned) return null;
+
+    return this.#requireOffsetManager().nextOffset(topic, partition);
+  }
+
+  /**
+   * Latest high watermark seen on a Fetch response for `topic`/`partition`. Returns `null` when
+   * no Fetch response has been observed for it yet, rather than throwing.
+   */
+  highWatermark(topic: string, partition: number): bigint | null {
+    return this.#highWatermarks[topic]?.[partition] ?? null;
   }
 
   /**

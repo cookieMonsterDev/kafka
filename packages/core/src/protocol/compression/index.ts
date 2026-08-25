@@ -24,7 +24,13 @@ export type CompressionType = (typeof COMPRESSION_TYPES)[keyof typeof COMPRESSIO
 export const COMPRESSION_CODEC_MASK = 0x07;
 
 export interface CompressionCodec {
-  compress(encoder: Encoder): Promise<Buffer>;
+  /**
+   * `level` is the producer's `compressionLevel` (or per-`send()` override), when honored by
+   * this codec. GZIP passes it straight to zlib's `level`. ZSTD maps it to
+   * `zlib.constants.ZSTD_c_compressionLevel`. Snappy and LZ4 have no compression-level concept
+   * here and ignore it.
+   */
+  compress(encoder: Encoder, level?: number): Promise<Buffer>;
   decompress(buffer: Buffer): Promise<Buffer>;
 }
 

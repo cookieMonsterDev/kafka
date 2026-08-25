@@ -79,6 +79,32 @@ describe('kafka.publicApi', () => {
     expect(() => consumer.on('not-an-event' as never, () => undefined)).toThrow(KafkaNonRetriableError);
   });
 
+  it('exposes listTopics and partitionsFor on producer and consumer', async () => {
+    const producer = kafka.producer();
+    const consumer = kafka.consumer({ groupId });
+    try {
+      await producer.connect();
+      await consumer.connect();
+
+      expect(await producer.listTopics()).toEqual(expect.arrayContaining([topicName]));
+      expect(await consumer.listTopics()).toEqual(expect.arrayContaining([topicName]));
+
+      const partitions = await producer.partitionsFor(topicName);
+      expect(partitions.length).toBeGreaterThan(0);
+      expect(partitions[0]).toMatchObject({
+        topic: topicName,
+        partitionId: expect.any(Number),
+        leader: expect.any(Number),
+        replicas: expect.any(Array),
+        isr: expect.any(Array),
+      });
+      expect(await consumer.partitionsFor(topicName)).toEqual(partitions);
+    } finally {
+      await consumer.disconnect();
+      await producer.disconnect();
+    }
+  });
+
   it('exposes a client logger', () => {
     expect(typeof kafka.logger().info).toBe('function');
   });

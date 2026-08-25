@@ -42,3 +42,18 @@ export function supportsTransactionV2(versions: BrokerVersions): boolean {
   const produce = advertised(versions, API_KEYS.Produce);
   return produce != null && produce.maxVersion >= 12;
 }
+
+/**
+ * KIP-919: DescribeCluster v1+ can request controller endpoints (`endpointType=CONTROLLER`).
+ * Kafka 3.7+.
+ */
+export function supportsDescribeClusterControllers(versions: BrokerVersions): boolean {
+  const describeCluster = advertised(versions, API_KEYS.DescribeCluster);
+  return describeCluster != null && describeCluster.maxVersion >= 1;
+}
+
+/** KIP-714 client telemetry: GetTelemetrySubscriptions (71) / PushTelemetry (72). Kafka 3.5+. */
+export function supportsClientTelemetry(versions: BrokerVersions): boolean {
+  const subscriptions = advertised(versions, API_KEYS.GetTelemetrySubscriptions);
+  return subscriptions != null && subscriptions.maxVersion != null;
+}

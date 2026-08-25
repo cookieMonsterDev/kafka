@@ -1,4 +1,4 @@
-import { KafkaPartialMessageError } from '../../errors';
+import { KafkaCorruptRecordError, KafkaPartialMessageError } from '../../errors';
 import {
   COMPRESSION_CODEC_MASK,
   COMPRESSION_TYPES,
@@ -39,6 +39,12 @@ const CONTROL_FLAG_MASK = 0x20;
 
 export interface EncodeRecordBatchOptions {
   compression?: CompressionType;
+  /**
+   * Passed to the active codec, when it honors one. GZIP maps it straight to zlib's `level`
+   * (0-9). ZSTD maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and
+   * LZ4 have no compression-level concept in this client's codecs and ignore it.
+   */
+  compressionLevel?: number;
   firstOffset?: bigint;
   firstTimestamp?: number;
   maxTimestamp?: number;
@@ -69,20 +75,25 @@ function sizeOfEncodedRecords(records: readonly Encoder[]): number {
   return size;
 }
 
-async function compressEncoder(compression: CompressionType, encoder: Encoder): Promise<Buffer> {
+async function compressEncoder(compression: CompressionType, encoder: Encoder, level?: number): Promise<Buffer> {
   const codec = lookupCodec(compression);
   if (!codec) {
     throw new Error(`Invariant violated: no codec registered for compression type ${compression}`);
   }
-  return codec.compress(encoder);
+  return codec.compress(encoder, level);
 }
 
-async function compressRecords(compression: CompressionType, records: readonly Encoder[]): Promise<Buffer> {
-  return compressEncoder(compression, new Encoder(sizeOfEncodedRecords(records)).writeEncoderArray(records));
+async function compressRecords(
+  compression: CompressionType,
+  records: readonly Encoder[],
+  level?: number,
+): Promise<Buffer> {
+  return compressEncoder(compression, new Encoder(sizeOfEncodedRecords(records)).writeEncoderArray(records), level);
 }
 
 export async function encodeRecordBatch({
   compression = COMPRESSION_TYPES.None,
+  compressionLevel,
   firstOffset = 0n,
   firstTimestamp = Date.now(),
   maxTimestamp = Date.now(),
@@ -107,9 +118,9 @@ export async function encodeRecordBatch({
     if (writeRecords) {
       const recordsEncoder = new Encoder(estimatedBytes ?? 511);
       writeRecords(recordsEncoder);
-      compressedRecords = await compressEncoder(compression, recordsEncoder);
+      compressedRecords = await compressEncoder(compression, recordsEncoder, compressionLevel);
     } else {
-      compressedRecords = await compressRecords(compression, records);
+      compressedRecords = await compressRecords(compression, records, compressionLevel);
     }
   }
 
@@ -194,7 +205,19 @@ function decodeOneRecord(decoder: Decoder, batchContext: RecordBatchContext): De
   return decodeRecord(new Decoder(recordBuffer), batchContext);
 }
 
-export async function decodeRecordBatch(fetchDecoder: Decoder): Promise<DecodedRecordBatch> {
+export interface DecodeRecordBatchOptions {
+  /**
+   * Verify the batch's CRC-32C on decode and throw {@link KafkaCorruptRecordError} on mismatch.
+   * Default `true` (matches `ConsumerConfig.checkCrcs`). Set `false` to skip the check for
+   * throughput - silent data corruption then goes undetected.
+   */
+  checkCrcs?: boolean;
+}
+
+export async function decodeRecordBatch(
+  fetchDecoder: Decoder,
+  { checkCrcs = true }: DecodeRecordBatchOptions = {},
+): Promise<DecodedRecordBatch> {
   const firstOffset = fetchDecoder.readInt64();
   const length = fetchDecoder.readInt32();
   const decoder = fetchDecoder.slice(length);
@@ -213,8 +236,10 @@ export async function decodeRecordBatch(fetchDecoder: Decoder): Promise<DecodedR
   // legacy message set. It's not used here directly, but it has to be read off the wire.
   const magicByte = decoder.readInt8();
 
-  // The library does not currently perform CRC validation, but the field has to be read off the wire.
-  decoder.readInt32();
+  const crc = decoder.readUInt32();
+  // CRC32C covers attributes through the last record - everything from here to the end of
+  // `decoder.buffer` (which is exactly this batch's `length` bytes), matching the encode side.
+  const bodyStart = decoder.offset;
 
   const attributes = decoder.readInt16();
   const lastOffsetDelta = decoder.readInt32();
@@ -244,6 +269,16 @@ export async function decodeRecordBatch(fetchDecoder: Decoder): Promise<DecodedR
     maxTimestamp,
     timestampType,
   };
+
+  if (checkCrcs) {
+    const computedCrc = crc32c(decoder.buffer.subarray(bodyStart));
+    if (computedCrc !== crc) {
+      throw new KafkaCorruptRecordError(`Record batch CRC mismatch: expected ${crc}, computed ${computedCrc}`, {
+        expectedCrc: crc,
+        computedCrc,
+      });
+    }
+  }
 
   const records = await decodeRecords(codec, decoder, { ...batchContext, magicByte });
 

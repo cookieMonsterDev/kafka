@@ -8,9 +8,6 @@ describe('throughputPreset', () => {
 
     expect(preset).toEqual({
       producer: {
-        lingerMs: 5,
-        batchSize: 16_384,
-        maxInFlightRequests: 5,
         createPartitioner: StickyPartitioner,
         bufferMemory: 32 * 1024 * 1024,
       },

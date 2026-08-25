@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaNotImplemented, KafkaNumberOfRetriesExceeded, KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
-import { createErrorFromCode } from '../protocol/error-codes';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
 import { waitFor } from '../utils/wait';
 import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
+import { REBALANCING } from './instrumentation-events';
 import { Runner } from './runner';
-import type { EachBatchHandler, KafkaMessage } from './types';
+import type { EachBatchHandler, KafkaMessage, OnConsumeEvent } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -74,6 +75,7 @@ describe('consumer/runner', () => {
       pause: vi.fn(),
       resume: vi.fn(),
       hasSeekOffset: vi.fn().mockReturnValue(false),
+      notifyPartitionsLost: vi.fn(async () => undefined),
       ...overrides,
     } as unknown as ConsumerGroupHandle;
   }
@@ -98,6 +100,58 @@ describe('consumer/runner', () => {
     await runner.start();
     expect(runner.scheduleFetchManager).toHaveBeenCalled();
     expect(onCrash).not.toHaveBeenCalled();
+  });
+
+  it('still emits REBALANCING and rejoins (not lost) when a fetch reports the group is rebalancing', async () => {
+    const error = rebalancingError();
+    const consumerGroup = fakeConsumerGroup({
+      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+    });
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const rebalancingEvents: unknown[] = [];
+    instrumentationEmitter.addListener(REBALANCING, (event) => rebalancingEvents.push(event));
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter,
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+      retry: { retries: 0 },
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.joinAndSync).mock.calls.length > 1 || false);
+
+    expect(rebalancingEvents).toHaveLength(1);
+    // REBALANCE_IN_PROGRESS is a normal mid-membership signal to rejoin, not a fenced/kicked
+    // member - the current assignment must not be reported lost for it.
+    expect(consumerGroup.notifyPartitionsLost).not.toHaveBeenCalled();
+  });
+
+  it('reports the current assignment lost (not revoked) before rejoining after UNKNOWN_MEMBER_ID', async () => {
+    const error = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
+    const consumerGroup = fakeConsumerGroup({
+      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+    });
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      heartbeatInterval: 3000,
+      retry: { retries: 0 },
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.notifyPartitionsLost).mock.calls.length > 0 || false);
+
+    expect(consumerGroup.notifyPartitionsLost).toHaveBeenCalledTimes(1);
+    expect(consumerGroup.memberId).toBeNull();
+    expect(consumerGroup.joinAndSync).toHaveBeenCalledTimes(2);
   });
 
   it('commits offsets during handleBatch', async () => {
@@ -480,6 +534,111 @@ describe('consumer/runner', () => {
     runner = undefined;
   });
 
+  describe('hooks', () => {
+    it('fires onConsume in registration order before eachMessage, once per message', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const order: string[] = [];
+      const first = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume-1');
+      });
+      const second = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume-2');
+      });
+      const eachMessage = vi.fn(async () => {
+        order.push('eachMessage');
+      });
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [first, second] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, {
+        partition,
+        highWatermark: 5n,
+        messages: [kafkaMessage(1n), kafkaMessage(2n)],
+      });
+      await runner.handleBatch(batch);
+
+      expect(order).toEqual(['onConsume-1', 'onConsume-2', 'eachMessage', 'onConsume-1', 'onConsume-2', 'eachMessage']);
+      expect(first).toHaveBeenCalledWith(
+        expect.objectContaining({ topic: topicName, partition, message: expect.any(Object) }),
+      );
+      const event = first.mock.calls[0]?.[0];
+      expect(event?.batch).toBeUndefined();
+    });
+
+    it('fires onConsume once per batch, before eachBatch', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const order: string[] = [];
+      const onConsume = vi.fn((_event: OnConsumeEvent) => {
+        order.push('onConsume');
+      });
+      const eachBatch = vi.fn(async () => {
+        order.push('eachBatch');
+      });
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [onConsume] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, {
+        partition,
+        highWatermark: 5n,
+        messages: [kafkaMessage(1n), kafkaMessage(2n)],
+      });
+      await runner.handleBatch(batch);
+
+      expect(order).toEqual(['onConsume', 'eachBatch']);
+      expect(onConsume).toHaveBeenCalledTimes(1);
+      const event = onConsume.mock.calls[0]?.[0];
+      expect(event?.message).toBeUndefined();
+      expect(event?.batch).toBe(batch);
+    });
+
+    it('does not fail eachMessage processing when an onConsume hook throws', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const throwingHook = vi.fn(() => {
+        throw new Error('onConsume boom');
+      });
+      const eachMessage = vi.fn(async () => undefined);
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hooks: { onConsume: [throwingHook] },
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 5n, messages: [kafkaMessage(4n)] });
+      await expect(runner.handleBatch(batch)).resolves.toBeUndefined();
+
+      expect(throwingHook).toHaveBeenCalledTimes(1);
+      expect(eachMessage).toHaveBeenCalledTimes(1);
+      expect(consumerGroup.resolveOffset).toHaveBeenCalledWith({ topic: topicName, partition, offset: 4n });
+    });
+  });
+
   it('does not commit on stop when autoCommit is false', async () => {
     const consumerGroup = fakeConsumerGroup();
     runner = new Runner({
@@ -498,5 +657,150 @@ describe('consumer/runner', () => {
     expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
     expect(consumerGroup.commitOffsetsIfNecessary).not.toHaveBeenCalled();
     runner = undefined;
+  });
+
+  describe('maxRecords', () => {
+    function messagesRange(count: number, startOffset = 1n): KafkaMessage[] {
+      return Array.from({ length: count }, (_, index) => kafkaMessage(startOffset + BigInt(index)));
+    }
+
+    it('defaults to 500-record slices per poll for eachMessage even when the batch is much larger', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const seenOffsets: bigint[] = [];
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async ({ message }) => {
+          seenOffsets.push(message.offset);
+        },
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(1200, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 2000n, messages });
+      await runner.handleBatch(batch);
+
+      // Every record is still delivered, in order, none dropped or duplicated across slices.
+      expect(seenOffsets).toHaveLength(1200);
+      expect(seenOffsets[0]).toBe(1n);
+      expect(seenOffsets[seenOffsets.length - 1]).toBe(1200n);
+
+      // Two internal 500-record checkpoints (after offsets 500 and 1000) plus the final commit
+      // `handleBatch` issues once `processEachMessage` returns.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
+      expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+    });
+
+    it('delivers a batch smaller than maxRecords in a single internal cycle', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const seenOffsets: bigint[] = [];
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async ({ message }) => {
+          seenOffsets.push(message.offset);
+        },
+        maxRecords: 5,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 10n, messages: messagesRange(3, 1n) });
+      await runner.handleBatch(batch);
+
+      expect(seenOffsets).toEqual([1n, 2n, 3n]);
+      // 3 < maxRecords(5): no mid-batch checkpoint, only the end-of-batch commit.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not truncate eachBatch by default even for a very large batch', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const eachBatch = vi.fn<EachBatchHandler>(async () => undefined);
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(10_000, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 20_000n, messages });
+      await runner.handleBatch(batch);
+
+      expect(eachBatch).toHaveBeenCalledTimes(1);
+      expect(eachBatch.mock.calls[0]?.[0].batch.messages).toHaveLength(10_000);
+    });
+
+    it('slices eachBatch into maxRecords-sized sub-batches when set explicitly', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const receivedSizes: number[] = [];
+      const receivedOffsets: bigint[] = [];
+      const eachBatch: EachBatchHandler = async ({ batch: slice, resolveOffset }) => {
+        receivedSizes.push(slice.messages.length);
+        for (const message of slice.messages) {
+          receivedOffsets.push(message.offset);
+          resolveOffset(message.offset);
+        }
+      };
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch,
+        maxRecords: 5,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const messages = messagesRange(12, 1n);
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 20n, messages });
+      await runner.handleBatch(batch);
+
+      expect(receivedSizes).toEqual([5, 5, 2]);
+      expect(receivedOffsets).toEqual(messages.map((message) => message.offset));
+      // Checkpointed between the 2 slice boundaries, plus the final commit after the last slice.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not pass maxRecords into the Fetch call, leaving maxBytes/maxBytesPerPartition untouched', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async () => undefined,
+        maxRecords: 1,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      await runner.fetch('1');
+
+      // `Runner#fetch` only ever forwards the node id: `maxRecords` never reaches the Fetch
+      // request, so the wire-level `maxBytes`/`maxBytesPerPartition` configured on the consumer
+      // group (owned by `ConsumerGroup`, not `Runner`) are never altered by it.
+      expect(consumerGroup.fetch).toHaveBeenCalledWith('1');
+      expect(consumerGroup.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 });

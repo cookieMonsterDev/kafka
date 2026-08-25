@@ -137,6 +137,18 @@ export interface UnregisterBrokerOptions {
   brokerId: number;
 }
 
+export interface AssignReplicasToDirsReplica {
+  topic: string;
+  partition: number;
+  directoryId: Buffer;
+}
+
+export interface AssignReplicasToDirsOptions {
+  brokerId: number;
+  brokerEpoch?: bigint;
+  replicas: AssignReplicasToDirsReplica[];
+}
+
 export interface RaftVoterListener {
   name: string;
   host: string;
@@ -524,6 +536,8 @@ export interface AdminOptions {
 export interface Admin {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   listTopics: () => Promise<string[]>;
   createTopics: (options: {
     topics: TopicConfig[];
@@ -638,6 +652,7 @@ export interface Admin {
   describeFeatures: () => Promise<DescribeFeaturesResult>;
   describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
   unregisterBroker: (options: UnregisterBrokerOptions) => Promise<void>;
+  assignReplicasToDirs: (options: AssignReplicasToDirsOptions) => Promise<void>;
   addRaftVoter: (options: AddRaftVoterOptions) => Promise<void>;
   removeRaftVoter: (options: RemoveRaftVoterOptions) => Promise<void>;
   listConfigResources: (options?: {

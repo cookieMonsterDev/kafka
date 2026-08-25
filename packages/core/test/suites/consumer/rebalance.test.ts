@@ -3,6 +3,7 @@ import { cooperativeSticky } from '../../../src/consumer/assigners/index';
 import { MemberAssignment } from '../../../src/consumer/assigner-protocol';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
+import type { TopicPartition } from '../../../src/consumer/types';
 import {
   createCluster,
   createTopic,
@@ -66,6 +67,64 @@ describe('consumer.rebalance', () => {
     const [a, b] = await Promise.all([first.describeGroup(), second.describeGroup()]);
     expect(a.members.length).toBe(2);
     expect(b.members.length).toBe(2);
+  });
+
+  it('invokes onPartitionsAssigned and onPartitionsRevoked during a live rebalance', async () => {
+    first = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      sessionTimeout: 10_000,
+      rebalanceTimeout: 15_000,
+      logger: newLogger(),
+    });
+    second = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      sessionTimeout: 10_000,
+      rebalanceTimeout: 15_000,
+      logger: newLogger(),
+    });
+
+    const firstAssigned: TopicPartition[][] = [];
+    const firstRevoked: TopicPartition[][] = [];
+    const secondAssigned: TopicPartition[][] = [];
+
+    await first.connect();
+    await first.subscribe({ topic: topicName, fromBeginning: true });
+    const firstJoin = waitForConsumerToJoinGroup(first, { label: 'first' });
+    await first.run({
+      eachMessage: async () => undefined,
+      onPartitionsAssigned: (partitions) => {
+        firstAssigned.push(partitions);
+      },
+      onPartitionsRevoked: (partitions) => {
+        firstRevoked.push(partitions);
+      },
+    });
+    await firstJoin;
+
+    expect(firstAssigned.length).toBeGreaterThan(0);
+    expect([...(firstAssigned[0] ?? [])].sort((left, right) => left.partition - right.partition)).toEqual([
+      { topic: topicName, partition: 0 },
+      { topic: topicName, partition: 1 },
+    ]);
+
+    const rejoin = waitForConsumerToJoinGroup(first, { label: 'first-rejoin', maxWait: 20_000 });
+    await second.connect();
+    await second.subscribe({ topic: topicName, fromBeginning: true });
+    const secondJoin = waitForConsumerToJoinGroup(second, { label: 'second', maxWait: 20_000 });
+    await second.run({
+      eachMessage: async () => undefined,
+      onPartitionsAssigned: (partitions) => {
+        secondAssigned.push(partitions);
+      },
+    });
+    await Promise.all([rejoin, secondJoin]);
+
+    expect(firstRevoked.some((partitions) => partitions.length > 0)).toBe(true);
+    expect(secondAssigned.some((partitions) => partitions.length > 0)).toBe(true);
   });
 
   testIfKafkaAtLeast_2_4('settles a cooperative rebalance before reporting the group join', async () => {

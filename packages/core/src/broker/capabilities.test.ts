@@ -3,6 +3,8 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import type { BrokerVersions } from '../protocol/requests/index';
 import {
   supportsAclPatternType,
+  supportsClientTelemetry,
+  supportsDescribeClusterControllers,
   supportsHeaders,
   supportsRecordBatch,
   supportsTransactions,
@@ -42,5 +44,17 @@ describe('broker/capabilities', () => {
     expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 11 } })).toBe(false);
     expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 12 } })).toBe(true);
     expect(supportsTransactionV2({})).toBe(false);
+  });
+
+  it('supportsDescribeClusterControllers when DescribeCluster maxVersion is at least 1', () => {
+    expect(supportsDescribeClusterControllers({ [API_KEYS.DescribeCluster]: { maxVersion: 0 } })).toBe(false);
+    expect(supportsDescribeClusterControllers({ [API_KEYS.DescribeCluster]: { maxVersion: 1 } })).toBe(true);
+    expect(supportsDescribeClusterControllers({ [API_KEYS.DescribeCluster]: { maxVersion: 2 } })).toBe(true);
+    expect(supportsDescribeClusterControllers({})).toBe(false);
+  });
+
+  it('supportsClientTelemetry when GetTelemetrySubscriptions is advertised', () => {
+    expect(supportsClientTelemetry({ [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } })).toBe(true);
+    expect(supportsClientTelemetry({})).toBe(false);
   });
 });

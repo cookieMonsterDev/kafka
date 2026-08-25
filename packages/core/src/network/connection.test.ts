@@ -146,6 +146,7 @@ describe('network/Connection', () => {
         socket.end = vi.fn().mockReturnThis();
         socket.unref = vi.fn().mockReturnThis();
         socket.write = vi.fn().mockReturnValue(true);
+        socket.destroy = vi.fn().mockReturnThis();
         return socket;
       };
 
@@ -164,6 +165,30 @@ describe('network/Connection', () => {
       await connection.connect();
       await expect(connection.disconnect()).resolves.toBe(true);
       expect(connection.isConnected()).toBe(false);
+    });
+  });
+
+  describe('connectionsMaxIdleMs', () => {
+    it('closes a connected socket after the idle interval with no traffic', async () => {
+      const { server, port } = await startFakeBroker(() => {});
+      servers.push(server);
+
+      const connection = createConnection(port, { connectionsMaxIdleMs: 40 });
+      await connection.connect();
+      expect(connection.isConnected()).toBe(true);
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(connection.isConnected()).toBe(false);
+    });
+
+    it('does not close when idle close is disabled', async () => {
+      const { server, port } = await startFakeBroker(() => {});
+      servers.push(server);
+
+      const connection = createConnection(port, { connectionsMaxIdleMs: 0 });
+      await connection.connect();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(connection.isConnected()).toBe(true);
     });
   });
 

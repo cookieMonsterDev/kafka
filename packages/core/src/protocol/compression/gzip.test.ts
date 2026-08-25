@@ -28,4 +28,21 @@ describe('protocol/compression/gzip', () => {
     await expect(decompressGzip(Buffer.from('not gzip'))).rejects.toThrow();
     await expect(decompressGzip(Buffer.from('not gzip'))).rejects.not.toBeInstanceOf(KafkaNonRetriableError);
   });
+
+  it('honors compressionLevel: level 1 produces a larger output than level 9 for compressible data', async () => {
+    const encoder = new Encoder().writeBuffer(Buffer.from('kafka-kafka-kafka-'.repeat(200)));
+    const fast = await gzipCodec.compress(encoder, 1);
+    const best = await gzipCodec.compress(encoder, 9);
+
+    expect(fast.length).toBeGreaterThan(best.length);
+    expect(await gzipCodec.decompress(fast)).toEqual(encoder.buffer);
+    expect(await gzipCodec.decompress(best)).toEqual(encoder.buffer);
+  });
+
+  it('omits the level option entirely when compressionLevel is not set', async () => {
+    const encoder = new Encoder().writeString('hello kafka');
+    // No level passed - falls back to zlib's own default, still round-trips correctly.
+    const compressed = await gzipCodec.compress(encoder, undefined);
+    expect(await gzipCodec.decompress(compressed)).toEqual(encoder.buffer);
+  });
 });

@@ -23,7 +23,7 @@ describe('protocol/requests/fetch/v12/response', () => {
       .writeUVarInt(0)
       .writeUVarInt(0);
 
-    const decoded = await fetchResponseV12.decode(encoded.buffer);
+    const decoded = await fetchResponseV12().decode(encoded.buffer);
     expect(decoded).toEqual({
       throttleTime: 0,
       clientSideThrottleTime: 5,
@@ -87,7 +87,7 @@ describe('protocol/requests/fetch/v12/response', () => {
       .writeUVarInt(nodeEndpointsTag.buffer.length)
       .writeBuffer(nodeEndpointsTag.buffer);
 
-    const decoded = await fetchResponseV12.decode(encoded.buffer);
+    const decoded = await fetchResponseV12().decode(encoded.buffer);
     expect(decoded.responses[0]?.partitions[0]?.currentLeader).toEqual({ leaderId: 3, leaderEpoch: 4 });
     expect(decoded.nodeEndpoints).toEqual([{ nodeId: 3, host: 'broker-3', port: 9094, rack: 'rack-a' }]);
   });

@@ -63,9 +63,44 @@ export interface ConsumerRunConfig {
   prefetchMaxBatches?: number;
   /** Max queued+in-flight record bytes prefetched per broker node. */
   prefetchMaxBytes?: number;
+  /**
+   * Caps how many records are delivered to the handler per internal processing cycle of an
+   * already-fetched batch (Java's `max.poll.records`). This slices delivery client-side only:
+   * it never shrinks the Fetch request (`maxBytes`/`maxBytesPerPartition` are unaffected), and
+   * leftover records carry over to the next cycle instead of being dropped or re-fetched.
+   * Defaults to `500` for `eachMessage`; `eachBatch` is unlimited unless set explicitly.
+   */
+  maxRecords?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
   signal?: AbortSignal;
+  /**
+   * Called with the partitions this member is giving up, before the consumer fetches from its
+   * new assignment (revoke-before-reassign). For a classic (eager) rebalance this is the
+   * member's entire prior assignment; for a cooperative-sticky incremental rebalance it is only
+   * the subset actually being given up this round - partitions the member keeps across the
+   * rebalance are not reported. Not called when partitions are lost without a clean revoke, see
+   * {@link ConsumerRunConfig.onPartitionsLost}. Awaited before the next assignment is installed;
+   * an error thrown here is logged and does not abort the rebalance.
+   */
+  onPartitionsRevoked?: RebalanceListener;
+  /**
+   * Called with the partitions newly gained by this member once it has (re)joined the group and
+   * installed its new assignment. For a classic rebalance this is the member's entire new
+   * assignment; for a cooperative-sticky incremental rebalance it is only the partitions not
+   * already held before this rebalance. An error thrown here is logged and does not abort the
+   * rebalance.
+   */
+  onPartitionsAssigned?: RebalanceListener;
+  /**
+   * Called instead of `onPartitionsRevoked` when this member's assignment was lost without a
+   * clean revoke - e.g. its session expired, or it was fenced out of the group
+   * (`UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`) before it had a chance to leave gracefully. A
+   * lost partition may already be owned by another member, so any pending offset commit for it
+   * should typically be abandoned rather than attempted. An error thrown here is logged and does
+   * not abort the rejoin.
+   */
+  onPartitionsLost?: RebalanceListener;
 }
 
 export interface TopicPartitions {
@@ -77,6 +112,15 @@ export interface TopicPartition {
   topic: string;
   partition: number;
 }
+
+/**
+ * Rebalance callback for {@link ConsumerRunConfig.onPartitionsRevoked},
+ * {@link ConsumerRunConfig.onPartitionsAssigned}, and {@link ConsumerRunConfig.onPartitionsLost}.
+ * Called with only the partitions actually moving in that rebalance step (see each option's doc
+ * comment). Ecosystem term for the equivalent protocol concept: Java's `ConsumerRebalanceListener`.
+ * @see https://kafka.apache.org/43/design/design/
+ */
+export type RebalanceListener = (topicPartitions: TopicPartition[]) => void | Promise<void>;
 
 export interface TopicPartitionOffset extends TopicPartition {
   offset: bigint;
@@ -159,6 +203,51 @@ export interface GroupDescription {
   protocol: string;
   protocolType: string;
   state: string;
+}
+
+/**
+ * Payload for {@link ConsumerHooks.onConsume}. Fires immediately before the user's handler runs
+ * for this unit of work: once per message when running with `eachMessage`, or once per batch when
+ * running with `eachBatch`. Exactly one of `message`/`batch` is set, matching the active mode.
+ */
+export interface OnConsumeEvent {
+  topic: string;
+  partition: number;
+  /** Set in `eachMessage` mode. */
+  message?: KafkaMessage;
+  /** Set in `eachBatch` mode. */
+  batch?: import('./batch').Batch;
+}
+
+export type OnConsumeHook = (event: OnConsumeEvent) => void | Promise<void>;
+
+/**
+ * Payload for {@link ConsumerHooks.onCommit}. Fires once per offset-commit attempt - auto-commit
+ * or a manual {@link Consumer.commitOffsets} call - after the broker responds (or the attempt
+ * fails). `error` is set on failure; `topics` is the set of topic/partition offsets committed (or
+ * attempted).
+ */
+export interface OnCommitEvent {
+  groupId: string;
+  memberId: string;
+  groupGenerationId: number;
+  topics: TopicOffsets[];
+  error?: unknown;
+}
+
+export type OnCommitHook = (event: OnCommitEvent) => void | Promise<void>;
+
+/**
+ * User-supplied hooks for a consumer's consume/commit paths. These are plain ordered async
+ * callbacks, not an interceptor SPI: each array runs in registration order, one hook is always
+ * awaited before the next starts, and a hook that throws is caught and logged - it never fails or
+ * alters the underlying consume or commit outcome.
+ */
+export interface ConsumerHooks {
+  /** Before `eachMessage`/`eachBatch` runs for a message or batch. */
+  onConsume?: readonly OnConsumeHook[];
+  /** After an offset-commit attempt (auto-commit or manual `commitOffsets`) settles. */
+  onCommit?: readonly OnCommitHook[];
 }
 
 /** Coerce a user-supplied offset to `bigint`. Accepts `bigint`, integer `number`, and numeric strings. */

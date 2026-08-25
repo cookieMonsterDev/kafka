@@ -22,8 +22,8 @@ export async function decompressGzip(buffer: Buffer, maxOutputLength = MAX_DECOM
 }
 
 export const gzipCodec: CompressionCodec = {
-  async compress(encoder) {
-    return gzip(encoder.buffer);
+  async compress(encoder, level) {
+    return level == null ? gzip(encoder.buffer) : gzip(encoder.buffer, { level });
   },
   async decompress(buffer) {
     return decompressGzip(buffer);

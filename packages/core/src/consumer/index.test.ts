@@ -450,6 +450,19 @@ describe('consumer', () => {
       ]);
     });
 
+    it('normalizes empty offset metadata to null', async () => {
+      const offsetFetch = vi.fn(async () => ({
+        responses: [{ topic: 't', partitions: [{ partition: 0, offset: 7n, metadata: '', errorCode: 0 }] }],
+      }));
+      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
+      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+      await expect(consumer.committed([{ topic: 't', partition: 0 }])).resolves.toEqual([
+        { topic: 't', partition: 0, offset: 7n, metadata: null },
+      ]);
+    });
+
     it('defaults a partition missing from the response to offset -1n and metadata null', async () => {
       const offsetFetch = vi.fn(async () => ({ responses: [] }));
       const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));

@@ -43,6 +43,8 @@ export interface ShareConsumerOptions {
 export interface ShareConsumer {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   subscribe: (subscription: ShareConsumerSubscribeTopics) => void;
   run: (config: ShareConsumerRunConfig) => Promise<void>;
   stop: () => Promise<void>;
@@ -165,6 +167,7 @@ export function createShareConsumer({
   return {
     connect,
     disconnect,
+    clientInstanceId: () => cluster.clientInstanceId(),
     subscribe,
     run,
     stop,

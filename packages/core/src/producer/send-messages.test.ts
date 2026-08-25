@@ -95,6 +95,7 @@ describe('producer/sendMessages', () => {
       connect: vi.fn().mockResolvedValue(undefined),
       targetTopics: new Set<string>(),
       isConnected: vi.fn().mockReturnValue(true),
+      recordProduceMetrics: vi.fn(),
     };
   }
 

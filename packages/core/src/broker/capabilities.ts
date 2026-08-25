@@ -51,3 +51,9 @@ export function supportsDescribeClusterControllers(versions: BrokerVersions): bo
   const describeCluster = advertised(versions, API_KEYS.DescribeCluster);
   return describeCluster != null && describeCluster.maxVersion >= 1;
 }
+
+/** KIP-714 client telemetry: GetTelemetrySubscriptions (71) / PushTelemetry (72). Kafka 3.5+. */
+export function supportsClientTelemetry(versions: BrokerVersions): boolean {
+  const subscriptions = advertised(versions, API_KEYS.GetTelemetrySubscriptions);
+  return subscriptions != null && subscriptions.maxVersion != null;
+}

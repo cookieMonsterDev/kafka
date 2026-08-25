@@ -3,6 +3,7 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import type { BrokerVersions } from '../protocol/requests/index';
 import {
   supportsAclPatternType,
+  supportsClientTelemetry,
   supportsDescribeClusterControllers,
   supportsHeaders,
   supportsRecordBatch,
@@ -50,5 +51,10 @@ describe('broker/capabilities', () => {
     expect(supportsDescribeClusterControllers({ [API_KEYS.DescribeCluster]: { maxVersion: 1 } })).toBe(true);
     expect(supportsDescribeClusterControllers({ [API_KEYS.DescribeCluster]: { maxVersion: 2 } })).toBe(true);
     expect(supportsDescribeClusterControllers({})).toBe(false);
+  });
+
+  it('supportsClientTelemetry when GetTelemetrySubscriptions is advertised', () => {
+    expect(supportsClientTelemetry({ [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } })).toBe(true);
+    expect(supportsClientTelemetry({})).toBe(false);
   });
 });

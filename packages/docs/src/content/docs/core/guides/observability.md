@@ -49,7 +49,24 @@ OpenTelemetry.
 | `kafka.consumer.group_join`       | counter         | `group_join`                                         |
 
 Request metrics include `client`, `api_name`, and `broker` attributes. Names
-are exported as `METRIC_NAMES` for KIP-714 telemetry later.
+are exported as `METRIC_NAMES` and reused on the KIP-714 push path.
 
 Config: [`KafkaConfig.metrics`](../../reference/configuration/#kafkaconfig).
 Events: [`on()`](../../reference/kafka/).
+
+## Broker telemetry (KIP-714)
+
+After `connect()`, each producer, consumer, admin, and share consumer
+subscribes with GetTelemetrySubscriptions (71) and, when the broker asks for
+metrics, pushes OTLP `MetricsData` via PushTelemetry (72). Default **on**
+(`enableMetricsPush: true`). If the broker does not advertise API 71 (Kafka
+before 3.5, or a build without the plugin), the pusher disables itself —
+connect still succeeds.
+
+`clientInstanceId()` returns the 16-byte UUID the broker assigned, or `null`
+until that RPC completes (or when push is off). Admin
+`listConfigResources` v0 still lists client-metrics resource names.
+
+The payload reuses the same `METRIC_NAMES` as the client-side meter. Empty
+`RequestedMetrics` from the broker means push nothing; a single empty string
+means all names.

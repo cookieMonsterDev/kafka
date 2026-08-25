@@ -1,7 +1,7 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import type { Admin } from '../admin/types';
 import type { MetadataRecovery } from '../cluster/broker-pool';
-import type { PartitionMetadata } from '../cluster/index';
+import type { PartitionMetadata, TopicPartitionInfo } from '../cluster/index';
 import type {
   AutoOffsetReset,
   Batch,
@@ -33,6 +33,7 @@ import type {
 } from '../consumer/types';
 import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
+import type { ClientDnsLookup } from '../network/dns-lookup';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
 import type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';
@@ -142,8 +143,36 @@ export interface KafkaConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#client.id
    */
   clientId?: string;
-  /** Socket connect timeout in milliseconds. */
+  /** Socket connect timeout in milliseconds. Also the initial TLS/TCP setup timeout. */
   connectionTimeout?: number;
+  /**
+   * Close idle broker sockets after this many milliseconds with no send/receive and no in-flight
+   * requests. Default 540_000 (9 minutes). `0` disables idle close.
+   * [connections.max.idle.ms](https://kafka.apache.org/43/configuration/producer-configs/#connections.max.idle.ms)
+   */
+  connectionsMaxIdleMs?: number;
+  /**
+   * Cap, in ms, for exponential growth of the connect/TLS handshake timeout after consecutive
+   * failures. The initial timeout is {@link KafkaConfig.connectionTimeout}. Default 30_000.
+   * [socket.connection.setup.timeout.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#socket.connection.setup.timeout.max.ms)
+   */
+  socketConnectionSetupTimeoutMaxMs?: number;
+  /**
+   * How bootstrap hostnames are resolved. Default `'useAllDnsIps'` (every A/AAAA, happy-eyeballs
+   * when both families exist). `'canonicalBootstrap'` follows CNAME/PTR so GSSAPI sees the FQDN.
+   * [client.dns.lookup](https://kafka.apache.org/43/configuration/producer-configs/#client.dns.lookup)
+   */
+  clientDnsLookup?: ClientDnsLookup;
+  /**
+   * Initial wait before reconnecting a dropped socket. Default 50. `0` disables.
+   * [reconnect.backoff.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.ms)
+   */
+  reconnectBackoffMs?: number;
+  /**
+   * Cap for reconnect backoff. Default 1000.
+   * [reconnect.backoff.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.max.ms)
+   */
+  reconnectBackoffMaxMs?: number;
   /** SASL handshake timeout in milliseconds. */
   authenticationTimeout?: number;
   /** Reauthenticate this many milliseconds before the broker session expires. */
@@ -167,6 +196,13 @@ export interface KafkaConfig {
    * (optional peer). Pass `{ meter }` to supply any OpenTelemetry-compatible `Meter`.
    */
   metrics?: KafkaMetrics;
+  /**
+   * KIP-714: after connect, subscribe and push client metrics to the broker when it
+   * advertises GetTelemetrySubscriptions (Kafka 3.5+). Default true; the pusher disables
+   * itself if the API is missing. Set false to skip the RPCs entirely.
+   * [enable.metrics.push](https://kafka.apache.org/43/configuration/producer-configs/#enable.metrics.push)
+   */
+  enableMetricsPush?: boolean;
 }
 
 /**
@@ -453,6 +489,7 @@ export type {
   OnConsumeHook,
   PartitionAssigner,
   PartitionMetadata,
+  TopicPartitionInfo,
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
@@ -478,6 +515,7 @@ export type {
 };
 
 export type { RetryOptions } from '../retry/index';
+export type { ClientDnsLookup } from '../network/dns-lookup';
 
 export type {
   EachShareBatchHandler,

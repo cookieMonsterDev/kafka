@@ -28,6 +28,9 @@ Source:
 Consumers are long-running processes. Do not call `run()` inside a serverless
 request handler.
 
+`listTopics()` and `partitionsFor(topic)` are the same Metadata helpers as on
+the producer. See [Consumer API](../../reference/consumer/#listtopics--partitionsfor).
+
 ## Subscribe
 
 `fromBeginning: true` starts at the earliest offset when the group has no

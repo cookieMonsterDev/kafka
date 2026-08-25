@@ -52,6 +52,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                        |
 | `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults        |
 | `describeCluster()`                                            | DescribeCluster (key 60) when advertised  |
+| `clientInstanceId()`                                           | KIP-714 UUID; `null` until assigned       |
 | `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+    |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                    |
 | `alterPartitionReassignments` / `listPartitionReassignments`   |                                           |

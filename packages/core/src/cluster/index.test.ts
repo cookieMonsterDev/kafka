@@ -305,4 +305,57 @@ describe('cluster/Cluster', () => {
       await expect(cluster.findBroker({ nodeId: '1' })).resolves.toBe(broker);
     });
   });
+
+  describe('listTopics / partitionsFor', () => {
+    it('listTopics returns named topics from a full metadata fetch', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster, 'connect').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'metadata').mockResolvedValue(
+        fakeMetadata({
+          topicMetadata: [
+            { topicErrorCode: 0, topic: 'orders', isInternal: false, partitionMetadata: [] },
+            { topicErrorCode: 0, topic: null, isInternal: true, partitionMetadata: [] },
+          ],
+        }),
+      );
+
+      await expect(cluster.listTopics()).resolves.toEqual(['orders']);
+    });
+
+    it('partitionsFor maps cached partition metadata after adding the topic', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster, 'connect').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'addTargetTopic').mockResolvedValue(undefined);
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [
+          {
+            topicErrorCode: 0,
+            topic: 'orders',
+            isInternal: false,
+            partitionMetadata: [
+              {
+                partitionErrorCode: 0,
+                partitionId: 1,
+                leader: 2,
+                replicas: [2, 3],
+                isr: [2],
+                offlineReplicas: [3],
+              },
+            ],
+          },
+        ],
+      });
+
+      await expect(cluster.partitionsFor('orders')).resolves.toEqual([
+        {
+          topic: 'orders',
+          partitionId: 1,
+          leader: 2,
+          replicas: [2, 3],
+          isr: [2],
+          offlineReplicas: [3],
+        },
+      ]);
+    });
+  });
 });

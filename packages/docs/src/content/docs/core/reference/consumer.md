@@ -23,6 +23,9 @@ interface Consumer {
   committed(topicPartitions: readonly TopicPartition[]): Promise<TopicPartitionOffsetAndMetadata[]>;
   position(topicPartition: TopicPartition): bigint | null;
   currentLag(topicPartition: TopicPartition): bigint | null;
+  listTopics(): Promise<string[]>;
+  partitionsFor(topic: string): Promise<TopicPartitionInfo[]>;
+  clientInstanceId(): Buffer | null;
   logger(): Logger;
   on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
   readonly events: Record<string, string>;
@@ -107,6 +110,21 @@ isn't currently assigned - a rebalance can move it away between fetches, for
 example. `currentLag` is `highWatermark - position` and returns `null` under
 the same condition, or when no Fetch response has landed yet for that
 partition. Both throw if the group/assignment hasn't started yet.
+
+## `listTopics` / `partitionsFor`
+
+Same Metadata helpers as on the producer — no Admin client required:
+
+```ts
+await consumer.connect();
+const topics = await consumer.listTopics();
+const partitions = await consumer.partitionsFor('events');
+```
+
+## `clientInstanceId`
+
+Same KIP-714 UUID as on the producer (`Buffer | null` until the broker assigns
+one). See [Observability](../../guides/observability/#broker-telemetry-kip-714).
 
 ## `KafkaMessage`
 

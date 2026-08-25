@@ -212,14 +212,6 @@ client APIs and are omitted here.
 `alterStreamsGroupOffsets`, `deleteStreamsGroupOffsets`, or
 `deleteStreamsGroups`.
 
-**Client telemetry (KIP-714).** No GetTelemetrySubscriptions (71) or
-PushTelemetry (72). There is no `clientInstanceId()` or `metrics()`. Java's
-deprecated `listClientMetricsResources` is covered by
-`admin.listConfigResources` (v0 lists client-metrics names).
-
-**Consumer shape.** Membership is `run()` / `stream()`, not Java `poll()`.
-The `Consumer` interface has no `assign()`, `unsubscribe()`, `assignment()`,
-or `committed()`.
-
-Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
+**Consumer shape.** Membership is `run()` / `stream()`, not a blocking `poll()`
+loop. Offsets as `bigint`, MessageSet, ZSTD, and `KAFKA_*` env vars:
 [Breaking changes](../../migration/breaking-changes/).

@@ -1,4 +1,4 @@
-import type { Cluster } from '../cluster/index';
+import type { Cluster, TopicPartitionInfo } from '../cluster/index';
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
@@ -199,6 +199,12 @@ export interface Consumer {
    * Throws {@link KafkaNonRetriableError} if the group/assignment has not started yet.
    */
   currentLag: (topicPartition: TopicPartition) => bigint | null;
+  /** Topic names from Metadata (all topics the broker will describe). Connects if needed. */
+  listTopics: () => Promise<string[]>;
+  /** Partition leaders/replicas/ISR for `topic`. Connects and refreshes metadata if needed. */
+  partitionsFor: (topic: string) => Promise<TopicPartitionInfo[]>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   pause: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
   paused: () => TopicPartitions[];
   resume: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
@@ -1101,6 +1107,19 @@ export function createConsumer({
     committed,
     position,
     currentLag,
+    listTopics: async () => {
+      if (!cluster.isConnected()) {
+        await connect();
+      }
+      return cluster.listTopics();
+    },
+    partitionsFor: async (topic: string) => {
+      if (!cluster.isConnected()) {
+        await connect();
+      }
+      return cluster.partitionsFor(topic);
+    },
+    clientInstanceId: () => cluster.clientInstanceId(),
     pause,
     paused,
     resume,

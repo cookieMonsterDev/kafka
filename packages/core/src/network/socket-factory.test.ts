@@ -70,4 +70,30 @@ describe('network/createDefaultSocketFactory', () => {
 
     connectSpy.mockRestore();
   });
+
+  it('uses an explicit servername for SNI when connecting to an IP over TLS', () => {
+    const fakeSocket = () => {
+      const socket = new EventEmitter() as unknown as net.Socket;
+      socket.setKeepAlive = vi.fn().mockReturnThis();
+      socket.setNoDelay = vi.fn().mockReturnThis();
+      return socket;
+    };
+
+    const connectSpy = vi.spyOn(tls, 'connect').mockImplementation((() => fakeSocket()) as never);
+    const factory = createDefaultSocketFactory();
+    factory({
+      host: '10.0.0.1',
+      port: 9093,
+      ssl: {},
+      servername: 'broker.example.com',
+      onConnect: () => {},
+    });
+
+    expect(connectSpy.mock.calls[0]?.[0]).toMatchObject({
+      host: '10.0.0.1',
+      port: 9093,
+      servername: 'broker.example.com',
+    });
+    connectSpy.mockRestore();
+  });
 });

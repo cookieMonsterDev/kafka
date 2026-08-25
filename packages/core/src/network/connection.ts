@@ -1,4 +1,5 @@
 import type { Socket } from 'node:net';
+import net from 'node:net';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { INT_32_MAX_VALUE } from '../constants';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
@@ -12,6 +13,8 @@ import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../pr
 import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { CONNECTED_STATUS, CONNECTION_STATUS } from './connection-status';
 import type { ConnectionStatus } from './connection-status';
+import { DEFAULT_CONNECTIONS_MAX_IDLE_MS } from './defaults';
+import { connectHappyEyeballs, resolveBrokerAddresses, type ClientDnsLookup } from './dns-lookup';
 import type { NetworkEventMap } from './instrumentation-events';
 import { RequestQueue } from './request-queue/index';
 import type { RequestEntry } from './request-queue/socket-request';
@@ -101,6 +104,22 @@ export interface ConnectionOptions {
   maxInFlightRequests?: number | null;
   instrumentationEmitter?: InstrumentationEventEmitter<NetworkEventMap> | null;
   createSaslAuthenticator?: CreateSaslAuthenticator;
+  /**
+   * Close the socket after this many ms with no send/receive and no in-flight requests.
+   * Default 9 minutes. `0` disables idle close.
+   */
+  connectionsMaxIdleMs?: number;
+  /** DNS policy for hostname brokers. Default `useAllDnsIps`. */
+  clientDnsLookup?: ClientDnsLookup;
+  /**
+   * Cap, in ms, for exponential growth of the connect/TLS handshake timeout after consecutive
+   * failures. Initial timeout is {@link ConnectionOptions.connectionTimeout}. Default 30_000.
+   */
+  socketConnectionSetupTimeoutMaxMs?: number;
+  /** Initial wait before reconnecting a dropped socket. Default 50. `0` disables. */
+  reconnectBackoffMs?: number;
+  /** Cap for reconnect backoff. Default 1000. */
+  reconnectBackoffMaxMs?: number;
 }
 
 interface AuthHandlers {
@@ -166,11 +185,14 @@ export class Connection {
   readonly #ssl: TlsConnectionOptions | null;
   readonly #connectionTimeout: number;
   readonly #reauthenticationThreshold: number;
+  readonly #connectionsMaxIdleMs: number;
+  readonly #clientDnsLookup: ClientDnsLookup;
   readonly #shouldLogBuffers: boolean;
   readonly #shouldLogFetchBuffer: boolean;
   readonly #createSaslAuthenticator: CreateSaslAuthenticator | undefined;
 
   #socket: Socket | undefined;
+  #idleTimer: NodeJS.Timeout | undefined;
   #connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   #correlationId = 0;
   #versions: BrokerVersions | null = null;
@@ -223,6 +245,8 @@ export class Connection {
       maxInFlightRequests = null,
       instrumentationEmitter = null,
       createSaslAuthenticator,
+      connectionsMaxIdleMs = DEFAULT_CONNECTIONS_MAX_IDLE_MS,
+      clientDnsLookup = 'useAllDnsIps',
     } = options;
 
     this.host = host;
@@ -239,6 +263,8 @@ export class Connection {
 
     this.#connectionTimeout = connectionTimeout;
     this.#reauthenticationThreshold = reauthenticationThreshold;
+    this.#connectionsMaxIdleMs = connectionsMaxIdleMs;
+    this.#clientDnsLookup = clientDnsLookup;
 
     this.requestQueue = new RequestQueue({
       instrumentationEmitter,
@@ -279,7 +305,7 @@ export class Connection {
     return CONNECTED_STATUS.includes(this.#connectionStatus);
   }
 
-  connect(): Promise<boolean> {
+  connect(setupTimeoutMs?: number): Promise<boolean> {
     return new Promise((resolve, reject) => {
       if (this.isConnected()) {
         resolve(true);
@@ -289,22 +315,45 @@ export class Connection {
       this.#authenticatedAt = null;
       this.#resetReceiveBuffer();
 
-      let timeoutId: NodeJS.Timeout;
+      const timeoutMs = setupTimeoutMs ?? this.#connectionTimeout;
+      const abort = new AbortController();
+      const timeouts: NodeJS.Timeout[] = [];
+      let settled = false;
 
-      const onConnect = (): void => {
-        clearTimeout(timeoutId);
+      const clearSetupTimeout = (): void => {
+        for (const timeoutId of timeouts) clearTimeout(timeoutId);
+      };
+
+      const fail = (error: KafkaConnectionError): void => {
+        if (settled) return;
+        settled = true;
+        abort.abort();
+        clearSetupTimeout();
+        this.#clearIdleTimer();
+        reject(error);
+      };
+
+      const succeed = (socket: Socket): void => {
+        if (settled) {
+          if (typeof socket.destroy === 'function') socket.destroy();
+          return;
+        }
+        settled = true;
+        abort.abort();
+        clearSetupTimeout();
+        this.#socket = socket;
         this.#connectionStatus = CONNECTION_STATUS.CONNECTED;
+        this.#armIdleTimer();
         resolve(true);
       };
 
       const onData = (data: Buffer): void => {
+        this.#touchActivity();
         this.#processData(data);
       };
 
       const onEnd = (): void => {
         void (async () => {
-          clearTimeout(timeoutId);
-
           const wasConnected = this.isConnected();
 
           if (this.#authHandlers) {
@@ -322,8 +371,6 @@ export class Connection {
 
       const onError = (e: Error & { code?: string }): void => {
         void (async () => {
-          clearTimeout(timeoutId);
-
           const error = new KafkaConnectionError(`Connection error: ${e.message}`, {
             broker: `${this.host}:${this.port}`,
             code: e.code,
@@ -333,7 +380,9 @@ export class Connection {
           this.#rejectRequests(error);
           await this.disconnect();
 
-          reject(error);
+          if (!this.isConnected()) {
+            fail(error);
+          }
         })();
       };
 
@@ -346,37 +395,110 @@ export class Connection {
           this.#logError(error.message);
           this.#rejectRequests(error);
           await this.disconnect();
-          reject(error);
+          fail(error);
         })();
       };
 
       this.#logDebug('Connecting', { ssl: !!this.#ssl, sasl: !!this.sasl });
 
-      try {
-        timeoutId = setTimeout(onTimeout, this.#connectionTimeout);
-        this.#socket = createSocket({
-          socketFactory: this.#socketFactory,
-          host: this.host,
-          port: this.port,
-          ssl: this.#ssl,
-          onConnect,
-          onData,
-          onEnd,
-          onError,
-          onTimeout,
+      timeouts.push(
+        setTimeout(() => {
+          onTimeout();
+        }, timeoutMs),
+      );
+
+      const connectAddress = (address: { address: string }, servername: string | undefined): Promise<Socket> =>
+        new Promise((resolveAddress, rejectAddress) => {
+          if (abort.signal.aborted) {
+            rejectAddress(new KafkaConnectionError('Connection attempt aborted', { broker: this.broker }));
+            return;
+          }
+
+          let finished = false;
+          const finishReject = (error: Error): void => {
+            if (finished) return;
+            finished = true;
+            abort.signal.removeEventListener('abort', onAbort);
+            try {
+              if (typeof socket.destroy === 'function') socket.destroy();
+            } catch {
+              // ignore
+            }
+            rejectAddress(error);
+          };
+
+          const onAbort = (): void => {
+            finishReject(new KafkaConnectionError('Connection attempt aborted', { broker: this.broker }));
+          };
+
+          const socket = createSocket({
+            socketFactory: this.#socketFactory,
+            host: address.address,
+            port: this.port,
+            ssl: this.#ssl,
+            servername,
+            onConnect: () => {
+              if (finished || abort.signal.aborted) {
+                if (typeof socket.destroy === 'function') socket.destroy();
+                return;
+              }
+              finished = true;
+              abort.signal.removeEventListener('abort', onAbort);
+              socket.removeListener('error', onSocketError);
+              resolveAddress(socket);
+            },
+            onData,
+            onEnd,
+            onError: (e) => {
+              if (!this.isConnected()) {
+                onError(e);
+              }
+            },
+            onTimeout,
+          });
+
+          const onSocketError = (e: Error & { code?: string }): void => {
+            finishReject(
+              new KafkaConnectionError(`Connection error: ${e.message}`, {
+                broker: `${this.host}:${this.port}`,
+                code: e.code,
+              }),
+            );
+          };
+
+          socket.once('error', onSocketError);
+          abort.signal.addEventListener('abort', onAbort, { once: true });
         });
-      } catch (e) {
-        clearTimeout(timeoutId!);
-        reject(
-          new KafkaConnectionError(`Failed to connect: ${(e as Error).message}`, {
-            broker: `${this.host}:${this.port}`,
-          }),
-        );
-      }
+
+      void (async () => {
+        try {
+          const resolved = await resolveBrokerAddresses(this.host, this.#clientDnsLookup);
+          if (abort.signal.aborted) return;
+          if (resolved.addresses.length === 0) {
+            fail(new KafkaConnectionError(`Failed to resolve broker host "${this.host}"`, { broker: this.broker }));
+            return;
+          }
+
+          const servername = net.isIP(resolved.hostname) ? undefined : resolved.hostname;
+          const socket = await connectHappyEyeballs(resolved.addresses, (address) =>
+            connectAddress(address, servername),
+          );
+          succeed(socket);
+        } catch (e) {
+          const error =
+            e instanceof KafkaConnectionError
+              ? e
+              : new KafkaConnectionError(`Failed to connect: ${(e as Error).message}`, {
+                  broker: `${this.host}:${this.port}`,
+                });
+          fail(error);
+        }
+      })();
     });
   }
 
   async disconnect(): Promise<boolean> {
+    this.#clearIdleTimer();
     this.#authenticatedAt = null;
     this.#connectionStatus = CONNECTION_STATUS.DISCONNECTING;
     this.#resetReceiveBuffer();
@@ -519,6 +641,7 @@ export class Connection {
             expectResponse,
             requestTimeout,
             sendRequest: () => {
+              this.#touchActivity();
               this.#socket!.write(requestPayload.buffer, 'binary');
             },
           });
@@ -578,6 +701,37 @@ export class Connection {
     }
   }
 
+  #touchActivity(): void {
+    if (this.isConnected()) {
+      this.#armIdleTimer();
+    }
+  }
+
+  #armIdleTimer(): void {
+    this.#clearIdleTimer();
+    if (this.#connectionsMaxIdleMs <= 0 || !this.isConnected()) return;
+    this.#idleTimer = setTimeout(() => {
+      void this.#closeIfIdle();
+    }, this.#connectionsMaxIdleMs);
+  }
+
+  #clearIdleTimer(): void {
+    if (this.#idleTimer) {
+      clearTimeout(this.#idleTimer);
+      this.#idleTimer = undefined;
+    }
+  }
+
+  async #closeIfIdle(): Promise<void> {
+    if (!this.isConnected()) return;
+    if (this.requestQueue.isBusy()) {
+      this.#armIdleTimer();
+      return;
+    }
+    this.#logDebug('Closing idle connection');
+    await this.disconnect();
+  }
+
   #nextCorrelationId(): number {
     if (this.#correlationId >= INT_32_MAX_VALUE) {
       this.#correlationId = 0;
@@ -626,6 +780,7 @@ export class Connection {
   }
 
   #processData(rawData: Buffer): void {
+    this.#touchActivity();
     if (this.#authHandlers && !this.#authExpectResponse) {
       this.#authHandlers.onSuccess(rawData);
       return;

@@ -2,8 +2,9 @@ import { createSaslAuthenticator } from '../broker/sasl-authenticator/index';
 import { KafkaConnectionError, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
-import { ConnectionPool } from '../network/connection-pool';
 import type { ConnectionOptions } from '../network/connection';
+import { ConnectionPool } from '../network/connection-pool';
+import type { ClientDnsLookup } from '../network/dns-lookup';
 import type { NetworkEventMap } from '../network/instrumentation-events';
 import type { SocketFactory } from '../network/socket-factory';
 import { shuffle } from '../utils/shuffle';
@@ -23,6 +24,11 @@ export interface ConnectionPoolBuilderOptions {
   logger: Logger;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   reauthenticationThreshold?: number;
+  connectionsMaxIdleMs?: number;
+  clientDnsLookup?: ClientDnsLookup;
+  socketConnectionSetupTimeoutMaxMs?: number;
+  reconnectBackoffMs?: number;
+  reconnectBackoffMaxMs?: number;
 }
 
 export interface ConnectionPoolDestination {
@@ -70,6 +76,11 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
     logger,
     instrumentationEmitter = null,
     reauthenticationThreshold,
+    connectionsMaxIdleMs,
+    clientDnsLookup,
+    socketConnectionSetupTimeoutMaxMs,
+    reconnectBackoffMs,
+    reconnectBackoffMaxMs,
   } = options;
 
   let index = 0;
@@ -129,6 +140,11 @@ export function connectionPoolBuilder(options: ConnectionPoolBuilderOptions): Co
           InstrumentationEventEmitter<NetworkEventMap> | null | undefined,
         logger,
         reauthenticationThreshold,
+        connectionsMaxIdleMs,
+        clientDnsLookup,
+        socketConnectionSetupTimeoutMaxMs,
+        reconnectBackoffMs,
+        reconnectBackoffMaxMs,
         createSaslAuthenticator,
       });
     },

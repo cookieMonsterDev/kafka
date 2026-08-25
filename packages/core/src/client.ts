@@ -62,6 +62,12 @@ export class Kafka {
     logLevel = LOG_LEVELS.INFO,
     logCreator = consoleLogCreator,
     metrics,
+    connectionsMaxIdleMs,
+    socketConnectionSetupTimeoutMaxMs,
+    clientDnsLookup,
+    reconnectBackoffMs,
+    reconnectBackoffMaxMs,
+    enableMetricsPush,
   }: KafkaConfig) {
     this.#logger = createLogger({ level: logLevel, logCreator });
     this.#clusterRetry = retry;
@@ -107,6 +113,12 @@ export class Kafka {
         maxInFlightRequests,
         isolationLevel,
         usingBootstrapControllers,
+        connectionsMaxIdleMs,
+        clientDnsLookup,
+        socketConnectionSetupTimeoutMaxMs,
+        reconnectBackoffMs,
+        reconnectBackoffMaxMs,
+        enableMetricsPush,
       });
   }
 

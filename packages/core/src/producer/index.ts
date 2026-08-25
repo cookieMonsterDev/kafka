@@ -1,5 +1,5 @@
 import { supportsTransactions } from '../broker/capabilities';
-import type { Cluster, TopicOffsets } from '../cluster/index';
+import type { Cluster, TopicOffsets, TopicPartitionInfo } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
@@ -71,6 +71,12 @@ export interface Producer {
   flush: () => Promise<void>;
   /** Begin a transaction. Requires `transactionalId` on the producer. */
   transaction: () => Promise<Transaction>;
+  /** Topic names from Metadata (all topics the broker will describe). Connects if needed. */
+  listTopics: () => Promise<string[]>;
+  /** Partition leaders/replicas/ISR for `topic`. Connects and refreshes metadata if needed. */
+  partitionsFor: (topic: string) => Promise<TopicPartitionInfo[]>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   logger: () => Logger;
   [Symbol.asyncDispose]: () => Promise<void>;
 }
@@ -310,6 +316,19 @@ export function createProducer({
     sendBatch,
     flush: flushAll,
     transaction,
+    listTopics: async () => {
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        await connect();
+      }
+      return cluster.listTopics();
+    },
+    partitionsFor: async (topic: string) => {
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        await connect();
+      }
+      return cluster.partitionsFor(topic);
+    },
+    clientInstanceId: () => cluster.clientInstanceId(),
     logger: () => logger,
     [Symbol.asyncDispose]: disconnect,
   };

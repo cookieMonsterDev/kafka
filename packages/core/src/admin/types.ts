@@ -536,6 +536,8 @@ export interface AdminOptions {
 export interface Admin {
   connect: (options?: ConnectOptions) => Promise<void>;
   disconnect: (options?: ConnectOptions) => Promise<void>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   listTopics: () => Promise<string[]>;
   createTopics: (options: {
     topics: TopicConfig[];

@@ -170,6 +170,12 @@ import type { DescribeTopicPartitionsResponseV0Body } from '../protocol/requests
 import { ListConfigResources } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesOptions } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesResponseV1Body } from '../protocol/requests/list-config-resources/v1/response';
+import { GetTelemetrySubscriptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import type { GetTelemetrySubscriptionsOptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import type { GetTelemetrySubscriptionsResponseV0Body } from '../protocol/requests/get-telemetry-subscriptions/v0/response';
+import { PushTelemetry } from '../protocol/requests/push-telemetry/index';
+import type { PushTelemetryOptions } from '../protocol/requests/push-telemetry/index';
+import type { PushTelemetryResponseV0Body } from '../protocol/requests/push-telemetry/v0/response';
 import { ListTransactions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
@@ -655,6 +661,21 @@ export class Broker {
       ListConfigResources,
     );
     return this.#send(listConfigResources(options));
+  }
+
+  async getTelemetrySubscriptions(
+    options: GetTelemetrySubscriptionsOptions = {},
+  ): Promise<GetTelemetrySubscriptionsResponseV0Body> {
+    const getTelemetrySubscriptions = this.lookupRequest<GetTelemetrySubscriptionsOptions>(
+      API_KEYS.GetTelemetrySubscriptions,
+      GetTelemetrySubscriptions,
+    );
+    return this.#send(getTelemetrySubscriptions(options));
+  }
+
+  async pushTelemetry(options: PushTelemetryOptions): Promise<PushTelemetryResponseV0Body> {
+    const pushTelemetry = this.lookupRequest<PushTelemetryOptions>(API_KEYS.PushTelemetry, PushTelemetry);
+    return this.#send(pushTelemetry(options));
   }
 
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {

@@ -24,6 +24,8 @@ describe('Kafka', () => {
     expect(typeof producer.flush).toBe('function');
     expect(typeof producer.connect).toBe('function');
     expect(typeof producer.disconnect).toBe('function');
+    expect(typeof producer.listTopics).toBe('function');
+    expect(typeof producer.partitionsFor).toBe('function');
     expect(typeof producer[Symbol.asyncDispose]).toBe('function');
     expect(producer.isIdempotent()).toBe(false);
   });
@@ -35,6 +37,8 @@ describe('Kafka', () => {
     expect(typeof consumer.subscribe).toBe('function');
     expect(typeof consumer.run).toBe('function');
     expect(typeof consumer.stream).toBe('function');
+    expect(typeof consumer.listTopics).toBe('function');
+    expect(typeof consumer.partitionsFor).toBe('function');
     expect(typeof consumer[Symbol.asyncDispose]).toBe('function');
   });
 
@@ -123,6 +127,18 @@ describe('Kafka', () => {
       createUpDownCounter: () => ({ add: () => undefined }),
     };
     expect(() => createClient({ metrics: { meter } }).producer()).not.toThrow();
+  });
+
+  it('accepts connection idle, DNS, and reconnect knobs', () => {
+    expect(() =>
+      createClient({
+        connectionsMaxIdleMs: 60_000,
+        clientDnsLookup: 'canonicalBootstrap',
+        socketConnectionSetupTimeoutMaxMs: 15_000,
+        reconnectBackoffMs: 100,
+        reconnectBackoffMaxMs: 2_000,
+      }).producer(),
+    ).not.toThrow();
   });
 
   it('accepts bootstrapControllers on admin()', () => {

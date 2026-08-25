@@ -27,6 +27,10 @@ Methods live on [`Producer`](../../reference/producer/). Config fields are in
 [Configuration](../../reference/configuration/). Source:
 [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 
+`listTopics()` and `partitionsFor(topic)` read cluster Metadata so you do not
+need an Admin client to discover topics and partition leaders. See
+[Producer API](../../reference/producer/#listtopics--partitionsfor).
+
 ## Message shape
 
 Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.

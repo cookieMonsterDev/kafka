@@ -247,6 +247,7 @@ export function createSendMessages({
         if (rejection) throw rejection.reason;
         const collected = collectResponse();
         metrics?.recordProduce({ ...produceSize, retries: retryCount });
+        cluster.recordProduceMetrics?.({ ...produceSize, retries: retryCount });
         return collected;
       } catch (e) {
         const error = e as Error & {

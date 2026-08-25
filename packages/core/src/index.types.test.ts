@@ -90,4 +90,18 @@ describe('public types', () => {
     expectTypeOf<KafkaConfig>().toHaveProperty('metrics');
     expectTypeOf<AdminConfig>().toHaveProperty('bootstrapControllers');
   });
+
+  it('types connection knobs and partitionsFor helpers', () => {
+    expectTypeOf<KafkaConfig>().toHaveProperty('connectionsMaxIdleMs');
+    expectTypeOf<KafkaConfig>().toHaveProperty('clientDnsLookup');
+    expectTypeOf<KafkaConfig>().toHaveProperty('reconnectBackoffMs');
+    expectTypeOf<Producer>().toHaveProperty('listTopics');
+    expectTypeOf<Producer>().toHaveProperty('partitionsFor');
+    expectTypeOf<Consumer>().toHaveProperty('listTopics');
+    expectTypeOf<Consumer>().toHaveProperty('partitionsFor');
+    expectTypeOf<KafkaConfig>().toHaveProperty('enableMetricsPush');
+    expectTypeOf<Producer>().toHaveProperty('clientInstanceId');
+    expectTypeOf<Consumer>().toHaveProperty('clientInstanceId');
+    expectTypeOf<Admin>().toHaveProperty('clientInstanceId');
+  });
 });

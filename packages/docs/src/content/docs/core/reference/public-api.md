@@ -60,6 +60,9 @@ and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 - Built-in Snappy (`CompressionTypes.Snappy`), LZ4 (`CompressionTypes.LZ4`), and ZSTD (`CompressionTypes.ZSTD`)
 - Optional OpenTelemetry metrics via `KafkaConfig.metrics` (see [Observability](../../guides/observability/))
 - Admin `bootstrapControllers` for KRaft controller-only discovery (KIP-919)
+- `producer.listTopics()` / `consumer.listTopics()` and `partitionsFor(topic)` over cluster metadata
+- Connection knobs: `connectionsMaxIdleMs`, `clientDnsLookup`, `reconnectBackoffMs` / max, `socketConnectionSetupTimeoutMaxMs`
+- KIP-714 client telemetry (`enableMetricsPush`, `clientInstanceId()`) — [Observability](../../guides/observability/)
 
 ## Capability errors
 

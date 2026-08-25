@@ -10,10 +10,12 @@ function fakeCluster(): Cluster {
   return {
     connect: vi.fn(async () => undefined),
     disconnect: vi.fn(async () => undefined),
+    isConnected: vi.fn().mockReturnValue(false),
     addMultipleTargetTopics: vi.fn(async () => undefined),
     metadata: vi.fn(async () => ({ topicMetadata: [] })),
     findGroupCoordinator: vi.fn(),
     removeBroker: vi.fn(),
+    clientInstanceId: vi.fn().mockReturnValue(null),
   } as unknown as Cluster;
 }
 
@@ -79,6 +81,33 @@ describe('consumer', () => {
   it('exposes the public events map', () => {
     const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
     expect(consumer.events).toBe(events);
+  });
+
+  it('delegates listTopics and partitionsFor to the cluster', async () => {
+    const partitions = [{ topic: 'orders', partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] }];
+    const connect = vi.fn(async () => undefined);
+    const listTopics = vi.fn().mockResolvedValue(['orders']);
+    const partitionsFor = vi.fn().mockResolvedValue(partitions);
+    const cluster = {
+      ...fakeCluster(),
+      connect,
+      listTopics,
+      partitionsFor,
+      isConnected: vi.fn().mockReturnValue(false),
+    } as unknown as Cluster;
+
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+    await expect(consumer.listTopics()).resolves.toEqual(['orders']);
+    await expect(consumer.partitionsFor('orders')).resolves.toEqual(partitions);
+    expect(connect).toHaveBeenCalled();
+    expect(partitionsFor).toHaveBeenCalledWith('orders');
+  });
+
+  it('exposes clientInstanceId from the cluster', () => {
+    const id = Buffer.alloc(16, 5);
+    const cluster = { ...fakeCluster(), clientInstanceId: () => id } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+    expect(consumer.clientInstanceId()).toEqual(id);
   });
 
   it('throws when seeking before run()', () => {

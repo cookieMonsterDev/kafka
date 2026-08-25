@@ -23,6 +23,8 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.ListTransactions).toBe(66);
     expect(API_KEYS.ConsumerGroupHeartbeat).toBe(68);
     expect(API_KEYS.ConsumerGroupDescribe).toBe(69);
+    expect(API_KEYS.GetTelemetrySubscriptions).toBe(71);
+    expect(API_KEYS.PushTelemetry).toBe(72);
     expect(API_KEYS.ShareGroupHeartbeat).toBe(76);
     expect(API_KEYS.ShareGroupDescribe).toBe(77);
     expect(API_KEYS.ShareFetch).toBe(78);

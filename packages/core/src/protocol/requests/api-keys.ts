@@ -68,6 +68,8 @@ export const API_KEYS = Object.freeze({
   ListTransactions: 66,
   ConsumerGroupHeartbeat: 68,
   ConsumerGroupDescribe: 69,
+  GetTelemetrySubscriptions: 71,
+  PushTelemetry: 72,
   ShareGroupHeartbeat: 76,
   ShareGroupDescribe: 77,
   ShareFetch: 78,

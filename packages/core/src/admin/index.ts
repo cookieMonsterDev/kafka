@@ -147,6 +147,7 @@ export function createAdmin({
   return {
     connect,
     disconnect,
+    clientInstanceId: () => cluster.clientInstanceId(),
     ...topics,
     ...producers,
     ...offsets,

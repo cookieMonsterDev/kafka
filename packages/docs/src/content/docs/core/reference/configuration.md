@@ -100,6 +100,11 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 | `maxWaitTimeInMs`      | `5000`           | [fetch.max.wait.ms](https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms)                                                  |
 | `retry`                | `{ retries: 5 }` |                                                                                                                                                     |
 
+`committed`, `position`, and `currentLag` on `Consumer` read committed
+offsets, fetch position, and lag without any extra config. See
+[Consumer](../../guides/consumer/#committed-offsets-position-and-lag) and
+[`committed` / `position` / `currentLag`](./consumer/#committed--position--currentlag).
+
 ## `ShareConsumerConfig`
 
 | Field               | Default          | Notes                                                                              |

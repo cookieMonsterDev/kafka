@@ -62,6 +62,29 @@ consumer.resume([{ topic: 'events' }]);
 consumer.seek({ topic: 'events', partition: 0, offset: 42n });
 ```
 
+## Committed offsets, position, and lag
+
+```ts
+const committed = await consumer.committed([{ topic: 'events', partition: 0 }]);
+const position = consumer.position({ topic: 'events', partition: 0 });
+const lag = consumer.currentLag({ topic: 'events', partition: 0 });
+```
+
+`committed()` fetches offsets from the group coordinator (OffsetFetch); it
+does not need `run()`/`stream()` to have started, since it is reading broker
+state rather than local state. A partition with no committed offset comes
+back as `offset: -1n`. This is the live-consumer counterpart to
+`admin.fetchOffsets`, which remains the out-of-band tool for inspecting or
+resetting offsets without a running consumer.
+
+`position()` is the next offset this consumer will read for an assigned
+partition; `currentLag()` is `highWatermark - position()`. Both return `null`
+when the partition is not currently assigned instead of throwing - so a
+rebalance that moves a partition away shows up as `null`, not an error.
+`currentLag()` also returns `null` until at least one Fetch response has been
+seen for the partition. Both require the group/assignment to have started
+(`run()`, `stream()`, or `assign()`) and throw otherwise.
+
 ## Assigners and isolation
 
 Range, round-robin (default), sticky, and cooperative-sticky are built in

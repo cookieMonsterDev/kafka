@@ -19,6 +19,9 @@ interface Consumer {
   seek(topicPartitionOffset: { topic: string; partition: number; offset: bigint | number | string }): void;
   commitOffsets(topicPartitions: readonly TopicPartitionOffsetAndMetadata[]): Promise<void>;
   describeGroup(): Promise<GroupDescription>;
+  committed(topicPartitions: readonly TopicPartition[]): Promise<TopicPartitionOffsetAndMetadata[]>;
+  position(topicPartition: TopicPartition): bigint | null;
+  currentLag(topicPartition: TopicPartition): bigint | null;
   logger(): Logger;
   on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
   readonly events: Record<string, string>;
@@ -58,6 +61,29 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.
 The default concurrency is `1`. Spread `throughputPreset().consumer` into `run()`
 for concurrency `4`. See [Throughput](../../guides/throughput/).
+
+## `committed` / `position` / `currentLag`
+
+```ts
+const committed = await consumer.committed([{ topic: 'events', partition: 0 }]);
+// [{ topic: 'events', partition: 0, offset: 41n, metadata: null }]
+
+const position = consumer.position({ topic: 'events', partition: 0 }); // 42n | null
+const lag = consumer.currentLag({ topic: 'events', partition: 0 }); // bigint | null
+```
+
+`committed` reads offsets from the group coordinator (OffsetFetch) and works
+whether or not `run()`/`stream()` has started - it queries the broker
+directly, the same way `admin.fetchOffsets` does. A partition with no
+committed offset comes back as `offset: -1n`, `metadata: null` (Kafka's wire
+convention for "none").
+
+`position` is the next fetch offset for a partition currently assigned to
+this consumer. It returns `null`, rather than throwing, when the partition
+isn't currently assigned - a rebalance can move it away between fetches, for
+example. `currentLag` is `highWatermark - position` and returns `null` under
+the same condition, or when no Fetch response has landed yet for that
+partition. Both throw if the group/assignment hasn't started yet.
 
 ## `KafkaMessage`
 

@@ -9,6 +9,7 @@ import { MemberAssignment } from './assigner-protocol';
 import { ConsumerGroup, nextAdaptiveMaxBytes } from './consumer-group';
 import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetManager } from './offset-manager/index';
+import type { TopicOffsetConfiguration } from './offset-reset';
 import type { Assigner } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -422,6 +423,156 @@ describe('consumer/consumer-group', () => {
       subscribedTopicNames: null,
     });
     expect(consumerGroupHeartbeat.mock.calls[1]?.[0].topicPartitions).toEqual([{ topicId, partitions: [0, 1] }]);
+  });
+
+  it('sends serverAssignor on ConsumerGroupHeartbeat when groupRemoteAssignor is set (KIP-848)', async () => {
+    const consumerGroupHeartbeat = vi.fn().mockResolvedValueOnce({
+      memberId: 'generated-member',
+      memberEpoch: 1,
+      heartbeatIntervalMs: 5_000,
+      assignment: null,
+    });
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup: vi.fn(), consumerGroupHeartbeat })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
+      committedOffsets: vi.fn(() => ({})),
+      refreshMetadata: vi.fn(async () => undefined),
+    } as unknown as Cluster;
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      groupProtocol: 'consumer',
+      groupRemoteAssignor: 'uniform',
+    });
+
+    await consumerGroup.joinAndSync();
+
+    expect(consumerGroup.groupRemoteAssignor).toBe('uniform');
+    expect(consumerGroupHeartbeat.mock.calls[0]?.[0]).toMatchObject({ serverAssignor: 'uniform' });
+  });
+
+  it('ignores groupRemoteAssignor and subscribedTopicRegex when groupProtocol is classic', () => {
+    const entries: { log: { message: string } }[] = [];
+    const logger = createLogger({ level: LOG_LEVELS.DEBUG, logCreator: () => (entry) => entries.push(entry) });
+
+    const consumerGroup = new ConsumerGroup({
+      logger,
+      topics: ['topic1'],
+      topicConfigurations: {},
+      cluster: {} as Cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      groupProtocol: 'classic',
+      groupRemoteAssignor: 'uniform',
+      subscribedTopicRegex: 'foo.*',
+    });
+
+    expect(consumerGroup.groupRemoteAssignor).toBeNull();
+    expect(consumerGroup.subscribedTopicRegex).toBeNull();
+    expect(entries.some((entry) => entry.log.message.includes('groupRemoteAssignor'))).toBe(true);
+    expect(entries.some((entry) => entry.log.message.includes('subscribedTopicRegex'))).toBe(true);
+  });
+
+  it('sends subscribedTopicRegex instead of topic names and applies its offset config to regex-matched topics', async () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const consumerGroupHeartbeat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        memberId: 'generated-member',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: { topicPartitions: [{ topicId, partitions: [0, 1] }] },
+      })
+      .mockResolvedValueOnce({
+        memberId: 'generated-member',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: null,
+      });
+    const consumerGroupDescribe = vi.fn(async () => ({
+      groups: [
+        {
+          groupId: 'group',
+          members: [
+            {
+              memberId: 'generated-member',
+              assignment: { topicPartitions: [{ topicId, topicName: 'matched-topic' }] },
+              targetAssignment: { topicPartitions: [] },
+            },
+          ],
+        },
+      ],
+    }));
+    const cluster = {
+      findGroupCoordinator: vi.fn(async () => ({ joinGroup: vi.fn(), consumerGroupHeartbeat, consumerGroupDescribe })),
+      findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+      committedOffsets: vi.fn(() => ({})),
+      refreshMetadata: vi.fn(async () => undefined),
+    } as unknown as Cluster;
+    const topicConfigurations: Record<string, TopicOffsetConfiguration> = {};
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: [],
+      topicConfigurations,
+      cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: true,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      groupProtocol: 'consumer',
+      subscribedTopicRegex: 'matched-.*',
+      defaultTopicConfiguration: { autoOffsetReset: 'earliest' },
+    });
+
+    await consumerGroup.joinAndSync();
+
+    expect(consumerGroupHeartbeat.mock.calls[0]?.[0]).toMatchObject({
+      subscribedTopicNames: [],
+      subscribedTopicRegex: 'matched-.*',
+    });
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'matched-topic', partitions: [0, 1] }]);
+    expect(topicConfigurations['matched-topic']).toEqual({ autoOffsetReset: 'earliest' });
   });
 
   it('emits GROUP_JOIN when a later heartbeat installs a new assignment', async () => {

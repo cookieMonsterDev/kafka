@@ -107,6 +107,7 @@ export type {
   EachShareBatchHandler,
   EachShareBatchPayload,
   GroupProtocol,
+  GroupRemoteAssignor,
   GssTokenChallenge,
   GssTokenProvider,
   GssTokenStep,

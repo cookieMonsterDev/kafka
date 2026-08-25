@@ -180,6 +180,7 @@ export class Kafka {
     groupInstanceId,
     autoOffsetReset,
     groupProtocol,
+    groupRemoteAssignor,
     hooks,
     checkCrcs,
   }: ConsumerConfig): Consumer {
@@ -213,6 +214,7 @@ export class Kafka {
       groupInstanceId,
       autoOffsetReset,
       groupProtocol,
+      groupRemoteAssignor,
       hooks,
       checkCrcs,
     });
@@ -258,6 +260,7 @@ export class Kafka {
       batchSize,
       shareAcquireMode,
       rackId,
+      instrumentationEmitter,
     });
   }
 

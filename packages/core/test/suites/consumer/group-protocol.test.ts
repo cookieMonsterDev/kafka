@@ -9,6 +9,7 @@ import {
   newLogger,
   secureRandom,
   testIfKafkaAtLeast_4_0,
+  testIfKafkaAtLeast_4_1,
   waitForMessages,
 } from '../../helpers/index';
 
@@ -113,4 +114,45 @@ describe('consumer.groupProtocol', () => {
     expect(secondPartitions.size).toBeGreaterThan(0);
     expect(new Set([...firstPartitions, ...secondPartitions]).size).toBeGreaterThan(0);
   });
+
+  testIfKafkaAtLeast_4_1(
+    'a RegExp subscription is matched server-side via subscribedTopicRegex (KIP-848 SubscriptionPattern)',
+    async () => {
+      // `topicName` already exists (created in beforeEach). The broker matches
+      // `subscribedTopicRegex` against topics it currently knows about, it does not discover
+      // topics created after the member subscribes - so the unmatched topic is created up front.
+      // Gated to 4.1+ because `subscribedTopicRegex` is ConsumerGroupHeartbeat v1.
+      const unmatchedTopic = `unmatched-${secureRandom()}`;
+      await createTopic({ topic: unmatchedTopic, partitions: 1 });
+
+      first = createConsumer({
+        cluster: createCluster(),
+        groupId,
+        groupProtocol: 'consumer',
+        maxWaitTimeInMs: 100,
+        rebalanceTimeout: 15_000,
+        logger: newLogger(),
+      });
+
+      await first.connect();
+      await first.subscribe({ topics: [new RegExp(`^${topicName}$`)], fromBeginning: true });
+
+      const consumed: EachMessagePayload[] = [];
+      const joined = waitForAssignedPartitions(first, { label: 'regex-subscribe' });
+      await first.run({
+        eachMessage: async (event) => {
+          consumed.push(event);
+        },
+      });
+      await joined;
+
+      await producer!.connect();
+      await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+      await producer!.send({ acks: 1, topic: unmatchedTopic, messages: generateMessages({ number: 5 }) });
+
+      await waitForMessages(consumed, { number: 5 });
+
+      expect(consumed.every((event) => event.topic === topicName)).toBe(true);
+    },
+  );
 });

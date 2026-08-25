@@ -131,6 +131,14 @@ export interface ConsumerOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /**
+   * Server-side partition assignor to request under the KIP-848 consumer protocol. Only
+   * meaningful when `groupProtocol` is `'consumer'`; ignored (logged at debug level) otherwise,
+   * the same as `sessionTimeout`, `heartbeatInterval`, and `partitionAssigners` are unused under
+   * `groupProtocol: 'consumer'`. Broker property: `group.remote.assignor`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   */
+  groupRemoteAssignor?: 'uniform' | 'range';
   /** Ordered async `onConsume`/`onCommit` hooks. See {@link ConsumerHooks}. */
   hooks?: ConsumerHooks;
   /**
@@ -231,6 +239,7 @@ export function createConsumer({
   groupInstanceId,
   autoOffsetReset,
   groupProtocol = 'classic',
+  groupRemoteAssignor,
   hooks,
   checkCrcs = true,
 }: ConsumerOptions): Consumer {
@@ -241,6 +250,11 @@ export function createConsumer({
   );
 
   const topics: Record<string, TopicOffsetConfiguration> = {};
+  // KIP-848 server-side regex subscription (`groupProtocol: 'consumer'` only): the `.source` of
+  // the single RegExp subscribed so far, sent as `subscribedTopicRegex` instead of a client-
+  // resolved topic list, plus the offset-reset config to apply to topics it matches.
+  let subscribedTopicRegex: string | null = null;
+  let subscribedTopicRegexConfiguration: TopicOffsetConfiguration | null = null;
   let runner: Runner | null = null;
   let consumerGroup: ConsumerGroup | null = null;
   let restartTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -352,8 +366,41 @@ export function createConsumer({
       throw new KafkaNonRetriableError('Missing required argument "topics"');
     }
 
-    const hasRegexSubscriptions = subscriptions.some((entry) => entry instanceof RegExp);
-    const regexEntries = subscriptions.filter((entry): entry is RegExp => entry instanceof RegExp);
+    const regexSubscriptions = subscriptions.filter((entry): entry is RegExp => entry instanceof RegExp);
+    const nameSubscriptions = subscriptions.filter((entry): entry is string => typeof entry === 'string');
+
+    if (groupProtocol === 'consumer' && regexSubscriptions.length > 0) {
+      // KIP-848: the broker matches a `SubscriptionPattern` server-side instead of the client
+      // scanning metadata itself, but a member can only carry one such pattern - reject a second,
+      // distinct RegExp across this and any earlier subscribe() call in this consumer's lifetime.
+      const alreadyDiffers =
+        subscribedTopicRegex != null && regexSubscriptions.some((entry) => entry.source !== subscribedTopicRegex);
+      if (regexSubscriptions.length > 1 || alreadyDiffers) {
+        throw new KafkaNonRetriableError(
+          'Only one RegExp subscription is supported per consumer group when groupProtocol is "consumer" ' +
+            '(KIP-848 subscribes via a single server-side SubscriptionPattern per member)',
+        );
+      }
+
+      const [pattern] = regexSubscriptions;
+      subscribedTopicRegex = pattern!.source;
+      subscribedTopicRegexConfiguration = topicConfiguration;
+
+      logger.debug('Subscription based on RegExp will be matched server-side (KIP-848 SubscriptionPattern)', {
+        groupId,
+        topicRegExp: pattern!.toString(),
+      });
+
+      for (const name of nameSubscriptions) {
+        topics[name] = topicConfiguration;
+      }
+
+      await cluster.addMultipleTargetTopics(nameSubscriptions);
+      return;
+    }
+
+    const hasRegexSubscriptions = regexSubscriptions.length > 0;
+    const regexEntries = regexSubscriptions;
 
     const matchTopicsForRegex = (
       candidateMetadata: Awaited<ReturnType<typeof cluster.metadata>> | undefined,
@@ -552,6 +599,9 @@ export function createConsumer({
               autoCommitInterval,
               autoCommitThreshold,
               groupProtocol,
+              groupRemoteAssignor,
+              subscribedTopicRegex,
+              defaultTopicConfiguration: subscribedTopicRegexConfiguration ?? undefined,
               hooks,
               checkCrcs,
               onPartitionsRevoked,
@@ -581,6 +631,9 @@ export function createConsumer({
               autoCommitInterval,
               autoCommitThreshold,
               groupProtocol,
+              groupRemoteAssignor,
+              subscribedTopicRegex,
+              defaultTopicConfiguration: subscribedTopicRegexConfiguration ?? undefined,
               hooks,
               checkCrcs,
               onPartitionsRevoked,

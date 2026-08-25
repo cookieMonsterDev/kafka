@@ -157,6 +157,28 @@ export interface ConsumerGroupOptions {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
+  /**
+   * Server-side partition assignor to request under the KIP-848 consumer protocol
+   * (`serverAssignor` on ConsumerGroupHeartbeat). Only meaningful when `groupProtocol` is
+   * `'consumer'`; set with `groupProtocol: 'classic'` it is ignored (logged at debug level),
+   * the same as this codebase's other consumer-protocol-only options.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   */
+  groupRemoteAssignor?: 'uniform' | 'range';
+  /**
+   * Server-side regex subscription (KIP-848 `SubscriptionPattern`) sent as `subscribedTopicRegex`
+   * on ConsumerGroupHeartbeat instead of a client-resolved topic list. Only meaningful when
+   * `groupProtocol` is `'consumer'`; set with `groupProtocol: 'classic'` it is ignored (logged at
+   * debug level). Kafka matches this pattern as RE2 server-side, which is not 1:1 with a JS
+   * `RegExp` - callers should stick to RE2-compatible patterns.
+   */
+  subscribedTopicRegex?: string | null;
+  /**
+   * Offset-reset configuration applied to a topic the broker assigns through
+   * `subscribedTopicRegex` (its name is unknown until the assignment arrives, so it cannot be
+   * looked up in `topicConfigurations` by name ahead of time).
+   */
+  defaultTopicConfiguration?: TopicOffsetConfiguration;
   /** Ordered async `onCommit` hook, forwarded to this group's `OffsetManager`. */
   hooks?: ConsumerHooks;
   /**
@@ -237,6 +259,12 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   groupInstanceId: string | null;
   /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
   useConsumerProtocol: boolean;
+  /** `serverAssignor` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
+  groupRemoteAssignor: 'uniform' | 'range' | null;
+  /** `subscribedTopicRegex` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
+  subscribedTopicRegex: string | null;
+  /** Fallback offset-reset config for topics assigned only via `subscribedTopicRegex`. */
+  defaultTopicConfiguration: TopicOffsetConfiguration | null;
   hooks: ConsumerHooks | undefined;
   onPartitionsRevoked: RebalanceListener | undefined;
   onPartitionsAssigned: RebalanceListener | undefined;
@@ -299,6 +327,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     metadataMaxAge,
     groupInstanceId,
     groupProtocol = 'classic',
+    groupRemoteAssignor,
+    subscribedTopicRegex,
+    defaultTopicConfiguration,
     hooks,
     onPartitionsRevoked,
     onPartitionsAssigned,
@@ -338,6 +369,23 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.onPartitionsAssigned = onPartitionsAssigned;
     this.onPartitionsLost = onPartitionsLost;
     this.#adaptiveMaxBytes = maxBytes;
+
+    if (groupRemoteAssignor != null && !this.useConsumerProtocol) {
+      this.logger.debug('groupRemoteAssignor is only used with groupProtocol "consumer"; ignoring', {
+        groupRemoteAssignor,
+        groupProtocol,
+      });
+    }
+    this.groupRemoteAssignor = this.useConsumerProtocol ? (groupRemoteAssignor ?? null) : null;
+
+    if (subscribedTopicRegex != null && !this.useConsumerProtocol) {
+      this.logger.debug('subscribedTopicRegex is only used with groupProtocol "consumer"; ignoring', {
+        subscribedTopicRegex,
+        groupProtocol,
+      });
+    }
+    this.subscribedTopicRegex = this.useConsumerProtocol ? (subscribedTopicRegex ?? null) : null;
+    this.defaultTopicConfiguration = this.useConsumerProtocol ? (defaultTopicConfiguration ?? null) : null;
 
     this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
       if (this.#assignMode) return;
@@ -760,6 +808,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
       rebalanceTimeoutMs: includeJoinFields ? this.rebalanceTimeout : -1,
       subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+      subscribedTopicRegex: includeJoinFields ? this.subscribedTopicRegex : null,
+      serverAssignor: includeJoinFields ? this.groupRemoteAssignor : null,
       topicPartitions: isJoining ? [] : includeOwnedPartitions ? this.#ownedTopicPartitions : null,
     });
 
@@ -799,6 +849,12 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     const owned: ConsumerGroupHeartbeatTopicPartitions[] = [];
     for (const { topicId, partitions } of response.assignment.topicPartitions) {
       const topic = await this.#resolveTopicName(topicId);
+      // Topics assigned only through `subscribedTopicRegex` were unknown at subscribe time, so
+      // they have no entry in `topicConfigurations` by name yet - apply the regex subscription's
+      // offset-reset config the first time each such topic is seen.
+      if (this.defaultTopicConfiguration && !(topic in this.topicConfigurations)) {
+        this.topicConfigurations[topic] = this.defaultTopicConfiguration;
+      }
       currentMemberAssignment.push({ topic, partitions });
       owned.push({ topicId, partitions });
     }

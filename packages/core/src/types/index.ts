@@ -345,6 +345,14 @@ export interface ConsumerConfig {
    */
   groupProtocol?: GroupProtocol;
   /**
+   * Server-side partition assignor to request under the KIP-848 consumer protocol. Only
+   * meaningful when `groupProtocol` is `'consumer'`; ignored (logged at debug level) otherwise,
+   * the same as `sessionTimeout`, `heartbeatInterval`, and `partitionAssigners` are unused under
+   * `groupProtocol: 'consumer'`. Broker property: `group.remote.assignor`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   */
+  groupRemoteAssignor?: GroupRemoteAssignor;
+  /**
    * Ordered async hooks around the consume/commit path, not an interceptor SPI: `onConsume`
    * fires before `eachMessage`/`eachBatch` runs, `onCommit` after an offset-commit attempt
    * settles (auto-commit or manual `commitOffsets`). Each array runs in registration order; a
@@ -362,6 +370,9 @@ export interface ConsumerConfig {
 }
 
 export type GroupProtocol = 'classic' | 'consumer';
+
+/** Broker-side partition assignor requested via `groupRemoteAssignor` (KIP-848, `group.remote.assignor`). */
+export type GroupRemoteAssignor = 'uniform' | 'range';
 
 /**
  * Options for {@link Kafka.shareConsumer} (KIP-932 share groups, Kafka 4.0+).

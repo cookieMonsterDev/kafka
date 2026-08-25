@@ -136,6 +136,73 @@ describe('consumer', () => {
     expect(addMultipleTargetTopics).toHaveBeenCalledWith(['foo-one', 'foo-two']);
   });
 
+  it('still runs the client-side metadata scan for RegExp subscriptions under classic protocol', async () => {
+    const metadata = vi.fn(async () => ({
+      topicMetadata: [{ topic: 'foo-one' }, { topic: 'bar' }],
+    }));
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), metadata, addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'classic' });
+
+    await consumer.subscribe({ topics: [/foo.*/] });
+
+    expect(metadata).toHaveBeenCalled();
+    expect(addMultipleTargetTopics).toHaveBeenCalledWith(['foo-one']);
+  });
+
+  it('sends a RegExp subscription server-side instead of scanning metadata when groupProtocol is consumer', async () => {
+    const metadata = vi.fn(async () => ({ topicMetadata: [{ topic: 'foo-one' }, { topic: 'bar' }] }));
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), metadata, addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'consumer' });
+
+    await consumer.subscribe({ topics: [/foo.*/] });
+
+    expect(metadata).not.toHaveBeenCalled();
+    expect(addMultipleTargetTopics).toHaveBeenCalledWith([]);
+  });
+
+  it('sends literal topic names alongside a RegExp subscription when groupProtocol is consumer', async () => {
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'consumer' });
+
+    await consumer.subscribe({ topics: ['literal-topic', /foo.*/] });
+
+    expect(addMultipleTargetTopics).toHaveBeenCalledWith(['literal-topic']);
+  });
+
+  it('rejects more than one RegExp subscription when groupProtocol is consumer', async () => {
+    const cluster = fakeCluster();
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'consumer' });
+
+    await expect(consumer.subscribe({ topics: [/foo.*/, /bar.*/] })).rejects.toThrow(
+      /Only one RegExp subscription is supported/,
+    );
+  });
+
+  it('rejects a second, different RegExp subscription across subscribe() calls when groupProtocol is consumer', async () => {
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'consumer' });
+
+    await consumer.subscribe({ topics: [/foo.*/] });
+
+    await expect(consumer.subscribe({ topics: [/bar.*/] })).rejects.toThrow(
+      /Only one RegExp subscription is supported/,
+    );
+  });
+
+  it('allows re-subscribing with the same RegExp source when groupProtocol is consumer', async () => {
+    const addMultipleTargetTopics = vi.fn(async () => undefined);
+    const cluster = { ...fakeCluster(), addMultipleTargetTopics } as unknown as Cluster;
+    const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger, groupProtocol: 'consumer' });
+
+    await consumer.subscribe({ topics: [/foo.*/] });
+
+    await expect(consumer.subscribe({ topics: [/foo.*/] })).resolves.not.toThrow();
+  });
+
   it('stores autoOffsetReset from subscribe options', async () => {
     const addMultipleTargetTopics = vi.fn(async () => undefined);
     const cluster = { ...fakeCluster(), addMultipleTargetTopics } as unknown as Cluster;

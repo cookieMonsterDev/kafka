@@ -115,4 +115,18 @@ describe('Kafka', () => {
     const kafka = createClient({ brokers: () => ['localhost:9092'] });
     expect(typeof kafka.producer().send).toBe('function');
   });
+
+  it('accepts a metrics meter without installing OpenTelemetry', () => {
+    const meter = {
+      createCounter: () => ({ add: () => undefined }),
+      createHistogram: () => ({ record: () => undefined }),
+      createUpDownCounter: () => ({ add: () => undefined }),
+    };
+    expect(() => createClient({ metrics: { meter } }).producer()).not.toThrow();
+  });
+
+  it('accepts bootstrapControllers on admin()', () => {
+    const admin = createClient().admin({ bootstrapControllers: ['localhost:9093'] });
+    expect(typeof admin.describeMetadataQuorum).toBe('function');
+  });
 });

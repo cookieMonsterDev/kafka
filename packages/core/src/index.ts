@@ -213,3 +213,13 @@ export type {
 } from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';
 export type { MetadataRecovery } from './cluster/broker-pool';
+export type {
+  KafkaCounter,
+  KafkaHistogram,
+  KafkaMeter,
+  KafkaMetricAttributes,
+  KafkaMetrics,
+  KafkaMetricsConfig,
+  KafkaUpDownCounter,
+} from './instrumentation/metrics';
+export { METRIC_NAMES } from './instrumentation/metrics';

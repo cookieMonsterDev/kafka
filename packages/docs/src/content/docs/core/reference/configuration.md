@@ -26,6 +26,7 @@ for the constructor-defaults table. Source:
 | `retry`                     | see below       |                                                                                                                                                                          |
 | `logLevel`                  | `logLevel.INFO` | Override with `KAFKA_LOG_LEVEL`                                                                                                                                          |
 | `logCreator`                | console         | Custom sink                                                                                                                                                              |
+| `metrics`                   | off             | `true` uses the global `@opentelemetry/api` meter (optional peer); `{ meter }` supplies any compatible `Meter`. See [Observability](../../guides/observability/)         |
 
 Retry defaults (`packages/core/src/retry/defaults.ts`): `retries: 5`,
 `initialRetryTime: 300`, `maxRetryTime: 30000`, `multiplier: 2`, `factor: 0.2`.
@@ -130,8 +131,9 @@ Requires Kafka 4.1+ with share groups enabled. See [Consumer](../../guides/consu
 
 ## `AdminConfig`
 
-| Field   | Default                            | Notes |
-| ------- | ---------------------------------- | ----- |
-| `retry` | inherited from `KafkaConfig.retry` |       |
+| Field                  | Default                            | Notes                                                                                                                                                                                                                                |
+| ---------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `retry`                | inherited from `KafkaConfig.retry` |                                                                                                                                                                                                                                      |
+| `bootstrapControllers` | unset                              | KIP-919: controller `host:port` list (or a function) instead of `KafkaConfig.brokers` for this admin instance. Requires DescribeCluster v1 (Kafka 3.7+). See [Admin: Controller bootstrap](../../guides/admin/#controller-bootstrap) |
 
 Admin [admin configs](https://kafka.apache.org/43/configuration/admin-configs/).

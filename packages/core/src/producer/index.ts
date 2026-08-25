@@ -3,6 +3,7 @@ import type { Cluster, TopicOffsets } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
+import type { MetricsRecorder } from '../instrumentation/metrics';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import type { CompressionType } from '../protocol/compression/index';
@@ -34,6 +35,7 @@ export interface ProducerOptions {
   maxRequestSize?: number;
   /** Ordered async `onSend`/`onAck` hooks, also used by every {@link Transaction} this producer starts. */
   hooks?: ProducerHooks;
+  metrics?: MetricsRecorder | null;
 }
 
 /**
@@ -101,6 +103,7 @@ export function createProducer({
   deliveryTimeoutMs,
   maxRequestSize,
   hooks,
+  metrics,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -146,6 +149,7 @@ export function createProducer({
     deliveryTimeoutMs,
     maxRequestSize,
     hooks,
+    metrics,
   };
 
   const { send, sendBatch, flush } = createMessageProducer({

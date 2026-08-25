@@ -607,4 +607,26 @@ describe('producer/sendMessages', () => {
       expect(nodeLatencyTracker.latencyFor(3)).toBeUndefined();
     });
   });
+
+  it('records produce metrics on a successful send', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const cluster = fakeCluster(brokers);
+    const recordProduce = vi.fn();
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+      metrics: { recordProduce } as never,
+    });
+
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: [{ key: 'ab', value: 'cd' }] }],
+    });
+
+    expect(recordProduce).toHaveBeenCalledWith({ records: 1, bytes: 4, retries: 0 });
+  });
 });

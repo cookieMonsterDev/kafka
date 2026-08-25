@@ -163,3 +163,24 @@ cover leader election, cluster metadata, log dirs, and quotas.
 On KRaft clusters, `describeMetadataQuorum`, `unregisterBroker`,
 `assignReplicasToDirs`, `addRaftVoter`, and `removeRaftVoter` target the active
 controller. Method signatures and version floors: [Admin API](../../reference/admin/).
+
+## Controller bootstrap
+
+When brokers are down, Admin can talk to the KRaft controller quorum directly
+(KIP-919, Kafka 3.7+). Pass controller listener addresses on this admin
+instance; producer and consumer still use `KafkaConfig.brokers`.
+
+```ts
+const admin = kafka.admin({
+  bootstrapControllers: ['localhost:9093'],
+});
+await admin.connect();
+await admin.describeMetadataQuorum();
+```
+
+Discovery uses DescribeCluster with `endpointType=CONTROLLER` instead of
+Metadata. This path is for quorum, voter, and other controller-targeted RPCs.
+APIs that need broker-side topic metadata (`listTopics`, produce/consume) still
+need a broker bootstrap list.
+
+[bootstrap.controllers](https://kafka.apache.org/43/configuration/admin-configs/#bootstrap.controllers).

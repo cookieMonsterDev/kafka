@@ -4,6 +4,7 @@ import type { Admin } from './admin/types';
 import { Cluster, type CommittedOffsetsByGroup } from './cluster/index';
 import { createConsumer, type Consumer } from './consumer/index';
 import { InstrumentationEventEmitter } from './instrumentation/emitter';
+import { createMetricsRecorder, type MetricsRecorder } from './instrumentation/metrics';
 import { consoleLogCreator } from './loggers/console';
 import { createLogger, LOG_LEVELS, type Logger } from './loggers/index';
 import { createDefaultSocketFactory } from './network/socket-factory';
@@ -21,6 +22,8 @@ interface CreateClusterOptions {
   maxInFlightRequests?: number | null;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   isolationLevel?: IsolationLevel;
+  brokers?: KafkaConfig['brokers'];
+  usingBootstrapControllers?: boolean;
 }
 
 function normalizeSsl(ssl: KafkaConfig['ssl']): TlsConnectionOptions | null {
@@ -41,6 +44,7 @@ export class Kafka {
   readonly #offsets: CommittedOffsetsByGroup = new Map();
   readonly #createCluster: (options: CreateClusterOptions) => Cluster;
   readonly #warnOfDefaultPartitioner: (logger: Logger) => void;
+  readonly #metrics: MetricsRecorder | null;
 
   constructor({
     brokers,
@@ -57,9 +61,11 @@ export class Kafka {
     socketFactory = createDefaultSocketFactory(),
     logLevel = LOG_LEVELS.INFO,
     logCreator = consoleLogCreator,
+    metrics,
   }: KafkaConfig) {
     this.#logger = createLogger({ level: logLevel, logCreator });
     this.#clusterRetry = retry;
+    this.#metrics = createMetricsRecorder(metrics);
     this.#warnOfDefaultPartitioner = once((logger: Logger) => {
       if (process.env.KAFKA_NO_PARTITIONER_WARNING == null) {
         logger.warn(
@@ -77,13 +83,15 @@ export class Kafka {
       maxInFlightRequests = null,
       instrumentationEmitter = null,
       isolationLevel,
+      brokers: brokersOverride,
+      usingBootstrapControllers = false,
     }) =>
       new Cluster({
         logger: this.#logger,
         retry: this.#clusterRetry,
         offsets: this.#offsets,
         socketFactory,
-        brokers,
+        brokers: brokersOverride ?? brokers,
         ssl: resolvedSsl,
         sasl,
         clientId: resolvedClientId,
@@ -98,6 +106,7 @@ export class Kafka {
         allowAutoTopicCreation,
         maxInFlightRequests,
         isolationLevel,
+        usingBootstrapControllers,
       });
   }
 
@@ -125,6 +134,7 @@ export class Kafka {
     hooks,
   }: ProducerConfig = {}): Producer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
+    this.#metrics?.bind(instrumentationEmitter, 'producer');
     const cluster = this.#createCluster({
       metadataMaxAge,
       allowAutoTopicCreation,
@@ -154,6 +164,7 @@ export class Kafka {
       deliveryTimeoutMs,
       maxRequestSize,
       hooks,
+      metrics: this.#metrics,
     });
   }
 
@@ -186,6 +197,7 @@ export class Kafka {
   }: ConsumerConfig): Consumer {
     const isolationLevel = readUncommitted ? ISOLATION_LEVEL.READ_UNCOMMITTED : ISOLATION_LEVEL.READ_COMMITTED;
     const instrumentationEmitter = new InstrumentationEventEmitter();
+    this.#metrics?.bind(instrumentationEmitter, 'consumer');
     const cluster = this.#createCluster({
       metadataMaxAge,
       allowAutoTopicCreation,
@@ -240,6 +252,7 @@ export class Kafka {
     maxInFlightRequests,
   }: ShareConsumerConfig): ShareConsumer {
     const instrumentationEmitter = new InstrumentationEventEmitter();
+    this.#metrics?.bind(instrumentationEmitter, 'share_consumer');
     const cluster = this.#createCluster({
       metadataMaxAge,
       allowAutoTopicCreation,
@@ -269,11 +282,13 @@ export class Kafka {
    * @see https://kafka.apache.org/43/configuration/admin-configs/
    * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
    */
-  admin({ retry }: AdminConfig = {}): Admin {
+  admin({ retry, bootstrapControllers }: AdminConfig = {}): Admin {
     const instrumentationEmitter = new InstrumentationEventEmitter();
+    this.#metrics?.bind(instrumentationEmitter, 'admin');
     const cluster = this.#createCluster({
       allowAutoTopicCreation: false,
       instrumentationEmitter,
+      ...(bootstrapControllers != null ? { brokers: bootstrapControllers, usingBootstrapControllers: true } : {}),
     });
 
     return createAdmin({

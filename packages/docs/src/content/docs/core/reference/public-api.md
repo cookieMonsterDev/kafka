@@ -41,6 +41,7 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `GroupProtocol`, `GroupRemoteAssignor`, `ShareAcknowledgeType`, `ShareAcquireMode`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
+`KafkaMetrics`, `KafkaMeter`, `METRIC_NAMES`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 `GssTokenStep`. Field-by-field:
 [Configuration](./configuration/),
@@ -57,6 +58,8 @@ and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
   `subscribe()` (see [Consumer: Assign mode](../../guides/consumer/#assign-mode))
 - `Symbol.asyncDispose` on producer, consumer, share consumer, and admin (`await using`)
 - Built-in Snappy (`CompressionTypes.Snappy`), LZ4 (`CompressionTypes.LZ4`), and ZSTD (`CompressionTypes.ZSTD`)
+- Optional OpenTelemetry metrics via `KafkaConfig.metrics` (see [Observability](../../guides/observability/))
+- Admin `bootstrapControllers` for KRaft controller-only discovery (KIP-919)
 
 ## Capability errors
 

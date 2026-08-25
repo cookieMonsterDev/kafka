@@ -9,6 +9,7 @@ import type {
   ConsumerSubscribeTopic,
   ConsumerSubscribeTopics,
 } from '../consumer/index';
+import type { KafkaMetrics } from '../instrumentation/metrics';
 import type {
   Assigner,
   ConsumerHooks,
@@ -161,6 +162,11 @@ export interface KafkaConfig {
   socketFactory?: SocketFactory;
   logLevel?: LogLevel;
   logCreator?: LogCreator;
+  /**
+   * Client-side metrics. Off by default. `true` uses the global `@opentelemetry/api` meter
+   * (optional peer). Pass `{ meter }` to supply any OpenTelemetry-compatible `Meter`.
+   */
+  metrics?: KafkaMetrics;
 }
 
 /**
@@ -404,6 +410,13 @@ export interface ShareConsumerConfig {
  */
 export interface AdminConfig {
   retry?: RetryOptions;
+  /**
+   * KIP-919: talk to the KRaft controller quorum without a broker bootstrap list.
+   * Mutually exclusive with discovering brokers for this admin instance; producer and consumer
+   * still use {@link KafkaConfig.brokers}. Requires DescribeCluster v1 (Kafka 3.7+).
+   * @see https://kafka.apache.org/43/configuration/admin-configs/#bootstrap.controllers
+   */
+  bootstrapControllers?: readonly string[] | BrokersFunction;
 }
 
 export type {

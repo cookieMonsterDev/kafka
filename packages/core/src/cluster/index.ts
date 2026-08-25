@@ -71,6 +71,11 @@ export interface ClusterOptions {
   isolationLevel?: IsolationLevel;
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   offsets?: CommittedOffsetsByGroup;
+  /**
+   * KIP-919: bootstrap from controller endpoints via DescribeCluster instead of Metadata.
+   * Admin-only; producer and consumer always discover brokers.
+   */
+  usingBootstrapControllers?: boolean;
 }
 
 /**
@@ -116,6 +121,7 @@ export class Cluster {
     isolationLevel,
     instrumentationEmitter = null,
     offsets = new Map(),
+    usingBootstrapControllers = false,
   }: ClusterOptions) {
     this.rootLogger = rootLogger;
     this.logger = rootLogger.namespace('Cluster');
@@ -148,6 +154,7 @@ export class Cluster {
       authenticationTimeout,
       metadataMaxAge,
       metadataRecovery,
+      usingBootstrapControllers,
     });
     this.committedOffsetsByGroup = offsets;
 

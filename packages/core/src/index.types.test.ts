@@ -6,6 +6,7 @@ import {
   Kafka,
   logLevel,
   type Admin,
+  type AdminConfig,
   type Batch,
   type Consumer,
   type KafkaConfig,
@@ -83,5 +84,10 @@ describe('public types', () => {
   it('types CompressionTypes as the frozen literal map', () => {
     expectTypeOf(CompressionTypes.GZIP).toEqualTypeOf<1>();
     expectTypeOf(CompressionTypes.ZSTD).toEqualTypeOf<4>();
+  });
+
+  it('types metrics and bootstrapControllers', () => {
+    expectTypeOf<KafkaConfig>().toHaveProperty('metrics');
+    expectTypeOf<AdminConfig>().toHaveProperty('bootstrapControllers');
   });
 });

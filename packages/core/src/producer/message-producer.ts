@@ -7,6 +7,7 @@ import {
   KafkaNonRetriableError,
   KafkaTimeout,
 } from '../errors';
+import type { MetricsRecorder } from '../instrumentation/metrics';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression/index';
@@ -79,6 +80,7 @@ export interface MessageProducerOptions {
   maxRequestSize?: number;
   /** Ordered async `onSend`/`onAck` hooks. See {@link ProducerHooks}. */
   hooks?: ProducerHooks;
+  metrics?: MetricsRecorder | null;
 }
 
 export interface MessageProducer {
@@ -186,8 +188,17 @@ export function createMessageProducer({
   deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
   maxRequestSize = DEFAULT_MAX_REQUEST_SIZE,
   hooks,
+  metrics,
 }: MessageProducerOptions): MessageProducer {
-  const sendMessages = createSendMessages({ logger, cluster, retrier, partitioner, eosManager, nodeLatencyTracker });
+  const sendMessages = createSendMessages({
+    logger,
+    cluster,
+    retrier,
+    partitioner,
+    eosManager,
+    nodeLatencyTracker,
+    metrics,
+  });
   const pending: PendingSend[] = [];
   let lingerTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInProgress: Promise<void> | null = null;

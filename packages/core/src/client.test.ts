@@ -141,6 +141,12 @@ describe('Kafka', () => {
     ).not.toThrow();
   });
 
+  it('accepts producer maxInFlightRequests including null to uncap', () => {
+    expect(() => createClient().producer()).not.toThrow();
+    expect(() => createClient().producer({ maxInFlightRequests: 5 })).not.toThrow();
+    expect(() => createClient().producer({ maxInFlightRequests: null })).not.toThrow();
+  });
+
   it('accepts bootstrapControllers on admin()', () => {
     const admin = createClient().admin({ bootstrapControllers: ['localhost:9093'] });
     expect(typeof admin.describeMetadataQuorum).toBe('function');

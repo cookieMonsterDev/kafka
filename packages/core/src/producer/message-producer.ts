@@ -45,13 +45,13 @@ export interface MessageProducerOptions {
   defaultCompressionLevel?: number;
   /**
    * Delay in ms to wait for more records before sending a Produce request.
-   * Default 0 (send immediately). Java 4.0+ defaults to 5.
+   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
   /**
    * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Unset or 0 means do not batch by size.
+   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
@@ -92,7 +92,8 @@ export interface MessageProducer {
 
 const DEFAULT_ACKS = -1;
 const DEFAULT_TIMEOUT = 30_000;
-const DEFAULT_LINGER_MS = 0;
+const DEFAULT_LINGER_MS = 5;
+const DEFAULT_BATCH_SIZE = 16_384;
 const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
 /** Java `max.request.size` default. @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size */
 const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
@@ -183,7 +184,7 @@ export function createMessageProducer({
   defaultCompression,
   defaultCompressionLevel,
   lingerMs = DEFAULT_LINGER_MS,
-  batchSize = 0,
+  batchSize = DEFAULT_BATCH_SIZE,
   bufferMemory,
   deliveryTimeoutMs = DEFAULT_DELIVERY_TIMEOUT_MS,
   maxRequestSize = DEFAULT_MAX_REQUEST_SIZE,

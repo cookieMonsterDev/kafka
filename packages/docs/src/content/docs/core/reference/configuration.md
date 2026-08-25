@@ -52,12 +52,12 @@ See [Security](../../guides/security/).
 | `acks`                   | `-1`                          | [acks](https://kafka.apache.org/43/configuration/producer-configs/#acks)                                                                                                                                                                      |
 | `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                                                                                                                              |
 | `compressionLevel`       | codec default                 | Honored by GZIP (zlib `level`, `0`-`9`) and ZSTD (`zlib.constants.ZSTD_c_compressionLevel`, roughly `1`-`22`). No-op for Snappy and LZ4 — see [Throughput](../../guides/throughput/#compression-level)                                        |
-| `lingerMs`               | `0`                           | Latency-first: one Produce per `send()`. **Next major** defaults to `5`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)                                                                                   |
-| `batchSize`              | unset                         | **Next major** defaults to `16384`. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                                                                                      |
+| `lingerMs`               | `5`                           | Pass `0` for one Produce per `send()`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)                                                                                                                     |
+| `batchSize`              | `16384`                       | Pass `0` to not batch by size. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                                                                                           |
 | `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing (enabled by `throughputPreset()`)                                                                                                                                         |
 | `metadataMaxAge`         | `300000`                      |                                                                                                                                                                                                                                               |
 | `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                                                                                                                              |
-| `maxInFlightRequests`    | unset (`null`)                | **Next major** defaults to `5`. The preset sets `5`.                                                                                                                                                                                          |
+| `maxInFlightRequests`    | `5`                           | Pass `null` to uncap. [max.in.flight.requests.per.connection](https://kafka.apache.org/43/configuration/producer-configs/#max.in.flight.requests.per.connection)                                                                              |
 | `bufferMemory`           | unset (unlimited)             | Soft cap on linger-buffered bytes. The preset sets 32 MiB. [buffer.memory](https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory)                                                                                         |
 | `retry`                  | 5, or unlimited if idempotent | [retries](https://kafka.apache.org/43/configuration/producer-configs/#retries)                                                                                                                                                                |
 | `deliveryTimeoutMs`      | `120000`                      | End-to-end deadline for one `send`/`sendBatch` call — `lingerMs`, any `bufferMemory` wait, and every retry, together. `0` disables it. [delivery.timeout.ms](https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms) |
@@ -83,10 +83,10 @@ await kafka.consumer({ groupId }).run({
 });
 ```
 
-| Fragment   | Fields                                                                                          |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| `producer` | `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner, `bufferMemory` |
-| `consumer` | `partitionsConsumedConcurrently: 4` (a `run()` option)                                          |
+| Fragment   | Fields                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `producer` | sticky partitioner, `bufferMemory` 32 MiB (linger/batch/in-flight are constructor defaults) |
+| `consumer` | `partitionsConsumedConcurrently: 4` (a `run()` option)                                      |
 
 See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).
 

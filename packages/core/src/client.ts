@@ -134,7 +134,7 @@ export class Kafka {
     idempotent,
     transactionalId,
     transactionTimeout,
-    maxInFlightRequests,
+    maxInFlightRequests = 5,
     acks,
     compression,
     compressionLevel,

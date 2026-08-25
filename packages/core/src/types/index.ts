@@ -235,7 +235,11 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms
    */
   transactionTimeout?: number;
-  maxInFlightRequests?: number;
+  /**
+   * Cap on in-flight requests per broker connection. Default 5. Pass `null` to uncap.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.in.flight.requests.per.connection
+   */
+  maxInFlightRequests?: number | null;
   /**
    * Default acks for send/sendBatch when the call omits acks. `-1` = all ISR.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
@@ -256,14 +260,13 @@ export interface ProducerConfig {
   compressionLevel?: number;
   /**
    * Delay in ms to wait for more records before sending a Produce request.
-   * Default 0 (send immediately). Java 4.0+ defaults to 5.
+   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
   /**
    * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Unset or 0 means do not batch by size.
-   * Java default is 16384.
+   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;

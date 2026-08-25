@@ -45,17 +45,18 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 ## Constructor defaults
 
-These defaults are product choices, kept on purpose for this minor.
+These defaults are product choices.
 
-| Setting               | This client                                                                                                                                                                                              |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                                                       |
-| `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                                                         |
-| `lingerMs`            | `0` (one Produce per `send()`); set `lingerMs` / `batchSize` to batch, or spread `throughputPreset()`. **Next major** will default `lingerMs` to 5, `batchSize` to 16384, and `maxInFlightRequests` to 5 |
-| `maxInFlightRequests` | Unset (`null`, uncapped) on this minor; the preset sets `5`. **Next major** will default to 5                                                                                                            |
-| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`)                            |
-| Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                                                          |
-| Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                                             |
+| Setting               | This client                                                                                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                            |
+| `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                              |
+| `lingerMs`            | `5`; pass `0` for one Produce per `send()`                                                                                                                                    |
+| `batchSize`           | `16384`; pass `0` to not batch by size                                                                                                                                        |
+| `maxInFlightRequests` | `5` on the producer; pass `null` to uncap. Consumer/admin connections stay uncapped unless set                                                                                |
+| Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`) |
+| Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                               |
+| Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                  |
 
 See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
 and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/) for
@@ -87,30 +88,17 @@ await kafka.consumer({ groupId: 'load' }).run({
 });
 ```
 
-`producer` sets `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`,
-the sticky partitioner, and a 32 MiB `bufferMemory`. `consumer` sets
+`producer` sets the sticky partitioner and a 32 MiB `bufferMemory`. Linger,
+batch size, and in-flight caps are already constructor defaults (`lingerMs: 5`,
+`batchSize: 16384`, `maxInFlightRequests: 5`). `consumer` sets
 `partitionsConsumedConcurrently: 4` on `run()` (not on `kafka.consumer()`).
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume
-API. Set `lingerMs` if you are not using the preset. Compression: GZIP and
+API. Pass `lingerMs: 0` for one Produce per `send()`. Compression: GZIP and
 ZSTD already use the zlib threadpool; Snappy and LZ4 are off-thread as well
 (optional native packages if installed).
 
 Full walkthrough: [Throughput](../../guides/throughput/).
-
-## Next major defaults
-
-The **next major** will change these constructor defaults to planned
-throughput-oriented values. This minor does **not** flip them.
-
-| Setting               | This minor                      | Next major |
-| --------------------- | ------------------------------- | ---------- |
-| `lingerMs`            | `0`                             | `5`        |
-| `batchSize`           | unset (no size flush by itself) | `16384`    |
-| `maxInFlightRequests` | unset (`null`, uncapped)        | `5`        |
-
-Use `throughputPreset()` until then. `flush()` remains. See
-[Breaking changes](../../migration/breaking-changes/).
 
 ## Implemented surface
 

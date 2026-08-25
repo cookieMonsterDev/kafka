@@ -96,6 +96,7 @@ await producer.connect();
 const id = producer.clientInstanceId(); // Buffer | null
 ```
 
-For load, spread `throughputPreset().producer` into `kafka.producer()` (`lingerMs: 5`,
-`batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner). See
+For load, spread `throughputPreset().producer` into `kafka.producer()` (sticky
+partitioner and 32 MiB `bufferMemory`; linger/batch/in-flight are already
+constructor defaults). See
 [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).

@@ -40,11 +40,11 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 ## Acks, linger, and batching
 
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
-call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
-request — latency-first. Set `lingerMs` / `batchSize` to batch, or spread
-[`throughputPreset()`](./throughput/). The **next major** of this client will
-default `lingerMs` to 5 (see
-[Breaking changes](../../migration/breaking-changes/)). See
+call omits them. `lingerMs` defaults to `5`, so consecutive `send()` calls can
+share a Produce request. Pass `lingerMs: 0` for one Produce per `send()`, or
+spread [`throughputPreset()`](./throughput/) for sticky partitioning and a
+32 MiB send buffer. See
+[Breaking changes](../../migration/breaking-changes/). See
 [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 GZIP, Snappy, LZ4, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /

@@ -107,13 +107,41 @@ describe('producer/messageProducer', () => {
   it('sends immediately when lingerMs is 0', async () => {
     vi.useFakeTimers();
     const broker = fakeBroker(1);
-    const producer = createTestProducer(broker);
+    const producer = createTestProducer(broker, { lingerMs: 0 });
 
     const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
     await sendPromise;
 
     expect(broker.produce).toHaveBeenCalledTimes(1);
     expect(broker.produce).toHaveBeenCalledWith(expect.objectContaining({ acks: -1 }));
+  });
+
+  it('defaults lingerMs to 5 so a send waits for the linger timer', async () => {
+    vi.useFakeTimers();
+    const broker = fakeBroker(1);
+    const producer = createTestProducer(broker);
+
+    const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+    await Promise.resolve();
+    expect(broker.produce).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(4);
+    expect(broker.produce).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await sendPromise;
+    expect(broker.produce).toHaveBeenCalledTimes(1);
+  });
+
+  it('defaults batchSize to 16384 and flushes when buffered bytes reach it', async () => {
+    vi.useFakeTimers();
+    const broker = fakeBroker(1);
+    const producer = createTestProducer(broker, { lingerMs: 10_000 });
+
+    const sendPromise = producer.send({ topic, messages: [{ value: 'a'.repeat(16_384) }] });
+    await sendPromise;
+
+    expect(broker.produce).toHaveBeenCalledTimes(1);
   });
 
   it('does not send until the linger timer fires', async () => {

@@ -5,10 +5,11 @@ order: 7
 section: guides
 ---
 
-Constructor defaults stay latency-oriented in this minor (`lingerMs: 0`, murmur2,
-`partitionsConsumedConcurrently: 1`). For 10k–100k msgs/s, spread
-`throughputPreset()` into the producer and into `consumer.run()`, use `eachBatch`,
-and set linger if you are not using the preset.
+Constructor defaults batch Produce traffic (`lingerMs: 5`, `batchSize: 16384`,
+`maxInFlightRequests: 5`, murmur2, `partitionsConsumedConcurrently: 1`). For
+10k–100k msgs/s, spread `throughputPreset()` into the producer and into
+`consumer.run()`, use `eachBatch`, and pass `lingerMs: 0` only when you want
+one Produce per `send()`.
 
 ```ts
 import { Kafka, throughputPreset, CompressionTypes } from '@cookiemonsterdev/kafka-core';
@@ -37,19 +38,19 @@ await c.run({
 
 `throughputPreset()` does not change constructor defaults. It returns:
 
-| Fragment   | Fields                                                                                          |
-| ---------- | ----------------------------------------------------------------------------------------------- |
-| `producer` | `lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner, `bufferMemory` |
-| `consumer` | `partitionsConsumedConcurrently: 4` — spread into `consumer.run()`, not `kafka.consumer()`      |
+| Fragment   | Fields                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `producer` | sticky partitioner, `bufferMemory` 32 MiB                                                  |
+| `consumer` | `partitionsConsumedConcurrently: 4` — spread into `consumer.run()`, not `kafka.consumer()` |
 
 See [Compatibility](../../reference/compatibility/) and
 [Configuration](../../reference/configuration/#throughputpreset).
 
 ## Produce
 
-`lingerMs: 0` (the constructor default) sends one Produce per `send()`. Set
-`lingerMs` (and usually `batchSize`) if you are not spreading the preset.
-`flush()` still drains linger-buffered records.
+`lingerMs: 5` (the constructor default) waits briefly so consecutive `send()`
+calls can share a Produce request. Pass `lingerMs: 0` for one Produce per
+`send()`. `flush()` still drains linger-buffered records.
 
 Prefer **GZIP** or **ZSTD** for compression: both use Node’s zlib threadpool.
 Snappy and LZ4 keep Kafka-compatible framing (xerial / LZ4F) and run the JS
@@ -123,9 +124,8 @@ consumer still sends its full topic list each round (it does use
 There is no client config for this — it is automatic when the broker
 advertises Fetch sessions.
 
-The **next major** will change constructor defaults to `lingerMs: 5`,
-`batchSize: 16384`, and `maxInFlightRequests: 5`. This minor keeps
-`lingerMs: 0`. See [Breaking changes](../../migration/breaking-changes/).
+Pass `lingerMs: 0` when you want one Produce per `send()`. See
+[Breaking changes](../../migration/breaking-changes/).
 
 ### checkCrcs
 

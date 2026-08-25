@@ -9,6 +9,7 @@ import {
   generateMessages,
   newLogger,
   secureRandom,
+  waitFor,
   waitForConsumerToJoinGroup,
   waitForMessages,
 } from '../../helpers/index';
@@ -183,9 +184,13 @@ describe('consumer.eachBatch', () => {
         { key: 'b', value: 'b', partition: 1 },
       ],
     });
-    await waitForMessages(consumed, { number: 2 });
+    await waitFor(() => (new Set(consumed.map((entry) => entry.partition)).size >= 2 ? consumed : false), {
+      maxWait: 15_000,
+      timeoutMessage: 'Timeout waiting for messages from both partitions',
+    });
 
     expect(new Set(consumed.map((entry) => entry.partition))).toEqual(new Set([0, 1]));
+    expect(consumed).toHaveLength(2);
     expect(maxInFlight).toBeGreaterThan(1);
   });
 });

@@ -46,8 +46,9 @@ export function createFetcher<T extends FetchBatch>({
   const filterUnassignedBatches = (batches: T[]): T[] =>
     batches.filter((batch) => {
       const assignedFetcher = getAssignedFetcher(batch);
-      if (assignedFetcher != null && assignedFetcher !== nodeId) {
-        logger.info('Filtering out batch due to partition already being processed by another fetcher', {
+      // Prefetch can return the same records before offsets resolve; skip any in-flight partition.
+      if (assignedFetcher != null) {
+        logger.info('Filtering out batch due to partition already being processed', {
           topic: batch.topic,
           partition: batch.partition,
           assignedFetcher,

@@ -859,6 +859,89 @@ describe('consumer/consumer-group', () => {
     expect(nextAdaptiveMaxBytes({ current: 8000, used: 8000, min: 100, max: 9000 })).toBe(9000);
   });
 
+  describe('position', () => {
+    it('returns the offset manager next offset for an assigned partition', () => {
+      const consumerGroup = createGroup();
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.offsetManager = {
+        nextOffset: vi.fn(() => 42n),
+      } as unknown as OffsetManager;
+
+      expect(consumerGroup.position('topic1', 0)).toBe(42n);
+    });
+
+    it('returns null for a partition that is not currently assigned', () => {
+      const consumerGroup = createGroup();
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.offsetManager = {
+        nextOffset: vi.fn(() => 42n),
+      } as unknown as OffsetManager;
+
+      expect(consumerGroup.position('topic1', 1)).toBeNull();
+      expect(consumerGroup.position('other-topic', 0)).toBeNull();
+    });
+  });
+
+  describe('highWatermark', () => {
+    it('returns null before any fetch has happened for the partition', () => {
+      const consumerGroup = createGroup();
+      expect(consumerGroup.highWatermark('topic1', 0)).toBeNull();
+    });
+
+    it('records the high watermark from a fetch response and exposes it per topic/partition', async () => {
+      const brokerFetch = vi.fn().mockResolvedValue({
+        responses: [
+          {
+            topicName: 'topic1',
+            partitions: [{ partition: 0, highWatermark: 10n, messages: [] }],
+          },
+        ],
+        sessionId: 0,
+      });
+      const cluster = {
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1 }]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+      } as unknown as Cluster;
+
+      const consumerGroup = new ConsumerGroup({
+        logger: silentLogger,
+        topics: ['topic1'],
+        topicConfigurations: {},
+        cluster,
+        groupId: 'group',
+        assigners: [],
+        sessionTimeout: 30_000,
+        rebalanceTimeout: 60_000,
+        maxBytesPerPartition: 1024,
+        minBytes: 1,
+        maxBytes: 1024,
+        maxWaitTimeInMs: 100,
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+        rackId: '',
+        metadataMaxAge: 300_000,
+        autoCommit: true,
+        autoCommitInterval: null,
+        autoCommitThreshold: null,
+      });
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.offsetManager = {
+        committedOffsets: () => ({ topic1: { 0: 0n } }),
+        nextOffset: () => 0n,
+        seek: vi.fn(async () => undefined),
+        resolveOffsets: vi.fn(async () => undefined),
+      } as unknown as OffsetManager;
+
+      expect(consumerGroup.highWatermark('topic1', 0)).toBeNull();
+
+      await consumerGroup.fetch('1');
+
+      expect(consumerGroup.highWatermark('topic1', 0)).toBe(10n);
+    });
+  });
+
   describe('KIP-227 fetch sessions', () => {
     function createGroupWithBroker(brokerFetch: ReturnType<typeof vi.fn>): { consumerGroup: ConsumerGroup } {
       const cluster = {

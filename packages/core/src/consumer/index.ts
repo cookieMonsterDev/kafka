@@ -37,6 +37,7 @@ import type {
   EachBatchHandler,
   GroupDescription,
   PartitionAssigner,
+  TopicPartition,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
 } from './types';
@@ -60,6 +61,7 @@ export type {
   OnConsumeHook,
   PartitionAssigner,
   RebalanceListener,
+  TopicPartition,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
@@ -160,6 +162,31 @@ export interface Consumer {
   commitOffsets: (topicPartitions: readonly TopicPartitionOffsetAndMetadata[]) => Promise<void>;
   seek: (topicPartitionOffset: { topic: string; partition: number; offset: bigint | number | string }) => void;
   describeGroup: () => Promise<GroupDescription>;
+  /**
+   * Committed offsets for the given partitions, read from the group coordinator via OffsetFetch.
+   * This queries the broker directly - it does not require `run()`/`stream()`/`assign()` to have
+   * started. A partition with no committed offset comes back with `offset: -1n` (Kafka's wire
+   * convention for "none") and `metadata: null`, matching what the broker returns.
+   *
+   * This is the live-consumer counterpart to `Admin.fetchOffsets`, which stays the out-of-band
+   * tool for inspecting/resetting offsets without a running consumer.
+   */
+  committed: (topicPartitions: readonly TopicPartition[]) => Promise<TopicPartitionOffsetAndMetadata[]>;
+  /**
+   * Next fetch offset for an assigned partition (the offset of the next record this consumer
+   * would read). Returns `null` when the partition is not currently assigned to this consumer -
+   * rather than throwing - since that is an expected, common state (e.g. right after a rebalance).
+   * Throws {@link KafkaNonRetriableError} if the group/assignment has not started yet
+   * (`run()`/`stream()`/`assign()`).
+   */
+  position: (topicPartition: TopicPartition) => bigint | null;
+  /**
+   * `highWatermark - position` for a partition. Returns `null` when the partition is not
+   * currently assigned, or when no Fetch response has been seen for it yet (so there is no known
+   * high watermark) - the same "unknown yet, don't throw" contract as {@link Consumer.position}.
+   * Throws {@link KafkaNonRetriableError} if the group/assignment has not started yet.
+   */
+  currentLag: (topicPartition: TopicPartition) => bigint | null;
   pause: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
   paused: () => TopicPartitions[];
   resume: (topics: readonly { topic: string; partitions?: number[] }[]) => void;
@@ -862,6 +889,100 @@ export function createConsumer({
     });
   };
 
+  const committed = async (
+    topicPartitions: readonly TopicPartition[] = [],
+  ): Promise<TopicPartitionOffsetAndMetadata[]> => {
+    if (!groupId) {
+      throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string to fetch committed offsets');
+    }
+
+    if (topicPartitions.length === 0) {
+      return [];
+    }
+
+    const partitionsByTopic = new Map<string, number[]>();
+    for (const { topic, partition } of topicPartitions) {
+      if (!topic) {
+        throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
+      }
+
+      if (typeof partition !== 'number' || Number.isNaN(partition)) {
+        throw new KafkaNonRetriableError(`Invalid partition, expected a number received ${partition}`);
+      }
+
+      const partitions = partitionsByTopic.get(topic) ?? [];
+      partitions.push(partition);
+      partitionsByTopic.set(topic, partitions);
+    }
+
+    const coordinator = await cluster.findGroupCoordinator({ groupId });
+    const committedRetrier = retrier(retry);
+    return committedRetrier(async () => {
+      const { responses } = await coordinator.offsetFetch({
+        groupId,
+        topics: [...partitionsByTopic.entries()].map(([topic, partitions]) => ({
+          topic,
+          partitions: partitions.map((partition) => ({ partition })),
+        })),
+      });
+
+      const offsetsByKey = new Map<string, { offset: bigint; metadata: string | null }>();
+      for (const { topic, partitions } of responses) {
+        for (const { partition, offset, metadata } of partitions) {
+          offsetsByKey.set(`${topic}:${partition}`, { offset, metadata: metadata ?? null });
+        }
+      }
+
+      return topicPartitions.map(({ topic, partition }) => {
+        const found = offsetsByKey.get(`${topic}:${partition}`);
+        return {
+          topic,
+          partition,
+          offset: found?.offset ?? BigInt(-1),
+          metadata: found?.metadata ?? null,
+        };
+      });
+    });
+  };
+
+  const position = ({ topic, partition }: TopicPartition): bigint | null => {
+    if (!topic) {
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
+    }
+
+    if (typeof partition !== 'number' || Number.isNaN(partition)) {
+      throw new KafkaNonRetriableError(`Invalid partition, expected a number received ${partition}`);
+    }
+
+    if (!consumerGroup) {
+      throw new KafkaNonRetriableError('Consumer group was not initialized, consumer#run must be called first');
+    }
+
+    return consumerGroup.position(topic, partition);
+  };
+
+  const currentLag = ({ topic, partition }: TopicPartition): bigint | null => {
+    if (!topic) {
+      throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
+    }
+
+    if (typeof partition !== 'number' || Number.isNaN(partition)) {
+      throw new KafkaNonRetriableError(`Invalid partition, expected a number received ${partition}`);
+    }
+
+    if (!consumerGroup) {
+      throw new KafkaNonRetriableError('Consumer group was not initialized, consumer#run must be called first');
+    }
+
+    const currentPosition = consumerGroup.position(topic, partition);
+    const highWatermark = consumerGroup.highWatermark(topic, partition);
+    if (currentPosition === null || highWatermark === null) {
+      return null;
+    }
+
+    return highWatermark - currentPosition;
+  };
+
   const pause = (topicPartitions: readonly { topic: string; partitions?: number[] }[] = []): void => {
     for (const topicPartition of topicPartitions) {
       if (!topicPartition || !topicPartition.topic) {
@@ -920,6 +1041,9 @@ export function createConsumer({
     commitOffsets,
     seek,
     describeGroup,
+    committed,
+    position,
+    currentLag,
     pause,
     paused,
     resume,

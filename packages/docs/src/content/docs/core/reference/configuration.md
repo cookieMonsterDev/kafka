@@ -105,6 +105,11 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 | `retry`                | `{ retries: 5 }`           |                                                                                                                                                                                                                      |
 | `hooks`                | unset                      | Ordered async `onConsume`/`onCommit` hooks (not an interceptor SPI). See [Consumer hooks](../../guides/consumer/#hooks)                                                                                              |
 
+`committed`, `position`, and `currentLag` on `Consumer` read committed
+offsets, fetch position, and lag without any extra config. See
+[Consumer](../../guides/consumer/#committed-offsets-position-and-lag) and
+[`committed` / `position` / `currentLag`](./consumer/#committed--position--currentlag).
+
 ## `ShareConsumerConfig`
 
 | Field               | Default          | Notes                                                                              |

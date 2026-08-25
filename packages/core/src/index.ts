@@ -154,6 +154,7 @@ export type {
   ScramSaslOptions,
   SocketFactory,
   TopicMessages,
+  TopicPartition,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,

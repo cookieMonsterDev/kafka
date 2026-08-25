@@ -340,4 +340,94 @@ describe('consumer', () => {
       }
     });
   });
+
+  describe('committed', () => {
+    it('returns [] without an RPC when no partitions are requested', async () => {
+      const findGroupCoordinator = vi.fn();
+      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+      await expect(consumer.committed([])).resolves.toEqual([]);
+      expect(findGroupCoordinator).not.toHaveBeenCalled();
+    });
+
+    it('fetches committed offsets from the group coordinator, grouped by topic', async () => {
+      const offsetFetch = vi.fn(async () => ({
+        responses: [
+          {
+            topic: 't',
+            partitions: [
+              { partition: 0, offset: 5n, metadata: 'meta', errorCode: 0 },
+              { partition: 1, offset: -1n, metadata: null, errorCode: 0 },
+            ],
+          },
+        ],
+      }));
+      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
+      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+      const result = await consumer.committed([
+        { topic: 't', partition: 0 },
+        { topic: 't', partition: 1 },
+      ]);
+
+      expect(findGroupCoordinator).toHaveBeenCalledWith({ groupId: 'g' });
+      expect(offsetFetch).toHaveBeenCalledWith({
+        groupId: 'g',
+        topics: [{ topic: 't', partitions: [{ partition: 0 }, { partition: 1 }] }],
+      });
+      expect(result).toEqual([
+        { topic: 't', partition: 0, offset: 5n, metadata: 'meta' },
+        { topic: 't', partition: 1, offset: -1n, metadata: null },
+      ]);
+    });
+
+    it('defaults a partition missing from the response to offset -1n and metadata null', async () => {
+      const offsetFetch = vi.fn(async () => ({ responses: [] }));
+      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
+      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
+
+      const result = await consumer.committed([{ topic: 't', partition: 0 }]);
+
+      expect(result).toEqual([{ topic: 't', partition: 0, offset: -1n, metadata: null }]);
+    });
+
+    it('rejects an invalid topic or partition', async () => {
+      const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+      await expect(consumer.committed([{ topic: '', partition: 0 }])).rejects.toThrow('Invalid topic');
+      await expect(consumer.committed([{ topic: 't', partition: Number.NaN }])).rejects.toThrow('Invalid partition');
+    });
+  });
+
+  describe('position', () => {
+    it('throws when the consumer group has not started', () => {
+      const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+      expect(() => consumer.position({ topic: 't', partition: 0 })).toThrow(
+        'Consumer group was not initialized, consumer#run must be called first',
+      );
+    });
+
+    it('rejects an invalid topic or partition', () => {
+      const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+      expect(() => consumer.position({ topic: '', partition: 0 })).toThrow('Invalid topic');
+      expect(() => consumer.position({ topic: 't', partition: Number.NaN })).toThrow('Invalid partition');
+    });
+  });
+
+  describe('currentLag', () => {
+    it('throws when the consumer group has not started', () => {
+      const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+      expect(() => consumer.currentLag({ topic: 't', partition: 0 })).toThrow(
+        'Consumer group was not initialized, consumer#run must be called first',
+      );
+    });
+
+    it('rejects an invalid topic or partition', () => {
+      const consumer = createConsumer({ cluster: fakeCluster(), groupId: 'g', logger: silentLogger });
+      expect(() => consumer.currentLag({ topic: '', partition: 0 })).toThrow('Invalid topic');
+      expect(() => consumer.currentLag({ topic: 't', partition: Number.NaN })).toThrow('Invalid partition');
+    });
+  });
 });

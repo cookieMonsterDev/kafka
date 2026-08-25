@@ -205,6 +205,10 @@ export interface ConsumerGroupHandle {
    * rejoining, so a subsequent rebalance doesn't also report the same partitions as revoked.
    */
   notifyPartitionsLost: () => Promise<void>;
+  /** Next fetch offset for `topic`/`partition`, or `null` when it isn't currently assigned. */
+  position: (topic: string, partition: number) => bigint | null;
+  /** Latest high watermark seen on a Fetch response for `topic`/`partition`, or `null` if none yet. */
+  highWatermark: (topic: string, partition: number) => bigint | null;
 }
 
 export class ConsumerGroup implements ConsumerGroupHandle {
@@ -268,6 +272,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
   readonly #assignMode: boolean;
   readonly #fixedAssignment: TopicPartitions[] | null;
+  /** Latest `highWatermark` seen on a Fetch response, per topic/partition. Backs {@link currentLag}. */
+  #highWatermarks: Record<string, Record<number, bigint>> = {};
 
   constructor({
     retry,
@@ -1115,6 +1121,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
             );
             if (!partitionRequestData) return [];
 
+            (this.#highWatermarks[topicName] ??= {})[partition] = partitionData.highWatermark;
+
             return [new Batch(topicName, partitionRequestData.fetchOffset, partitionData)];
           });
       });
@@ -1427,6 +1435,26 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   hasSeekOffset({ topic, partition }: TopicPartition): boolean {
     return this.seekOffset.has(topic, partition);
+  }
+
+  /**
+   * Next fetch offset for `topic`/`partition` - the offset of the next record this consumer
+   * would read. Returns `null` when the partition is not currently assigned to this consumer,
+   * rather than throwing, since "not assigned" is an expected state (e.g. after a rebalance).
+   */
+  position(topic: string, partition: number): bigint | null {
+    const isAssigned = this.assigned().some((tp) => tp.topic === topic && tp.partitions.includes(partition));
+    if (!isAssigned) return null;
+
+    return this.#requireOffsetManager().nextOffset(topic, partition);
+  }
+
+  /**
+   * Latest high watermark seen on a Fetch response for `topic`/`partition`. Returns `null` when
+   * no Fetch response has been observed for it yet, rather than throwing.
+   */
+  highWatermark(topic: string, partition: number): bigint | null {
+    return this.#highWatermarks[topic]?.[partition] ?? null;
   }
 
   /**

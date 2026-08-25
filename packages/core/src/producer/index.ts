@@ -1,8 +1,9 @@
 import { supportsTransactions } from '../broker/capabilities';
-import type { Cluster, TopicOffsets } from '../cluster/index';
+import type { Cluster, TopicOffsets, TopicPartitionInfo } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
+import type { MetricsRecorder } from '../instrumentation/metrics';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
 import type { CompressionType } from '../protocol/compression/index';
@@ -11,8 +12,9 @@ import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createEosManager, type EosManager } from './eos-manager/index';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
 import { createMessageProducer } from './message-producer';
+import { createNodeLatencyTracker } from './node-latency-tracker';
 import { DefaultPartitioner } from './partitioners/index';
-import type { CustomPartitioner, ProducerBatch, ProducerRecord, RecordMetadata } from './types';
+import type { CustomPartitioner, ProducerBatch, ProducerHooks, ProducerRecord, RecordMetadata } from './types';
 
 export interface ProducerOptions {
   cluster: Cluster;
@@ -25,9 +27,15 @@ export interface ProducerOptions {
   instrumentationEmitter?: InstrumentationEventEmitter | null;
   acks?: number;
   compression?: CompressionType;
+  compressionLevel?: number;
   lingerMs?: number;
   batchSize?: number;
   bufferMemory?: number;
+  deliveryTimeoutMs?: number;
+  maxRequestSize?: number;
+  /** Ordered async `onSend`/`onAck` hooks, also used by every {@link Transaction} this producer starts. */
+  hooks?: ProducerHooks;
+  metrics?: MetricsRecorder | null;
 }
 
 /**
@@ -63,6 +71,12 @@ export interface Producer {
   flush: () => Promise<void>;
   /** Begin a transaction. Requires `transactionalId` on the producer. */
   transaction: () => Promise<Transaction>;
+  /** Topic names from Metadata (all topics the broker will describe). Connects if needed. */
+  listTopics: () => Promise<string[]>;
+  /** Partition leaders/replicas/ISR for `topic`. Connects and refreshes metadata if needed. */
+  partitionsFor: (topic: string) => Promise<TopicPartitionInfo[]>;
+  /** KIP-714 client instance UUID, or `null` until the broker assigns one (or telemetry is off). */
+  clientInstanceId: () => Buffer | null;
   logger: () => Logger;
   [Symbol.asyncDispose]: () => Promise<void>;
 }
@@ -88,9 +102,14 @@ export function createProducer({
   instrumentationEmitter: rootInstrumentationEmitter,
   acks,
   compression,
-  lingerMs = 0,
-  batchSize,
+  compressionLevel,
+  lingerMs = 5,
+  batchSize = 16_384,
   bufferMemory,
+  deliveryTimeoutMs,
+  maxRequestSize,
+  hooks,
+  metrics,
 }: ProducerOptions): Producer {
   let connectionStatus: ConnectionStatus = CONNECTION_STATUS.DISCONNECTED;
   const producerRetry: RetryOptions = retry ?? { retries: idempotent ? Number.MAX_SAFE_INTEGER : 5 };
@@ -108,6 +127,9 @@ export function createProducer({
   const partitioner = createPartitioner();
   const producerRetrier = retrier(producerRetry);
   const instrumentationEmitter = rootInstrumentationEmitter ?? new InstrumentationEventEmitter();
+  // Shared across the idempotent producer and every transaction() below - it's about how fast
+  // this producer's broker nodes respond, not anything specific to one message-producer instance.
+  const nodeLatencyTracker = createNodeLatencyTracker();
   const idempotentEosManager = createEosManager({
     logger,
     cluster,
@@ -122,12 +144,18 @@ export function createProducer({
     cluster,
     partitioner,
     retrier: producerRetrier,
+    nodeLatencyTracker,
     getConnectionStatus: () => connectionStatus,
     defaultAcks: acks,
     defaultCompression: compression,
+    defaultCompressionLevel: compressionLevel,
     lingerMs,
     batchSize,
     bufferMemory,
+    deliveryTimeoutMs,
+    maxRequestSize,
+    hooks,
+    metrics,
   };
 
   const { send, sendBatch, flush } = createMessageProducer({
@@ -288,6 +316,19 @@ export function createProducer({
     sendBatch,
     flush: flushAll,
     transaction,
+    listTopics: async () => {
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        await connect();
+      }
+      return cluster.listTopics();
+    },
+    partitionsFor: async (topic: string) => {
+      if (connectionStatus !== CONNECTION_STATUS.CONNECTED) {
+        await connect();
+      }
+      return cluster.partitionsFor(topic);
+    },
+    clientInstanceId: () => cluster.clientInstanceId(),
     logger: () => logger,
     [Symbol.asyncDispose]: disconnect,
   };

@@ -21,7 +21,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v4/response', () => {
   it('decodes a real fixture, including uncompressed record batches', async () => {
-    const data = await fetchResponseV4.decode(Buffer.from(v4ResponseFixture.data));
+    const data = await fetchResponseV4().decode(Buffer.from(v4ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -45,6 +45,7 @@ describe('protocol/requests/fetch/v4/response', () => {
                 key: Buffer.from(`key-${i}`),
                 value: Buffer.from(`some-value-${i}`),
                 isControlRecord: false,
+                byteSize: 51,
               })),
             },
           ],
@@ -52,11 +53,11 @@ describe('protocol/requests/fetch/v4/response', () => {
       ],
     });
 
-    await expect(fetchResponseV4.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV4().parse(data)).resolves.toBeTruthy();
   });
 
   it('decodes a 0.10 MessageSet payload (magic 1) from a v4 response', async () => {
-    const data = await fetchResponseV4.decode(Buffer.from(v4Response010Fixture.data));
+    const data = await fetchResponseV4().decode(Buffer.from(v4Response010Fixture.data));
     expect(data.responses[0]?.partitions[0]?.messages).toEqual([
       expect.objectContaining({
         offset: 0n,
@@ -70,11 +71,11 @@ describe('protocol/requests/fetch/v4/response', () => {
         headers: {},
       }),
     ]);
-    await expect(fetchResponseV4.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV4().parse(data)).resolves.toBeTruthy();
   });
 
   it('decodes only the 0.10 messages from a mixed-format response', async () => {
-    const data = await fetchResponseV4.decode(Buffer.from(v4ResponseMixedFixture.data));
+    const data = await fetchResponseV4().decode(Buffer.from(v4ResponseMixedFixture.data));
     const magicBytes = data.responses[0]?.partitions[0]?.messages.map((m) => m.magicByte) ?? [];
     expect(new Set(magicBytes)).toEqual(new Set([1]));
   });

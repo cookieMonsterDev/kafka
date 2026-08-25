@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bufferPoolStats, clearBufferPool } from './buffer-pool';
 import { Decoder } from './decoder';
 import { Encoder } from './encoder';
 
@@ -327,6 +328,67 @@ describe('protocol/Encoder', () => {
       encoder.writeUInt32At(0, 0xe3069283);
       expect(encoder.buffer.readUInt32BE(0)).toBe(0xe3069283);
       expect(encoder.buffer.readInt8(4)).toBe(2);
+    });
+  });
+
+  describe('release', () => {
+    it('throws if the encoder is used after release', () => {
+      const encoder = new Encoder().writeInt8(1);
+      encoder.release();
+      expect(() => encoder.writeInt8(2)).toThrow(/released/);
+      expect(() => encoder.buffer).toThrow(/released/);
+    });
+
+    it('is idempotent', () => {
+      const encoder = new Encoder();
+      encoder.release();
+      expect(() => encoder.release()).not.toThrow();
+    });
+
+    it('writeEncoder leaves its argument usable by default', () => {
+      const value = new Encoder().writeBuffer(B(1));
+      new Encoder().writeEncoder(value);
+      expect(value.buffer).toEqual(B(1));
+    });
+
+    it('writeEncoder releases its argument when asked to', () => {
+      const value = new Encoder().writeBuffer(B(1));
+      new Encoder().writeEncoder(value, { release: true });
+      expect(() => value.buffer).toThrow(/released/);
+    });
+
+    it('writeEncoderArray leaves its elements usable by default', () => {
+      const values = [new Encoder().writeBuffer(B(1)), new Encoder().writeBuffer(B(2))];
+      new Encoder().writeEncoderArray(values);
+      expect(values.map((v) => v.buffer)).toEqual([B(1), B(2)]);
+    });
+
+    it('writeEncoderArray releases every element when asked to', () => {
+      const values = [new Encoder().writeBuffer(B(1)), new Encoder().writeBuffer(B(2))];
+      new Encoder().writeEncoderArray(values, { release: true });
+      for (const value of values) {
+        expect(() => value.buffer).toThrow(/released/);
+      }
+    });
+
+    it('lets a released buffer be reused by the next Encoder of the same size', () => {
+      clearBufferPool();
+      const first = new Encoder(4);
+      first.release();
+      new Encoder(4);
+
+      expect(bufferPoolStats()).toEqual({ acquireCount: 2, allocCount: 1, releaseCount: 1 });
+    });
+
+    it('recycles the pre-growth buffer instead of leaking it', () => {
+      clearBufferPool();
+      // Encoder(4) rounds its backing buffer up to 8 bytes; fill it exactly, then force a grow.
+      const encoder = new Encoder(4).writeBuffer(B(1, 2, 3, 4, 5, 6, 7, 8));
+      encoder.writeInt8(9);
+      expect(encoder.buffer).toEqual(B(1, 2, 3, 4, 5, 6, 7, 8, 9));
+
+      const stats = bufferPoolStats();
+      expect(stats.releaseCount).toBe(1); // the pre-growth buffer went back to the pool
     });
   });
 

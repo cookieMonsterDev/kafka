@@ -65,8 +65,12 @@ export class RequestQueue extends EventEmitter {
     this.isConnected = options.isConnected ?? (() => true);
   }
 
+  isBusy(): boolean {
+    return this.pending.length > 0 || this.inflight.size > 0;
+  }
+
   #emitRequestQueueEmptyIfIdle(): void {
-    if (this.pending.length === 0 && this.inflight.size === 0) {
+    if (!this.isBusy()) {
       this.emit(REQUEST_QUEUE_EMPTY);
     }
   }

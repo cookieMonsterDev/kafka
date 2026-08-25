@@ -1,6 +1,8 @@
 import { Broker } from '../broker/index';
-import { KafkaBrokerNotFound, KafkaProtocolError } from '../errors';
+import { supportsDescribeClusterControllers } from '../broker/capabilities';
+import { KafkaBrokerNotFound, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
+import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
 import { staleMetadata } from '../protocol/error-codes';
 import type { BrokerVersions } from '../protocol/requests/index';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
@@ -19,6 +21,29 @@ function hasBrokerBeenReplaced(
   );
 }
 
+/** KIP-951: the partition's current leader, reported on a stale-leader error response. */
+export interface CurrentLeader {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+/** KIP-951: a broker address the client may not already have cached metadata for. */
+export interface NodeEndpointUpdate {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
+export interface ApplyLeaderUpdateOptions {
+  topic: string;
+  partition: number;
+  currentLeader: CurrentLeader;
+  nodeEndpoints?: readonly NodeEndpointUpdate[];
+}
+
+export type MetadataRecovery = 'rebootstrap' | 'none';
+
 export interface BrokerPoolOptions {
   connectionPoolBuilder: ConnectionPoolBuilder;
   logger: Logger;
@@ -26,6 +51,32 @@ export interface BrokerPoolOptions {
   allowAutoTopicCreation?: boolean;
   authenticationTimeout?: number;
   metadataMaxAge?: number;
+  metadataRecovery?: MetadataRecovery;
+  /**
+   * KIP-919: discover the controller quorum via DescribeCluster (`endpointType=CONTROLLER`)
+   * instead of Metadata. Used when Admin is constructed with `bootstrapControllers`.
+   */
+  usingBootstrapControllers?: boolean;
+}
+
+/** Map a DescribeCluster (controller) response onto the Metadata shape `BrokerPool` already stores. */
+export function clusterMetadataFromDescribeCluster(body: {
+  throttleTime: number;
+  clientSideThrottleTime: number;
+  brokers: readonly { nodeId: number; host: string; port: number; rack: string | null }[];
+  clusterId: string;
+  controllerId: number;
+  clusterAuthorizedOperations: number;
+}): ClusterMetadata {
+  return {
+    throttleTime: body.throttleTime,
+    clientSideThrottleTime: body.clientSideThrottleTime,
+    brokers: body.brokers.map(({ nodeId, host, port, rack }) => ({ nodeId, host, port, rack })),
+    clusterId: body.clusterId,
+    controllerId: body.controllerId,
+    topicMetadata: [],
+    clusterAuthorizedOperations: body.clusterAuthorizedOperations,
+  };
 }
 
 /**
@@ -39,6 +90,7 @@ export class BrokerPool {
   readonly logger: Logger;
   readonly connectionPoolBuilder: ConnectionPoolBuilder;
   readonly metadataMaxAge: number;
+  readonly metadataRecovery: MetadataRecovery;
   readonly retrier: ReturnType<typeof retrier>;
 
   brokers: Record<string, Broker> = {};
@@ -46,6 +98,7 @@ export class BrokerPool {
   metadata: ClusterMetadata | null = null;
   metadataExpireAt: number | null = null;
   versions: BrokerVersions | null = null;
+  readonly usingBootstrapControllers: boolean;
 
   readonly #createBroker: (options: {
     connectionPool: Broker['connectionPool'];
@@ -61,10 +114,14 @@ export class BrokerPool {
     allowAutoTopicCreation,
     authenticationTimeout,
     metadataMaxAge,
+    metadataRecovery,
+    usingBootstrapControllers = false,
   }: BrokerPoolOptions) {
     this.rootLogger = logger;
     this.connectionPoolBuilder = connectionPoolBuilder;
     this.metadataMaxAge = metadataMaxAge ?? 0;
+    this.metadataRecovery = metadataRecovery ?? 'rebootstrap';
+    this.usingBootstrapControllers = usingBootstrapControllers;
     this.logger = logger.namespace('BrokerPool');
     this.retrier = retrier(retry);
 
@@ -142,13 +199,13 @@ export class BrokerPool {
   }
 
   async refreshMetadata(topics: readonly string[]): Promise<void> {
-    const broker = await this.findConnectedBroker();
-    const seedHost = this.seedBroker!.connectionPool.host;
-    const seedPort = this.seedBroker!.connectionPool.port;
-
     await this.retrier(async (bail, _retryCount, _retryTime) => {
       try {
-        this.metadata = await broker.metadata([...topics]);
+        const broker = await this.findConnectedBroker();
+        const seedHost = this.seedBroker!.connectionPool.host;
+        const seedPort = this.seedBroker!.connectionPool.port;
+
+        this.metadata = await this.fetchClusterMetadata(broker, topics);
         this.metadataExpireAt = Date.now() + this.metadataMaxAge;
 
         const replacedBrokers: Broker[] = [];
@@ -195,7 +252,19 @@ export class BrokerPool {
 
         this.brokers = nextBrokers;
       } catch (e) {
-        const error = e as Error & { type?: string };
+        const error = e as Error & { type?: string; name?: string };
+
+        if (
+          this.metadataRecovery === 'rebootstrap' &&
+          (error.type === 'REBOOTSTRAP_REQUIRED' || error.name === 'KafkaConnectionError')
+        ) {
+          this.logger.warn('Rediscovering the cluster from the bootstrap broker list', {
+            reason: error.type ?? error.name,
+          });
+          await this.rebootstrap();
+          throw new KafkaProtocolError({ message: error.message, retriable: true });
+        }
+
         if (staleMetadata(error)) {
           throw error;
         }
@@ -204,20 +273,109 @@ export class BrokerPool {
     });
   }
 
+  /**
+   * KIP-1102: drops every discovered broker and cached metadata, then rebuilds a seed broker
+   * from the original bootstrap list and reconnects. `connectionPoolBuilder.build()` without a
+   * destination always draws from that original list rather than brokers this pool has since
+   * discovered, so this is a genuine return to the seeds - not a retry against brokers already
+   * known to be stale or unreachable.
+   */
+  async rebootstrap(): Promise<void> {
+    await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
+    this.brokers = {};
+    this.metadata = null;
+    this.metadataExpireAt = null;
+
+    await this.createSeedBroker();
+    await this.connect();
+  }
+
   async refreshMetadataIfNecessary(topics: readonly string[]): Promise<void> {
+    const metadata = this.metadata;
+    // KIP-919 controller pools have no topic metadata; skip the topic-presence check.
+    // Otherwise require a cache hit before reading `topicMetadata` — the previous
+    // `this.metadata!` form threw when connect() had not yet loaded Metadata.
+    const topicsReady =
+      this.usingBootstrapControllers ||
+      (metadata != null &&
+        topics.every((topic) => metadata.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic)));
     const shouldRefresh =
-      this.metadata == null ||
-      this.metadataExpireAt == null ||
-      Date.now() > this.metadataExpireAt ||
-      !topics.every((topic) => this.metadata!.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic));
+      metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
 
     if (shouldRefresh) {
       await this.refreshMetadata(topics);
     }
   }
 
+  /**
+   * KIP-951: patches the cached partition leader (and any accompanying broker addresses) from a
+   * Produce/Fetch error response's `CurrentLeader` / `NodeEndpoints` tagged fields, without a
+   * Metadata RPC. Returns whether the cached partition metadata was actually found and patched -
+   * callers should fall back to `refreshMetadata` when it returns `false`.
+   */
+  async applyLeaderUpdate({
+    topic,
+    partition,
+    currentLeader,
+    nodeEndpoints = [],
+  }: ApplyLeaderUpdateOptions): Promise<boolean> {
+    if (currentLeader.leaderId < 0 || !this.metadata) return false;
+
+    for (const endpoint of nodeEndpoints) {
+      const key = String(endpoint.nodeId);
+      const existing = this.brokers[key];
+      if (existing && !hasBrokerBeenReplaced(existing, endpoint)) continue;
+
+      const replaced = this.brokers[key];
+      this.brokers[key] = this.#createBroker({
+        logger: this.rootLogger,
+        versions: this.versions,
+        connectionPool: await this.connectionPoolBuilder.build(endpoint),
+        nodeId: endpoint.nodeId,
+      });
+      if (replaced) await replaced.disconnect();
+
+      const brokerIndex = this.metadata.brokers.findIndex((broker) => broker.nodeId === endpoint.nodeId);
+      const brokerEntry = { nodeId: endpoint.nodeId, host: endpoint.host, port: endpoint.port, rack: endpoint.rack };
+      if (brokerIndex === -1) {
+        this.metadata.brokers.push(brokerEntry);
+      } else {
+        this.metadata.brokers[brokerIndex] = brokerEntry;
+      }
+    }
+
+    const topicMetadata = this.metadata.topicMetadata.find((entry) => entry.topic === topic);
+    const partitionMetadata = topicMetadata?.partitionMetadata.find((entry) => entry.partitionId === partition);
+    if (!partitionMetadata) return false;
+
+    partitionMetadata.leader = currentLeader.leaderId;
+    if (currentLeader.leaderEpoch >= 0) partitionMetadata.leaderEpoch = currentLeader.leaderEpoch;
+    return true;
+  }
+
   getNodeIds(): string[] {
     return Object.keys(this.brokers);
+  }
+
+  /**
+   * Metadata against brokers, or DescribeCluster (`endpointType=CONTROLLER`) when this pool
+   * was created for Admin `bootstrapControllers` (KIP-919).
+   */
+  private async fetchClusterMetadata(broker: Broker, topics: readonly string[]): Promise<ClusterMetadata> {
+    if (!this.usingBootstrapControllers) {
+      return broker.metadata([...topics]);
+    }
+
+    const versions = broker.versions ?? this.versions ?? {};
+    if (!supportsDescribeClusterControllers(versions)) {
+      throw new KafkaNonRetriableError('bootstrapControllers requires DescribeCluster v1 (KIP-919, Kafka 3.7+)');
+    }
+
+    const body = await broker.describeCluster({
+      includeClusterAuthorizedOperations: false,
+      endpointType: ENDPOINT_TYPES.CONTROLLER,
+    });
+    return clusterMetadataFromDescribeCluster(body);
   }
 
   async findBroker({ nodeId }: { nodeId: string }): Promise<Broker> {

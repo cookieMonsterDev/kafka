@@ -13,6 +13,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.OffsetDelete).toBe(47);
     expect(API_KEYS.DescribeUserScramCredentials).toBe(50);
     expect(API_KEYS.AlterUserScramCredentials).toBe(51);
+    expect(API_KEYS.AssignReplicasToDirs).toBe(73);
     expect(API_KEYS.DescribeQuorum).toBe(55);
     expect(API_KEYS.UpdateFeatures).toBe(57);
     expect(API_KEYS.DescribeCluster).toBe(60);
@@ -22,6 +23,8 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.ListTransactions).toBe(66);
     expect(API_KEYS.ConsumerGroupHeartbeat).toBe(68);
     expect(API_KEYS.ConsumerGroupDescribe).toBe(69);
+    expect(API_KEYS.GetTelemetrySubscriptions).toBe(71);
+    expect(API_KEYS.PushTelemetry).toBe(72);
     expect(API_KEYS.ShareGroupHeartbeat).toBe(76);
     expect(API_KEYS.ShareGroupDescribe).toBe(77);
     expect(API_KEYS.ShareFetch).toBe(78);

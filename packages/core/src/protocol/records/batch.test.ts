@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KafkaCorruptRecordError } from '../../errors';
 import { COMPRESSION_TYPES } from '../compression/index';
 import { Decoder } from '../decoder';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
@@ -124,5 +125,48 @@ describe('protocol/records/batch', () => {
     });
 
     expect(inplace.buffer).toEqual(copied.buffer);
+  });
+
+  it('compressionLevel threads through to the codec: gzip level 1 vs 9 change the encoded size', async () => {
+    const records = [encodeRecord({ key: 'k', value: 'kafka-kafka-kafka-'.repeat(200) })];
+
+    const fast = await encodeRecordBatch({ compression: COMPRESSION_TYPES.GZIP, compressionLevel: 1, records });
+    const best = await encodeRecordBatch({ compression: COMPRESSION_TYPES.GZIP, compressionLevel: 9, records });
+
+    expect(fast.buffer.length).toBeGreaterThan(best.buffer.length);
+
+    const decodedFast = await decodeRecordBatch(new Decoder(fast.buffer));
+    const decodedBest = await decodeRecordBatch(new Decoder(best.buffer));
+    expect(decodedFast.records[0]?.value?.toString()).toBe('kafka-kafka-kafka-'.repeat(200));
+    expect(decodedBest.records[0]?.value?.toString()).toBe('kafka-kafka-kafka-'.repeat(200));
+  });
+
+  describe('checkCrcs', () => {
+    it('defaults to true and rejects a batch whose CRC does not match its bytes', async () => {
+      const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
+      const corrupted = Buffer.from(encoded.buffer);
+      // Flip a byte inside the record payload (after the fixed header) without touching the CRC field.
+      const flipIndex = corrupted.length - 1;
+      corrupted[flipIndex] = (corrupted[flipIndex] as number) ^ 0xff;
+
+      await expect(decodeRecordBatch(new Decoder(corrupted))).rejects.toBeInstanceOf(KafkaCorruptRecordError);
+      await expect(decodeRecordBatch(new Decoder(corrupted))).rejects.toThrow(/CRC mismatch/);
+    });
+
+    it('checkCrcs: false skips the check and decodes the corrupted batch anyway', async () => {
+      const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
+      const corrupted = Buffer.from(encoded.buffer);
+      const flipIndex = corrupted.length - 1;
+      corrupted[flipIndex] = (corrupted[flipIndex] as number) ^ 0xff;
+
+      const decoded = await decodeRecordBatch(new Decoder(corrupted), { checkCrcs: false });
+      expect(decoded.records).toHaveLength(1);
+    });
+
+    it('checkCrcs: true (explicit) still accepts a valid batch', async () => {
+      const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
+      const decoded = await decodeRecordBatch(new Decoder(encoded.buffer), { checkCrcs: true });
+      expect(decoded.records).toHaveLength(1);
+    });
   });
 });

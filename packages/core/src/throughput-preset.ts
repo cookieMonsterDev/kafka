@@ -1,12 +1,6 @@
 import { StickyPartitioner } from './producer/partitioners/index';
 import type { CustomPartitioner } from './producer/types';
 
-/** Java `linger.ms` default since 4.0. Constructor default stays `0`. */
-const LINGER_MS = 5;
-/** Java `batch.size` default. */
-const BATCH_SIZE = 16_384;
-/** Java `max.in.flight.requests.per.connection` with idempotence. */
-const MAX_IN_FLIGHT_REQUESTS = 5;
 /** Java `buffer.memory` default (32 MiB). Constructor default stays unlimited. */
 const BUFFER_MEMORY = 32 * 1024 * 1024;
 /** Consume partitions in parallel; constructor/`run` default stays `1`. */
@@ -14,12 +8,10 @@ const PARTITIONS_CONSUMED_CONCURRENTLY = 4;
 
 /**
  * Producer options from {@link throughputPreset}. Spread into {@link Kafka.producer}.
- * Does not change constructor defaults.
+ * Linger, batch size, and in-flight caps are constructor defaults; the preset adds sticky
+ * partitioning and a 32 MiB `bufferMemory`.
  */
 export interface ThroughputPresetProducer {
-  lingerMs: number;
-  batchSize: number;
-  maxInFlightRequests: number;
   createPartitioner: CustomPartitioner;
   bufferMemory: number;
 }
@@ -33,9 +25,9 @@ export interface ThroughputPresetConsumer {
 }
 
 /**
- * Named throughput profile. Constructor defaults stay latency-oriented (`lingerMs: 0`,
- * murmur2, consume concurrency 1). Spread the fragments into producer construction and
- * `consumer.run()`:
+ * Named throughput profile. Constructor defaults already batch (`lingerMs: 5`,
+ * `batchSize: 16384`, `maxInFlightRequests: 5`). Spread the fragments for sticky
+ * partitioning, a 32 MiB send buffer, and consume concurrency:
  *
  * ```ts
  * const { producer, consumer } = throughputPreset()
@@ -51,15 +43,12 @@ export interface ThroughputPreset {
 }
 
 /**
- * Returns linger/batching/sticky-partitioner producer options and consume-concurrency
- * for load-oriented clients. Safe to spread; does not mutate constructor defaults.
+ * Returns sticky-partitioner producer options and consume-concurrency for load-oriented
+ * clients. Safe to spread; does not mutate constructor defaults.
  */
 export function throughputPreset(): ThroughputPreset {
   return {
     producer: {
-      lingerMs: LINGER_MS,
-      batchSize: BATCH_SIZE,
-      maxInFlightRequests: MAX_IN_FLIGHT_REQUESTS,
       createPartitioner: StickyPartitioner,
       bufferMemory: BUFFER_MEMORY,
     },

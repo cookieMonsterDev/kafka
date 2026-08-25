@@ -1,6 +1,7 @@
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import type { Admin } from '../admin/types';
-import type { PartitionMetadata } from '../cluster/index';
+import type { MetadataRecovery } from '../cluster/broker-pool';
+import type { PartitionMetadata, TopicPartitionInfo } from '../cluster/index';
 import type {
   AutoOffsetReset,
   Batch,
@@ -8,8 +9,10 @@ import type {
   ConsumerSubscribeTopic,
   ConsumerSubscribeTopics,
 } from '../consumer/index';
+import type { KafkaMetrics } from '../instrumentation/metrics';
 import type {
   Assigner,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   EachBatchHandler,
@@ -17,27 +20,40 @@ import type {
   EachMessageHandler,
   EachMessagePayload,
   KafkaMessage,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
+  RebalanceListener,
+  TopicPartition,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
 } from '../consumer/types';
 import type { LogCreator, LogEntry, LogLevel, Logger } from '../loggers/index';
 import type { AuthenticationProviderArgs, SaslAuthenticationProvider } from '../network/connection';
+import type { ClientDnsLookup } from '../network/dns-lookup';
 import type { SocketFactory } from '../network/socket-factory';
 import type { CompressionType } from '../protocol/compression/index';
 import type { ShareAcquireMode } from '../protocol/requests/share-fetch/index';
 import type { GssTokenChallenge, GssTokenProvider, GssTokenStep } from '../protocol/sasl/gssapi';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { Producer, Transaction } from '../producer/index';
+import type { NodeLatencyReader } from '../producer/node-latency-tracker';
 import type {
   CustomPartitioner,
   Message,
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
+  ProducerAckHook,
+  ProducerAckHookEvent,
   ProducerBatch,
+  ProducerHooks,
   ProducerRecord,
+  ProducerSendHook,
+  ProducerSendHookEvent,
   RecordMetadata,
   TopicMessages,
 } from '../producer/types';
@@ -127,8 +143,36 @@ export interface KafkaConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#client.id
    */
   clientId?: string;
-  /** Socket connect timeout in milliseconds. */
+  /** Socket connect timeout in milliseconds. Also the initial TLS/TCP setup timeout. */
   connectionTimeout?: number;
+  /**
+   * Close idle broker sockets after this many milliseconds with no send/receive and no in-flight
+   * requests. Default 540_000 (9 minutes). `0` disables idle close.
+   * [connections.max.idle.ms](https://kafka.apache.org/43/configuration/producer-configs/#connections.max.idle.ms)
+   */
+  connectionsMaxIdleMs?: number;
+  /**
+   * Cap, in ms, for exponential growth of the connect/TLS handshake timeout after consecutive
+   * failures. The initial timeout is {@link KafkaConfig.connectionTimeout}. Default 30_000.
+   * [socket.connection.setup.timeout.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#socket.connection.setup.timeout.max.ms)
+   */
+  socketConnectionSetupTimeoutMaxMs?: number;
+  /**
+   * How bootstrap hostnames are resolved. Default `'useAllDnsIps'` (every A/AAAA, happy-eyeballs
+   * when both families exist). `'canonicalBootstrap'` follows CNAME/PTR so GSSAPI sees the FQDN.
+   * [client.dns.lookup](https://kafka.apache.org/43/configuration/producer-configs/#client.dns.lookup)
+   */
+  clientDnsLookup?: ClientDnsLookup;
+  /**
+   * Initial wait before reconnecting a dropped socket. Default 50. `0` disables.
+   * [reconnect.backoff.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.ms)
+   */
+  reconnectBackoffMs?: number;
+  /**
+   * Cap for reconnect backoff. Default 1000.
+   * [reconnect.backoff.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.max.ms)
+   */
+  reconnectBackoffMaxMs?: number;
   /** SASL handshake timeout in milliseconds. */
   authenticationTimeout?: number;
   /** Reauthenticate this many milliseconds before the broker session expires. */
@@ -137,10 +181,28 @@ export interface KafkaConfig {
   requestTimeout?: number;
   /** When false, in-flight requests are not timed out by the client. */
   enforceRequestTimeout?: boolean;
+  /**
+   * KIP-1102: on `REBOOTSTRAP_REQUIRED` or an exhausted/unreachable broker set, `'rebootstrap'`
+   * (the default) drops discovered metadata and reconnects to the original bootstrap broker
+   * list; `'none'` keeps retrying the brokers already known to the client.
+   */
+  metadataRecovery?: MetadataRecovery;
   retry?: RetryOptions;
   socketFactory?: SocketFactory;
   logLevel?: LogLevel;
   logCreator?: LogCreator;
+  /**
+   * Client-side metrics. Off by default. `true` uses the global `@opentelemetry/api` meter
+   * (optional peer). Pass `{ meter }` to supply any OpenTelemetry-compatible `Meter`.
+   */
+  metrics?: KafkaMetrics;
+  /**
+   * KIP-714: after connect, subscribe and push client metrics to the broker when it
+   * advertises GetTelemetrySubscriptions (Kafka 3.5+). Default true; the pusher disables
+   * itself if the API is missing. Set false to skip the RPCs entirely.
+   * [enable.metrics.push](https://kafka.apache.org/43/configuration/producer-configs/#enable.metrics.push)
+   */
+  enableMetricsPush?: boolean;
 }
 
 /**
@@ -173,7 +235,11 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms
    */
   transactionTimeout?: number;
-  maxInFlightRequests?: number;
+  /**
+   * Cap on in-flight requests per broker connection. Default 5. Pass `null` to uncap.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.in.flight.requests.per.connection
+   */
+  maxInFlightRequests?: number | null;
   /**
    * Default acks for send/sendBatch when the call omits acks. `-1` = all ISR.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
@@ -185,15 +251,22 @@ export interface ProducerConfig {
    */
   compression?: CompressionType;
   /**
+   * Default compression level for send/sendBatch when the call omits compressionLevel, passed
+   * to the active codec when it honors one. GZIP maps it straight to zlib's `level` (0-9). ZSTD
+   * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
+   * compression-level concept in this client's codecs and ignore it.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   */
+  compressionLevel?: number;
+  /**
    * Delay in ms to wait for more records before sending a Produce request.
-   * Default 0 (send immediately). Java 4.0+ defaults to 5.
+   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
   /**
    * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Unset or 0 means do not batch by size.
-   * Java default is 16384.
+   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
@@ -205,6 +278,33 @@ export interface ProducerConfig {
    * @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
    */
   bufferMemory?: number;
+  /**
+   * End-to-end deadline for one `send`/`sendBatch` call, covering `lingerMs`, any
+   * `bufferMemory` wait, and every retry attempt together - not any single RPC. Once it
+   * elapses, the call rejects with `KafkaDeliveryTimeoutError` regardless of retries
+   * remaining; the in-flight attempt, if any, is not cancelled. Default 120_000; 0 (or
+   * below) disables the deadline. Keep it comfortably above `lingerMs` plus the per-call
+   * `timeout` (or the broker could still be waiting on acks when this fires) and above
+   * `retry.maxRetryTime` times however many retries you expect to need.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+   */
+  deliveryTimeoutMs?: number;
+  /**
+   * Cap, in bytes, on the uncompressed records of one Produce request. A single record over the
+   * cap rejects immediately at `send`/`sendBatch` call time with `KafkaMessageTooLargeError`,
+   * before it ever occupies a linger slot; a linger-buffered batch that would otherwise combine
+   * past the cap is flushed as multiple requests instead, none over the cap. Default 1_048_576
+   * (1 MiB), matching Java's default. Distinct from the broker's `MESSAGE_TOO_LARGE` protocol
+   * error, which only fires after the broker has accepted bytes on the wire.
+   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+   */
+  maxRequestSize?: number;
+  /**
+   * Ordered async hooks around the send path, not an interceptor SPI: `onSend` fires before a
+   * `send()`/`sendBatch()` call is dispatched, `onAck` after it settles. Each array runs in
+   * registration order; a throwing hook is caught and logged, never failing the send.
+   */
+  hooks?: ProducerHooks;
 }
 
 /**
@@ -214,9 +314,12 @@ export interface ProducerConfig {
 export interface ConsumerConfig {
   /**
    * Consumer group id. Members that share this id partition assigned topics among themselves.
+   * Required to use {@link Consumer.subscribe}. Optional for {@link Consumer.assign}, which
+   * fetches without group membership; set it there only if you plan to call
+   * {@link Consumer.commitOffsets}.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.id
    */
-  groupId: string;
+  groupId?: string;
   partitionAssigners?: PartitionAssigner[];
   metadataMaxAge?: number;
   /**
@@ -286,9 +389,35 @@ export interface ConsumerConfig {
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: GroupProtocol;
+  /**
+   * Server-side partition assignor to request under the KIP-848 consumer protocol. Only
+   * meaningful when `groupProtocol` is `'consumer'`; ignored (logged at debug level) otherwise,
+   * the same as `sessionTimeout`, `heartbeatInterval`, and `partitionAssigners` are unused under
+   * `groupProtocol: 'consumer'`. Broker property: `group.remote.assignor`.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   */
+  groupRemoteAssignor?: GroupRemoteAssignor;
+  /**
+   * Ordered async hooks around the consume/commit path, not an interceptor SPI: `onConsume`
+   * fires before `eachMessage`/`eachBatch` runs, `onCommit` after an offset-commit attempt
+   * settles (auto-commit or manual `commitOffsets`). Each array runs in registration order; a
+   * throwing hook is caught and logged, never failing consumption or the commit.
+   */
+  hooks?: ConsumerHooks;
+  /**
+   * Verify each fetched record batch's CRC (RecordBatch v2 CRC-32C, or the legacy MessageSet
+   * CRC-32) and throw {@link KafkaCorruptRecordError} on mismatch. Default `true`. Set `false`
+   * to skip the check for extreme throughput - corrupted bytes on the wire (a bad disk, a buggy
+   * proxy, transport bit-flips) then go undetected instead of failing loudly.
+   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   */
+  checkCrcs?: boolean;
 }
 
 export type GroupProtocol = 'classic' | 'consumer';
+
+/** Broker-side partition assignor requested via `groupRemoteAssignor` (KIP-848, `group.remote.assignor`). */
+export type GroupRemoteAssignor = 'uniform' | 'range';
 
 /**
  * Options for {@link Kafka.shareConsumer} (KIP-932 share groups, Kafka 4.0+).
@@ -320,6 +449,13 @@ export interface ShareConsumerConfig {
  */
 export interface AdminConfig {
   retry?: RetryOptions;
+  /**
+   * KIP-919: talk to the KRaft controller quorum without a broker bootstrap list.
+   * Mutually exclusive with discovering brokers for this admin instance; producer and consumer
+   * still use {@link KafkaConfig.brokers}. Requires DescribeCluster v1 (Kafka 3.7+).
+   * @see https://kafka.apache.org/43/configuration/admin-configs/#bootstrap.controllers
+   */
+  bootstrapControllers?: readonly string[] | BrokersFunction;
 }
 
 export type {
@@ -330,6 +466,7 @@ export type {
   Batch,
   CompressionType,
   Consumer,
+  ConsumerHooks,
   ConsumerRetryOptions,
   ConsumerRunConfig,
   ConsumerSubscribeTopic,
@@ -348,19 +485,32 @@ export type {
   LogLevel,
   Logger,
   Message,
+  NodeLatencyReader,
+  OnCommitEvent,
+  OnCommitHook,
+  OnConsumeEvent,
+  OnConsumeHook,
   PartitionAssigner,
   PartitionMetadata,
+  TopicPartitionInfo,
   Partitioner,
   PartitionerArgs,
   PartitionerBatchArgs,
   Producer,
+  ProducerAckHook,
+  ProducerAckHookEvent,
   ProducerBatch,
+  ProducerHooks,
   ProducerRecord,
+  ProducerSendHook,
+  ProducerSendHookEvent,
+  RebalanceListener,
   RecordHeaders,
   RecordMetadata,
   SaslAuthenticationProvider,
   SocketFactory,
   TopicMessages,
+  TopicPartition,
   TopicPartitionOffset,
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
@@ -368,6 +518,7 @@ export type {
 };
 
 export type { RetryOptions } from '../retry/index';
+export type { ClientDnsLookup } from '../network/dns-lookup';
 
 export type {
   EachShareBatchHandler,

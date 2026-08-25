@@ -160,6 +160,35 @@ describe('consumer/fetch-manager', () => {
     await waitFor(() => manager.getFetchers().length === 2);
     expect(manager.getFetchers()).toHaveLength(2);
   });
+
+  it('does not dispatch the same partition to two workers while it is in flight', async () => {
+    const inFlight = new Set<number>();
+    let overlapping = false;
+    const fetch = vi.fn(async () => {
+      await sleep(5);
+      return [new Batch('test-topic', 0n, { partition: 0, highWatermark: 100n, messages: [] })];
+    });
+    const handler = vi.fn(async (batch: Batch) => {
+      if (inFlight.has(batch.partition)) overlapping = true;
+      inFlight.add(batch.partition);
+      await sleep(40);
+      inFlight.delete(batch.partition);
+    });
+
+    const manager = createFetchManager({
+      logger: silentLogger,
+      concurrency: 2,
+      prefetchMaxBatches: 8,
+      fetch,
+      handler,
+      getNodeIds: () => ['0'],
+    });
+    fetchManager = manager;
+    void manager.start();
+    await waitFor(() => handler.mock.calls.length >= 2);
+    await manager.stop();
+    expect(overlapping).toBe(false);
+  });
 });
 
 describe('consumer/fetcher', () => {

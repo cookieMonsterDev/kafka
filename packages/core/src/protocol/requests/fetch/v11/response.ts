@@ -1,6 +1,13 @@
 import { Decoder } from '../../../decoder';
 import type { ResponseDefinition } from '../../../schema';
-import { decodeRecordSet, parseFetchResponse, readTopicName } from '../shared';
+import {
+  decodeRecordSet,
+  parseFetchResponse,
+  readTopicName,
+  type FetchNodeEndpoint,
+  type FetchRequestOptions,
+  type LeaderIdAndEpoch,
+} from '../shared';
 import type { DecodedRecordBatch } from '../../../records/batch';
 
 export interface FetchPartitionResponseV11 {
@@ -12,6 +19,8 @@ export interface FetchPartitionResponseV11 {
   abortedTransactions: { producerId: bigint; firstOffset: bigint }[];
   preferredReadReplica: number;
   messages: DecodedRecordBatch['records'];
+  /** KIP-951 (v12+); always `null` pre-v12, where the wire has no tagged fields to carry it. */
+  currentLeader: LeaderIdAndEpoch | null;
 }
 
 export interface FetchTopicResponseV11 {
@@ -27,10 +36,12 @@ export interface FetchResponseV11Body {
   errorCode: number;
   sessionId: number;
   responses: FetchTopicResponseV11[];
+  /** KIP-951 (v16+); always `[]` pre-v16, where the wire has no top-level tagged fields. */
+  nodeEndpoints: FetchNodeEndpoint[];
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV11> {
-  return {
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV11> => ({
     partition: decoder.readInt32(),
     errorCode: decoder.readInt16(),
     highWatermark: decoder.readInt64(),
@@ -41,12 +52,16 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
       firstOffset: decoder.readInt64(),
     })),
     preferredReadReplica: decoder.readInt32(),
-    messages: await decodeRecordSet(decoder),
-  };
+    messages: await decodeRecordSet(decoder, checkCrcs),
+    currentLeader: null,
+  });
 }
 
-async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponseV11> {
-  return { topicName: readTopicName(decoder), partitions: await decoder.readArrayAsync(decodePartition) };
+function decodeTopicResponse(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchTopicResponseV11> => ({
+    topicName: readTopicName(decoder),
+    partitions: await decoder.readArrayAsync(decodePartition(checkCrcs)),
+  });
 }
 
 /**
@@ -67,14 +82,18 @@ async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponse
  * throttling: report a client-facing `throttleTime` of 0 and surface the wire value as
  * `clientSideThrottleTime` for the caller to act on.
  */
-export const fetchResponseV11: ResponseDefinition<FetchResponseV11Body> = {
-  decode: async (rawData) => {
-    const decoder = new Decoder(rawData);
-    const clientSideThrottleTime = decoder.readInt32();
-    const errorCode = decoder.readInt16();
-    const sessionId = decoder.readInt32();
-    const responses = await decoder.readArrayAsync(decodeTopicResponse);
-    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses };
-  },
-  parse: parseFetchResponse,
-};
+export function fetchResponseV11(
+  options: Pick<FetchRequestOptions, 'checkCrcs'> = {},
+): ResponseDefinition<FetchResponseV11Body> {
+  return {
+    decode: async (rawData) => {
+      const decoder = new Decoder(rawData);
+      const clientSideThrottleTime = decoder.readInt32();
+      const errorCode = decoder.readInt16();
+      const sessionId = decoder.readInt32();
+      const responses = await decoder.readArrayAsync(decodeTopicResponse(options.checkCrcs));
+      return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses, nodeEndpoints: [] };
+    },
+    parse: parseFetchResponse,
+  };
+}

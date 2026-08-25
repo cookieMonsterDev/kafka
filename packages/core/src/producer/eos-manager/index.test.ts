@@ -3,6 +3,7 @@ import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
+import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createEosManager } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -15,6 +16,12 @@ const mockInitProducerIdResponse = {
   clientSideThrottleTime: 0,
 };
 
+/** Second InitProducerId response, used to assert an epoch bump under transaction V2. */
+const mockBumpedInitProducerIdResponse = {
+  ...mockInitProducerIdResponse,
+  producerEpoch: mockInitProducerIdResponse.producerEpoch + 1,
+};
+
 function fakeBroker() {
   return {
     initProducerId: vi.fn().mockResolvedValue(mockInitProducerIdResponse),
@@ -25,11 +32,13 @@ function fakeBroker() {
   };
 }
 
-function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
+/** `transactionV2` mirrors a broker advertising Produce v12 (Kafka 4.0+, KIP-890 part 2). */
+function fakeCluster(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
   return {
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
+    brokerPool: { versions: transactionV2 ? { [API_KEYS.Produce]: { maxVersion: 12 } } : undefined },
   };
 }
 
@@ -202,6 +211,105 @@ describe('producer/eosManager', () => {
           ],
         }),
       );
+    });
+
+    it('skips AddPartitionsToTxn under transaction V2, tracking partitions locally instead', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker, { transactionV2: true });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      expect(broker.addPartitionsToTxn).not.toHaveBeenCalled();
+
+      // Still tracked locally: commit sends EndTxn, proving the transaction is considered ongoing.
+      await eosManager.commit();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+    });
+
+    it('bumps the producer epoch after commit/abort under transaction V2', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const cluster = fakeCluster(broker, { transactionV2: true });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      await eosManager.commit();
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('does not bump the producer epoch when the broker predates transaction V2', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker, { transactionV2: false });
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      await eosManager.commit();
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+      expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+    });
+
+    it('marks the transaction abort-only after TRANSACTION_ABORTABLE, rejecting commit but allowing abort', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+
+      eosManager.markTransactionAbortable();
+
+      await expect(eosManager.commit()).rejects.toEqual(
+        new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "ABORTABLE"'),
+      );
+
+      await eosManager.abort();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
+    });
+
+    it('is a no-op outside an active transaction', () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      expect(() => eosManager.markTransactionAbortable()).not.toThrow();
     });
 
     it('commits a transaction', async () => {
@@ -397,6 +505,14 @@ describe('producer/eosManager', () => {
         );
       });
     }
+
+    it('markTransactionAbortable is a no-op', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+
+      expect(() => eosManager.markTransactionAbortable()).not.toThrow();
+    });
   });
 
   it('is a no-op for partition gates until initialized', async () => {

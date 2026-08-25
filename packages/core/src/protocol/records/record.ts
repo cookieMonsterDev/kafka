@@ -1,4 +1,4 @@
-import type { Decoder } from '../decoder';
+import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import type { TimestampType } from '../enums/timestamp-types';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
@@ -123,21 +123,17 @@ export interface DecodedRecord {
   headers: Record<string, HeaderValue | HeaderValue[]>;
   isControlRecord: boolean;
   batchContext: RecordBatchContext;
+  /**
+   * This record's on-wire size (post-decompression): length-prefix framing, attributes,
+   * timestamp/offset deltas, key, value, and headers, all together. Cheap — it's just the
+   * length already read off the wire to isolate this record's bytes — and available without
+   * decoding `value`/`headers`, so byte-usage accounting (e.g. the consumer's adaptive
+   * fetch-size controller) doesn't have to force that decode just to estimate how much was used.
+   */
+  byteSize: number;
 }
 
-export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext): DecodedRecord {
-  const { firstOffset, firstTimestamp, magicByte, isControlBatch, timestampType, maxTimestamp } = batchContext;
-  const attributes = decoder.readInt8();
-
-  const timestampDelta = decoder.readVarLong();
-  const timestamp = timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + timestampDelta;
-
-  const offsetDelta = decoder.readVarInt();
-  const offset = firstOffset + BigInt(offsetDelta);
-
-  const key = decoder.readVarIntBytes();
-  const value = decoder.readVarIntBytes();
-
+function decodeHeadersArray(decoder: Decoder): Record<string, HeaderValue | HeaderValue[]> {
   const headers: Record<string, HeaderValue | HeaderValue[]> = {};
   for (const { key: headerKey, value: headerValue } of decoder.readVarIntArray(decodeHeader)) {
     const existing = headers[String(headerKey)];
@@ -149,6 +145,42 @@ export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext)
       headers[String(headerKey)] = [existing, headerValue];
     }
   }
+  return headers;
+}
+
+export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext): DecodedRecord {
+  const { firstOffset, firstTimestamp, magicByte, isControlBatch, timestampType, maxTimestamp } = batchContext;
+  const byteSize = decoder.buffer.length;
+  const attributes = decoder.readInt8();
+
+  const timestampDelta = decoder.readVarLong();
+  const timestamp = timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + timestampDelta;
+
+  const offsetDelta = decoder.readVarInt();
+  const offset = firstOffset + BigInt(offsetDelta);
+
+  const key = decoder.readVarIntBytes();
+
+  // `value`/`headers` are the fields an `eachBatch` consumer that only reads offsets (e.g.
+  // `batch.lastOffset()`) never touches, and headers in particular costs an array-of-tags parse
+  // plus a fresh object per record. Deferred via getters (not a spread, which would evaluate
+  // them immediately) until the first access to either — headers always follows value on the
+  // wire, so there's no benefit to decoding them independently.
+  const bodyBuffer = decoder.readAll();
+  let bodyDecoded = false;
+  let value: Buffer | null = null;
+  let headers: Record<string, HeaderValue | HeaderValue[]> = {};
+
+  function decodeBody(): void {
+    if (bodyDecoded) return;
+    // Only latch `bodyDecoded` once parsing actually succeeds, so a throw (malformed/truncated
+    // wire data) is retried — and rethrown — on the next access instead of being cached as if
+    // it had decoded to the empty defaults below.
+    const bodyDecoder = new Decoder(bodyBuffer);
+    value = bodyDecoder.readVarIntBytes();
+    headers = decodeHeadersArray(bodyDecoder);
+    bodyDecoded = true;
+  }
 
   return {
     magicByte,
@@ -156,9 +188,16 @@ export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext)
     timestamp,
     offset,
     key,
-    value,
-    headers,
+    get value() {
+      decodeBody();
+      return value;
+    },
+    get headers() {
+      decodeBody();
+      return headers;
+    },
     isControlRecord: isControlBatch,
     batchContext,
+    byteSize,
   };
 }

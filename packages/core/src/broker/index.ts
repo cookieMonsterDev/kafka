@@ -170,6 +170,12 @@ import type { DescribeTopicPartitionsResponseV0Body } from '../protocol/requests
 import { ListConfigResources } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesOptions } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesResponseV1Body } from '../protocol/requests/list-config-resources/v1/response';
+import { GetTelemetrySubscriptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import type { GetTelemetrySubscriptionsOptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import type { GetTelemetrySubscriptionsResponseV0Body } from '../protocol/requests/get-telemetry-subscriptions/v0/response';
+import { PushTelemetry } from '../protocol/requests/push-telemetry/index';
+import type { PushTelemetryOptions } from '../protocol/requests/push-telemetry/index';
+import type { PushTelemetryResponseV0Body } from '../protocol/requests/push-telemetry/v0/response';
 import { ListTransactions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
@@ -185,6 +191,9 @@ import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-f
 import { UnregisterBroker } from '../protocol/requests/unregister-broker/index';
 import type { UnregisterBrokerOptions } from '../protocol/requests/unregister-broker/index';
 import type { UnregisterBrokerResponseV0Body } from '../protocol/requests/unregister-broker/v0/response';
+import { AssignReplicasToDirs } from '../protocol/requests/assign-replicas-to-dirs/index';
+import type { AssignReplicasToDirsOptions } from '../protocol/requests/assign-replicas-to-dirs/index';
+import type { AssignReplicasToDirsResponseV0Body } from '../protocol/requests/assign-replicas-to-dirs/v0/response';
 import { AddRaftVoter } from '../protocol/requests/add-raft-voter/index';
 import type { AddRaftVoterOptions } from '../protocol/requests/add-raft-voter/index';
 import type { AddRaftVoterResponseV0Body } from '../protocol/requests/add-raft-voter/v0/response';
@@ -654,6 +663,21 @@ export class Broker {
     return this.#send(listConfigResources(options));
   }
 
+  async getTelemetrySubscriptions(
+    options: GetTelemetrySubscriptionsOptions = {},
+  ): Promise<GetTelemetrySubscriptionsResponseV0Body> {
+    const getTelemetrySubscriptions = this.lookupRequest<GetTelemetrySubscriptionsOptions>(
+      API_KEYS.GetTelemetrySubscriptions,
+      GetTelemetrySubscriptions,
+    );
+    return this.#send(getTelemetrySubscriptions(options));
+  }
+
+  async pushTelemetry(options: PushTelemetryOptions): Promise<PushTelemetryResponseV0Body> {
+    const pushTelemetry = this.lookupRequest<PushTelemetryOptions>(API_KEYS.PushTelemetry, PushTelemetry);
+    return this.#send(pushTelemetry(options));
+  }
+
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {
     const electLeaders = this.lookupRequest<ElectLeadersOptions>(API_KEYS.ElectLeaders, ElectLeaders);
     return this.#send(electLeaders(options));
@@ -721,6 +745,14 @@ export class Broker {
   async unregisterBroker(options: UnregisterBrokerOptions): Promise<UnregisterBrokerResponseV0Body> {
     const unregisterBroker = this.lookupRequest<UnregisterBrokerOptions>(API_KEYS.UnregisterBroker, UnregisterBroker);
     return this.#send(unregisterBroker(options));
+  }
+
+  async assignReplicasToDirs(options: AssignReplicasToDirsOptions): Promise<AssignReplicasToDirsResponseV0Body> {
+    const assignReplicasToDirs = this.lookupRequest<AssignReplicasToDirsOptions>(
+      API_KEYS.AssignReplicasToDirs,
+      AssignReplicasToDirs,
+    );
+    return this.#send(assignReplicasToDirs(options));
   }
 
   async addRaftVoter(options: AddRaftVoterOptions): Promise<AddRaftVoterResponseV0Body> {

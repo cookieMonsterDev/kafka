@@ -1,7 +1,49 @@
+import {
+  compactArray,
+  compactString,
+  defineResponse,
+  field,
+  flexibleObject,
+  int16,
+  int32,
+  int64,
+} from '../../../schema';
+import { checkOffsetForLeaderEpochErrors } from '../shared';
+
+export interface OffsetForLeaderEpochResponseV4Body {
+  throttleTime: number;
+  topics: {
+    topic: string;
+    partitions: { errorCode: number; partition: number; leaderEpoch: number; endOffset: bigint }[];
+  }[];
+}
+
 /**
  * OffsetForLeaderEpoch Response (Version: 4) => throttle_time_ms [topics] TAG_BUFFER
+ *   throttle_time_ms => INT32
+ *   topics => topic [partitions] TAG_BUFFER
+ *     topic => COMPACT_STRING
+ *     partitions => error_code partition leader_epoch end_offset TAG_BUFFER
+ *       error_code => INT16
+ *       partition => INT32
+ *       leader_epoch => INT32
+ *       end_offset => INT64
  *
- * Wire format and parsing identical to v3.
+ * Flexible form of v3.
  */
-export { offsetForLeaderEpochResponseV3 as offsetForLeaderEpochResponseV4 } from '../v3/response';
-export type { OffsetForLeaderEpochResponseV3Body as OffsetForLeaderEpochResponseV4Body } from '../v3/response';
+const partitionSchema = flexibleObject([
+  field('errorCode', int16),
+  field('partition', int32),
+  field('leaderEpoch', int32),
+  field('endOffset', int64),
+]);
+const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);
+const bodySchema = flexibleObject([field('throttleTime', int32), field('topics', compactArray(topicSchema))]);
+
+export const offsetForLeaderEpochResponseV4 = defineResponse({
+  schema: bodySchema,
+  parse: async (data) => {
+    checkOffsetForLeaderEpochErrors(data);
+    return data;
+  },
+});

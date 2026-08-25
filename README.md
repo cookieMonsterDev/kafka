@@ -111,7 +111,7 @@ KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
-Branch names, Conventional Commits, PR flow, code style, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Releases and GitHub settings: **[`.github/branch-setup.md`](.github/branch-setup.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 

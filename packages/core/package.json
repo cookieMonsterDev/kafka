@@ -48,7 +48,7 @@
     "build:js": "vite build",
     "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
     "dev": "vite build --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p bench/tsconfig.json --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest --project unit",
@@ -71,5 +71,13 @@
   "dependencies": {
     "lz4-lite": "^1.1.2",
     "snappyjs": "^0.7.0"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.9.0"
+  },
+  "peerDependenciesMeta": {
+    "@opentelemetry/api": {
+      "optional": true
+    }
   }
 }

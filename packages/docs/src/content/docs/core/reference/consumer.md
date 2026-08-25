@@ -10,6 +10,7 @@ interface Consumer {
   connect(options?: ConnectOptions): Promise<void>;
   disconnect(options?: ConnectOptions): Promise<void>;
   subscribe(subscription: ConsumerSubscribeTopics | ConsumerSubscribeTopic): Promise<void>;
+  assign(topicPartitions: readonly { topic: string; partition: number }[]): Promise<void>;
   run(config?: ConsumerRunConfig): Promise<void>;
   stream(config?: Omit<ConsumerRunConfig, 'eachBatch' | 'eachMessage'>): AsyncIterableIterator<Batch>;
   stop(): Promise<void>;
@@ -19,6 +20,12 @@ interface Consumer {
   seek(topicPartitionOffset: { topic: string; partition: number; offset: bigint | number | string }): void;
   commitOffsets(topicPartitions: readonly TopicPartitionOffsetAndMetadata[]): Promise<void>;
   describeGroup(): Promise<GroupDescription>;
+  committed(topicPartitions: readonly TopicPartition[]): Promise<TopicPartitionOffsetAndMetadata[]>;
+  position(topicPartition: TopicPartition): bigint | null;
+  currentLag(topicPartition: TopicPartition): bigint | null;
+  listTopics(): Promise<string[]>;
+  partitionsFor(topic: string): Promise<TopicPartitionInfo[]>;
+  clientInstanceId(): Buffer | null;
   logger(): Logger;
   on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
   readonly events: Record<string, string>;
@@ -37,9 +44,26 @@ Apache: [consumer configs](https://kafka.apache.org/43/configuration/consumer-co
 ```ts
 await consumer.subscribe({ topics: ['events'], fromBeginning: true });
 await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
+await consumer.subscribe({ topics: ['events'], autoOffsetReset: 'by_duration:PT1H' });
 ```
 
-`autoOffsetReset` wins over `fromBeginning` when both are set.
+`autoOffsetReset` wins over `fromBeginning` when both are set. `'by_duration:PT1H'`
+(KIP-1106) starts at the first offset at or after `now` minus that ISO-8601 duration.
+
+## `assign`
+
+```ts
+await consumer.assign([
+  { topic: 'events', partition: 0 },
+  { topic: 'events', partition: 1 },
+]);
+```
+
+Fetches exactly these partitions with no group membership (no JoinGroup/SyncGroup, no
+`ConsumerGroupHeartbeat`, no rebalancing). Mutually exclusive with `subscribe` on the same
+consumer - calling one after the other throws, and so does `run`/`stream` if neither was called.
+`groupId` is optional on `kafka.consumer(...)` in this mode; it is required only to call
+`commitOffsets`. Guide: [Assign mode](../../guides/consumer/#assign-mode).
 
 ## `run` / `stream`
 
@@ -52,12 +76,55 @@ await consumer.subscribe({ topic: /^events\./, autoOffsetReset: 'none' });
 | `autoCommitThreshold`            |         | messages                                                                          |
 | `partitionsConsumedConcurrently` | `1`     | Parallel partitions                                                               |
 | `signal`                         |         | Abort to stop                                                                     |
+| `onPartitionsRevoked`            |         | Partitions given up this rebalance, before fetching the new assignment            |
+| `onPartitionsAssigned`           |         | Partitions newly gained this rebalance                                            |
+| `onPartitionsLost`               |         | Fires instead of `onPartitionsRevoked` when the assignment was lost, not revoked  |
 
-`stream()` cannot run alongside `run()`.
+`stream()` cannot run alongside `run()`. See
+[Rebalance callbacks](../../guides/consumer/#rebalance-callbacks) for the
+revoked-vs-lost distinction and error-handling policy.
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume API.
 The default concurrency is `1`. Spread `throughputPreset().consumer` into `run()`
 for concurrency `4`. See [Throughput](../../guides/throughput/).
+
+## `committed` / `position` / `currentLag`
+
+```ts
+const committed = await consumer.committed([{ topic: 'events', partition: 0 }]);
+// [{ topic: 'events', partition: 0, offset: 41n, metadata: null }]
+
+const position = consumer.position({ topic: 'events', partition: 0 }); // 42n | null
+const lag = consumer.currentLag({ topic: 'events', partition: 0 }); // bigint | null
+```
+
+`committed` reads offsets from the group coordinator (OffsetFetch) and works
+whether or not `run()`/`stream()` has started - it queries the broker
+directly, the same way `admin.fetchOffsets` does. A partition with no
+committed offset comes back as `offset: -1n`, `metadata: null` (Kafka's wire
+convention for "none").
+
+`position` is the next fetch offset for a partition currently assigned to
+this consumer. It returns `null`, rather than throwing, when the partition
+isn't currently assigned - a rebalance can move it away between fetches, for
+example. `currentLag` is `highWatermark - position` and returns `null` under
+the same condition, or when no Fetch response has landed yet for that
+partition. Both throw if the group/assignment hasn't started yet.
+
+## `listTopics` / `partitionsFor`
+
+Same Metadata helpers as on the producer — no Admin client required:
+
+```ts
+await consumer.connect();
+const topics = await consumer.listTopics();
+const partitions = await consumer.partitionsFor('events');
+```
+
+## `clientInstanceId`
+
+Same KIP-714 UUID as on the producer (`Buffer | null` until the broker assigns
+one). See [Observability](../../guides/observability/#broker-telemetry-kip-714).
 
 ## `KafkaMessage`
 
@@ -96,6 +163,9 @@ interface ShareConsumer {
     prefetchMaxBytes?: number;
   }): Promise<void>;
   stop(): Promise<void>;
+  clientInstanceId(): Buffer | null;
+  on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
+  readonly events: Record<string, string>;
   logger(): Logger;
   [Symbol.asyncDispose](): Promise<void>;
 }
@@ -103,4 +173,20 @@ interface ShareConsumer {
 
 `SHARE_ACKNOWLEDGE_TYPE`: `GAP` 0, `ACCEPT` 1, `RELEASE` 2, `REJECT` 3, `RENEW` 4.
 `SHARE_ACQUIRE_MODE`: `BATCH_OPTIMIZED` 0, `RECORD_LIMIT` 1 (ShareFetch v2 / KIP-1206).
-Guide: [Share groups](../../guides/consumer/#share-groups-kip-932).
+Guide: [Share groups](../../guides/consumer/#share-groups-kip-932),
+[Acknowledgement: implicit vs explicit](../../guides/consumer/#acknowledgement-implicit-vs-explicit),
+[Instrumentation events](../../guides/consumer/#instrumentation-events).
+
+### `ShareConsumer` events
+
+Namespaced under `share_consumer.*`; source:
+[`share-consumer/instrumentation-events.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/share-consumer/instrumentation-events.ts).
+
+| Event                | Payload                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `FETCH_START`        | `{ nodeId }`                                                                                                                |
+| `FETCH`              | `{ nodeId, numberOfBatches, duration }`                                                                                     |
+| `ACKNOWLEDGE`        | `{ groupId, memberId, nodeId, topics: [{ topic, partitions: [{ partition, firstOffset, lastOffset, acknowledgeType }] }] }` |
+| `REQUEST`            | Same shape as the classic consumer's `REQUEST` (`NetworkRequestEvent`)                                                      |
+| `REQUEST_TIMEOUT`    | Same shape as the classic consumer's `REQUEST_TIMEOUT`                                                                      |
+| `REQUEST_QUEUE_SIZE` | Same shape as the classic consumer's `REQUEST_QUEUE_SIZE`                                                                   |

@@ -1,6 +1,7 @@
 import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
 import type { EachMessageHandler } from '../consumer/types';
 import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import {
   SHARE_ACQUIRE_MODE,
@@ -8,10 +9,12 @@ import {
   SHARE_SESSION_INITIAL_EPOCH,
   type ShareAcquireMode,
   type ShareFetchAcknowledgementBatchInput,
+  type ShareFetchForgottenTopicInput,
 } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
 import { SHARE_ACKNOWLEDGE_TYPE, type ShareAcknowledgeType } from './acknowledge-types';
+import { ACKNOWLEDGE, FETCH, FETCH_START, type ShareAcknowledgeTopicPayload } from './instrumentation-events';
 import { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
 
@@ -27,6 +30,17 @@ interface PendingAck {
   firstOffset: bigint;
   lastOffset: bigint;
   acknowledgeType: ShareAcknowledgeType;
+}
+
+/** Groups a flat list of acknowledged ranges into the `ACKNOWLEDGE` event's per-topic shape. */
+function groupAcksByTopic(acks: readonly PendingAck[]): ShareAcknowledgeTopicPayload[] {
+  const byTopic = new Map<string, ShareAcknowledgeTopicPayload['partitions']>();
+  for (const { topic, partition, firstOffset, lastOffset, acknowledgeType } of acks) {
+    const partitions = byTopic.get(topic) ?? [];
+    partitions.push({ partition, firstOffset, lastOffset, acknowledgeType });
+    byTopic.set(topic, partitions);
+  }
+  return [...byTopic.entries()].map(([topic, partitions]) => ({ topic, partitions }));
 }
 
 export interface EachShareBatchPayload {
@@ -57,6 +71,7 @@ export interface ShareRunnerOptions {
   prefetchMaxBytes?: number;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
+  instrumentationEmitter?: InstrumentationEventEmitter | null;
 }
 
 export class ShareRunner {
@@ -75,10 +90,13 @@ export class ShareRunner {
   readonly #onCrash: (reason: Error) => void | Promise<void>;
   readonly #retrier: ReturnType<typeof retrier>;
   readonly #fetchManager: FetchManager<ShareBatch>;
+  readonly #instrumentationEmitter: InstrumentationEventEmitter;
 
   running = false;
   shuttingDown = false;
   #shareSessionEpochByNode = new Map<string, number>();
+  /** What each node's share session last had, so unassigned partitions can be forgotten (KIP-227-style). */
+  #shareSessionPartitionsByNode = new Map<string, Map<string, Set<number>>>();
   #pendingAcks: PendingAck[] = [];
 
   constructor({
@@ -99,8 +117,10 @@ export class ShareRunner {
     prefetchMaxBytes,
     onCrash,
     retry,
+    instrumentationEmitter,
   }: ShareRunnerOptions) {
     this.#logger = logger.namespace('ShareRunner');
+    this.#instrumentationEmitter = instrumentationEmitter ?? new InstrumentationEventEmitter();
     this.#shareGroup = shareGroup;
     this.#eachMessage = eachMessage;
     this.#eachBatch = eachBatch;
@@ -209,6 +229,21 @@ export class ShareRunner {
   async #fetchFromNode(nodeId: string): Promise<ShareBatch[]> {
     if (!this.running || this.shuttingDown) return [];
 
+    const startFetch = Date.now();
+    this.#instrumentationEmitter.emit(FETCH_START, { nodeId });
+
+    const batches = await this.#doFetchFromNode(nodeId);
+
+    this.#instrumentationEmitter.emit(FETCH, {
+      numberOfBatches: batches.length,
+      duration: Date.now() - startFetch,
+      nodeId,
+    });
+
+    return batches;
+  }
+
+  async #doFetchFromNode(nodeId: string): Promise<ShareBatch[]> {
     await this.#shareGroup.cluster.refreshMetadataIfNecessary();
     const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
     if (topicPartitions.length === 0) return [];
@@ -217,6 +252,10 @@ export class ShareRunner {
     if (!memberId) return [];
 
     const shareSessionEpoch = this.#shareSessionEpochByNode.get(nodeId) ?? SHARE_SESSION_INITIAL_EPOCH;
+    const previousPartitions = this.#shareSessionPartitionsByNode.get(nodeId);
+    const currentPartitions = new Map(topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)]));
+    const forgottenTopics = this.#forgottenTopicsFor(previousPartitions, currentPartitions);
+
     const takenAcks: PendingAck[] = [];
     const topics = topicPartitions
       .map(({ topic, partitions }) => {
@@ -252,10 +291,20 @@ export class ShareRunner {
           shareAcquireMode: this.#shareAcquireMode,
           isRenewAck: takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics,
-          forgottenTopics: [],
+          forgottenTopics,
         }),
       );
       this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
+      this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
+
+      if (takenAcks.length > 0) {
+        this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+          groupId: this.#shareGroup.groupId,
+          memberId,
+          nodeId,
+          topics: groupAcksByTopic(takenAcks),
+        });
+      }
 
       const batches: ShareBatch[] = [];
       for (const { topicId, partitions } of response.responses) {
@@ -273,8 +322,38 @@ export class ShareRunner {
       return batches.filter((batch) => !this.#isStale(batch));
     } catch (error) {
       this.#pendingAcks.push(...takenAcks);
+      // The session state we just tried to send may no longer match what the broker has -
+      // start the next fetch for this node with a fresh (epoch 0) session. `#retrier` wraps an
+      // exhausted-retries error in `KafkaNumberOfRetriesExceeded`, so the protocol error's `type`
+      // may only be reachable via `.cause`.
+      const errorLike = error as { type?: string; cause?: { type?: string } };
+      const type = errorLike.type ?? errorLike.cause?.type;
+      if (type === 'SHARE_SESSION_NOT_FOUND' || type === 'INVALID_SHARE_SESSION_EPOCH') {
+        this.#shareSessionEpochByNode.delete(nodeId);
+        this.#shareSessionPartitionsByNode.delete(nodeId);
+      }
       throw error;
     }
+  }
+
+  /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */
+  #forgottenTopicsFor(
+    previous: Map<string, Set<number>> | undefined,
+    current: Map<string, Set<number>>,
+  ): ShareFetchForgottenTopicInput[] {
+    if (!previous) return [];
+
+    const forgottenTopics: ShareFetchForgottenTopicInput[] = [];
+    for (const [topic, previousPartitions] of previous) {
+      const currentTopicPartitions = current.get(topic);
+      const removed = [...previousPartitions].filter((partition) => !currentTopicPartitions?.has(partition));
+      if (removed.length === 0) continue;
+
+      const topicId = this.#shareGroup.cluster.findTopicId(topic);
+      if (!topicId) continue;
+      forgottenTopics.push({ topicId, partitions: removed });
+    }
+    return forgottenTopics;
   }
 
   async #resolveTopicName(topicId: Buffer): Promise<string> {
@@ -380,12 +459,14 @@ export class ShareRunner {
     if (!memberId) {
       this.#pendingAcks = [];
       this.#shareSessionEpochByNode.clear();
+      this.#shareSessionPartitionsByNode.clear();
       return;
     }
 
     const nodeIds = new Set([...this.#shareSessionEpochByNode.keys(), ...this.#shareGroup.getNodeIds()]);
     for (const nodeId of nodeIds) {
       try {
+        const acksForNode = this.#acksForNode(nodeId);
         const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
         await broker.shareAcknowledge({
           groupId: this.#shareGroup.groupId,
@@ -394,6 +475,15 @@ export class ShareRunner {
           isRenewAck: this.#pendingAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
           topics: this.#acknowledgementTopicsForNode(nodeId),
         });
+
+        if (acksForNode.length > 0) {
+          this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+            groupId: this.#shareGroup.groupId,
+            memberId,
+            nodeId,
+            topics: groupAcksByTopic(acksForNode),
+          });
+        }
       } catch {
         // Closing is best-effort; leave() still runs after this.
       }
@@ -401,6 +491,16 @@ export class ShareRunner {
 
     this.#pendingAcks = [];
     this.#shareSessionEpochByNode.clear();
+    this.#shareSessionPartitionsByNode.clear();
+  }
+
+  /** The pending acks that apply to `nodeId`'s currently assigned partitions. */
+  #acksForNode(nodeId: string): PendingAck[] {
+    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
+    const partitionSet = new Set(
+      topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => `${topic}:${partition}`)),
+    );
+    return this.#pendingAcks.filter((ack) => partitionSet.has(`${ack.topic}:${ack.partition}`));
   }
 
   #acknowledgementTopicsForNode(nodeId: string): {

@@ -5,9 +5,11 @@ import type { CompressionType } from '../protocol/compression/index';
 import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier } from '../retry/index';
+import type { MetricsRecorder } from '../instrumentation/metrics';
 import { createTopicData } from './create-topic-data';
 import type { EosManager, EosManagerPartition } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
+import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
 
@@ -17,6 +19,9 @@ export interface SendMessagesOptions {
   partitioner: ReturnType<CustomPartitioner>;
   eosManager: EosManager;
   retrier: Retrier;
+  /** Shared across a producer's lifetime. Defaults to a fresh tracker. */
+  nodeLatencyTracker?: NodeLatencyTracker;
+  metrics?: MetricsRecorder | null;
 }
 
 export interface SendMessagesRequest {
@@ -24,11 +29,30 @@ export interface SendMessagesRequest {
   acks: number;
   timeout: number;
   compression?: CompressionType;
+  compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
 }
 
 function partitionKey(topic: string, partition: number): string {
   return `${topic}\0${partition}`;
+}
+
+function payloadBytes(value: Message['key'] | Message['value']): number {
+  if (value == null) return 0;
+  if (Buffer.isBuffer(value)) return value.byteLength;
+  return Buffer.byteLength(String(value));
+}
+
+function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: number; bytes: number } {
+  let records = 0;
+  let bytes = 0;
+  for (const { messages } of topicMessages) {
+    for (const message of messages) {
+      records += 1;
+      bytes += payloadBytes(message.key) + payloadBytes(message.value);
+    }
+  }
+  return { records, bytes };
 }
 
 function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicData>): EosManagerPartition[] {
@@ -41,11 +65,26 @@ function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicDa
   return partitions;
 }
 
-export function createSendMessages({ logger, cluster, partitioner, eosManager, retrier }: SendMessagesOptions) {
-  return ({ acks, timeout, compression, topicMessages }: SendMessagesRequest): Promise<RecordMetadata[]> => {
+export function createSendMessages({
+  logger,
+  cluster,
+  partitioner,
+  eosManager,
+  retrier,
+  nodeLatencyTracker = createNodeLatencyTracker(),
+  metrics,
+}: SendMessagesOptions) {
+  return ({
+    acks,
+    timeout,
+    compression,
+    compressionLevel,
+    topicMessages,
+  }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
+    const produceSize = topicMessagesSize(topicMessages);
 
     function collectResponse(): RecordMetadata[] {
       if (acks === 0) return [];
@@ -75,7 +114,16 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           throw new KafkaMetadataNotLoaded('Producing to topic without metadata');
         }
 
-        next.set(topic, groupMessagesPerPartition({ topic, partitionMetadata, messages, partitioner }));
+        next.set(
+          topic,
+          groupMessagesPerPartition({
+            topic,
+            partitionMetadata,
+            messages,
+            partitioner,
+            nodeLatency: nodeLatencyTracker,
+          }),
+        );
       }
 
       for (const [topic, messagesPerPartition] of next) {
@@ -142,6 +190,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           }
 
           let response;
+          const producedAt = Date.now();
           try {
             response = await broker.produce({
               transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
@@ -150,6 +199,7 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
               acks,
               timeout,
               compression,
+              compressionLevel,
               topicData,
             });
           } catch (e) {
@@ -162,6 +212,11 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           }
 
           const expectsResponse = acks !== 0;
+          // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
+          // write, not the node's responsiveness - only record when a response was awaited.
+          if (expectsResponse && broker.nodeId != null) {
+            nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
+          }
           const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
 
           if (expectsResponse) {
@@ -190,9 +245,22 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
         const results = await Promise.allSettled(requests);
         const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
         if (rejection) throw rejection.reason;
-        return collectResponse();
+        const collected = collectResponse();
+        metrics?.recordProduce({ ...produceSize, retries: retryCount });
+        cluster.recordProduceMetrics?.({ ...produceSize, retries: retryCount });
+        return collected;
       } catch (e) {
-        const error = e as Error & { name: string; host?: string; port?: number; retriable?: boolean; type?: string };
+        const error = e as Error & {
+          name: string;
+          host?: string;
+          port?: number;
+          retriable?: boolean;
+          type?: string;
+          topic?: string;
+          partition?: number;
+          currentLeader?: { leaderId: number; leaderEpoch: number };
+          nodeEndpoints?: { nodeId: number; host: string; port: number; rack: string | null }[];
+        };
 
         if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
           cluster.removeBroker({ host: error.host, port: error.port });
@@ -203,6 +271,35 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           await cluster.connect();
           await cluster.refreshMetadata();
           throw error;
+        }
+
+        // KIP-951: the Produce response itself named the new leader (and its address, if the
+        // client didn't already have it cached). Patch the cache locally instead of paying for a
+        // full Metadata round trip before the retrier's next attempt.
+        if (
+          staleMetadata(error) &&
+          error.topic != null &&
+          error.partition != null &&
+          error.currentLeader != null &&
+          error.currentLeader.leaderId >= 0
+        ) {
+          const patched = await cluster.applyLeaderUpdate({
+            topic: error.topic,
+            partition: error.partition,
+            currentLeader: error.currentLeader,
+            nodeEndpoints: error.nodeEndpoints ?? [],
+          });
+
+          if (patched) {
+            logger.debug(`Recovered leader from Produce response, skipping metadata refresh: ${error.message}`, {
+              retryCount,
+              retryTime,
+              topic: error.topic,
+              partition: error.partition,
+              leaderId: error.currentLeader.leaderId,
+            });
+            throw error;
+          }
         }
 
         // This is necessary in case the metadata is stale and the number of partitions for this
@@ -229,6 +326,12 @@ export function createSendMessages({ logger, cluster, partitioner, eosManager, r
           });
           await eosManager.initProducerId();
           throw new KafkaProtocolError(error, { retriable: true });
+        }
+
+        // KIP-890: the broker rejected this produce and the transaction can no longer commit,
+        // only abort. Mark it so a later `commit()` fails clearly instead of racing the broker.
+        if (error.type === 'TRANSACTION_ABORTABLE') {
+          eosManager.markTransactionAbortable();
         }
 
         logger.error(`${error.message}`, { retryCount, retryTime });

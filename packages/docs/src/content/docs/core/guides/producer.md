@@ -27,6 +27,10 @@ Methods live on [`Producer`](../../reference/producer/). Config fields are in
 [Configuration](../../reference/configuration/). Source:
 [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 
+`listTopics()` and `partitionsFor(topic)` read cluster Metadata so you do not
+need an Admin client to discover topics and partition leaders. See
+[Producer API](../../reference/producer/#listtopics--partitionsfor).
+
 ## Message shape
 
 Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
@@ -36,11 +40,11 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 ## Acks, linger, and batching
 
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
-call omits them. `lingerMs` defaults to `0`, so each `send()` is its own Produce
-request. Set `lingerMs` / `batchSize` to batch, or spread
-[`throughputPreset()`](./throughput/). Java 4.0 default `linger.ms` is 5 ms;
-the **next major** of this client will match that (see
-[Breaking changes](../../migration/breaking-changes/)). See
+call omits them. `lingerMs` defaults to `5`, so consecutive `send()` calls can
+share a Produce request. Pass `lingerMs: 0` for one Produce per `send()`, or
+spread [`throughputPreset()`](./throughput/) for sticky partitioning and a
+32 MiB send buffer. See
+[Breaking changes](../../migration/breaking-changes/). See
 [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 GZIP, Snappy, LZ4, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /
@@ -52,20 +56,131 @@ installed). Built-in codecs remain overridable via `CompressionCodecs`.
 Prefer GZIP or ZSTD under load; Snappy and LZ4 are also safe for the event
 loop now that they are off-thread.
 
+## Delivery timeout and retries
+
+`deliveryTimeoutMs` (default `120000`) is an end-to-end deadline for one
+`send()` / `sendBatch()` call — it covers `lingerMs`, any wait for
+`bufferMemory` to free up, and every retry attempt together, not any single
+RPC. Once it elapses the call rejects with `KafkaDeliveryTimeoutError`,
+regardless of how many retries `retry` still has left; the in-flight attempt,
+if any, is not cancelled, so a late response can still land on the broker
+after the caller has already moved on. Pass `0` to disable it.
+
+This is a different knob from the per-call `timeout` on `send()` /
+`sendBatch()` (default `30000`), which is the wire-level deadline the _broker_
+uses for that one Produce request before it responds — it doesn't bound
+retries or linger at all. Keep `deliveryTimeoutMs` comfortably above
+`lingerMs` plus that per-call `timeout`, and above `retry.maxRetryTime`
+times however many retries you actually expect to need, or the deadline can
+fire while a perfectly healthy retry is still in flight.
+
+```ts
+import { KafkaDeliveryTimeoutError } from '@cookiemonsterdev/kafka-core';
+
+const producer = kafka.producer({ deliveryTimeoutMs: 30_000, retry: { retries: 3 } });
+
+try {
+  await producer.send({ topic: 'events', messages: [{ value: 'hello' }] });
+} catch (error) {
+  if (error instanceof KafkaDeliveryTimeoutError) {
+    // Gave up waiting - the message may or may not have reached the broker.
+  }
+}
+```
+
+## maxRequestSize
+
+`maxRequestSize` (default `1_048_576`, 1 MiB) caps the uncompressed bytes of
+one Produce request. It's enforced client-side, before a record ever occupies
+a linger slot or reaches the network — a different failure than the broker's
+`MESSAGE_TOO_LARGE` protocol error, which only fires after the broker has
+already accepted bytes on the wire (see [Errors](../../reference/errors/)).
+
+Two checks apply:
+
+- A single record whose own size already exceeds `maxRequestSize` rejects
+  immediately at the `send()` / `sendBatch()` call, with
+  `KafkaMessageTooLargeError`. So does a call whose records, combined, exceed
+  the cap even though none alone does — this client doesn't split one call's
+  records across multiple requests.
+- With `lingerMs` and `batchSize` batching multiple calls together, a
+  combined batch that would otherwise exceed `maxRequestSize` is sent as
+  multiple Produce requests instead of one oversized one — each call's own
+  records land in one request, in order, none over the cap.
+
+```ts
+import { KafkaMessageTooLargeError } from '@cookiemonsterdev/kafka-core';
+
+const producer = kafka.producer({ maxRequestSize: 1_048_576 });
+
+try {
+  await producer.send({ topic: 'events', messages: [{ value: hugePayload }] });
+} catch (error) {
+  if (error instanceof KafkaMessageTooLargeError) {
+    // error.size / error.maxRequestSize - split the payload or raise the cap.
+  }
+}
+```
+
+Keep `maxRequestSize` at or above `batchSize` — a `batchSize` larger than
+`maxRequestSize` still triggers a flush before the buffer grows past the cap,
+but records will spend less time batching. Compression happens per Produce
+request, after this check, so `maxRequestSize` measures the same uncompressed
+bytes `bufferMemory` accounts for, not the compressed request actually sent
+over the wire.
+
 ## Partitioners
 
 The default is murmur2 (`Partitioners.DefaultPartitioner`). Pass
 `createPartitioner: Partitioners.LegacyPartitioner` for pre-2.0 key routing.
 For KIP-794 uniform sticky routing, opt in with
 `createPartitioner: Partitioners.StickyPartitioner`. Explicit partitions are
-honored, keyed records continue to use Java-compatible murmur2, and unkeyed
-records share a partition for each producer batch before rotating uniformly.
-The default remains unchanged. See [Compatibility](../../reference/compatibility/).
+honored, keyed records use murmur2 routing, and unkeyed records share a
+partition for each producer batch before rotating. The default
+remains unchanged. See [Compatibility](../../reference/compatibility/).
+
+`StickyPartitioner` tracks each broker node's Produce latency and, by
+default, rotates unkeyed records toward whichever candidate's leader has
+responded fastest rather than choosing uniformly at random — the same idea
+as [`partitioner.adaptive.partitioning.enable`](https://kafka.apache.org/43/configuration/producer-configs/#partitioner.adaptive.partitioning.enable).
+It falls back to a plain uniform choice whenever none of the candidates have
+been measured yet (e.g. right after a rebalance). Disable it with
+`createPartitioner: () => Partitioners.StickyPartitioner({ adaptive: false })`.
+A custom partitioner can read the same signal via `PartitionerArgs.nodeLatency`.
+
+## Hooks
+
+`hooks` is a set of ordered async callbacks, not an interceptor SPI - there is
+no `ProducerInterceptor` class to implement. `onSend` fires once per
+`send()`/`sendBatch()` call, before the record(s) are dispatched to a broker
+(or enqueued, if `lingerMs > 0`); `onAck` fires once per call after it
+settles, with `metadata` set on success or `error` set on failure. Each array
+runs in registration order, one hook is always awaited before the next
+starts, and a hook that throws is caught, logged, and never affects the
+underlying send - it neither fails a successful send nor swallows a real
+failure.
+
+```ts
+const producer = kafka.producer({
+  hooks: {
+    onSend: [({ topicMessages }) => console.log('sending', topicMessages.length, 'topic(s)')],
+    onAck: [
+      ({ metadata, error }) => {
+        if (error) console.error('send failed', error);
+        else console.log('acked', metadata?.length, 'partition(s)');
+      },
+    ],
+  },
+});
+```
+
+Transactional producers reuse the same `hooks` passed to `kafka.producer()`
+for every `transaction()`.
 
 ## Idempotence and abort
 
-`idempotent` defaults to `false` (Java 3.0+ defaults `enable.idempotence` to
-`true`). `send()` and `sendBatch()` accept `signal` to abort the wait.
+`idempotent` defaults to `false` — an explicit opt-in. `send()` and
+`sendBatch()` accept `signal` to abort the wait.
 
 ```ts
 await producer.send({ topic: 'events', messages: [{ value: 'hello' }], signal });

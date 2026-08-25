@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v9/response', () => {
   it('decodes a real fixture (wire shape identical to v8)', async () => {
-    const data = await fetchResponseV9.decode(Buffer.from(v9ResponseFixture.data));
+    const data = await fetchResponseV9().decode(Buffer.from(v9ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -47,6 +47,7 @@ describe('protocol/requests/fetch/v9/response', () => {
                 key: Buffer.from(`key-${i}`),
                 value: Buffer.from(`some-value-${i}`),
                 isControlRecord: false,
+                byteSize: 51,
               })),
             },
           ],
@@ -54,6 +55,6 @@ describe('protocol/requests/fetch/v9/response', () => {
       ],
     });
 
-    await expect(fetchResponseV9.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV9().parse(data)).resolves.toBeTruthy();
   });
 });

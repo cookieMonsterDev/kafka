@@ -58,6 +58,7 @@ describe('protocol/records/record', () => {
       key: Buffer.from('key-0'),
       value: Buffer.from('some-value-0'),
       isControlRecord: false,
+      byteSize: V0_RECORD_FIXTURE.length,
     });
   });
 
@@ -130,5 +131,52 @@ describe('protocol/records/record', () => {
     const decoded = decodeRecord(new Decoder(body), baseBatchContext());
     expect(decoded.key).toEqual(Buffer.from('k'));
     expect(decoded.value).toEqual(Buffer.from('v'));
+  });
+
+  describe('lazy value/headers', () => {
+    it('accessing headers first decodes it correctly, without reading value first', () => {
+      const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
+      const decoded = decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext());
+
+      expect(decoded.headers).toEqual({ h: Buffer.from('hv') });
+      expect(decoded.value).toEqual(Buffer.from('v'));
+    });
+
+    it('memoizes value/headers instead of re-parsing on every access', () => {
+      const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
+      const decoded = decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext());
+
+      const value1 = decoded.value;
+      const value2 = decoded.value;
+      expect(value1).toBe(value2);
+
+      const headers1 = decoded.headers;
+      const headers2 = decoded.headers;
+      expect(headers1).toBe(headers2);
+    });
+
+    it('does not decode value/headers until accessed', () => {
+      // Truncate the encoded body right after `key` — offset/attributes/key survive `decodeRecord`
+      // untouched, but nothing is left for value/headers to parse from.
+      const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
+      const body = unwrapRecordBody(encoded);
+
+      const probe = new Decoder(body);
+      probe.readInt8(); // attributes
+      probe.readVarLong(); // timestampDelta
+      probe.readVarInt(); // offsetDelta
+      probe.readVarIntBytes(); // key
+      const truncatedBody = body.subarray(0, probe.offset);
+
+      const decoded = decodeRecord(new Decoder(truncatedBody), baseBatchContext());
+
+      // Decoding the record itself, and reading its cheap fields, must not throw.
+      expect(decoded.key).toEqual(Buffer.from('k'));
+      expect(decoded.offset).toBe(0n);
+
+      // Only once `value` (or `headers`) is actually read does the missing data surface.
+      expect(() => decoded.value).toThrow();
+      expect(() => decoded.headers).toThrow();
+    });
   });
 });

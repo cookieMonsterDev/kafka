@@ -24,12 +24,15 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetForLeaderEpochOpti
     request: offsetForLeaderEpochRequestV0({ topics: withoutCurrentLeaderEpoch(topics) }),
     response: offsetForLeaderEpochResponseV0,
   }),
+  // `current_leader_epoch` isn't added to the request until v2; v1 only adds `leader_epoch` to
+  // the response.
   1: ({ topics }) => ({
-    request: offsetForLeaderEpochRequestV1({ topics: withCurrentLeaderEpochs(topics) }),
+    request: offsetForLeaderEpochRequestV1({ topics: withoutCurrentLeaderEpoch(topics) }),
     response: offsetForLeaderEpochResponseV1,
   }),
-  2: ({ replicaId = REPLICA_ID, topics }) => ({
-    request: offsetForLeaderEpochRequestV2({ replicaId, topics: withCurrentLeaderEpochs(topics) }),
+  // `replica_id` isn't added until v3.
+  2: ({ topics }) => ({
+    request: offsetForLeaderEpochRequestV2({ topics: withCurrentLeaderEpochs(topics) }),
     response: offsetForLeaderEpochResponseV2,
   }),
   3: ({ replicaId = REPLICA_ID, topics }) => ({

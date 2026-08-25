@@ -1,7 +1,7 @@
 import { fetchResponseV13 } from '../v13/response';
 
 /**
- * Fetch Response (Version: 16) — adds tagged NodeEndpoints (KIP-951), skipped on decode.
+ * Fetch Response (Version: 16) — adds tagged NodeEndpoints (KIP-951), decoded by `fetchResponseV13`.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */

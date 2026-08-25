@@ -5,6 +5,7 @@ import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
 import type { EosManager } from './eos-manager/index';
+import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { PartitionerArgs } from './types';
 
@@ -52,6 +53,7 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
     isInitialized: vi.fn().mockReturnValue(false),
     initProducerId: vi.fn().mockResolvedValue(undefined),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
+    markTransactionAbortable: vi.fn(),
     acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
     releasePartitionGates: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -74,6 +76,7 @@ describe('producer/sendMessages', () => {
       addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      applyLeaderUpdate: vi.fn().mockResolvedValue(true),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
       findTopicId: vi.fn().mockReturnValue(undefined),
       findLeaderForPartitions: vi.fn().mockImplementation((_topic: string, partitions: readonly number[]) => {
@@ -92,6 +95,7 @@ describe('producer/sendMessages', () => {
       connect: vi.fn().mockResolvedValue(undefined),
       targetTopics: new Set<string>(),
       isConnected: vi.fn().mockReturnValue(true),
+      recordProduceMetrics: vi.fn(),
     };
   }
 
@@ -163,6 +167,44 @@ describe('producer/sendMessages', () => {
       expect(cluster.refreshMetadata).toHaveBeenCalled();
     });
   }
+
+  it('recovers the leader from a CurrentLeader hint instead of a full metadata refresh (KIP-951)', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'NOT_LEADER_OR_FOLLOWER')!.code;
+    const error = createErrorFromCode(code, {
+      topic,
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+    brokers[1].produce
+      .mockImplementationOnce(() => Promise.reject(error))
+      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+
+    const cluster = fakeCluster(brokers);
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
+
+    expect(cluster.applyLeaderUpdate).toHaveBeenCalledWith({
+      topic,
+      partition: 0,
+      currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+    });
+    expect(cluster.refreshMetadata).not.toHaveBeenCalled();
+    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
+  });
 
   it('refreshes metadata if partition metadata is empty', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
@@ -391,6 +433,28 @@ describe('producer/sendMessages', () => {
     expect(brokers[1].produce).toHaveBeenCalledTimes(2);
   });
 
+  it('marks the transaction abort-only on TRANSACTION_ABORTABLE (KIP-890)', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const code = ERROR_CODES.find((entry) => entry.type === 'TRANSACTION_ABORTABLE')!.code;
+    brokers[1].produce.mockRejectedValue(createErrorFromCode(code));
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
+
+    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
+  });
+
   it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
@@ -491,5 +555,79 @@ describe('producer/sendMessages', () => {
         topicData: [expect.objectContaining({ topic, topicId })],
       }),
     );
+  });
+
+  describe('nodeLatencyTracker', () => {
+    it('records latency for the responding node after a successful produce', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fakeCluster(brokers);
+      const nodeLatencyTracker = createNodeLatencyTracker();
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        eosManager: fakeEosManager(),
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+        nodeLatencyTracker,
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeUndefined();
+
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeGreaterThanOrEqual(0);
+      expect(nodeLatencyTracker.latencyFor(2)).toBeGreaterThanOrEqual(0);
+      expect(nodeLatencyTracker.latencyFor(3)).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does not record latency for acks: 0, since no response is awaited', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fakeCluster(brokers);
+      const nodeLatencyTracker = createNodeLatencyTracker();
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        eosManager: fakeEosManager(),
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+        nodeLatencyTracker,
+      });
+
+      await sendMessages({
+        acks: 0,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(nodeLatencyTracker.latencyFor(1)).toBeUndefined();
+      expect(nodeLatencyTracker.latencyFor(2)).toBeUndefined();
+      expect(nodeLatencyTracker.latencyFor(3)).toBeUndefined();
+    });
+  });
+
+  it('records produce metrics on a successful send', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const cluster = fakeCluster(brokers);
+    const recordProduce = vi.fn();
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager: fakeEosManager(),
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+      metrics: { recordProduce } as never,
+    });
+
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      topicMessages: [{ topic, messages: [{ key: 'ab', value: 'cd' }] }],
+    });
+
+    expect(recordProduce).toHaveBeenCalledWith({ records: 1, bytes: 4, retries: 0 });
   });
 });

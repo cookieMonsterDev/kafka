@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { KafkaCorruptRecordError } from '../../errors';
 import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import { decodeMessageSet } from './decoder';
@@ -23,6 +24,7 @@ const v0Messages = [0, 1, 2].map((i) => ({
     inTransaction: false,
     producerId: -1n,
   }),
+  byteSize: 31,
 }));
 
 describe('protocol/message-set/decoder', () => {
@@ -46,5 +48,36 @@ describe('protocol/message-set/decoder', () => {
     const decoder = new Decoder(new Encoder().writeInt32(messageSet.size()).writeBuffer(truncated).buffer);
 
     await expect(decodeMessageSet(decoder)).resolves.toEqual([]);
+  });
+
+  it('throws when a compressed entry has a null value', async () => {
+    const { encodeMessageV0 } = await import('../message/v0');
+    const { COMPRESSION_TYPES } = await import('../compression/index');
+    const message = encodeMessageV0({ compression: COMPRESSION_TYPES.GZIP, key: null, value: null });
+    const set = new Encoder().writeInt64(-1n).writeInt32(message.size()).writeEncoder(message);
+    const decoder = new Decoder(new Encoder().writeInt32(set.size()).writeEncoder(set).buffer);
+    await expect(decodeMessageSet(decoder)).rejects.toThrow('null value');
+  });
+
+  describe('checkCrcs', () => {
+    function corruptedMessageSetBuffer(): Buffer {
+      const messageSet = encodeMessageSet({ messageVersion: 0, entries: [{ key: 'k', value: 'hello' }] });
+      const corrupted = Buffer.from(messageSet.buffer);
+      corrupted[corrupted.length - 1] = (corrupted[corrupted.length - 1] as number) ^ 0xff;
+      return corrupted;
+    }
+
+    it('defaults to true and rejects a message whose CRC does not match its bytes', async () => {
+      const corrupted = corruptedMessageSetBuffer();
+      const decoder = new Decoder(new Encoder().writeInt32(corrupted.length).writeBuffer(corrupted).buffer);
+      await expect(decodeMessageSet(decoder)).rejects.toBeInstanceOf(KafkaCorruptRecordError);
+    });
+
+    it('checkCrcs: false skips the check and decodes the corrupted message anyway', async () => {
+      const corrupted = corruptedMessageSetBuffer();
+      const decoder = new Decoder(new Encoder().writeInt32(corrupted.length).writeBuffer(corrupted).buffer);
+      const messages = await decodeMessageSet(decoder, undefined, false);
+      expect(messages).toHaveLength(1);
+    });
   });
 });

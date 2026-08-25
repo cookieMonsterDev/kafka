@@ -44,6 +44,55 @@ describe('producer.send', () => {
     );
   });
 
+  it('returns no metadata when acks is 0', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      logger: newLogger(),
+    });
+    await producer.connect();
+    await expect(
+      producer.send({ acks: 0, topic: topicName, messages: [{ key: 'k', value: 'fire-and-forget' }] }),
+    ).resolves.toEqual([]);
+  });
+
+  it('requires ISR acknowledgements when acks is -1', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      logger: newLogger(),
+    });
+    await producer.connect();
+    await expect(
+      producer.send({ acks: -1, timeout: 10_000, topic: topicName, messages: [{ key: 'k', value: 'all-isr' }] }),
+    ).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ topicName, partition: 0, errorCode: 0, baseOffset: 0n })]),
+    );
+  });
+
+  it('returns immediately for an empty messages array', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({ cluster: createCluster(), logger: newLogger() });
+    await producer.connect();
+    await expect(producer.send({ acks: 1, topic: topicName, messages: [] })).resolves.toEqual([]);
+  });
+
+  it('rejects send when the signal is already aborted', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({ cluster: createCluster(), logger: newLogger() });
+    await producer.connect();
+    await expect(
+      producer.send({
+        acks: 1,
+        topic: topicName,
+        messages: [{ key: 'k', value: 'v' }],
+        signal: AbortSignal.abort(),
+      }),
+    ).rejects.toThrow(/aborted/i);
+  });
+
   it('sends messages and allows tombstones', async () => {
     await createTopic({ topic: topicName });
     producer = createProducer({

@@ -33,6 +33,9 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     markOffsetAsCommitted: vi.fn(),
+    clientInstanceId: vi.fn().mockReturnValue(null),
+    listTopics: vi.fn().mockResolvedValue([]),
+    partitionsFor: vi.fn().mockResolvedValue([]),
     brokerPool: {
       versions: {
         [API_KEYS.Produce]: { minVersion: 0, maxVersion: 7 },
@@ -363,6 +366,30 @@ describe('producer', () => {
       await first.commit();
 
       await expect(producer.transaction()).resolves.toBeTruthy();
+    });
+  });
+
+  describe('listTopics / partitionsFor', () => {
+    it('delegates to the cluster after connecting', async () => {
+      const partitions = [{ topic: 'orders', partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] }];
+      const cluster = fakeCluster({
+        listTopics: vi.fn().mockResolvedValue(['orders', 'payments']),
+        partitionsFor: vi.fn().mockResolvedValue(partitions),
+      });
+      const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+
+      await expect(producer.listTopics()).resolves.toEqual(['orders', 'payments']);
+      await expect(producer.partitionsFor('orders')).resolves.toEqual(partitions);
+      expect(cluster.connect).toHaveBeenCalled();
+      expect(cluster.listTopics).toHaveBeenCalledOnce();
+      expect(cluster.partitionsFor).toHaveBeenCalledWith('orders');
+    });
+
+    it('exposes clientInstanceId from the cluster', () => {
+      const id = Buffer.alloc(16, 4);
+      const cluster = fakeCluster({ clientInstanceId: vi.fn().mockReturnValue(id) });
+      const producer = createProducer({ cluster: cluster as unknown as Cluster, logger: silentLogger });
+      expect(producer.clientInstanceId()).toEqual(id);
     });
   });
 });

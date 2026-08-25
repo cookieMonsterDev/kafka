@@ -29,6 +29,7 @@ describe('share-consumer/share-batch', () => {
             timestampType: 0,
             magicByte: 2,
           },
+          byteSize: 1,
         },
       ],
       acquiredRecords: [{ firstOffset: 1n, lastOffset: 1n, deliveryCount: 1 }],

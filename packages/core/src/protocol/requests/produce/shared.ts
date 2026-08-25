@@ -1,6 +1,7 @@
 import { encodeRecord, type RecordHeaders } from '../../records/record';
 import { encodeRecordBatch } from '../../records/batch';
 import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index';
+import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
 import { createErrorFromCode, failure } from '../../error-codes';
 import {
@@ -62,6 +63,8 @@ export interface ProduceRequestOptions {
   producerId?: bigint;
   producerEpoch?: number;
   compression?: CompressionType;
+  /** Passed to the active codec, when it honors one. @see EncodeRecordBatchOptions.compressionLevel */
+  compressionLevel?: number;
   topicData: ProduceTopicData[];
 }
 
@@ -84,10 +87,17 @@ async function encodePartition(
   { partition, firstSequence = 0, messages }: ProducePartitionData,
   {
     compression,
+    compressionLevel,
     transactionalId,
     producerId,
     producerEpoch,
-  }: { compression: CompressionType; transactionalId?: string | null; producerId?: bigint; producerEpoch?: number },
+  }: {
+    compression: CompressionType;
+    compressionLevel?: number;
+    transactionalId?: string | null;
+    producerId?: bigint;
+    producerEpoch?: number;
+  },
 ): Promise<{ partition: number; recordSet: Buffer }> {
   const dateNow = Date.now();
   let firstTimestamp = dateNow;
@@ -115,6 +125,7 @@ async function encodePartition(
 
   const recordBatch = await encodeRecordBatch({
     compression,
+    compressionLevel,
     firstTimestamp,
     maxTimestamp,
     producerId,
@@ -185,6 +196,7 @@ async function encodeTopicPartitions(
   partitions: ProducePartitionData[],
   options: {
     compression: CompressionType;
+    compressionLevel?: number;
     transactionalId?: string | null;
     producerId?: bigint;
     producerEpoch?: number;
@@ -201,9 +213,9 @@ async function encodeTopicPartitions(
  * topic name with a topic UUID (KIP-516).
  */
 export function createProduceRequest(apiVersion: number, options: ProduceRequestOptions): RequestDefinition {
-  const { acks, timeout, transactionalId = null, producerId, producerEpoch, topicData } = options;
+  const { acks, timeout, transactionalId = null, producerId, producerEpoch, compressionLevel, topicData } = options;
   const compression = options.compression ?? COMPRESSION_TYPES.None;
-  const partitionOptions = { compression, transactionalId, producerId, producerEpoch };
+  const partitionOptions = { compression, compressionLevel, transactionalId, producerId, producerEpoch };
   const schema = apiVersion >= 9 ? flexibleRequestBodySchema : requestBodySchema;
 
   return {
@@ -297,19 +309,98 @@ const responseBodySchema = object([
   field('throttleTime', int32),
 ]);
 
+export interface LeaderIdAndEpoch {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+export interface ProduceNodeEndpoint {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
+const produceNodeEndpointSchema = flexibleObject([
+  field('nodeId', int32),
+  field('host', compactString),
+  field('port', int32),
+  field('rack', compactNullableString),
+]);
+const produceNodeEndpointsArraySchema = compactArray(produceNodeEndpointSchema);
+
+/**
+ * Reads a Produce partition's trailing tagged fields: CurrentLeader (tag 0, v10+, KIP-951).
+ * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
+ * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
+  let currentLeader: LeaderIdAndEpoch | null = null;
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 0) {
+      currentLeader = { leaderId: fieldDecoder.readInt32(), leaderEpoch: fieldDecoder.readInt32() };
+    }
+  }
+
+  return currentLeader;
+}
+
+/**
+ * Reads the Produce response's trailing tagged fields: NodeEndpoints (tag 0, v10+, KIP-951) —
+ * the broker addresses for any `currentLeader.leaderId` values in the response the client may
+ * not already have cached.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readProduceResponseNodeEndpoints(decoder: Decoder): ProduceNodeEndpoint[] {
+  let nodeEndpoints: ProduceNodeEndpoint[] = [];
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 0) {
+      nodeEndpoints = produceNodeEndpointsArraySchema.read(fieldDecoder);
+    }
+  }
+
+  return nodeEndpoints;
+}
+
 /**
  * Shared by every Produce response version: throw the first partition-level failure found,
  * scanning topics in wire order.
  */
 export async function parseProduceResponse<
   T extends {
-    topics: readonly { topicName?: string; partitions: readonly { errorCode: number; partition?: number }[] }[];
+    topics: readonly {
+      topicName?: string;
+      partitions: readonly { errorCode: number; partition?: number; currentLeader?: LeaderIdAndEpoch | null }[];
+    }[];
+    nodeEndpoints?: readonly ProduceNodeEndpoint[];
   },
 >(data: T): Promise<T> {
   for (const topic of data.topics) {
     const firstError = topic.partitions.find((p) => failure(p.errorCode));
     if (firstError) {
-      throw createErrorFromCode(firstError.errorCode, { topic: topic.topicName, partition: firstError.partition });
+      throw createErrorFromCode(firstError.errorCode, {
+        topic: topic.topicName,
+        partition: firstError.partition,
+        currentLeader: firstError.currentLeader ?? undefined,
+        nodeEndpoints: data.nodeEndpoints,
+      });
     }
   }
   return data;

@@ -106,7 +106,7 @@ Layered roughly bottom-up:
 - **`instrumentation/`** — event emitter for internal lifecycle events (connect, request, etc.).
 - **`retry/`, `utils/`, `types/`, `loggers/`** — cross-cutting helpers; `errors.ts` at `src/` root defines all public `Kafka*Error` classes.
 
-Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/core/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, `lingerMs: 0` (one Produce per `send()`), murmur2 partitioner. Offsets are `bigint` everywhere, not strings.
+Key defaults that intentionally diverge from the Java client (full table in `packages/docs/src/content/docs/core/reference/compatibility.md`): `idempotent: false`, `read_committed` isolation by default, murmur2 partitioner. Produce constructor defaults are throughput-oriented (`lingerMs: 5`, `batchSize: 16384`, `maxInFlightRequests: 5`). Offsets are `bigint` everywhere, not strings.
 
 ## Code conventions
 

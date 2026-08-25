@@ -13,6 +13,9 @@ interface Producer {
   sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
   flush(): Promise<void>;
   transaction(): Promise<Transaction>;
+  listTopics(): Promise<string[]>;
+  partitionsFor(topic: string): Promise<TopicPartitionInfo[]>;
+  clientInstanceId(): Buffer | null;
   isIdempotent(): boolean;
   on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
   readonly events: Record<string, string>;
@@ -29,8 +32,10 @@ Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-co
 
 ## `send` / `sendBatch`
 
-`ProducerRecord`: `topic`, `messages`, optional `acks`, `timeout`, `compression`.
-`ProducerBatch` is the same options with `topicMessages` for several topics.
+`ProducerRecord`: `topic`, `messages`, optional `acks`, `timeout`, `compression`,
+`compressionLevel`. `ProducerBatch` is the same options with `topicMessages`
+for several topics. `compressionLevel` overrides the producer's own default
+for that one call; see [Throughput](../../guides/throughput/#compression-level).
 
 ### `Message`
 
@@ -64,6 +69,34 @@ interface Transaction {
 
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.
 
-For load, spread `throughputPreset().producer` into `kafka.producer()` (`lingerMs: 5`,
-`batchSize: 16384`, `maxInFlightRequests: 5`, sticky partitioner). See
+## `listTopics` / `partitionsFor`
+
+Thin wrappers over cluster Metadata so you do not need Admin for “what topics
+exist” or “which partitions does this topic have”:
+
+```ts
+await producer.connect();
+const topics = await producer.listTopics();
+const partitions = await producer.partitionsFor('events');
+// [{ topic, partitionId, leader, replicas, isr, offlineReplicas }, ...]
+```
+
+`listTopics()` issues Metadata with an empty topic list (all topics the broker
+will describe). `partitionsFor(topic)` refreshes that topic’s metadata if stale.
+
+## `clientInstanceId`
+
+KIP-714 UUID assigned by the broker after connect when
+[`enableMetricsPush`](./configuration/#kafkaconfig) is on (the default) and the
+broker advertises GetTelemetrySubscriptions (Kafka 3.5+). `null` until that
+RPC completes, or when telemetry is off / unsupported.
+
+```ts
+await producer.connect();
+const id = producer.clientInstanceId(); // Buffer | null
+```
+
+For load, spread `throughputPreset().producer` into `kafka.producer()` (sticky
+partitioner and 32 MiB `bufferMemory`; linger/batch/in-flight are already
+constructor defaults). See
 [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).

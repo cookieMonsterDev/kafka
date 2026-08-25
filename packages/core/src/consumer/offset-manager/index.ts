@@ -2,9 +2,18 @@ import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import type { Logger } from '../../loggers/index';
+import { runHooks } from '../../utils/run-hooks';
 import { COMMIT_OFFSETS } from '../instrumentation-events';
-import { resolveAutoOffsetReset, type AutoOffsetReset, type TopicOffsetConfiguration } from '../offset-reset';
+import {
+  isByDurationReset,
+  listOffsetsQueryForReset,
+  resolveAutoOffsetReset,
+  type AutoOffsetReset,
+  type TopicOffsetConfiguration,
+} from '../offset-reset';
 import type {
+  ConsumerHooks,
   MemberAssignment,
   Offsets,
   OffsetsByTopicPartition,
@@ -13,6 +22,9 @@ import type {
 } from '../types';
 import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
+import type { OffsetManagerHandle } from './offset-manager-handle';
+
+export type { OffsetManagerHandle } from './offset-manager-handle';
 
 function indexTopics(topics: readonly string[]): Record<string, Record<string, bigint>> {
   return topics.reduce<Record<string, Record<string, bigint>>>((obj, topic) => {
@@ -33,13 +45,16 @@ export interface OffsetManagerOptions {
   groupId: string;
   generationId: number;
   memberId: string;
+  logger: Logger;
+  /** Ordered async `onCommit` hook. See {@link ConsumerHooks}. */
+  hooks?: ConsumerHooks;
 }
 
 /**
  * Kafka's committed offset is the next offset to read, not the last consumed one.
  * `resolveOffset({ offset })` therefore stores `offset + 1n`.
  */
-export class OffsetManager {
+export class OffsetManager implements OffsetManagerHandle {
   cluster: Cluster;
   coordinator: Broker;
   memberAssignment: MemberAssignment;
@@ -54,6 +69,8 @@ export class OffsetManager {
   lastCommit: number;
   topics: string[];
   resolvedOffsets: Record<string, Record<string, bigint>>;
+  logger: Logger;
+  hooks: ConsumerHooks | undefined;
   #committedOffsets: Record<string, Record<string, bigint>> | undefined;
 
   constructor({
@@ -68,6 +85,8 @@ export class OffsetManager {
     groupId,
     generationId,
     memberId,
+    logger,
+    hooks,
   }: OffsetManagerOptions) {
     this.cluster = cluster;
     this.coordinator = coordinator;
@@ -83,13 +102,21 @@ export class OffsetManager {
     this.lastCommit = Date.now();
     this.topics = Object.keys(memberAssignment);
     this.resolvedOffsets = {};
+    this.logger = logger.namespace('OffsetManager');
+    this.hooks = hooks;
     this.clearAllOffsets();
   }
 
   nextOffset(topic: string, partition: number): bigint {
     const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
     if (resolvedTopic[partition] === undefined) {
-      resolvedTopic[partition] = this.committedOffsets()[topic]?.[partition] ?? 0n;
+      const committed = this.committedOffsets()[topic]?.[partition];
+      // Do not cache a fallback 0n: `position()` can run after join and before the first
+      // fetch's resolveOffsets(), and a cached 0n would then pin Fetch to the log start.
+      if (committed === undefined) {
+        return 0n;
+      }
+      resolvedTopic[partition] = committed;
     }
 
     let offset = resolvedTopic[partition];
@@ -138,6 +165,20 @@ export class OffsetManager {
     return sum;
   }
 
+  async #defaultOffsetFor(topic: string, partition: number, reset: AutoOffsetReset): Promise<bigint> {
+    if (isByDurationReset(reset)) {
+      const query = listOffsetsQueryForReset(topic, [{ partition }], reset);
+      const [result] = query ? await this.cluster.fetchTopicsOffset([query]) : [];
+      const offset = result?.partitions.find((entry) => entry.partition === partition)?.offset;
+      if (offset == null) {
+        throw new KafkaNonRetriableError(`No ListOffsets result for topic ${topic} partition ${partition}`);
+      }
+      return offset;
+    }
+
+    return this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
+  }
+
   async setDefaultOffset({ topic, partition }: TopicPartition): Promise<void> {
     const reset = resolveAutoOffsetReset(this.topicConfigurations[topic]);
     if (reset === 'none') {
@@ -146,7 +187,7 @@ export class OffsetManager {
       );
     }
 
-    const defaultOffset = this.cluster.defaultOffset({ fromBeginning: reset === 'earliest' });
+    const defaultOffset = await this.#defaultOffsetFor(topic, partition, reset);
     const coordinator = await this.getCoordinator();
 
     await coordinator.offsetCommit({
@@ -251,12 +292,18 @@ export class OffsetManager {
       }
 
       this.lastCommit = Date.now();
+      if (this.hooks?.onCommit?.length) {
+        await runHooks(this.hooks.onCommit, payload, 'onCommit', this.logger);
+      }
     } catch (e) {
       const error = e as { type?: string };
       if (error.type === 'NOT_COORDINATOR_FOR_GROUP') {
         await this.cluster.refreshMetadata();
       }
 
+      if (this.hooks?.onCommit?.length) {
+        await runHooks(this.hooks.onCommit, { ...payload, error: e }, 'onCommit', this.logger);
+      }
       throw e;
     }
   }
@@ -301,12 +348,12 @@ export class OffsetManager {
       );
 
       const topicsForListOffsets = unresolvedPartitions
-        .filter((t) => t.partitions.length > 0 && resetByTopic[t.topic] !== 'none')
-        .map((t) => ({
-          topic: t.topic,
-          partitions: t.partitions,
-          fromBeginning: resetByTopic[t.topic] === 'earliest',
-        }));
+        .map((t) => {
+          const reset = resetByTopic[t.topic];
+          if (t.partitions.length === 0 || reset == null) return null;
+          return listOffsetsQueryForReset(t.topic, t.partitions, reset);
+        })
+        .filter((query): query is NonNullable<typeof query> => query != null);
 
       const topicOffsets =
         topicsForListOffsets.length > 0 ? await this.cluster.fetchTopicsOffset(topicsForListOffsets) : [];

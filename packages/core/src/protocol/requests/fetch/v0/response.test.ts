@@ -16,11 +16,12 @@ const messageSetRecord = (i: number, crc: number) => ({
   headers: {},
   isControlRecord: false,
   batchContext: expect.objectContaining({ magicByte: 0, firstOffset: BigInt(i), producerId: -1n }),
+  byteSize: 31,
 });
 
 describe('protocol/requests/fetch/v0/response', () => {
   it('decodes a real fixture, including uncompressed MessageSet records', async () => {
-    const data = await fetchResponseV0.decode(Buffer.from(v0ResponseFixture.data));
+    const data = await fetchResponseV0().decode(Buffer.from(v0ResponseFixture.data));
     expect(data).toEqual({
       responses: [
         {
@@ -36,11 +37,11 @@ describe('protocol/requests/fetch/v0/response', () => {
         },
       ],
     });
-    await expect(fetchResponseV0.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV0().parse(data)).resolves.toBeTruthy();
   });
 
   it('decodes a gzip MessageSet fixture', async () => {
-    const data = await fetchResponseV0.decode(Buffer.from(v0ResponseGzipFixture.data));
+    const data = await fetchResponseV0().decode(Buffer.from(v0ResponseGzipFixture.data));
     expect(data.responses[0]?.partitions[0]?.messages).toEqual([
       messageSetRecord(0, 120234579),
       messageSetRecord(1, -141862522),
@@ -52,7 +53,7 @@ describe('protocol/requests/fetch/v0/response', () => {
 
   it('throws KafkaOffsetOutOfRange when a partition reports OFFSET_OUT_OF_RANGE', async () => {
     await expect(
-      fetchResponseV0.parse({
+      fetchResponseV0().parse({
         responses: [
           {
             topicName: 't',

@@ -1,6 +1,13 @@
 import { Decoder } from '../../../decoder';
 import { uuid, type ResponseDefinition } from '../../../schema';
-import { decodeCompactRecordSet, parseFetchResponse, resolveFetchTopicName, type FetchRequestOptions } from '../shared';
+import {
+  decodeCompactRecordSet,
+  parseFetchResponse,
+  readFetchPartitionTaggedFields,
+  readFetchResponseNodeEndpoints,
+  resolveFetchTopicName,
+  type FetchRequestOptions,
+} from '../shared';
 import type { FetchPartitionResponseV11, FetchResponseV11Body, FetchTopicResponseV11 } from '../v11/response';
 
 export type FetchPartitionResponseV13 = FetchPartitionResponseV11;
@@ -22,30 +29,33 @@ async function readCompactArrayAsync<T>(decoder: Decoder, reader: (d: Decoder) =
   return values;
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV13> {
-  const partition = decoder.readInt32();
-  const errorCode = decoder.readInt16();
-  const highWatermark = decoder.readInt64();
-  const lastStableOffset = decoder.readInt64();
-  const logStartOffset = decoder.readInt64();
-  const abortedTransactions =
-    decoder.readUVarIntArray((d) => {
-      const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
-      d.readTaggedFields();
-      return txn;
-    }) ?? [];
-  const preferredReadReplica = decoder.readInt32();
-  const messages = await decodeCompactRecordSet(decoder);
-  decoder.readTaggedFields();
-  return {
-    partition,
-    errorCode,
-    highWatermark,
-    lastStableOffset,
-    logStartOffset,
-    abortedTransactions,
-    preferredReadReplica,
-    messages,
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV13> => {
+    const partition = decoder.readInt32();
+    const errorCode = decoder.readInt16();
+    const highWatermark = decoder.readInt64();
+    const lastStableOffset = decoder.readInt64();
+    const logStartOffset = decoder.readInt64();
+    const abortedTransactions =
+      decoder.readUVarIntArray((d) => {
+        const txn = { producerId: d.readInt64(), firstOffset: d.readInt64() };
+        d.readTaggedFields();
+        return txn;
+      }) ?? [];
+    const preferredReadReplica = decoder.readInt32();
+    const messages = await decodeCompactRecordSet(decoder, checkCrcs);
+    const currentLeader = readFetchPartitionTaggedFields(decoder);
+    return {
+      partition,
+      errorCode,
+      highWatermark,
+      lastStableOffset,
+      logStartOffset,
+      abortedTransactions,
+      preferredReadReplica,
+      messages,
+      currentLeader,
+    };
   };
 }
 
@@ -55,14 +65,15 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
  *     topic_id => UUID
  *
  * Topic names are replaced with topic IDs (KIP-516). `decode` restores `topicName` from the
- * request so consumers stay name-based. DivergingEpoch / CurrentLeader / SnapshotId (v12+) and
- * NodeEndpoints (v16+) are tagged fields and are skipped.
+ * request so consumers stay name-based. DivergingEpoch (tag 0) and SnapshotId (tag 2, v12+)
+ * stay skipped; CurrentLeader (tag 1, v12+) and NodeEndpoints (v16+) are decoded (KIP-951).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export function fetchResponseV13(
-  options: Pick<FetchRequestOptions, 'topics'> = { topics: [] },
+  options: Pick<FetchRequestOptions, 'topics' | 'topicsForResponse' | 'checkCrcs'> = { topics: [] },
 ): ResponseDefinition<FetchResponseV13Body> {
+  const resolutionTopics = options.topicsForResponse ?? options.topics;
   return {
     decode: async (rawData) => {
       const decoder = new Decoder(rawData);
@@ -71,21 +82,22 @@ export function fetchResponseV13(
       const sessionId = decoder.readInt32();
       const responses = await readCompactArrayAsync(decoder, async (d) => {
         const topicId = uuid.read(d);
-        const partitions = await readCompactArrayAsync(d, decodePartition);
+        const partitions = await readCompactArrayAsync(d, decodePartition(options.checkCrcs));
         d.readTaggedFields();
         return { topicId, partitions };
       });
-      decoder.readTaggedFields();
+      const nodeEndpoints = readFetchResponseNodeEndpoints(decoder);
       return {
         throttleTime: 0,
         clientSideThrottleTime,
         errorCode,
         sessionId,
         responses: responses.map((topic, index) => ({
-          topicName: resolveFetchTopicName(topic.topicId, index, options.topics),
+          topicName: resolveFetchTopicName(topic.topicId, index, resolutionTopics),
           topicId: topic.topicId,
           partitions: topic.partitions,
         })),
+        nodeEndpoints,
       };
     },
     parse: parseFetchResponse,

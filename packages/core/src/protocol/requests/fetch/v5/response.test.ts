@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v5/response', () => {
   it('decodes a real fixture, including logStartOffset', async () => {
-    const data = await fetchResponseV5.decode(Buffer.from(v5ResponseFixture.data));
+    const data = await fetchResponseV5().decode(Buffer.from(v5ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -44,6 +44,7 @@ describe('protocol/requests/fetch/v5/response', () => {
                 key: Buffer.from(`key-${i}`),
                 value: Buffer.from(`some-value-${i}`),
                 isControlRecord: false,
+                byteSize: 51,
               })),
             },
           ],
@@ -51,6 +52,6 @@ describe('protocol/requests/fetch/v5/response', () => {
       ],
     });
 
-    await expect(fetchResponseV5.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV5().parse(data)).resolves.toBeTruthy();
   });
 });

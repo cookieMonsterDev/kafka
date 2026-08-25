@@ -38,29 +38,31 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Groups, configs, cluster
 
-| Method                                                         | Notes                                    |
-| -------------------------------------------------------------- | ---------------------------------------- |
-| `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                          |
-| `describeClassicGroups(ids)`                                   | DescribeGroups (15); classic JoinGroup   |
-| `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+   |
-| `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+      |
-| `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)           |
-| `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)              |
-| `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)             |
-| `deleteShareGroups(ids)`                                       | DeleteGroups (42) for share groups       |
-| `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors   |
-| `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                       |
-| `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults       |
-| `describeCluster()`                                            | DescribeCluster (key 60) when advertised |
-| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+   |
-| `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                   |
-| `alterPartitionReassignments` / `listPartitionReassignments`   |                                          |
-| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels             |
-| `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+    |
-| `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+      |
-| `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+    |
-| `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+        |
-| `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+     |
+| Method                                                         | Notes                                     |
+| -------------------------------------------------------------- | ----------------------------------------- |
+| `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                           |
+| `describeClassicGroups(ids)`                                   | DescribeGroups (15); classic JoinGroup    |
+| `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+    |
+| `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+       |
+| `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)            |
+| `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)               |
+| `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)              |
+| `deleteShareGroups(ids)`                                       | DeleteGroups (42) for share groups        |
+| `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors    |
+| `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                        |
+| `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults        |
+| `describeCluster()`                                            | DescribeCluster (key 60) when advertised  |
+| `clientInstanceId()`                                           | KIP-714 UUID; `null` until assigned       |
+| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+    |
+| `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                    |
+| `alterPartitionReassignments` / `listPartitionReassignments`   |                                           |
+| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels              |
+| `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+     |
+| `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+       |
+| `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+     |
+| `assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })`   | AssignReplicasToDirs (key 73); KRaft 3.7+ |
+| `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+         |
+| `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+      |
 
 `describeConsumerGroups` discovers each group coordinator and sends
 ConsumerGroupDescribe (key 69). Use it for KIP-848 `groupProtocol: 'consumer'`
@@ -82,6 +84,12 @@ partition state (v0–v2). `highWatermark` and `logEndOffset` values are `bigint
 v1 adds replica fetch timestamps; v2 adds `errorMessage`, `replicaDirectoryId`,
 and controller `nodes`. `voterDirectoryId` for raft voter APIs is a
 16-byte `Buffer`.
+
+`assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })` sends
+AssignReplicasToDirs (key 73) to the active controller (KIP-858, Kafka 3.7+).
+Each replica is `{ topic, partition, directoryId }` where `directoryId` is a
+16-byte `Buffer`. Topic names are resolved to topic IDs from metadata.
+`brokerEpoch` defaults to `-1n`.
 
 ## Transactions
 
@@ -120,8 +128,8 @@ partition. Requires Kafka 3.0+ (WriteTxnMarkers v1+; v0 removed in 4.0). v2
 adds optional `transactionVersion` when the broker negotiates WriteTxnMarkers v2.
 
 `forceTerminateTransaction({ transactionalId, transactionTimeout? })` fences a
-single transactional producer via InitProducerId, matching Java's convenience
-wrapper around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
+single transactional producer via InitProducerId, a convenience wrapper
+around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 
 ## ACLs, SCRAM, quotas, log dirs
 
@@ -139,11 +147,11 @@ wrapper around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 and `expireDelegationToken` are keys 38–41 (Kafka 1.1+). They target the
 active controller. HMAC values are `Buffer`; issue, expiry, and max timestamps
 are `bigint`. Owner and renewer principals are `{ principalType, name }`
-(`User` + name, matching Java `KafkaPrincipal`).
+(`User` + name).
 
 `createDelegationToken({ owner })` needs CreateDelegationToken v3 (Kafka 3.3+).
-`expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately
-(Java default). Brokers must set `delegation.token.secret.key` and accept the
+`expireDelegationToken({ hmac, expiryTimePeriodMs: -1n })` expires immediately.
+Brokers must set `delegation.token.secret.key` and accept the
 request over SASL; PLAINTEXT returns `DELEGATION_TOKEN_REQUEST_NOT_ALLOWED`.
 Default integration compose files do not enable tokens. Pass the returned
 `tokenId` and `hmac` as `sasl.tokenId` / `sasl.tokenHmac` on a SCRAM client to

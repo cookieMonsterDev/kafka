@@ -3,7 +3,7 @@ import { Broker } from '../broker/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { KafkaConnectionError } from '../errors';
 import type { ConnectionPool } from '../network/connection-pool';
-import { BrokerPool } from './broker-pool';
+import { BrokerPool, clusterMetadataFromDescribeCluster } from './broker-pool';
 import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -182,6 +182,44 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.brokers['2']).not.toBe(brokerPool.seedBroker);
     });
 
+    it('refreshMetadataIfNecessary loads metadata when the cache is still empty', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      const metadataResponse = {
+        brokers: [{ nodeId: 1, host: 'seed-host', port: 9092, rack: null }],
+        topicMetadata: [
+          {
+            topic: 'orders',
+            topicErrorCode: 0,
+            isInternal: false,
+            partitionMetadata: [],
+          },
+        ],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        })
+        .mockResolvedValueOnce(metadataResponse);
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => seedPool),
+        logger: silentLogger,
+      });
+      await brokerPool.connect();
+      expect(brokerPool.metadata).toBeNull();
+
+      await expect(brokerPool.refreshMetadataIfNecessary(['orders'])).resolves.toBeUndefined();
+      expect(brokerPool.metadata?.topicMetadata.map((entry) => entry.topic)).toEqual(['orders']);
+    });
+
     it('disconnects brokers no longer present in fresh metadata', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
       const staleDestroySpy = vi.fn().mockResolvedValue(undefined);
@@ -225,6 +263,351 @@ describe('cluster/BrokerPool', () => {
 
       expect(staleDestroySpy).toHaveBeenCalledOnce();
       expect(brokerPool.brokers['99']).toBeUndefined();
+    });
+  });
+
+  describe('rebootstrap (KIP-1102)', () => {
+    function apiVersionsResponse() {
+      return {
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+      };
+    }
+
+    function rebootstrapRequiredError() {
+      return Object.assign(new Error('Client metadata is stale'), {
+        name: 'KafkaProtocolError',
+        type: 'REBOOTSTRAP_REQUIRED',
+        retriable: false,
+      });
+    }
+
+    it('rebootstrap disconnects known brokers, clears metadata, and rebuilds the seed from the bootstrap list', async () => {
+      const oldSeedPool = fakeConnectionPool({ host: 'old-seed', port: 9092 });
+      const newSeedPool = fakeConnectionPool({ host: 'new-seed', port: 9092 });
+      const staleBrokerDestroy = vi.fn().mockResolvedValue(undefined);
+      const staleBrokerPool = fakeConnectionPool({ host: 'stale-broker', port: 9094, destroy: staleBrokerDestroy });
+
+      const pools = [oldSeedPool, newSeedPool];
+      let buildCount = 0;
+      const build = vi.fn(async () => pools[buildCount++]!);
+
+      const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(build), logger: silentLogger });
+      await brokerPool.createSeedBroker();
+      brokerPool.brokers = { '99': new Broker({ connectionPool: staleBrokerPool, logger: silentLogger }) };
+      brokerPool.metadata = {
+        brokers: [],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 0,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+
+      await brokerPool.rebootstrap();
+
+      expect(staleBrokerDestroy).toHaveBeenCalledOnce();
+      expect(brokerPool.brokers).toEqual({});
+      expect(brokerPool.metadata).toBeNull();
+      expect(brokerPool.seedBroker!.connectionPool.host).toBe('new-seed');
+      expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('refreshMetadata rebootstraps from the seed list on REBOOTSTRAP_REQUIRED and recovers', async () => {
+      const staleSeedPool = fakeConnectionPool({ host: 'stale-seed', port: 9092 });
+      const freshSeedPool = fakeConnectionPool({ host: 'fresh-seed', port: 9092 });
+
+      staleSeedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse()) // apiVersions negotiated on the initial connect()
+        .mockRejectedValueOnce(rebootstrapRequiredError()); // the Metadata RPC itself signals rebootstrap
+
+      const metadataResponse = {
+        brokers: [{ nodeId: 1, host: 'fresh-seed', port: 9092, rack: null }],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+      freshSeedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse()) // apiVersions negotiated while rebootstrapping
+        .mockResolvedValueOnce(metadataResponse); // Metadata succeeds against the fresh seed
+
+      const pools = [staleSeedPool, freshSeedPool];
+      let buildCount = 0;
+      const build = vi.fn(async () => pools[buildCount++]!);
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(build),
+        logger: silentLogger,
+        retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await brokerPool.connect();
+      await brokerPool.refreshMetadata([]);
+
+      expect(brokerPool.seedBroker!.connectionPool.host).toBe('fresh-seed');
+      expect(brokerPool.metadata).toEqual(metadataResponse);
+      expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    it('metadataRecovery: "none" does not rebootstrap and surfaces REBOOTSTRAP_REQUIRED as non-retriable', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsResponse())
+        .mockRejectedValueOnce(rebootstrapRequiredError());
+
+      const build = vi.fn(async () => seedPool);
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(build),
+        logger: silentLogger,
+        metadataRecovery: 'none',
+        retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await brokerPool.connect();
+      await expect(brokerPool.refreshMetadata([])).rejects.toThrow();
+      expect(build).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('bootstrapControllers (KIP-919)', () => {
+    function apiVersionsWithDescribeCluster(maxVersion: number) {
+      return {
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [
+          ...Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+          { apiKey: 60, minVersion: 0, maxVersion },
+        ],
+      };
+    }
+
+    function describeClusterBody(brokers: { nodeId: number; host: string; port: number; rack: string | null }[]) {
+      return {
+        errorCode: 0,
+        errorMessage: null,
+        endpointType: 2,
+        clusterId: 'kraft',
+        controllerId: brokers[0]?.nodeId ?? 1,
+        brokers,
+        clusterAuthorizedOperations: -2147483648,
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+      };
+    }
+
+    it('clusterMetadataFromDescribeCluster maps controllers onto the Metadata shape', () => {
+      expect(
+        clusterMetadataFromDescribeCluster(
+          describeClusterBody([{ nodeId: 1, host: 'controller-1', port: 9093, rack: 'r1' }]),
+        ),
+      ).toEqual({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        brokers: [{ nodeId: 1, host: 'controller-1', port: 9093, rack: 'r1' }],
+        clusterId: 'kraft',
+        controllerId: 1,
+        topicMetadata: [],
+        clusterAuthorizedOperations: -2147483648,
+      });
+    });
+
+    it('refreshMetadata discovers the controller quorum via DescribeCluster', async () => {
+      const seedPool = fakeConnectionPool({ host: 'controller-1', port: 9093 });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsWithDescribeCluster(2))
+        .mockResolvedValueOnce(
+          describeClusterBody([
+            { nodeId: 1, host: 'controller-1', port: 9093, rack: null },
+            { nodeId: 2, host: 'controller-2', port: 9093, rack: null },
+          ]),
+        );
+
+      const otherPool = fakeConnectionPool({ host: 'controller-2', port: 9093 });
+      const build = vi.fn(async (destination?: ConnectionPoolDestination) =>
+        destination?.host === 'controller-2' ? otherPool : seedPool,
+      );
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(build),
+        logger: silentLogger,
+        usingBootstrapControllers: true,
+      });
+      await brokerPool.connect();
+      await brokerPool.refreshMetadata(['ignored-topic']);
+
+      expect(brokerPool.usingBootstrapControllers).toBe(true);
+      expect(brokerPool.brokers['1']).toBe(brokerPool.seedBroker);
+      expect(brokerPool.brokers['2']).toBeDefined();
+      expect(brokerPool.metadata?.topicMetadata).toEqual([]);
+      expect(brokerPool.metadata?.controllerId).toBe(1);
+      expect(brokerPool.metadata?.clusterId).toBe('kraft');
+    });
+
+    it('refreshMetadataIfNecessary does not refetch just because topics are absent', async () => {
+      const seedPool = fakeConnectionPool({ host: 'controller-1', port: 9093 });
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsWithDescribeCluster(2))
+        .mockResolvedValueOnce(describeClusterBody([{ nodeId: 1, host: 'controller-1', port: 9093, rack: null }]));
+      seedPool.send = send;
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => seedPool),
+        logger: silentLogger,
+        usingBootstrapControllers: true,
+        metadataMaxAge: 60_000,
+      });
+      await brokerPool.connect();
+      await brokerPool.refreshMetadata([]);
+      await brokerPool.refreshMetadataIfNecessary(['orders']);
+
+      expect(send).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws when DescribeCluster v1 is not advertised', async () => {
+      const seedPool = fakeConnectionPool({ host: 'controller-1', port: 9093 });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce(apiVersionsWithDescribeCluster(0))
+        .mockResolvedValueOnce(describeClusterBody([{ nodeId: 1, host: 'controller-1', port: 9093, rack: null }]));
+
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => seedPool),
+        logger: silentLogger,
+        usingBootstrapControllers: true,
+        retry: { retries: 0, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+      await brokerPool.connect();
+      await expect(brokerPool.refreshMetadata([])).rejects.toThrow(/DescribeCluster v1/);
+    });
+  });
+
+  describe('applyLeaderUpdate', () => {
+    function metadataFixture(partitionMetadata: { partitionId: number; leader: number }[]) {
+      return {
+        brokers: [{ nodeId: 1, host: 'broker-1', port: 9092, rack: null }],
+        topicMetadata: [
+          {
+            topic: 'orders',
+            topicErrorCode: 0,
+            isInternal: false,
+            partitionMetadata: partitionMetadata.map((p) => ({
+              partitionErrorCode: 0,
+              partitionId: p.partitionId,
+              leader: p.leader,
+              replicas: [],
+              isr: [],
+            })),
+          },
+        ],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+    }
+
+    it('patches the cached partition leader without a Metadata RPC', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(true);
+      expect(brokerPool.metadata.topicMetadata[0]!.partitionMetadata[0]).toMatchObject({
+        leader: 2,
+        leaderEpoch: 5,
+      });
+    });
+
+    it('registers a new broker from NodeEndpoints without a Metadata RPC', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async (destination) => fakeConnectionPool({ host: destination?.host })),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+        nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
+      });
+
+      expect(applied).toBe(true);
+      expect(brokerPool.brokers['2']).toBeDefined();
+      expect(brokerPool.brokers['2']!.connectionPool.host).toBe('broker-2');
+      expect(brokerPool.metadata.brokers).toContainEqual({
+        nodeId: 2,
+        host: 'broker-2',
+        port: 9093,
+        rack: null,
+      });
+    });
+
+    it('returns false without patching when there is no cached metadata yet', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(false);
+    });
+
+    it('returns false when the partition is not in the cached metadata', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 99,
+        currentLeader: { leaderId: 2, leaderEpoch: 5 },
+      });
+
+      expect(applied).toBe(false);
+    });
+
+    it('ignores a negative leaderId (no known leader) and does not patch', async () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.metadata = metadataFixture([{ partitionId: 0, leader: 1 }]);
+
+      const applied = await brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: -1, leaderEpoch: -1 },
+      });
+
+      expect(applied).toBe(false);
+      expect(brokerPool.metadata.topicMetadata[0]!.partitionMetadata[0]!.leader).toBe(1);
     });
   });
 });

@@ -50,11 +50,25 @@ describe('protocol/requests/fetch/v13/response', () => {
               abortedTransactions: [],
               preferredReadReplica: -1,
               messages: [],
+              currentLeader: null,
             },
           ],
         },
       ],
+      nodeEndpoints: [],
     });
+  });
+
+  it('resolves topicName from topicsForResponse when the topic is missing from the (incremental) request topics', async () => {
+    // KIP-227: an incremental fetch session's request can omit an unchanged topic while the
+    // broker still returns fresh data for it, since it's part of the session. `topics` is empty
+    // here (nothing changed), but `topicsForResponse` (the caller's full desired set) still has it.
+    const decoded = await fetchResponseV13({
+      topics: [],
+      topicsForResponse: [{ topic: 'orders', topicId, partitions: [] }],
+    }).decode(encodeV13Response());
+
+    expect(decoded.responses[0]?.topicName).toBe('orders');
   });
 
   it('still throws from the partition error_code with the restored topic name', async () => {

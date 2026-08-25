@@ -19,7 +19,7 @@ const batchContext = {
 
 describe('protocol/requests/fetch/v11/response', () => {
   it('decodes a real fixture, including preferredReadReplica', async () => {
-    const data = await fetchResponseV11.decode(Buffer.from(v11ResponseFixture.data));
+    const data = await fetchResponseV11().decode(Buffer.from(v11ResponseFixture.data));
 
     expect(data).toEqual({
       throttleTime: 0,
@@ -38,6 +38,7 @@ describe('protocol/requests/fetch/v11/response', () => {
               logStartOffset: 0n,
               abortedTransactions: [],
               preferredReadReplica: 0,
+              currentLeader: null,
               messages: [0, 1, 2].map((i) => ({
                 offset: BigInt(i),
                 magicByte: 2,
@@ -48,13 +49,15 @@ describe('protocol/requests/fetch/v11/response', () => {
                 key: Buffer.from(`key-${i}`),
                 value: Buffer.from(`some-value-${i}`),
                 isControlRecord: false,
+                byteSize: 51,
               })),
             },
           ],
         },
       ],
+      nodeEndpoints: [],
     });
 
-    await expect(fetchResponseV11.parse(data)).resolves.toBeTruthy();
+    await expect(fetchResponseV11().parse(data)).resolves.toBeTruthy();
   });
 });

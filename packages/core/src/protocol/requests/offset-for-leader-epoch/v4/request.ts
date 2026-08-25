@@ -11,7 +11,8 @@ import { API_KEYS } from '../../api-keys';
  *       current_leader_epoch => INT32
  *       leader_epoch => INT32
  *
- * Wire format is identical to v3.
+ * Flexible (KIP-482): the first flexible version of this API - compact types and a trailing
+ * TAG_BUFFER on every struct, including the root. Same fields as v3, just flexible framing.
  */
 const partitionSchema = flexibleObject([
   field('partition', int32),

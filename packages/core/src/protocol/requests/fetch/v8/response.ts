@@ -1,7 +1,7 @@
 import { Decoder } from '../../../decoder';
 import type { ResponseDefinition } from '../../../schema';
 import type { FetchTopicResponseV7 } from '../v7/response';
-import { decodeRecordSet, parseFetchResponse, readTopicName } from '../shared';
+import { decodeRecordSet, parseFetchResponse, readTopicName, type FetchRequestOptions } from '../shared';
 import type { DecodedRecordBatch } from '../../../records/batch';
 
 export interface FetchPartitionResponseV8 {
@@ -22,8 +22,8 @@ export interface FetchResponseV8Body {
   responses: FetchTopicResponseV7[];
 }
 
-async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponseV8> {
-  return {
+function decodePartition(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchPartitionResponseV8> => ({
     partition: decoder.readInt32(),
     errorCode: decoder.readInt16(),
     highWatermark: decoder.readInt64(),
@@ -33,12 +33,15 @@ async function decodePartition(decoder: Decoder): Promise<FetchPartitionResponse
       producerId: decoder.readInt64(),
       firstOffset: decoder.readInt64(),
     })),
-    messages: await decodeRecordSet(decoder),
-  };
+    messages: await decodeRecordSet(decoder, checkCrcs),
+  });
 }
 
-async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponseV7> {
-  return { topicName: readTopicName(decoder), partitions: await decoder.readArrayAsync(decodePartition) };
+function decodeTopicResponse(checkCrcs?: boolean) {
+  return async (decoder: Decoder): Promise<FetchTopicResponseV7> => ({
+    topicName: readTopicName(decoder),
+    partitions: await decoder.readArrayAsync(decodePartition(checkCrcs)),
+  });
 }
 
 /**
@@ -48,14 +51,18 @@ async function decodeTopicResponse(decoder: Decoder): Promise<FetchTopicResponse
  *
  * Fetch Response (Version: 8) - wire shape identical to v7.
  */
-export const fetchResponseV8: ResponseDefinition<FetchResponseV8Body> = {
-  decode: async (rawData) => {
-    const decoder = new Decoder(rawData);
-    const clientSideThrottleTime = decoder.readInt32();
-    const errorCode = decoder.readInt16();
-    const sessionId = decoder.readInt32();
-    const responses = await decoder.readArrayAsync(decodeTopicResponse);
-    return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses };
-  },
-  parse: parseFetchResponse,
-};
+export function fetchResponseV8(
+  options: Pick<FetchRequestOptions, 'checkCrcs'> = {},
+): ResponseDefinition<FetchResponseV8Body> {
+  return {
+    decode: async (rawData) => {
+      const decoder = new Decoder(rawData);
+      const clientSideThrottleTime = decoder.readInt32();
+      const errorCode = decoder.readInt16();
+      const sessionId = decoder.readInt32();
+      const responses = await decoder.readArrayAsync(decodeTopicResponse(options.checkCrcs));
+      return { throttleTime: 0, clientSideThrottleTime, errorCode, sessionId, responses };
+    },
+    parse: parseFetchResponse,
+  };
+}

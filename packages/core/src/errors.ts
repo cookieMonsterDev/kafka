@@ -20,7 +20,10 @@ export type KafkaErrorName =
   | 'KafkaNotImplemented'
   | 'KafkaTimeout'
   | 'KafkaLockTimeout'
+  | 'KafkaDeliveryTimeoutError'
+  | 'KafkaMessageTooLargeError'
   | 'KafkaUnsupportedMagicByteInMessageSet'
+  | 'KafkaCorruptRecordError'
   | 'KafkaDeleteTopicRecordsError'
   | 'KafkaInvariantViolation'
   | 'KafkaInvalidVarIntError'
@@ -73,10 +76,28 @@ export class KafkaNonRetriableError extends KafkaError {
   }
 }
 
+/** KIP-951: the partition's current leader, reported on a stale-leader error response. */
+export interface CurrentLeader {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+/** KIP-951: a broker address the client may not already have cached metadata for. */
+export interface NodeEndpoint {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
 export interface KafkaProtocolErrorOptions {
   retriable?: boolean;
   topic?: string;
   partition?: number;
+  /** KIP-951: set when the Produce/Fetch response carried a `CurrentLeader` tagged field. */
+  currentLeader?: CurrentLeader;
+  /** KIP-951: broker addresses accompanying `currentLeader`, when the client doesn't know them yet. */
+  nodeEndpoints?: readonly NodeEndpoint[];
 }
 
 /**
@@ -89,6 +110,8 @@ export class KafkaProtocolError extends KafkaError {
   readonly code: number | undefined;
   readonly topic: string | undefined;
   readonly partition: number | undefined;
+  readonly currentLeader: CurrentLeader | undefined;
+  readonly nodeEndpoints: readonly NodeEndpoint[] | undefined;
 
   constructor(
     e: ErrorLike & { retriable?: boolean; type?: string; code?: number },
@@ -106,6 +129,8 @@ export class KafkaProtocolError extends KafkaError {
     this.code = e.code;
     this.topic = topic;
     this.partition = partition;
+    this.currentLeader = options.currentLeader;
+    this.nodeEndpoints = options.nodeEndpoints;
   }
 }
 
@@ -114,13 +139,10 @@ export class KafkaOffsetOutOfRange extends KafkaProtocolError {
   override readonly topic: string | undefined;
   override readonly partition: number | undefined;
 
-  constructor(
-    e: ConstructorParameters<typeof KafkaProtocolError>[0],
-    { topic, partition }: { topic?: string; partition?: number },
-  ) {
-    super(e);
-    this.topic = topic;
-    this.partition = partition;
+  constructor(e: ConstructorParameters<typeof KafkaProtocolError>[0], options: KafkaProtocolErrorOptions) {
+    super(e, options);
+    this.topic = options.topic;
+    this.partition = options.partition;
   }
 }
 
@@ -303,8 +325,77 @@ export class KafkaLockTimeout extends KafkaTimeout {
   override readonly name: KafkaErrorName = 'KafkaLockTimeout';
 }
 
+/**
+ * `deliveryTimeoutMs` elapsed before a produce settled — end-to-end, across linger, buffer-memory
+ * waits, and every retry, not any single RPC. Non-retriable: the point is to stop retrying once
+ * the deadline is up, even if the underlying attempt is still in flight (it isn't cancelled).
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+ */
+export class KafkaDeliveryTimeoutError extends KafkaTimeout {
+  override readonly name: KafkaErrorName = 'KafkaDeliveryTimeoutError';
+  readonly deliveryTimeoutMs: number;
+
+  constructor(deliveryTimeoutMs: number) {
+    super(`Delivery timeout of ${deliveryTimeoutMs}ms exceeded before the record was acknowledged`);
+    this.deliveryTimeoutMs = deliveryTimeoutMs;
+  }
+}
+
+export interface KafkaMessageTooLargeErrorOptions {
+  /** Uncompressed size in bytes of the offending record, or the whole call's records combined. */
+  size: number;
+  maxRequestSize: number;
+  topic?: string;
+}
+
+/**
+ * A record - or the uncompressed sum of every record in one `send`/`sendBatch` call, or the
+ * records the linger buffer had already accumulated for the next Produce - exceeded
+ * `maxRequestSize` (default 1 MiB). Raised client-side, before the record ever occupies a linger
+ * slot or reaches the network, so it is distinct from the broker's `MESSAGE_TOO_LARGE` protocol
+ * error (`KafkaProtocolError` with `type: 'MESSAGE_TOO_LARGE'`), which the broker can only return
+ * after it has already accepted bytes on the wire.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+ */
+export class KafkaMessageTooLargeError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaMessageTooLargeError';
+  readonly size: number;
+  readonly maxRequestSize: number;
+  readonly topic: string | undefined;
+
+  constructor({ size, maxRequestSize, topic }: KafkaMessageTooLargeErrorOptions) {
+    const details = topic != null ? ` for topic "${topic}"` : '';
+    super(
+      `Record(s)${details} total ${size} bytes uncompressed, exceeding maxRequestSize (${maxRequestSize} bytes). ` +
+        'Reduce the message size, send fewer records per call, or raise maxRequestSize',
+    );
+    this.size = size;
+    this.maxRequestSize = maxRequestSize;
+    this.topic = topic;
+  }
+}
+
 export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaUnsupportedMagicByteInMessageSet';
+}
+
+/**
+ * The decoded bytes don't match the record's checksum: a RecordBatch v2 CRC-32C mismatch, or a
+ * legacy MessageSet (magic 0/1) CRC-32 mismatch. Raised only when `ConsumerConfig.checkCrcs` is
+ * `true` (the default). Non-retriable: the bytes on the wire were corrupted, so retrying the same
+ * fetch would not help.
+ * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+ */
+export class KafkaCorruptRecordError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaCorruptRecordError';
+  readonly expectedCrc: number;
+  readonly computedCrc: number;
+
+  constructor(message: string, { expectedCrc, computedCrc }: { expectedCrc: number; computedCrc: number }) {
+    super(message);
+    this.expectedCrc = expectedCrc;
+    this.computedCrc = computedCrc;
+  }
 }
 
 export interface DeleteTopicRecordPartition {

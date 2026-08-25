@@ -7,6 +7,7 @@ import { Encoder } from '../../encoder';
 import { ISOLATION_LEVEL } from '../../enums/isolation-level';
 import {
   compactArray,
+  compactNullableString,
   compactString,
   field,
   flexibleObject,
@@ -58,6 +59,8 @@ export interface FetchRequestOptions {
   minBytes: number;
   maxBytes: number;
   isolationLevel?: number;
+  /** Verify each decoded record batch's CRC. Default `true` when omitted. */
+  checkCrcs?: boolean;
   topics: FetchTopicRequest[];
   /** v7+ only (KIP-227 incremental fetch sessions); earlier request versions ignore these. */
   sessionId?: number;
@@ -65,6 +68,14 @@ export interface FetchRequestOptions {
   forgottenTopics?: ForgottenTopic[];
   /** v11+ only (KIP-392 fetch from closest replica); earlier request versions ignore this. */
   rackId?: string;
+  /**
+   * v13+ responses (KIP-516) carry topic IDs, not names; `topicName` on each response entry is
+   * resolved by matching the response's id against a topics list. An incremental fetch session
+   * (KIP-227) can return data for a topic that isn't in this request's own `topics` (it's part of
+   * the session but happened to be unchanged this round), so name resolution needs the caller's
+   * *full* desired topic set here - not just what's on the wire. Falls back to `topics`.
+   */
+  topicsForResponse?: readonly FetchTopicRequest[];
 }
 
 /** First Fetch version that addresses topics by UUID instead of name (KIP-516). */
@@ -95,17 +106,101 @@ export function resolveFetchTopicName(topicId: Buffer, index: number, topics: re
 
 const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSET_OUT_OF_RANGE')?.code;
 
+export interface LeaderIdAndEpoch {
+  leaderId: number;
+  leaderEpoch: number;
+}
+
+export interface FetchNodeEndpoint {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+}
+
+const fetchNodeEndpointSchema = flexibleObject([
+  field('nodeId', int32),
+  field('host', compactString),
+  field('port', int32),
+  field('rack', compactNullableString),
+]);
+const fetchNodeEndpointsArraySchema = compactArray(fetchNodeEndpointSchema);
+
 /**
- * Shared by every Fetch response version: scan partitions for the first failure.
+ * Reads a Fetch partition's trailing tagged fields (v12+): DivergingEpoch (tag 0, KIP-320),
+ * CurrentLeader (tag 1, KIP-951), and SnapshotId (tag 2, KIP-595). Only CurrentLeader is
+ * surfaced today; DivergingEpoch and SnapshotId stay skipped until truncation detection needs
+ * them. Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
+ * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readFetchPartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
+  let currentLeader: LeaderIdAndEpoch | null = null;
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 1) {
+      currentLeader = { leaderId: fieldDecoder.readInt32(), leaderEpoch: fieldDecoder.readInt32() };
+    }
+  }
+
+  return currentLeader;
+}
+
+/**
+ * Reads the Fetch response's trailing tagged fields: NodeEndpoints (tag 0, v16+, KIP-951) — the
+ * broker addresses for any `currentLeader.leaderId` values in the response the client may not
+ * already have cached.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function readFetchResponseNodeEndpoints(decoder: Decoder): FetchNodeEndpoint[] {
+  let nodeEndpoints: FetchNodeEndpoint[] = [];
+  const numberOfTaggedFields = decoder.readUVarInt();
+
+  for (let i = 0; i < numberOfTaggedFields; i++) {
+    const tag = decoder.readUVarInt();
+    const size = decoder.readUVarInt();
+    const fieldDecoder = decoder.slice(size);
+    decoder.forward(size);
+
+    if (tag === 0) {
+      nodeEndpoints = fetchNodeEndpointsArraySchema.read(fieldDecoder);
+    }
+  }
+
+  return nodeEndpoints;
+}
+
+/**
+ * Shared by every Fetch response version: check the session-level error first (v7+, KIP-227 —
+ * e.g. `FETCH_SESSION_ID_NOT_FOUND` / `INVALID_FETCH_SESSION_EPOCH`, where `responses` is empty
+ * and there is nothing partition-level to report), then scan partitions for the first failure.
  * `OFFSET_OUT_OF_RANGE` becomes {@link KafkaOffsetOutOfRange} with topic and partition.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export async function parseFetchResponse<
   T extends {
-    responses: readonly { topicName: string; partitions: readonly { errorCode: number; partition: number }[] }[];
+    /** v7+ only; absent on earlier response versions, which have no session-level error. */
+    errorCode?: number;
+    responses: readonly {
+      topicName: string;
+      partitions: readonly { errorCode: number; partition: number; currentLeader?: LeaderIdAndEpoch | null }[];
+    }[];
+    nodeEndpoints?: readonly FetchNodeEndpoint[];
   },
 >(data: T): Promise<T> {
+  if (data.errorCode != null && failure(data.errorCode)) {
+    throw createErrorFromCode(data.errorCode);
+  }
+
   const [firstError] = data.responses.flatMap(({ topicName, partitions }) =>
     partitions
       .filter((partition) => failure(partition.errorCode))
@@ -113,11 +208,12 @@ export async function parseFetchResponse<
   );
 
   if (firstError) {
-    const { errorCode, topic, partition } = firstError;
+    const { errorCode, topic, partition, currentLeader } = firstError;
+    const extras = { topic, partition, currentLeader: currentLeader ?? undefined, nodeEndpoints: data.nodeEndpoints };
     if (errorCode === OFFSET_OUT_OF_RANGE_ERROR_CODE) {
-      throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), { topic, partition });
+      throw new KafkaOffsetOutOfRange(createErrorFromCode(errorCode), extras);
     }
-    throw createErrorFromCode(errorCode, { topic, partition });
+    throw createErrorFromCode(errorCode, extras);
   }
 
   return data;
@@ -140,7 +236,7 @@ const RECORD_BATCH_MAGIC = 2;
  *
  * @see https://kafka.apache.org/43/implementation/messages/
  */
-export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
+export async function decodeRecordSet(decoder: Decoder, checkCrcs?: boolean): Promise<DecodedRecordBatch['records']> {
   const messagesSize = decoder.readInt32();
   if (messagesSize <= 0 || !decoder.canReadBytes(messagesSize)) {
     return [];
@@ -148,24 +244,30 @@ export async function decodeRecordSet(decoder: Decoder): Promise<DecodedRecordBa
 
   const messagesBuffer = decoder.readBytes(messagesSize);
   if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
-  return decodeRecordSetBuffer(messagesBuffer);
+  return decodeRecordSetBuffer(messagesBuffer, checkCrcs);
 }
 
 /**
  * Fetch v12+ uses COMPACT_RECORDS (unsigned varint length `N+1`) instead of INT32-prefixed RECORDS.
  */
-export async function decodeCompactRecordSet(decoder: Decoder): Promise<DecodedRecordBatch['records']> {
+export async function decodeCompactRecordSet(
+  decoder: Decoder,
+  checkCrcs?: boolean,
+): Promise<DecodedRecordBatch['records']> {
   const messagesBuffer = decoder.readUVarIntBytes();
   if (!messagesBuffer || messagesBuffer.length <= MAGIC_OFFSET) return [];
-  return decodeRecordSetBuffer(messagesBuffer);
+  return decodeRecordSetBuffer(messagesBuffer, checkCrcs);
 }
 
-async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRecordBatch['records']> {
+async function decodeRecordSetBuffer(
+  messagesBuffer: Buffer,
+  checkCrcs?: boolean,
+): Promise<DecodedRecordBatch['records']> {
   const messagesDecoder = new Decoder(messagesBuffer);
   const magicByte = messagesBuffer.readInt8(MAGIC_OFFSET);
 
   if (magicByte !== RECORD_BATCH_MAGIC) {
-    return decodeMessageSet(messagesDecoder, messagesBuffer.length);
+    return decodeMessageSet(messagesDecoder, messagesBuffer.length, checkCrcs);
   }
 
   const records: DecodedRecordBatch['records'] = [];
@@ -179,7 +281,7 @@ async function decodeRecordSetBuffer(messagesBuffer: Buffer): Promise<DecodedRec
   const RECORD_BATCH_HEADER_SIZE = 57;
   while (messagesDecoder.canReadBytes(RECORD_BATCH_HEADER_SIZE)) {
     try {
-      const batch = await decodeRecordBatch(messagesDecoder);
+      const batch = await decodeRecordBatch(messagesDecoder, { checkCrcs });
       records.push(...batch.records);
     } catch (e) {
       // The tail of the record batches can have incomplete records due to how max_bytes works.

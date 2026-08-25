@@ -62,6 +62,35 @@ describe('consumer/fetcher', () => {
     await stopping;
   });
 
+  it('does not re-enqueue a partition this fetcher is already processing', async () => {
+    const gate = deferred<Batch[]>();
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce([{ topic: 'orders', partition: 0 }])
+      .mockResolvedValueOnce([{ topic: 'orders', partition: 0 }])
+      .mockImplementation(() => gate.promise);
+    const workerQueue = mockQueue();
+    const partitionAssignments = new Map<string, string>();
+    const fetcher = createFetcher({
+      nodeId: '1',
+      workerQueue,
+      partitionAssignments,
+      fetch,
+      logger: silentLogger,
+    });
+
+    const started = fetcher.start();
+    await vi.waitFor(() => expect(fetch.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(workerQueue.pushForNode).toHaveBeenCalledTimes(1);
+    expect(workerQueue.pushForNode).toHaveBeenCalledWith('1', [{ topic: 'orders', partition: 0 }], expect.any(Object));
+    expect(partitionAssignments.get('orders|0')).toBe('1');
+
+    const stopping = fetcher.stop();
+    gate.resolve([]);
+    await started;
+    await stopping;
+  });
+
   it('filters batches already assigned to another fetcher', async () => {
     const gate = deferred<Batch[]>();
     const fetch = vi

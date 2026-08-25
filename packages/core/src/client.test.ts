@@ -43,6 +43,8 @@ describe('Kafka', () => {
     expect(typeof shareConsumer.subscribe).toBe('function');
     expect(typeof shareConsumer.run).toBe('function');
     expect(typeof shareConsumer.stop).toBe('function');
+    expect(typeof shareConsumer.on).toBe('function');
+    expect(shareConsumer.events).toBeDefined();
     expect(typeof shareConsumer[Symbol.asyncDispose]).toBe('function');
   });
 

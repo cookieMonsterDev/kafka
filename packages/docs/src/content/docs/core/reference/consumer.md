@@ -143,6 +143,8 @@ interface ShareConsumer {
     prefetchMaxBytes?: number;
   }): Promise<void>;
   stop(): Promise<void>;
+  on(eventName: string, listener: (event: unknown) => void | Promise<void>): () => void;
+  readonly events: Record<string, string>;
   logger(): Logger;
   [Symbol.asyncDispose](): Promise<void>;
 }
@@ -150,4 +152,20 @@ interface ShareConsumer {
 
 `SHARE_ACKNOWLEDGE_TYPE`: `GAP` 0, `ACCEPT` 1, `RELEASE` 2, `REJECT` 3, `RENEW` 4.
 `SHARE_ACQUIRE_MODE`: `BATCH_OPTIMIZED` 0, `RECORD_LIMIT` 1 (ShareFetch v2 / KIP-1206).
-Guide: [Share groups](../../guides/consumer/#share-groups-kip-932).
+Guide: [Share groups](../../guides/consumer/#share-groups-kip-932),
+[Acknowledgement: implicit vs explicit](../../guides/consumer/#acknowledgement-implicit-vs-explicit),
+[Instrumentation events](../../guides/consumer/#instrumentation-events).
+
+### `ShareConsumer` events
+
+Namespaced under `share_consumer.*`; source:
+[`share-consumer/instrumentation-events.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/share-consumer/instrumentation-events.ts).
+
+| Event                | Payload                                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `FETCH_START`        | `{ nodeId }`                                                                                                                |
+| `FETCH`              | `{ nodeId, numberOfBatches, duration }`                                                                                     |
+| `ACKNOWLEDGE`        | `{ groupId, memberId, nodeId, topics: [{ topic, partitions: [{ partition, firstOffset, lastOffset, acknowledgeType }] }] }` |
+| `REQUEST`            | Same shape as the classic consumer's `REQUEST` (`NetworkRequestEvent`)                                                      |
+| `REQUEST_TIMEOUT`    | Same shape as the classic consumer's `REQUEST_TIMEOUT`                                                                      |
+| `REQUEST_QUEUE_SIZE` | Same shape as the classic consumer's `REQUEST_QUEUE_SIZE`                                                                   |

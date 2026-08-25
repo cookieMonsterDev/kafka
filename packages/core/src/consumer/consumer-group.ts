@@ -920,7 +920,16 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           throw new KafkaError(error);
         }
 
-        bail(error);
+        // Only short-circuit the retrier for genuinely non-retriable errors (e.g. auth
+        // failures, invalid group state). Retriable protocol errors like
+        // COORDINATOR_LOAD_IN_PROGRESS or NOT_COORDINATOR must fall through so the retrier can
+        // retry them instead of failing the join immediately.
+        if ((error as { retriable?: boolean }).retriable === false) {
+          bail(error);
+          return;
+        }
+
+        throw error;
       }
     });
   }

@@ -231,11 +231,17 @@ export class Cluster {
     await this.#refreshMetadataIfNecessary();
   }
 
-  async metadata(options: { topics?: readonly string[] } = {}): Promise<ClusterMetadata | null> {
+  async metadata(
+    options: { topics?: readonly string[]; forceRefresh?: boolean } = {},
+  ): Promise<ClusterMetadata | null> {
     const topics = options.topics ?? [];
     return this.retrier(async (bail) => {
       try {
-        await this.brokerPool.refreshMetadataIfNecessary([...topics]);
+        if (options.forceRefresh) {
+          await this.brokerPool.refreshMetadata([...topics]);
+        } else {
+          await this.brokerPool.refreshMetadataIfNecessary([...topics]);
+        }
         return await this.brokerPool.withBroker(async ({ broker }) => broker.metadata([...topics]));
       } catch (e) {
         const error = e as Error & { type?: string };

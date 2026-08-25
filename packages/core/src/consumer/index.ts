@@ -9,6 +9,7 @@ import { retrier } from '../retry/index';
 import { RETRY_DEFAULTS } from '../retry/defaults';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
+import { sleep } from '../utils/wait';
 import { roundRobin } from './assigners/index';
 import type { Batch } from './batch';
 import { ConsumerGroup } from './consumer-group';
@@ -224,6 +225,10 @@ export function createConsumer({
   let mode: 'unset' | 'subscribe' | 'assign' = 'unset';
   let assignment: TopicPartitions[] = [];
 
+  if (groupId === '') {
+    throw new KafkaNonRetriableError('Consumer groupId must be a non-empty string.');
+  }
+
   if (groupProtocol !== 'consumer' && heartbeatInterval >= sessionTimeout) {
     throw new KafkaNonRetriableError(
       `Consumer heartbeatInterval (${heartbeatInterval}) must be lower than sessionTimeout (${sessionTimeout}). It is recommended to set heartbeatInterval to approximately a third of the sessionTimeout.`,
@@ -321,21 +326,60 @@ export function createConsumer({
     }
 
     const hasRegexSubscriptions = subscriptions.some((entry) => entry instanceof RegExp);
-    const metadata = hasRegexSubscriptions ? await cluster.metadata() : undefined;
+    const regexEntries = subscriptions.filter((entry): entry is RegExp => entry instanceof RegExp);
+
+    const matchTopicsForRegex = (
+      candidateMetadata: Awaited<ReturnType<typeof cluster.metadata>> | undefined,
+      entry: RegExp,
+    ): string[] =>
+      (candidateMetadata?.topicMetadata ?? [])
+        .map(({ topic: topicName }) => topicName)
+        .filter((topicName): topicName is string => topicName != null)
+        .filter((topicName) => {
+          // `RegExp.test` with the global flag advances `lastIndex` and skips later matches.
+          const matcher = entry.flags.includes('g') ? new RegExp(entry.source, entry.flags.replaceAll('g', '')) : entry;
+          return matcher.test(topicName);
+        });
+
+    let metadata = hasRegexSubscriptions ? await cluster.metadata() : undefined;
+
+    if (regexEntries.length > 0) {
+      const collectMatches = (candidateMetadata: typeof metadata): Set<string> => {
+        const matched = new Set<string>();
+        for (const entry of regexEntries) {
+          for (const topic of matchTopicsForRegex(candidateMetadata, entry)) matched.add(topic);
+        }
+        return matched;
+      };
+
+      // A topic created just before subscribe() propagates to the broker serving this metadata
+      // request through Kafka's own inter-broker metadata propagation, not through anything this
+      // client controls, so a regex subscription can match some but not all of the intended
+      // topics on the first few reads. Keep forcing a refresh until two consecutive reads agree
+      // on the same set, or a bounded number of attempts pass.
+      const REGEX_METADATA_MAX_ATTEMPTS = 20;
+      const REGEX_METADATA_REQUIRED_STABLE_READS = 2;
+      let previousMatches = collectMatches(metadata);
+      let stableReads = 0;
+      for (
+        let attempt = 0;
+        attempt < REGEX_METADATA_MAX_ATTEMPTS && stableReads < REGEX_METADATA_REQUIRED_STABLE_READS;
+        attempt++
+      ) {
+        await sleep(150);
+        metadata = await cluster.metadata({ forceRefresh: true });
+        const nextMatches = collectMatches(metadata);
+        const isStable =
+          nextMatches.size === previousMatches.size && [...nextMatches].every((topic) => previousMatches.has(topic));
+        previousMatches = nextMatches;
+        stableReads = isStable ? stableReads + 1 : 0;
+      }
+    }
 
     const topicsToSubscribe: string[] = [];
     for (const entry of subscriptions) {
       if (entry instanceof RegExp) {
-        const matchedTopics = (metadata?.topicMetadata ?? [])
-          .map(({ topic: topicName }) => topicName)
-          .filter((topicName): topicName is string => topicName != null)
-          .filter((topicName) => {
-            // `RegExp.test` with the global flag advances `lastIndex` and skips later matches.
-            const matcher = entry.flags.includes('g')
-              ? new RegExp(entry.source, entry.flags.replaceAll('g', ''))
-              : entry;
-            return matcher.test(topicName);
-          });
+        const matchedTopics = matchTopicsForRegex(metadata, entry);
 
         logger.debug('Subscription based on RegExp', {
           groupId,
@@ -432,12 +476,12 @@ export function createConsumer({
       return;
     }
 
-    if (mode === 'unset') {
-      throw new KafkaNonRetriableError('Consumer must call subscribe() or assign() before run().');
-    }
-
     if (signal?.aborted) {
       throw abortError(signal);
+    }
+
+    if (mode === 'unset') {
+      throw new KafkaNonRetriableError('Consumer must call subscribe() or assign() before run().');
     }
 
     // assign() mode never auto-commits: there is no consumer group to own the offsets, so

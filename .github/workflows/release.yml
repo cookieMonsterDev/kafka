@@ -1,4 +1,5 @@
-# Per-package semantic-release on master. workflow_dispatch can force a package or dry-run.
+# Chained semantic-release on master, walking RELEASE_PACKAGES in order. workflow_dispatch can
+# force a package or dry-run.
 name: Release
 
 on:
@@ -8,8 +9,11 @@ on:
     inputs:
       package:
         description: Package to release
+        # GitHub requires choice options as literal YAML, so this list can't be generated from
+        # RELEASE_PACKAGES — keep it in sync by hand (scripts/resolve-release-package.mjs is the
+        # source of truth for order).
         type: choice
-        options: [auto, core, cli, docs, all]
+        options: [auto, config, core, cli, docs, all]
         default: auto
       dry_run:
         description: Analyze the next version without publishing, tagging, or opening a sync PR
@@ -31,111 +35,61 @@ jobs:
     name: Detect packages
     runs-on: ubuntu-latest
     outputs:
-      core: ${{ fromJSON(steps.detect.outputs.flags).core }}
-      cli: ${{ fromJSON(steps.detect.outputs.flags).cli }}
-      docs: ${{ fromJSON(steps.detect.outputs.flags).docs }}
+      flags: ${{ steps.detect.outputs.flags }}
+      any: ${{ steps.any.outputs.any }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - uses: ./.github/actions/setup-node-pnpm
+      - id: manifest
+        name: Derive the package list and filters from RELEASE_PACKAGES
+        run: node scripts/print-release-manifest-outputs.mjs
       - uses: ./.github/actions/detect-release-packages
         id: detect
         with:
-          packages: 'core cli docs'
-          filters: |
-            core:
-              - 'packages/core/**'
-            cli:
-              - 'packages/cli/**'
-            docs:
-              - 'packages/docs/**'
+          packages: ${{ steps.manifest.outputs.packages }}
+          filters: ${{ steps.manifest.outputs.filters }}
           dispatch_package: ${{ inputs.package || 'auto' }}
-
-  release-core:
-    name: Release @cookiemonsterdev/kafka-core
-    needs: [changes]
-    if: needs.changes.outputs.core == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
-      - uses: ./.github/actions/setup-node-pnpm
-      - uses: ./.github/actions/require-npm-oidc
-      - run: pnpm --filter @cookiemonsterdev/kafka-core build
-      - run: pnpm --filter @cookiemonsterdev/kafka-core test
-      - uses: ./.github/actions/exchange-npm-oidc-token
-        with:
-          npm_package: '@cookiemonsterdev/kafka-core'
-          dry_run: ${{ inputs.dry_run || false }}
-      - uses: ./.github/actions/run-semantic-release
-        with:
-          package: core
-          dry_run: ${{ inputs.dry_run || false }}
-
-  release-cli:
-    name: Release @cookiemonsterdev/kafka-cli
-    needs: [changes, release-core]
-    if: >-
-      always() &&
-      !cancelled() &&
-      needs.changes.outputs.cli == 'true' &&
-      (needs.release-core.result == 'success' || needs.release-core.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
-      - uses: ./.github/actions/fast-forward-to-master
-      - uses: ./.github/actions/setup-node-pnpm
-      - uses: ./.github/actions/require-npm-oidc
-      - run: pnpm --filter @cookiemonsterdev/kafka-cli build
-      - run: pnpm --filter @cookiemonsterdev/kafka-cli test
-      - uses: ./.github/actions/exchange-npm-oidc-token
-        with:
-          npm_package: '@cookiemonsterdev/kafka-cli'
-          dry_run: ${{ inputs.dry_run || false }}
-      - uses: ./.github/actions/run-semantic-release
-        with:
-          package: cli
-          dry_run: ${{ inputs.dry_run || false }}
-
-  release-docs:
-    name: Release @cookiemonsterdev/kafka-docs
-    needs: [changes, release-cli]
-    if: >-
-      always() &&
-      !cancelled() &&
-      needs.changes.outputs.docs == 'true' &&
-      (needs.release-cli.result == 'success' || needs.release-cli.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
-      - uses: ./.github/actions/fast-forward-to-master
-      - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm --filter @cookiemonsterdev/kafka-docs... build
+      - id: any
+        name: Any package changed?
         env:
-          GITHUB_PAGES: '1'
-      - uses: ./.github/actions/run-semantic-release
+          FLAGS: ${{ steps.detect.outputs.flags }}
+        run: |
+          set -euo pipefail
+          if jq -e 'any(.[]; . == true)' <<<"$FLAGS" >/dev/null; then
+            echo 'any=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'any=false' >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Release
+    needs: [changes]
+    if: needs.changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
         with:
-          package: docs
-          dry_run: ${{ inputs.dry_run || false }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/require-npm-oidc
+      - name: Run the release chain
+        env:
+          RELEASE_CHANGES: ${{ needs.changes.outputs.flags }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HUSKY: '0'
+        run: node scripts/release-chain.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
 
   sync-develop:
     name: Sync versions to develop
-    needs: [release-core, release-cli, release-docs]
+    needs: [release]
     if: >-
       always() &&
       inputs.dry_run != true &&
-      (needs.release-core.result == 'success' || needs.release-cli.result == 'success' || needs.release-docs.result == 'success')
+      needs.release.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

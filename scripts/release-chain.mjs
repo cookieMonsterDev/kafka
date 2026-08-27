@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
 
@@ -8,17 +9,28 @@ import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
 const dryRun = process.argv.includes('--dry-run');
 const changes = JSON.parse(process.env.RELEASE_CHANGES ?? '{}');
 
+let released = false;
+
+// A mid-chain failure still leaves earlier packages' version-bump commits on master needing a
+// master -> develop sync, so report whether anything released, success or not — the caller
+// (release.yml's sync-develop job) reads this even when the step itself fails.
+function reportReleasedAndExit(code) {
+  const githubOutput = process.env.GITHUB_OUTPUT;
+  if (githubOutput) {
+    appendFileSync(githubOutput, `released=${released}\n`, 'utf8');
+  }
+  process.exit(code);
+}
+
 function run(command, args, extraEnv) {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
     env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
   });
   if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+    reportReleasedAndExit(result.status ?? 1);
   }
 }
-
-let released = false;
 
 for (const pkg of RELEASE_PACKAGES) {
   if (!changes[pkg.name]) continue;
@@ -29,14 +41,12 @@ for (const pkg of RELEASE_PACKAGES) {
     run('git', ['pull', '--ff-only', 'origin', 'master']);
   }
 
+  run('pnpm', ['--filter', pkg.publishesToNpm ? pkg.npmName : `${pkg.npmName}...`, 'build'], pkg.buildEnv);
   if (pkg.publishesToNpm) {
-    run('pnpm', ['--filter', pkg.npmName, 'build']);
     run('pnpm', ['--filter', pkg.npmName, 'test']);
     if (!dryRun) {
       run('node', ['scripts/exchange-npm-oidc-token.mjs', pkg.npmName]);
     }
-  } else {
-    run('pnpm', ['--filter', `${pkg.npmName}...`, 'build'], pkg.buildEnv);
   }
 
   const releaseArgs = ['scripts/run-semantic-release.mjs', pkg.name];
@@ -50,3 +60,5 @@ for (const pkg of RELEASE_PACKAGES) {
 if (!released) {
   console.log('No packages changed; nothing to release.');
 }
+
+reportReleasedAndExit(0);

@@ -294,8 +294,8 @@ options as literal YAML — add the new name there too.
 
 A package that publishes to npm and wants to pin its own dependency set (the way
 `@cookiemonsterdev/kafka-core` and `@cookiemonsterdev/kafka-config` do, to keep a policy like
-"stays dependency-free" enforceable in CI) should add itself to `EXPECTED_DEPENDENCIES` in
-`scripts/check-publishable-deps.mjs`.
+"stays dependency-free" enforceable in CI) should add itself to the `expectedDependencies()` table
+in `scripts/check-publishable-deps.mjs`.
 
 ## Configuration notes
 

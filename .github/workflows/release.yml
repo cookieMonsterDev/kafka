@@ -69,6 +69,10 @@ jobs:
     if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      # Set even when the chain step fails partway through, so sync-develop still runs after a
+      # package released successfully before a later one failed.
+      released: ${{ steps.chain.outputs.released }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -77,6 +81,7 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
       - uses: ./.github/actions/require-npm-oidc
       - name: Run the release chain
+        id: chain
         env:
           RELEASE_CHANGES: ${{ needs.changes.outputs.flags }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -89,7 +94,7 @@ jobs:
     if: >-
       always() &&
       inputs.dry_run != true &&
-      needs.release.result == 'success'
+      needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

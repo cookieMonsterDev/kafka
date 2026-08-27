@@ -33,8 +33,12 @@ export function assertValidKafkaFileConfig(config: unknown): asserts config is K
  * Identity helper for a `kafka.config.*` file's default export: freezes and shallow-validates a
  * plain config object, or passes a sync/async factory through unchanged (its result is validated
  * when it resolves). Named exports are not supported — use `export default defineConfig({...})`.
+ *
+ * Generic over its input so the result stays as specific as what was passed in — combine with
+ * `satisfies KafkaFileConfig` on the argument (`defineConfig({...} satisfies KafkaFileConfig)`)
+ * to get a compile-time check without widening the literal's inferred type.
  */
-export function defineConfig(input: KafkaFileConfigInput): KafkaFileConfigInput {
+export function defineConfig<T extends KafkaFileConfigInput>(input: T): T {
   if (typeof input === 'function') return input;
 
   assertValidKafkaFileConfig(input);

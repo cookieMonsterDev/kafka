@@ -7,11 +7,25 @@ import semver from 'semver';
 const WORKSPACE_SCOPE = '@cookiemonsterdev/';
 const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'];
 
-// D1's extraction trigger: the config loader must stay dependency-free, or move to its own
-// package. Bumping this list is a deliberate decision, not a drive-by dependency add.
-const CORE_REQUIRED_DEPENDENCIES = ['lz4-lite', 'snappyjs'];
+const CORE_NAME = '@cookiemonsterdev/kafka-core';
+const CONFIG_NAME = '@cookiemonsterdev/kafka-config';
 
-function checkManifest(manifest, workspaceVersions) {
+// D1/D1a's extraction triggers, one per package: core's dependencies stay third-party-only plus
+// the config loader (D1a) and kafka-config stays dependency-free (its inverted trigger — a
+// runtime dependency here must move to an optional peer). Bumping either list is a deliberate
+// decision, not a drive-by dependency add.
+//
+// core's expectation only names kafka-config once packages/config exists — this check lands
+// before the extraction (T0b) that adds the dependency, so it must stay inert until then rather
+// than failing every build on develop in the interim.
+function expectedDependencies(workspaceVersions) {
+  return {
+    [CORE_NAME]: ['lz4-lite', 'snappyjs', ...(CONFIG_NAME in workspaceVersions ? [CONFIG_NAME] : [])],
+    [CONFIG_NAME]: [],
+  };
+}
+
+function checkManifest(manifest, workspaceVersions, expectedDeps) {
   const problems = [];
   const name = manifest.name ?? '<unnamed package>';
 
@@ -42,14 +56,26 @@ function checkManifest(manifest, workspaceVersions) {
     }
   }
 
-  if (name === '@cookiemonsterdev/kafka-core') {
-    const actual = Object.keys(manifest.dependencies ?? {}).sort();
-    const expected = [...CORE_REQUIRED_DEPENDENCIES].sort();
-    if (actual.join(',') !== expected.join(',')) {
-      problems.push(
-        `${name}: dependencies must be exactly {${expected.join(', ')}} (found ` +
-          `{${actual.join(', ') || 'none'}}) — see the D1 extraction trigger in the config-loader plan`,
-      );
+  const expected = expectedDeps[name];
+  if (expected) {
+    const actual = Object.keys(manifest.dependencies ?? {});
+    const isWorkspace = (dep) => dep.startsWith(WORKSPACE_SCOPE);
+
+    // Reported separately so the failure message says which rule broke: a stray third-party
+    // dependency is a D1/D1a policy violation, a wrong workspace-internal dependency is very
+    // likely just a missed `pnpm add` after an extraction.
+    for (const [label, keep] of [
+      ['third-party', (dep) => !isWorkspace(dep)],
+      ['workspace-internal', isWorkspace],
+    ]) {
+      const expectedSet = new Set(expected.filter(keep).sort());
+      const actualSet = new Set(actual.filter(keep).sort());
+      if ([...expectedSet].join(',') !== [...actualSet].join(',')) {
+        problems.push(
+          `${name}: ${label} dependencies must be exactly {${[...expectedSet].join(', ') || 'none'}} ` +
+            `(found {${[...actualSet].join(', ') || 'none'}}) — see D1/D1a in the config-loader plan`,
+        );
+      }
     }
   }
 
@@ -66,7 +92,8 @@ const manifests = readdirSync(packagesDir, { withFileTypes: true })
 const workspaceVersions = Object.fromEntries(
   manifests.filter((manifest) => manifest.name).map((manifest) => [manifest.name, manifest.version]),
 );
-const problems = manifests.flatMap((manifest) => checkManifest(manifest, workspaceVersions));
+const expectedDeps = expectedDependencies(workspaceVersions);
+const problems = manifests.flatMap((manifest) => checkManifest(manifest, workspaceVersions, expectedDeps));
 
 if (problems.length > 0) {
   console.error('Publishable-dependency check failed:\n');

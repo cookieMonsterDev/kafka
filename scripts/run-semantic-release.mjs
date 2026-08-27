@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RELEASE_PACKAGES, resolveReleasePackage, UnknownReleasePackageError } from './lib/resolve-release-package.mjs';
+import { RELEASE_PACKAGES, resolveReleasePackage, UnknownReleasePackageError } from './resolve-release-package.mjs';
 
 const USAGE = `Usage: node scripts/run-semantic-release.mjs <${[...RELEASE_PACKAGES].join('|')}> [--dry-run]`;
 

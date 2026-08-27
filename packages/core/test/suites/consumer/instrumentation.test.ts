@@ -87,8 +87,9 @@ describe('consumer.instrumentation', () => {
     const join = waitForConsumerToJoinGroup(consumer!);
     await consumer!.run({ eachMessage: async () => undefined });
     await join;
+    const endBatchProcess = waitForNextEvent(consumer!, consumer!.events.END_BATCH_PROCESS);
     await producer!.send({ acks: 1, topic: topicName, messages: [{ key: 'k', value: 'v' }] });
-    await waitForNextEvent(consumer!, consumer!.events.END_BATCH_PROCESS);
+    await endBatchProcess;
     await consumer!.stop();
 
     expect(events).toEqual(expect.arrayContaining(['start_batch', 'end_batch', 'commit', 'stop']));

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { discoverConfigFile } from './discover';
@@ -80,6 +80,20 @@ describe('discoverConfigFile — static fixtures', () => {
 
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  it('resolves a relative cwd to an absolute path (pathToFileURL/memoisation downstream require one)', () => {
+    const absolute = join(FIXTURES, 'ladder', 'ts');
+    const relativeCwd = relative(process.cwd(), absolute);
+    // Guard the fixture itself: a relative path that already escaped to absolute (e.g. a
+    // different drive on Windows) would make this test vacuously pass.
+    expect(isAbsolute(relativeCwd)).toBe(false);
+
+    const result = discoverConfigFile({ cwd: relativeCwd, searchParents: false });
+
+    expect(result).toBe(join(absolute, 'kafka.config.ts'));
+    expect(result).not.toBeNull();
+    expect(isAbsolute(result as string)).toBe(true);
   });
 });
 

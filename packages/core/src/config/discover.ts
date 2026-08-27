@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
 
 /**
@@ -80,17 +80,20 @@ export interface DiscoverConfigFileOptions {
 }
 
 /**
- * Finds a `kafka.config.*` / `.config/kafka.*` file starting at `cwd`. The first directory
- * containing any candidate wins entirely — configs at multiple levels are never merged. Search
- * stops (inclusive of the boundary directory itself) at the first `.git`, `pnpm-workspace.yaml`,
- * or workspace `package.json` it finds, or immediately when `searchParents` is `false`.
+ * Finds a `kafka.config.*` / `.config/kafka.*` file starting at `cwd` (resolved against
+ * `process.cwd()` first if relative, so every returned path is absolute — required downstream by
+ * `pathToFileURL` and by the sync loader's per-absolute-path memoisation). The first directory
+ * containing any candidate wins
+ * entirely — configs at multiple levels are never merged. Search stops (inclusive of the boundary
+ * directory itself) at the first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` it
+ * finds, or immediately when `searchParents` is `false`.
  */
 export function discoverConfigFile({
   cwd,
   searchParents = true,
   onDiagnostic = defaultOnConfigDiagnostic,
 }: DiscoverConfigFileOptions): string | null {
-  let dir = cwd;
+  let dir = resolve(cwd);
 
   for (;;) {
     const found = resolveInDirectory(dir, onDiagnostic);

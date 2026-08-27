@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-docs",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Astro documentation site for @cookiemonsterdev/kafka-core, published to GitHub Pages.",
   "type": "module",

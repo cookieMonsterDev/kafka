@@ -113,11 +113,16 @@ that need real codegen. A config file (or anything it imports) using a TypeScrip
 relative import missing its file extension, or `export default` in a `.ts` file whose nearest
 `package.json` doesn't declare `"type": "module"`, fails on that default path.
 
-By default, the loader rescues all three cases: it installs synchronous `require()` hooks
-(`module.registerHooks` + `stripTypeScriptTypes({ mode: 'transform' })`) and retries — once per
-process, and only when the rescue is actually needed, never on the happy path. The rescue is never
-silent: a warning names the file and the exact fix (replace the `enum` with a frozen object; add
-the `.ts` extension).
+By default, **the synchronous loader** (`loadConfigFileSync`, and therefore `loadKafkaConfig`)
+rescues all three cases: it installs synchronous `require()` hooks (`module.registerHooks` +
+`stripTypeScriptTypes({ mode: 'transform' })`) and retries — once per process, and only when the
+rescue is actually needed, never on the happy path. The rescue is never silent: a warning names
+the file and the exact fix (replace the `enum` with a frozen object; add the `.ts` extension).
+
+**`loadConfigFileAsync` does not get this rescue.** `registerHooks` only intercepts CommonJS
+`require()`, so it has no effect on `import()`. A config that needs both async loading (top-level
+`await`, or an async factory) _and_ one of the three rescuable constructs has no working path
+today — restructure it to avoid needing both at once.
 
 Pass `allowTransformFallback: false` to `loadConfigFileSync` / `loadKafkaConfig` for CI: the
 original failure surfaces as an error instead, with the same rewritten, fix-naming message, and

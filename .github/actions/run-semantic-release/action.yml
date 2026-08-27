@@ -1,0 +1,28 @@
+name: Run semantic-release
+description: Runs scripts/run-semantic-release.mjs for one workspace package, honoring dry_run.
+
+inputs:
+  package:
+    description: Package name understood by scripts/run-semantic-release.mjs (core, cli, docs, ...)
+    required: true
+  dry_run:
+    description: "'true' to analyze the next version without publishing, tagging, or opening a sync PR"
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        GITHUB_TOKEN: ${{ github.token }}
+        HUSKY: '0'
+        DRY_RUN: ${{ inputs.dry_run }}
+      run: |
+        set -euo pipefail
+        args=(node scripts/run-semantic-release.mjs "$PACKAGE")
+        if [[ "$DRY_RUN" == "true" ]]; then
+          args+=(--dry-run)
+        fi
+        "${args[@]}"

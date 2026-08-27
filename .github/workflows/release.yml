@@ -63,32 +63,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Install npm CLI with trusted publishing support
-        run: |
-          set -euo pipefail
-          npm install --global npm@11.19.0
-          npm --version
-          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
-            echo "::error::GitHub OIDC is unavailable; check id-token: write permissions"
-            exit 1
-          fi
+      - uses: ./.github/actions/require-npm-oidc
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test
-      - name: Exchange npm OIDC token
-        if: inputs.dry_run != true
-        run: node scripts/exchange-npm-oidc-token.mjs @cookiemonsterdev/kafka-core
-      - name: semantic-release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HUSKY: '0'
-          DRY_RUN: ${{ inputs.dry_run || false }}
-        run: |
-          set -euo pipefail
-          args=(node scripts/run-semantic-release.mjs core)
-          if [[ "$DRY_RUN" == "true" ]]; then
-            args+=(--dry-run)
-          fi
-          "${args[@]}"
+      - uses: ./.github/actions/exchange-npm-oidc-token
+        with:
+          npm_package: '@cookiemonsterdev/kafka-core'
+          dry_run: ${{ inputs.dry_run || false }}
+      - uses: ./.github/actions/run-semantic-release
+        with:
+          package: core
+          dry_run: ${{ inputs.dry_run || false }}
 
   release-cli:
     name: Release @cookiemonsterdev/kafka-cli
@@ -105,38 +90,19 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
-      - name: Fast-forward to origin/master
-        run: |
-          git fetch origin master
-          git checkout master
-          git reset --hard origin/master
+      - uses: ./.github/actions/fast-forward-to-master
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Install npm CLI with trusted publishing support
-        run: |
-          set -euo pipefail
-          npm install --global npm@11.19.0
-          npm --version
-          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
-            echo "::error::GitHub OIDC is unavailable; check id-token: write permissions"
-            exit 1
-          fi
+      - uses: ./.github/actions/require-npm-oidc
       - run: pnpm --filter @cookiemonsterdev/kafka-cli build
       - run: pnpm --filter @cookiemonsterdev/kafka-cli test
-      - name: Exchange npm OIDC token
-        if: inputs.dry_run != true
-        run: node scripts/exchange-npm-oidc-token.mjs @cookiemonsterdev/kafka-cli
-      - name: semantic-release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HUSKY: '0'
-          DRY_RUN: ${{ inputs.dry_run || false }}
-        run: |
-          set -euo pipefail
-          args=(node scripts/run-semantic-release.mjs cli)
-          if [[ "$DRY_RUN" == "true" ]]; then
-            args+=(--dry-run)
-          fi
-          "${args[@]}"
+      - uses: ./.github/actions/exchange-npm-oidc-token
+        with:
+          npm_package: '@cookiemonsterdev/kafka-cli'
+          dry_run: ${{ inputs.dry_run || false }}
+      - uses: ./.github/actions/run-semantic-release
+        with:
+          package: cli
+          dry_run: ${{ inputs.dry_run || false }}
 
   release-docs:
     name: Release @cookiemonsterdev/kafka-docs
@@ -153,27 +119,15 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
-      - name: Fast-forward to origin/master
-        run: |
-          git fetch origin master
-          git checkout master
-          git reset --hard origin/master
+      - uses: ./.github/actions/fast-forward-to-master
       - uses: ./.github/actions/setup-node-pnpm
       - run: pnpm --filter @cookiemonsterdev/kafka-docs... build
         env:
           GITHUB_PAGES: '1'
-      - name: semantic-release
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HUSKY: '0'
-          DRY_RUN: ${{ inputs.dry_run || false }}
-        run: |
-          set -euo pipefail
-          args=(node scripts/run-semantic-release.mjs docs)
-          if [[ "$DRY_RUN" == "true" ]]; then
-            args+=(--dry-run)
-          fi
-          "${args[@]}"
+      - uses: ./.github/actions/run-semantic-release
+        with:
+          package: docs
+          dry_run: ${{ inputs.dry_run || false }}
 
   sync-develop:
     name: Sync versions to develop

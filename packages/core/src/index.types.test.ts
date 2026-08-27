@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { describe, expectTypeOf, it } from 'vitest';
+import type * as IndexModule from './index';
 import {
   CompressionTypes,
   Kafka,
@@ -28,32 +29,32 @@ describe('public types', () => {
       mechanism: 'plain' as const,
       username: 'u',
       password: 'p',
-    }).toMatchTypeOf<SaslOptions>();
+    }).toExtend<SaslOptions>();
 
     expectTypeOf({
       mechanism: 'scram-sha-256' as const,
       username: 'u',
       password: 'p',
-    }).toMatchTypeOf<SaslOptions>();
+    }).toExtend<SaslOptions>();
 
     expectTypeOf({
       mechanism: 'scram-sha-256' as const,
       tokenId: `token-${randomUUID()}`,
       tokenHmac: randomBytes(16),
-    }).toMatchTypeOf<SaslOptions>();
+    }).toExtend<SaslOptions>();
 
     expectTypeOf({
       mechanism: 'scram-sha-512' as const,
       tokenId: `token-${randomUUID()}`,
       tokenHmac: randomBytes(24).toString('base64'),
-    }).toMatchTypeOf<SaslOptions>();
+    }).toExtend<SaslOptions>();
 
     expectTypeOf({
       mechanism: 'gssapi' as const,
       serviceName: 'kafka',
       principal: 'user@EXAMPLE.COM',
       gssProvider: async () => ({ token: Buffer.alloc(0), complete: true }),
-    }).toMatchTypeOf<SaslOptions>();
+    }).toExtend<SaslOptions>();
   });
 
   it('types producer/consumer/admin factories and bigint offsets', () => {
@@ -103,5 +104,16 @@ describe('public types', () => {
     expectTypeOf<Producer>().toHaveProperty('clientInstanceId');
     expectTypeOf<Consumer>().toHaveProperty('clientInstanceId');
     expectTypeOf<Admin>().toHaveProperty('clientInstanceId');
+  });
+
+  it('does not re-export the config surface — that is the ./config subpath only', () => {
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('defineConfig');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadKafkaConfig');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileSync');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileAsync');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('discoverConfigFile');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('mergeConfigLayers');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigError');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigRequiresAsyncError');
   });
 });

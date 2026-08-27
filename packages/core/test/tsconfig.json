@@ -7,5 +7,6 @@
     "declarationMap": false,
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../src/**/*.ts", "../vite.config.ts"]
+  "include": ["./**/*.ts", "../src/**/*.ts", "../vite.config.ts"],
+  "exclude": ["fixtures/**"]
 }

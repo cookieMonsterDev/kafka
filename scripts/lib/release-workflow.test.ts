@@ -12,6 +12,7 @@ function loadWorkflow(relativePath) {
 }
 
 const releaseWorkflow = loadWorkflow('.github/workflows/release.yml');
+const ciWorkflow = loadWorkflow('.github/workflows/ci.yml');
 
 describe('release.yml', () => {
   const changesJob = releaseWorkflow.jobs.changes;
@@ -84,5 +85,22 @@ describe('release.yml', () => {
         expect(hasFastForward).toBe(true);
       }
     }
+  });
+});
+
+describe('ci.yml', () => {
+  const unitJob = ciWorkflow.jobs.unit;
+  const unitRunCommands = unitJob.steps.map((step) => step.run).filter(Boolean);
+
+  it('does not hardcode a package filter for typecheck or test', () => {
+    for (const run of unitRunCommands) {
+      expect(run).not.toMatch(/--filter\s+@cookiemonsterdev\/kafka-core\b/);
+    }
+  });
+
+  it('runs typecheck, test, and test:scripts generically', () => {
+    expect(unitRunCommands.some((run) => /\bpnpm\s+(--filter\s+\S+\s+)?typecheck\b/.test(run))).toBe(true);
+    expect(unitRunCommands).toContain('pnpm test');
+    expect(unitRunCommands).toContain('pnpm test:scripts');
   });
 });

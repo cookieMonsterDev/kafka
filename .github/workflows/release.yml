@@ -9,7 +9,7 @@ on:
       package:
         description: Package to release
         type: choice
-        options: [auto, core, docs, all]
+        options: [auto, core, cli, docs, all]
         default: auto
       dry_run:
         description: Analyze the next version without publishing, tagging, or opening a sync PR
@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       core: ${{ steps.flags.outputs.core }}
+      cli: ${{ steps.flags.outputs.cli }}
       docs: ${{ steps.flags.outputs.docs }}
     steps:
       - uses: actions/checkout@v7
@@ -45,6 +46,8 @@ jobs:
           filters: |
             core:
               - 'packages/core/**'
+            cli:
+              - 'packages/cli/**'
             docs:
               - 'packages/docs/**'
       - id: flags
@@ -52,19 +55,24 @@ jobs:
           EVENT: ${{ github.event_name }}
           PACKAGE: ${{ inputs.package || 'auto' }}
           FILTER_CORE: ${{ steps.filter.outputs.core }}
+          FILTER_CLI: ${{ steps.filter.outputs.cli }}
           FILTER_DOCS: ${{ steps.filter.outputs.docs }}
         run: |
           set -euo pipefail
           core=false
+          cli=false
           docs=false
           if [[ "$EVENT" == "workflow_dispatch" && "$PACKAGE" != "auto" ]]; then
             [[ "$PACKAGE" == "core" || "$PACKAGE" == "all" ]] && core=true
+            [[ "$PACKAGE" == "cli" || "$PACKAGE" == "all" ]] && cli=true
             [[ "$PACKAGE" == "docs" || "$PACKAGE" == "all" ]] && docs=true
           else
             [[ "$FILTER_CORE" == "true" ]] && core=true
+            [[ "$FILTER_CLI" == "true" ]] && cli=true
             [[ "$FILTER_DOCS" == "true" ]] && docs=true
           fi
           echo "core=$core" >> "$GITHUB_OUTPUT"
+          echo "cli=$cli" >> "$GITHUB_OUTPUT"
           echo "docs=$docs" >> "$GITHUB_OUTPUT"
 
   release-core:
@@ -106,14 +114,62 @@ jobs:
           fi
           "${args[@]}"
 
-  release-docs:
-    name: Release @cookiemonsterdev/kafka-docs
+  release-cli:
+    name: Release @cookiemonsterdev/kafka-cli
     needs: [changes, release-core]
     if: >-
       always() &&
       !cancelled() &&
-      needs.changes.outputs.docs == 'true' &&
+      needs.changes.outputs.cli == 'true' &&
       (needs.release-core.result == 'success' || needs.release-core.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - name: Fast-forward to origin/master
+        run: |
+          git fetch origin master
+          git checkout master
+          git reset --hard origin/master
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Install npm CLI with trusted publishing support
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.19.0
+          npm --version
+          if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
+            echo "::error::GitHub OIDC is unavailable; check id-token: write permissions"
+            exit 1
+          fi
+      - run: pnpm --filter @cookiemonsterdev/kafka-cli build
+      - run: pnpm --filter @cookiemonsterdev/kafka-cli test
+      - name: Exchange npm OIDC token
+        if: inputs.dry_run != true
+        run: node scripts/exchange-npm-oidc-token.mjs @cookiemonsterdev/kafka-cli
+      - name: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HUSKY: '0'
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          args=(node scripts/run-semantic-release.mjs cli)
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          "${args[@]}"
+
+  release-docs:
+    name: Release @cookiemonsterdev/kafka-docs
+    needs: [changes, release-cli]
+    if: >-
+      always() &&
+      !cancelled() &&
+      needs.changes.outputs.docs == 'true' &&
+      (needs.release-cli.result == 'success' || needs.release-cli.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -145,11 +201,11 @@ jobs:
 
   sync-develop:
     name: Sync versions to develop
-    needs: [release-core, release-docs]
+    needs: [release-core, release-cli, release-docs]
     if: >-
       always() &&
       inputs.dry_run != true &&
-      (needs.release-core.result == 'success' || needs.release-docs.result == 'success')
+      (needs.release-core.result == 'success' || needs.release-cli.result == 'success' || needs.release-docs.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

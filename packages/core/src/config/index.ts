@@ -16,6 +16,8 @@ export { loadConfigFileAsync } from './load-async';
 export { loadKafkaConfig } from './load';
 export type { LoadKafkaConfigOptions, LoadKafkaConfigResult } from './load';
 
+export { mergeConfigLayers } from './merge';
+
 export type { ConfigErrorTag, KafkaConfigErrorOptions } from './errors';
 export { KafkaConfigError, KafkaConfigRequiresAsyncError } from './errors';
 

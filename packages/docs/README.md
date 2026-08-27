@@ -257,7 +257,7 @@ Examples: `fix(docs): repair internal markdown links`, `feat(docs): add changelo
 
 ```sh
 git checkout master && git pull
-pnpm release:docs:dry-run
+pnpm release:dry-run docs
 # or from this package:
 pnpm release:dry-run
 ```

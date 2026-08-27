@@ -245,18 +245,19 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 
 `develop` is the default integration branch. `master` is the release branch.
 
-| Package                        | What a release does                                                                                           |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `@cookiemonsterdev/kafka-core` | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md` |
-| `@cookiemonsterdev/kafka-cli`  | npm publish (`@cookiemonsterdev/kafka-cli`), GitHub release, tag `cli-vX.Y.Z`, `packages/cli/CHANGELOG.md`    |
-| `@cookiemonsterdev/kafka-docs` | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)         |
+| Package                          | What a release does                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@cookiemonsterdev/kafka-config` | npm publish (`@cookiemonsterdev/kafka-config`), GitHub release, tag `config-vX.Y.Z`, `packages/config/CHANGELOG.md` |
+| `@cookiemonsterdev/kafka-core`   | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md`       |
+| `@cookiemonsterdev/kafka-cli`    | npm publish (`@cookiemonsterdev/kafka-cli`), GitHub release, tag `cli-vX.Y.Z`, `packages/cli/CHANGELOG.md`          |
+| `@cookiemonsterdev/kafka-docs`   | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)               |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
-2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `cli` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
-3. The three release jobs run in a fixed order — core, then cli, then docs — so a package that comes later always builds against the freshly-released version of the ones before it.
+2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
+3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then docs, so a package that comes later always builds against the freshly-released version of the ones before it.
 4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
 5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
-6. **Recovering a half-failed release:** if one package's job fails (say cli), the jobs after it in the chain are skipped, not failed — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.
+6. **Recovering a half-failed release:** if one package fails mid-chain (say cli), `release-chain.mjs` stops there without running the packages after it — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.
 
 ## Adding a package
 
@@ -282,10 +283,19 @@ in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `depend
 `{lz4-lite, snappyjs}` — a guardrail against `@cookiemonsterdev/kafka-core` quietly picking up a
 runtime dependency it can't drop later without a breaking release.
 
-Adding a fourth package needs **no edit to `ci.yml`**: `pnpm typecheck` / `pnpm test` already walk
-every workspace package. It does need one to `release.yml` — add its `paths-filter` entry, its
-`changes` output, and a `release-<name>` job in the chain — because each published package needs
-its own npm OIDC exchange and `publishConfig`.
+Adding a package needs **no edit to `ci.yml`**: `pnpm typecheck` / `pnpm test` already walk every
+workspace package. It also needs **no edit to `release.yml`**: `RELEASE_PACKAGES` in
+`scripts/resolve-release-package.mjs` is the single source of truth for the release chain — add
+one entry (`name`, `npmName`, `publishesToNpm`, and `buildEnv` if the build needs one) at the
+point in publish-dependency order where the new package belongs, and `release.yml` derives its
+`paths-filter` entry and chain step from it automatically. The one place that stays hand-written is
+`workflow_dispatch.inputs.package.options` in `release.yml`, because GitHub requires `choice`
+options as literal YAML — add the new name there too.
+
+A package that publishes to npm and wants to pin its own dependency set (the way
+`@cookiemonsterdev/kafka-core` and `@cookiemonsterdev/kafka-config` do, to keep a policy like
+"stays dependency-free" enforceable in CI) should add itself to `EXPECTED_DEPENDENCIES` in
+`scripts/check-publishable-deps.mjs`.
 
 ## Configuration notes
 

@@ -1,0 +1,17 @@
+name: Fast-forward to master
+description: >
+  Fast-forwards the checkout to origin/master, for a release job that runs after another release
+  job in the chain may have pushed a version-bump commit. Assumes the caller has already checked
+  out the repo with a token that can push to master (actions/checkout persists it for later git
+  commands in the same job).
+
+runs:
+  using: composite
+  steps:
+    - name: Fast-forward to origin/master
+      shell: bash
+      run: |
+        set -euo pipefail
+        git fetch origin master
+        git checkout master
+        git reset --hard origin/master

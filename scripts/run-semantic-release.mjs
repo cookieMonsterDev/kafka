@@ -2,14 +2,23 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { RELEASE_PACKAGES, resolveReleasePackage } from './resolve-release-package.mjs';
 
-const pkg = process.argv[2];
-const extra = process.argv.slice(3);
+const USAGE = `Usage: node scripts/run-semantic-release.mjs <${[...RELEASE_PACKAGES].join('|')}> [--dry-run]`;
 
-if (pkg !== 'core' && pkg !== 'docs') {
-  console.error('Usage: node scripts/run-semantic-release.mjs <core|docs> [--dry-run]');
+// The package name can appear anywhere in argv (pnpm always appends a script's trailing CLI
+// args to the end, so "pnpm release:dry-run core" arrives as ["--dry-run", "core"]). Everything
+// else is forwarded to semantic-release as-is.
+const args = process.argv.slice(2);
+const pkgIndex = args.findIndex((arg) => RELEASE_PACKAGES.has(arg));
+
+if (pkgIndex === -1) {
+  console.error(USAGE);
   process.exit(1);
 }
+
+const pkg = resolveReleasePackage(args[pkgIndex]);
+const extra = [...args.slice(0, pkgIndex), ...args.slice(pkgIndex + 1)];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cwd = path.join(root, 'packages', pkg);
@@ -19,6 +28,11 @@ const child = spawn(process.execPath, [bin, ...extra], {
   cwd,
   stdio: 'inherit',
   env: process.env,
+});
+
+child.on('error', (err) => {
+  console.error(`Failed to start semantic-release for "${pkg}" in ${cwd}: ${err.message}`);
+  process.exit(1);
 });
 
 child.on('exit', (code, signal) => {

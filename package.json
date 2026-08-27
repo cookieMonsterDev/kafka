@@ -20,10 +20,8 @@
     "format:check": "prettier --check .",
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules",
     "prepare": "husky",
-    "release:core": "node scripts/run-semantic-release.mjs core",
-    "release:core:dry-run": "node scripts/run-semantic-release.mjs core --dry-run",
-    "release:docs": "node scripts/run-semantic-release.mjs docs",
-    "release:docs:dry-run": "node scripts/run-semantic-release.mjs docs --dry-run"
+    "release": "node scripts/run-semantic-release.mjs",
+    "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.2",
@@ -43,6 +41,7 @@
     "prettier": "^3.9.6",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
+    "semver": "^7.8.5",
     "typescript-eslint": "^8.67.0"
   }
 }

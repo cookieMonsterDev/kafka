@@ -1,0 +1,19 @@
+name: Require npm OIDC
+description: >
+  Upgrades npm to a version with trusted-publishing (OIDC) support and fails fast if GitHub's
+  OIDC token endpoint isn't available. Run this before a package's build/test, ahead of the
+  actual token exchange, so a missing id-token permission is caught before spending build time.
+
+runs:
+  using: composite
+  steps:
+    - name: Install npm CLI with trusted publishing support
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm install --global npm@11.19.0
+        npm --version
+        if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]]; then
+          echo "::error::GitHub OIDC is unavailable; check id-token: write permissions"
+          exit 1
+        fi

@@ -12,6 +12,8 @@ export default tseslint.config(
       '**/node_modules/**',
       'packages/docs/**',
       'scripts/**',
+      'packages/core/test/fixtures/**',
+      'packages/core/test/helpers/**/*.mjs',
     ],
   },
   js.configs.recommended,

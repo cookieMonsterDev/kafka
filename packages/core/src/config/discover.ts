@@ -7,7 +7,7 @@ import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostic
  * repo family is TypeScript-first and Node runs `.ts` natively, so a stray `kafka.config.js`
  * beside a `.ts` file is almost always a stale build artifact.
  */
-const CANDIDATE_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'] as const;
+export const CANDIDATE_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'] as const;
 
 function topLevelCandidates(dir: string): string[] {
   return CANDIDATE_EXTENSIONS.map((ext) => join(dir, `kafka.config${ext}`));

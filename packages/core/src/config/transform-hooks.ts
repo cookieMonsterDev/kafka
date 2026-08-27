@@ -21,6 +21,10 @@ const stripTypeScriptTypes = stripTypeScriptTypesStripOnly as unknown as (
 
 const TS_URL_PATTERN = /\.[cm]?ts$/;
 const RETRY_EXTENSIONS = ['.ts', '.mts'];
+/** Extensions whose module format Node infers from `package.json#type` — never `.mts`/`.mjs`/`.cts`/`.cjs`, which are pinned by extension. */
+const AMBIGUOUS_EXTENSIONS = new Set(['.ts', '.js']);
+/** Top-level `import`/`export` syntax — the same signal Node's own ambiguous-format auto-detection looks for. */
+const LOOKS_LIKE_ESM_SYNTAX = /^\s*(?:export|import)\b/m;
 
 let installed = false;
 
@@ -52,9 +56,10 @@ function detectModuleFormat(path: string): 'module' | 'commonjs' {
 }
 
 /**
- * Installs synchronous `require()` hooks (Node's `module.registerHooks`) that rescue two cases the
+ * Installs synchronous `require()` hooks (Node's `module.registerHooks`) that rescue cases the
  * default strip-only TypeScript loader cannot handle: a construct that requires an actual
- * transform (a TS `enum`), and a relative import missing its file extension.
+ * transform (a TS `enum`), a relative import missing its file extension, and `export default` in
+ * a `.ts`/`.js` file whose module format resolves to CommonJS despite unambiguously ESM content.
  *
  * Installs **once per process** — `registerHooks` has no `deregister` on this Node version, so
  * this is irreversible for the process's lifetime. Call only from the retry path (see
@@ -97,7 +102,20 @@ export function installConfigTransformHooks(): void {
       const source = readFileSync(path, 'utf8');
       const transformed = stripTypeScriptTypes(source, { mode: 'transform', sourceUrl: url });
 
-      return { format: detectModuleFormat(path), source: transformed, shortCircuit: true };
+      const declaredFormat = detectModuleFormat(path);
+      // A `.ts`/`.js` file's format normally follows `package.json#type`, same as Node's own
+      // resolution. But we only reach this hook after that resolution already failed once, so if
+      // the source unambiguously looks like ESM despite a CommonJS-typed package.json, prefer the
+      // content over the (evidently wrong-for-this-file) declared type — the same override Node's
+      // built-in ambiguous-format auto-detection applies when `type` is left unset entirely.
+      const format =
+        AMBIGUOUS_EXTENSIONS.has(extname(path)) &&
+        declaredFormat === 'commonjs' &&
+        LOOKS_LIKE_ESM_SYNTAX.test(transformed)
+          ? 'module'
+          : declaredFormat;
+
+      return { format, source: transformed, shortCircuit: true };
     },
   });
 }

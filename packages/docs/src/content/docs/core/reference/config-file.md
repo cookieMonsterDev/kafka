@@ -109,10 +109,11 @@ same kind of explicit override, ahead of discovery. A missing explicit path is a
 ## The erasable-TypeScript constraint
 
 Node's built-in `.ts` support only **strips** types by default; it does not transform constructs
-that need real codegen. A config file (or anything it imports) using a TypeScript `enum`, or a
-relative import missing its file extension, fails on that default path.
+that need real codegen. A config file (or anything it imports) using a TypeScript `enum`, a
+relative import missing its file extension, or `export default` in a `.ts` file whose nearest
+`package.json` doesn't declare `"type": "module"`, fails on that default path.
 
-By default, the loader rescues both cases: it installs synchronous `require()` hooks
+By default, the loader rescues all three cases: it installs synchronous `require()` hooks
 (`module.registerHooks` + `stripTypeScriptTypes({ mode: 'transform' })`) and retries — once per
 process, and only when the rescue is actually needed, never on the happy path. The rescue is never
 silent: a warning names the file and the exact fix (replace the `enum` with a frozen object; add

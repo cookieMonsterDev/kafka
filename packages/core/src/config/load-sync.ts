@@ -50,8 +50,10 @@ interface Rescue {
   fix: string;
 }
 
-/** Only the two constructs the transform-hook fallback (D8) can actually rescue. */
-function describeRescue(error: NodeJS.ErrnoException & { url?: string }): Rescue | null {
+const ESM_SYNTAX_UNDER_COMMONJS_PATTERN = /Unexpected token ['"](?:export|import)['"]/;
+
+/** Only the constructs the transform-hook fallback (D8) can actually rescue. */
+function describeRescue(error: Error & { code?: string; url?: string }): Rescue | null {
   if (error.code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
     return {
       detail: 'a TypeScript construct the default strip-only loader cannot handle (e.g. an enum)',
@@ -62,6 +64,12 @@ function describeRescue(error: NodeJS.ErrnoException & { url?: string }): Rescue
     return {
       detail: 'a relative import missing its file extension',
       fix: 'add the ".ts" (or ".mts") extension to the import',
+    };
+  }
+  if (error instanceof SyntaxError && ESM_SYNTAX_UNDER_COMMONJS_PATTERN.test(error.message)) {
+    return {
+      detail: 'ES module syntax (import/export) in a file whose module format resolves to CommonJS',
+      fix: 'rename the file to ".mts" so Node always treats it as ESM, or add "type": "module" to the nearest package.json',
     };
   }
   return null;

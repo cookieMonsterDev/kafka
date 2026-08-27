@@ -29,6 +29,31 @@ describe('loadConfigFileSync', () => {
     expect(config).toEqual({ client: { brokers: ['commonjs-pkg:9092'] } });
   });
 
+  it('rescues "export default" in a .ts file under an untyped package.json (Node auto-detects ESM natively)', () => {
+    const diagnostics: string[] = [];
+
+    const config = loadConfigFileSync(join(FIXTURES, 'esm-export-under-untyped', 'kafka.config.ts'), {
+      onDiagnostic: (d) => diagnostics.push(d.code),
+    });
+
+    expect(config).toEqual({ client: { brokers: ['esm-export-untyped:9092'] } });
+    expect(diagnostics).not.toContain('config.transform-fallback');
+  });
+
+  it('rescues "export default" in a .ts file under "type": "commonjs" (D8 fallback)', () => {
+    const diagnostics: { code: string; detail?: unknown }[] = [];
+    const path = join(FIXTURES, 'esm-export-under-commonjs-typed', 'kafka.config.ts');
+
+    const config = loadConfigFileSync(path, {
+      onDiagnostic: (d) => diagnostics.push({ code: d.code, detail: d.detail }),
+    });
+
+    expect(config).toEqual({ client: { brokers: ['esm-export-cjs-typed:9092'] } });
+    const fallback = diagnostics.find((d) => d.code === 'config.transform-fallback');
+    expect(fallback).toBeDefined();
+    expect(fallback?.detail).toContain('ES module syntax');
+  });
+
   it('loads a path containing a space and a "#" via pathToFileURL, never string concatenation', () => {
     const config = loadConfigFileSync(join(FIXTURES, 'weird path #1', 'kafka.config.ts'));
 

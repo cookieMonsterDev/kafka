@@ -31,18 +31,17 @@ jobs:
     name: Detect packages
     runs-on: ubuntu-latest
     outputs:
-      core: ${{ steps.flags.outputs.core }}
-      cli: ${{ steps.flags.outputs.cli }}
-      docs: ${{ steps.flags.outputs.docs }}
+      core: ${{ fromJSON(steps.detect.outputs.flags).core }}
+      cli: ${{ fromJSON(steps.detect.outputs.flags).cli }}
+      docs: ${{ fromJSON(steps.detect.outputs.flags).docs }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: dorny/paths-filter@v4
-        id: filter
-        if: github.event_name == 'push' || inputs.package == 'auto'
+      - uses: ./.github/actions/detect-release-packages
+        id: detect
         with:
-          base: ${{ github.ref }}
+          packages: 'core cli docs'
           filters: |
             core:
               - 'packages/core/**'
@@ -50,33 +49,7 @@ jobs:
               - 'packages/cli/**'
             docs:
               - 'packages/docs/**'
-      - id: flags
-        env:
-          EVENT: ${{ github.event_name }}
-          PACKAGE: ${{ inputs.package || 'auto' }}
-          FILTER_CORE: ${{ steps.filter.outputs.core }}
-          FILTER_CLI: ${{ steps.filter.outputs.cli }}
-          FILTER_DOCS: ${{ steps.filter.outputs.docs }}
-        run: |
-          set -euo pipefail
-          core=false
-          cli=false
-          docs=false
-          if [[ "$EVENT" == "workflow_dispatch" && "$PACKAGE" != "auto" ]]; then
-            # paths-filter is skipped on this branch, so a manually chosen package that
-            # doesn't exist yet (e.g. `cli` before the T4 scaffold lands) must be gated
-            # here too — otherwise the job below runs instead of being skipped.
-            [[ ( "$PACKAGE" == "core" || "$PACKAGE" == "all" ) && -f packages/core/package.json ]] && core=true
-            [[ ( "$PACKAGE" == "cli" || "$PACKAGE" == "all" ) && -f packages/cli/package.json ]] && cli=true
-            [[ ( "$PACKAGE" == "docs" || "$PACKAGE" == "all" ) && -f packages/docs/package.json ]] && docs=true
-          else
-            [[ "$FILTER_CORE" == "true" ]] && core=true
-            [[ "$FILTER_CLI" == "true" ]] && cli=true
-            [[ "$FILTER_DOCS" == "true" ]] && docs=true
-          fi
-          echo "core=$core" >> "$GITHUB_OUTPUT"
-          echo "cli=$cli" >> "$GITHUB_OUTPUT"
-          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+          dispatch_package: ${{ inputs.package || 'auto' }}
 
   release-core:
     name: Release @cookiemonsterdev/kafka-core

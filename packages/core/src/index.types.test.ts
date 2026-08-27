@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { describe, expectTypeOf, it } from 'vitest';
+import type * as IndexModule from './index';
 import {
   CompressionTypes,
   Kafka,
@@ -103,5 +104,16 @@ describe('public types', () => {
     expectTypeOf<Producer>().toHaveProperty('clientInstanceId');
     expectTypeOf<Consumer>().toHaveProperty('clientInstanceId');
     expectTypeOf<Admin>().toHaveProperty('clientInstanceId');
+  });
+
+  it('does not re-export the config surface — that is the ./config subpath only', () => {
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('defineConfig');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadKafkaConfig');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileSync');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileAsync');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('discoverConfigFile');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('mergeConfigLayers');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigError');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigRequiresAsyncError');
   });
 });

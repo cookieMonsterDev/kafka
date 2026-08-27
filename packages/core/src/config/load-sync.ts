@@ -17,7 +17,7 @@ const cache = new Map<string, KafkaFileConfig>();
  * strict caller could silently receive an earlier lenient call's rescued result.
  */
 function cacheKey(path: string, allowTransformFallback: boolean): string {
-  return `${allowTransformFallback} ${path}`;
+  return `${allowTransformFallback}:${path}`;
 }
 
 function parseJson(path: string): unknown {

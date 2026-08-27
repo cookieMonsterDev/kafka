@@ -112,5 +112,47 @@ describe('loadConfigFileSync', () => {
       expect(first).toEqual({ client: { brokers: ['call-1:9092'] } });
       expect(second).toBe(first);
     });
+
+    it('gives allowTransformFallback: true and false independent cache entries for the same path', () => {
+      // Uses a call-counting factory with no rescuable construct at all (loads via the plain
+      // native path either way), so this isolates the cache key itself from whether the
+      // transform-hook fallback happens to already be installed elsewhere in the process (see the
+      // "known limitation" test below for that separate concern).
+      const path = join(FIXTURES, 'cache-key-factory', 'kafka.config.ts');
+
+      const lenient1 = loadConfigFileSync(path);
+      const lenient2 = loadConfigFileSync(path);
+      const strict1 = loadConfigFileSync(path, { allowTransformFallback: false });
+      const strict2 = loadConfigFileSync(path, { allowTransformFallback: false });
+
+      expect(lenient1).toEqual({ client: { brokers: ['cache-key-call-1:9092'] } });
+      expect(lenient2).toBe(lenient1);
+      // A single cache keyed only by `path` would return `lenient1` here instead of invoking the
+      // factory again — proving the two options get independent cache entries.
+      expect(strict1).toEqual({ client: { brokers: ['cache-key-call-2:9092'] } });
+      expect(strict1).not.toBe(lenient1);
+      expect(strict2).toBe(strict1);
+    });
+
+    it('known limitation: once the transform fallback is installed anywhere in the process, a later strict call for a rescuable file no longer throws', () => {
+      // `module.registerHooks` (D8) has no `deregister` on this Node version (see
+      // transform-hooks.ts) — once any earlier lenient load anywhere in the process installs the
+      // fallback hooks, `require()` itself silently rescues a rescuable file on every later
+      // attempt, including one made with `allowTransformFallback: false`. The cache-key fix above
+      // stops a *stale cached value* from masking this, but it cannot make `require()` fail again
+      // once Node's global hook state has already changed — that would need `registerHooks`
+      // deregistration, which does not exist. Pinned here so this residual behavior is an explicit,
+      // tested contract instead of a silent surprise. A process that needs the CI guarantee to be
+      // airtight must set `allowTransformFallback: false` for every call from process start, never
+      // mixing it with a lenient call for a potentially-rescuable file in the same process.
+      const path = join(FIXTURES, 'cache-key-enum', 'kafka.config.ts');
+
+      const lenient = loadConfigFileSync(path);
+      expect(lenient).toEqual({ client: { brokers: ['cache-key-enum:info'] } });
+
+      // Would ideally throw; documented here as a known limitation, not asserted as a bug.
+      const strict = loadConfigFileSync(path, { allowTransformFallback: false });
+      expect(strict).toEqual(lenient);
+    });
   });
 });

@@ -121,7 +121,13 @@ the `.ts` extension).
 
 Pass `allowTransformFallback: false` to `loadConfigFileSync` / `loadKafkaConfig` for CI: the
 original failure surfaces as an error instead, with the same rewritten, fix-naming message, and
-the hooks are never installed.
+the hooks are never installed — **as long as no earlier call in the same process already installed
+them.** `module.registerHooks` has no `deregister`, so once any earlier lenient call (the default)
+rescues a file, every later call in that process — even one passing
+`allowTransformFallback: false` — can silently succeed against a rescuable file too, because
+`require()` itself now transparently rescues it. For the guarantee to be airtight, set
+`allowTransformFallback: false` on every call from the start of the process; don't mix it with a
+lenient call against a potentially-rescuable file earlier in the same run.
 
 Prefer avoiding the fallback where you can — a rescued config loads through this loader but not
 under `node kafka.config.ts` or `tsx` directly, so this keeps your config file portable:

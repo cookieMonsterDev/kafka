@@ -49,6 +49,6 @@ runs:
           elif [[ -n "${CHANGES:-}" ]] && jq -e --arg n "$name" 'index($n) != null' <<<"$CHANGES" >/dev/null; then
             value=true
           fi
-          result=$(jq --arg k "$name" --argjson v "$value" '. + {($k): $v}' <<<"$result")
+          result=$(jq -c --arg k "$name" --argjson v "$value" '. + {($k): $v}' <<<"$result")
         done
         echo "flags=$result" >> "$GITHUB_OUTPUT"

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 
 const WORKSPACE_SCOPE = '@cookiemonsterdev/';
@@ -9,9 +9,9 @@ const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependen
 
 // D1's extraction trigger: the config loader must stay dependency-free, or move to its own
 // package. Bumping this list is a deliberate decision, not a drive-by dependency add.
-export const CORE_REQUIRED_DEPENDENCIES = ['lz4-lite', 'snappyjs'];
+const CORE_REQUIRED_DEPENDENCIES = ['lz4-lite', 'snappyjs'];
 
-export function checkManifest(manifest, workspaceVersions = {}) {
+function checkManifest(manifest, workspaceVersions) {
   const problems = [];
   const name = manifest.name ?? '<unnamed package>';
 
@@ -56,36 +56,22 @@ export function checkManifest(manifest, workspaceVersions = {}) {
   return problems;
 }
 
-export function checkWorkspace(manifests) {
-  const workspaceVersions = Object.fromEntries(
-    manifests.filter((manifest) => manifest.name).map((manifest) => [manifest.name, manifest.version]),
-  );
-  return manifests.flatMap((manifest) => checkManifest(manifest, workspaceVersions));
-}
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const packagesDir = path.join(root, 'packages');
+const manifests = readdirSync(packagesDir, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => path.join(packagesDir, entry.name, 'package.json'))
+  .map((file) => JSON.parse(readFileSync(file, 'utf8')));
 
-export function readWorkspaceManifests(root) {
-  const packagesDir = path.join(root, 'packages');
-  return readdirSync(packagesDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(packagesDir, entry.name, 'package.json'))
-    .map((file) => JSON.parse(readFileSync(file, 'utf8')));
-}
+const workspaceVersions = Object.fromEntries(
+  manifests.filter((manifest) => manifest.name).map((manifest) => [manifest.name, manifest.version]),
+);
+const problems = manifests.flatMap((manifest) => checkManifest(manifest, workspaceVersions));
 
-function main() {
-  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const manifests = readWorkspaceManifests(root);
-  const problems = checkWorkspace(manifests);
-
-  if (problems.length > 0) {
-    console.error('Publishable-dependency check failed:\n');
-    for (const problem of problems) console.error(`  - ${problem}`);
-    process.exitCode = 1;
-    return;
-  }
-
+if (problems.length > 0) {
+  console.error('Publishable-dependency check failed:\n');
+  for (const problem of problems) console.error(`  - ${problem}`);
+  process.exitCode = 1;
+} else {
   console.log(`Publishable-dependency check passed for ${manifests.length} package(s).`);
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  main();
 }

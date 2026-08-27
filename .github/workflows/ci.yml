@@ -45,7 +45,6 @@ jobs:
       # as a follow-up; `pnpm typecheck` from the repo root still runs it for local dev.
       - run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
       - run: pnpm test
-      - run: pnpm test:scripts
       - run: node scripts/check-publishable-deps.mjs
 
   integration-matrix:

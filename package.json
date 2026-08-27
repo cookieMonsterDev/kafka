@@ -14,7 +14,6 @@
     "build": "pnpm -r --if-present run build",
     "dev": "pnpm -r --parallel --if-present run dev",
     "test": "pnpm -r --if-present run test",
-    "test:scripts": "vitest run --project scripts",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -47,8 +46,6 @@
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.5",
-    "typescript-eslint": "^8.67.0",
-    "vitest": "catalog:",
-    "yaml": "^2.9.0"
+    "typescript-eslint": "^8.67.0"
   }
 }

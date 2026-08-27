@@ -59,6 +59,14 @@ To depend on another workspace package, use the `workspace:` protocol:
 pnpm --filter @cookiemonsterdev/kafka-<name> add @cookiemonsterdev/kafka-core --workspace
 ```
 
+**Exception: a package that publishes to npm.** `npm publish` ships a `workspace:` specifier
+verbatim, producing an uninstallable tarball — `pnpm pack` rewrites it, but the release jobs run
+`npm publish`. Use a plain semver range instead (see [Adding a package](#adding-a-package)).
+`saveWorkspaceProtocol: rolling` in `pnpm-workspace.yaml` will rewrite that range back to
+`workspace:^` the next time you `pnpm --filter <pkg> add` — undo that by hand before committing.
+`scripts/check-publishable-deps.mjs` (CI and pre-commit) catches a `workspace:` specifier that
+slips through.
+
 ## Branch names
 
 Branch from **`develop`**. Use kebab-case, with a Conventional Commit **type** as the prefix:
@@ -240,12 +248,15 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 | Package                        | What a release does                                                                                           |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | `@cookiemonsterdev/kafka-core` | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md` |
+| `@cookiemonsterdev/kafka-cli`  | npm publish (`@cookiemonsterdev/kafka-cli`), GitHub release, tag `cli-vX.Y.Z`, `packages/cli/CHANGELOG.md`    |
 | `@cookiemonsterdev/kafka-docs` | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)         |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
-2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
-3. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
-4. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
+2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `core` / `cli` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
+3. The three release jobs run in a fixed order — core, then cli, then docs — so a package that comes later always builds against the freshly-released version of the ones before it.
+4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
+5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
+6. **Recovering a half-failed release:** if one package's job fails (say cli), the jobs after it in the chain are skipped, not failed — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.
 
 ## Adding a package
 
@@ -253,6 +264,28 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 2. Run `pnpm install`.
 
 The `packages/*` glob in `pnpm-workspace.yaml` picks it up.
+
+**If the package will be published to npm** (i.e. not `private: true`), every dependency on
+another workspace package must use a plain semver range, never `workspace:`:
+
+```json
+"dependencies": {
+  "@cookiemonsterdev/kafka-core": "^2.0.0"
+}
+```
+
+`npm publish` — what the release jobs run — ships `workspace:` specifiers verbatim, which makes
+the published tarball uninstallable; `pnpm pack` alone would rewrite it, but that's not what
+release uses. `linkWorkspacePackages: true` still links the local package during development, so
+nothing about the day-to-day workflow changes. `scripts/check-publishable-deps.mjs` enforces this
+in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` to exactly
+`{lz4-lite, snappyjs}` — a guardrail against `@cookiemonsterdev/kafka-core` quietly picking up a
+runtime dependency it can't drop later without a breaking release.
+
+Adding a fourth package needs **no edit to `ci.yml`**: `pnpm typecheck` / `pnpm test` already walk
+every workspace package. It does need one to `release.yml` — add its `paths-filter` entry, its
+`changes` output, and a `release-<name>` job in the chain — because each published package needs
+its own npm OIDC exchange and `publishConfig`.
 
 ## Configuration notes
 

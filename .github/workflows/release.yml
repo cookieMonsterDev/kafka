@@ -63,9 +63,12 @@ jobs:
           cli=false
           docs=false
           if [[ "$EVENT" == "workflow_dispatch" && "$PACKAGE" != "auto" ]]; then
-            [[ "$PACKAGE" == "core" || "$PACKAGE" == "all" ]] && core=true
-            [[ "$PACKAGE" == "cli" || "$PACKAGE" == "all" ]] && cli=true
-            [[ "$PACKAGE" == "docs" || "$PACKAGE" == "all" ]] && docs=true
+            # paths-filter is skipped on this branch, so a manually chosen package that
+            # doesn't exist yet (e.g. `cli` before the T4 scaffold lands) must be gated
+            # here too — otherwise the job below runs instead of being skipped.
+            [[ ( "$PACKAGE" == "core" || "$PACKAGE" == "all" ) && -f packages/core/package.json ]] && core=true
+            [[ ( "$PACKAGE" == "cli" || "$PACKAGE" == "all" ) && -f packages/cli/package.json ]] && cli=true
+            [[ ( "$PACKAGE" == "docs" || "$PACKAGE" == "all" ) && -f packages/docs/package.json ]] && docs=true
           else
             [[ "$FILTER_CORE" == "true" ]] && core=true
             [[ "$FILTER_CLI" == "true" ]] && cli=true

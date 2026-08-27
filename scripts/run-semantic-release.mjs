@@ -27,6 +27,11 @@ const child = spawn(process.execPath, [bin, ...extra], {
   env: process.env,
 });
 
+child.on('error', (err) => {
+  console.error(`Failed to start semantic-release for "${pkg}" in ${cwd}: ${err.message}`);
+  process.exit(1);
+});
+
 child.on('exit', (code, signal) => {
   if (signal) {
     process.exit(1);

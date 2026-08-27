@@ -34,6 +34,14 @@ describe('release.yml', () => {
     expect(releaseWorkflow.jobs).toHaveProperty(`release-${pkg}`);
   });
 
+  it.each([...RELEASE_PACKAGES])('gates a manually dispatched %s release on the package existing on disk', (pkg) => {
+    // workflow_dispatch with an explicit `package` bypasses dorny/paths-filter (see the
+    // step's `if:`), so a package chosen before it exists (e.g. cli before T4 scaffolds
+    // packages/cli) must be re-gated here — otherwise the job runs instead of skipping.
+    const flagsStep = changesJob.steps.find((step) => step.id === 'flags');
+    expect(flagsStep.run).toMatch(new RegExp(`-f packages/${pkg}/package\\.json`));
+  });
+
   const releaseJobNames = Object.keys(releaseWorkflow.jobs).filter((name) => name.startsWith('release-'));
 
   it('the release jobs form a single total order', () => {

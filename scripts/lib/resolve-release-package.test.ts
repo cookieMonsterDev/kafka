@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -37,5 +38,13 @@ describe('run-semantic-release.mjs usage', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toMatch(/^Usage: node scripts\/run-semantic-release\.mjs </);
+  });
+
+  it('handles a spawn failure (e.g. a package directory that does not exist yet) cleanly', () => {
+    // A guard against regressing to an unhandled `spawn` 'error' event, which crashes the
+    // process with a raw stack trace instead of a clean, actionable message — reachable in
+    // practice whenever a valid package name (e.g. cli) has no packages/<name> directory yet.
+    const source = readFileSync(runner, 'utf8');
+    expect(source).toMatch(/child\.on\(\s*['"]error['"]/);
   });
 });

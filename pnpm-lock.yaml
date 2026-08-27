@@ -80,6 +80,9 @@ importers:
       semantic-release-monorepo:
         specifier: ^8.0.2
         version: 8.0.2(semantic-release@25.0.9(supports-color@7.2.0)(typescript@6.0.3))(supports-color@7.2.0)
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       typescript-eslint:
         specifier: ^8.67.0
         version: 8.67.0(eslint@10.8.1(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@6.0.3)

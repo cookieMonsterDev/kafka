@@ -46,6 +46,7 @@
     "prettier": "^3.9.6",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
+    "semver": "^7.8.5",
     "typescript-eslint": "^8.67.0",
     "vitest": "catalog:",
     "yaml": "^2.9.0"

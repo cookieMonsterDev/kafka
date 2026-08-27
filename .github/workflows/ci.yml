@@ -46,6 +46,7 @@ jobs:
       - run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
       - run: pnpm test
       - run: pnpm test:scripts
+      - run: node scripts/check-publishable-deps.mjs
 
   integration-matrix:
     name: Integration matrix

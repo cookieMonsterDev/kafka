@@ -9,7 +9,7 @@ const kafkaFileConfig = createDefineConfig<KafkaFileConfig>({ objectSections: KN
  * Validates the known top-level sections of a {@link KafkaFileConfig}. Unknown keys pass through
  * untouched — an older core must not reject a config file written for a newer CLI. Also the
  * `assertValid` this package's own {@link import('./load').loadKafkaConfig} injects into the
- * generic loader (D20).
+ * generic loader.
  */
 export const assertValidKafkaFileConfig = kafkaFileConfig.assertValid;
 

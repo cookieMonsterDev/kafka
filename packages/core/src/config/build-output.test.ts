@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -50,14 +50,21 @@ describe('the ./config subpath build output', () => {
   });
 
   it('imports @cookiemonsterdev/kafka-config as a bare specifier, with no inlined copy', () => {
-    const source = readFileSync(join(DIST, 'config', 'index.js'), 'utf8');
+    const configDir = join(DIST, 'config');
+    const sources = readdirSync(configDir)
+      .filter((file) => file.endsWith('.js'))
+      .map((file) => readFileSync(join(configDir, file), 'utf8'));
 
-    expect(source).toMatch(/from\s*['"]@cookiemonsterdev\/kafka-config['"]/);
+    expect(sources.some((source) => /from\s*['"]@cookiemonsterdev\/kafka-config['"]/.test(source))).toBe(true);
 
-    // "No inlined copy": none of the machinery's own source strings (present only if vite bundled
-    // the dependency's code into this file instead of leaving it external) show up here.
-    expect(source).not.toContain('kafka config file');
-    expect(source).not.toContain('registerHooks');
+    // "No inlined copy": these strings are specific to the dependency's own internals (the
+    // transform-hook rescue), not anything core's own config/*.ts files happen to write
+    // themselves — present only if vite bundled the dependency's code in instead of leaving it
+    // external.
+    for (const source of sources) {
+      expect(source).not.toContain("mode: 'transform'");
+      expect(source).not.toContain('registerHooks');
+    }
   });
 
   it('resolves and exposes the documented config API from a scratch import', async () => {
@@ -65,11 +72,16 @@ describe('the ./config subpath build output', () => {
 
     expect(typeof mod.defineConfig).toBe('function');
     expect(typeof mod.loadKafkaConfig).toBe('function');
-    expect(typeof mod.loadConfigFileSync).toBe('function');
-    expect(typeof mod.loadConfigFileAsync).toBe('function');
-    expect(typeof mod.discoverConfigFile).toBe('function');
-    expect(typeof mod.mergeConfigLayers).toBe('function');
-    expect(typeof mod.KafkaConfigError).toBe('function');
-    expect(typeof mod.KafkaConfigRequiresAsyncError).toBe('function');
+  });
+
+  it('does not re-export the generic loader machinery — import that from @cookiemonsterdev/kafka-config', async () => {
+    const mod: Record<string, unknown> = await import(pathToFileURL(join(DIST, 'config', 'index.js')).href);
+
+    expect(mod.loadConfigFileSync).toBeUndefined();
+    expect(mod.loadConfigFileAsync).toBeUndefined();
+    expect(mod.discoverConfigFile).toBeUndefined();
+    expect(mod.mergeConfigLayers).toBeUndefined();
+    expect(mod.KafkaConfigError).toBeUndefined();
+    expect(mod.KafkaConfigRequiresAsyncError).toBeUndefined();
   });
 });

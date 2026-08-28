@@ -6,6 +6,8 @@ import {
   KafkaAlterPartitionReassignmentsError,
   KafkaConnectionClosedError,
   KafkaConnectionError,
+  KafkaConfigError,
+  KafkaConfigRequiresAsyncError,
   KafkaCreateTopicError,
   KafkaDeleteGroupsError,
   KafkaDeleteTopicRecordsError,
@@ -188,6 +190,36 @@ describe('errors', () => {
     expect(new KafkaNoBrokerAvailableError().message).toBe('No broker available');
   });
 
+  describe('KafkaConfigError', () => {
+    it('carries a tag, an optional path, and is non-retriable', () => {
+      const cause = new Error('root cause');
+      const error = new KafkaConfigError('MissingBrokers', 'no brokers found', { path: '/x/kafka.config.ts', cause });
+
+      expect(error).toBeInstanceOf(KafkaNonRetriableError);
+      expect(error.name).toBe('KafkaConfigError');
+      expect(error.tag).toBe('MissingBrokers');
+      expect(error.path).toBe('/x/kafka.config.ts');
+      expect(error.retriable).toBe(false);
+      expect(error.cause).toBe(cause);
+    });
+
+    it('leaves path undefined when none is given', () => {
+      expect(new KafkaConfigError('ConfigFileNotFound', 'not found').path).toBeUndefined();
+    });
+  });
+
+  describe('KafkaConfigRequiresAsyncError', () => {
+    it('names the path and points at Kafka.fromConfig', () => {
+      const error = new KafkaConfigRequiresAsyncError('/x/kafka.config.ts');
+
+      expect(error).toBeInstanceOf(KafkaNonRetriableError);
+      expect(error.name).toBe('KafkaConfigRequiresAsyncError');
+      expect(error.path).toBe('/x/kafka.config.ts');
+      expect(error.message).toContain('/x/kafka.config.ts');
+      expect(error.message).toContain('Kafka.fromConfig()');
+    });
+  });
+
   describe('isRebalancing', () => {
     it('is true for the three group-rebalance protocol types', () => {
       expect(isRebalancing({ type: 'REBALANCE_IN_PROGRESS' })).toBe(true);
@@ -205,6 +237,7 @@ describe('errors', () => {
     it('is true only for the KafkaError hierarchy, not sibling Error subclasses', () => {
       expect(isKafkaError(new KafkaError('x'))).toBe(true);
       expect(isKafkaError(new KafkaNonRetriableError('x'))).toBe(true);
+      expect(isKafkaError(new KafkaConfigError('MissingBrokers', 'x'))).toBe(true);
       expect(isKafkaError(new Error('x'))).toBe(false);
       expect(isKafkaError(new KafkaAggregateError('x', []))).toBe(false);
       expect(isKafkaError(new KafkaFetcherRebalanceError())).toBe(false);

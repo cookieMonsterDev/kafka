@@ -7,6 +7,23 @@
  */
 export { Kafka } from './client';
 
+export {
+  defineConfig,
+  loadKafkaConfig,
+  loadKafkaConfigAsync,
+  resolveKafkaConfig,
+  resolveKafkaConfigAsync,
+} from './config/index';
+export type {
+  ConfigKeySource,
+  KafkaConfigSource,
+  KafkaFileConfig,
+  LoadKafkaConfigOptions,
+  ResolvedKafkaConfig,
+  ResolveKafkaConfigOptions,
+  ResolveKafkaConfigResult,
+} from './config/index';
+
 import { MemberAssignment, MemberMetadata } from './consumer/assigner-protocol';
 import { cooperativeSticky, range, roundRobin, sticky } from './consumer/assigners/index';
 import { DefaultPartitioner, LegacyPartitioner, StickyPartitioner } from './producer/partitioners/index';
@@ -74,7 +91,10 @@ export {
   KafkaNoBrokerAvailableError,
   KafkaAlterPartitionReassignmentsError,
   KafkaUpdateFeaturesError,
+  KafkaConfigError,
+  KafkaConfigRequiresAsyncError,
 } from './errors';
+export type { KafkaConfigErrorOptions, KafkaConfigErrorTag } from './errors';
 
 export type {
   Admin,

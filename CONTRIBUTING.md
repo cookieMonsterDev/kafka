@@ -280,8 +280,9 @@ the published tarball uninstallable; `pnpm pack` alone would rewrite it, but tha
 release uses. `linkWorkspacePackages: true` still links the local package during development, so
 nothing about the day-to-day workflow changes. `scripts/check-publishable-deps.mjs` enforces this
 in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` to exactly
-`{lz4-lite, snappyjs}` — a guardrail against `@cookiemonsterdev/kafka-core` quietly picking up a
-runtime dependency it can't drop later without a breaking release.
+`{lz4-lite, snappyjs, @cookiemonsterdev/kafka-config}` — a guardrail against
+`@cookiemonsterdev/kafka-core` quietly picking up a runtime dependency it can't drop later without
+a breaking release.
 
 Adding a package needs **no edit to `ci.yml`**: `pnpm typecheck` / `pnpm test` already walk every
 workspace package. It also needs **no edit to `release.yml`**: `RELEASE_PACKAGES` in

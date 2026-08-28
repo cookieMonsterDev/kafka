@@ -107,6 +107,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@cookiemonsterdev/kafka-config':
+        specifier: ^1.0.0
+        version: link:../config
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1

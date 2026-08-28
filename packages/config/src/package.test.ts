@@ -16,9 +16,9 @@ describe('package.json', () => {
     expect(packageJson.engines).toEqual({ node: '>=24.0.0' });
   });
 
-  // D1a's trigger: if the loader ever needs a runtime dependency, extract it to an optional peer
-  // instead (see D1a's "inverted trigger" and D18a). `scripts/check-publishable-deps.mjs` checks
-  // this repo-wide too; this test pins it in-package so it fails fast during local development.
+  // If the loader ever needs a runtime dependency, that's a real design decision, not a drive-by
+  // `pnpm add`. `scripts/check-publishable-deps.mjs` checks this repo-wide too; this test pins it
+  // in-package so it fails fast during local development.
   it('declares no dependencies, peerDependencies, or optionalDependencies', () => {
     expect(packageJson.dependencies).toBeUndefined();
     expect(packageJson.peerDependencies).toBeUndefined();

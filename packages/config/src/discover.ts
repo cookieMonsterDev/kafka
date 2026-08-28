@@ -76,8 +76,8 @@ export interface DiscoverConfigFileOptions {
   cwd: string;
   /**
    * Base name for the candidate ladder: `<name>.config.*` at the top level, `.config/<name>.*`
-   * nested. Default `'kafka'`. A future consumer (e.g. `kafka-studio`) passes its own name to
-   * discover `studio.config.ts` instead.
+   * nested. Default `'kafka'`. A different consumer passes its own name to discover
+   * `<name>.config.ts` instead.
    */
   name?: string;
   /** Walk upward toward the filesystem root, stopping at a workspace boundary. Default `true`. */

@@ -23,12 +23,13 @@ interface DriverResult {
 }
 
 /**
- * D18a rests on duplication across two copies of this loader being harmless. This is what proves
- * it — never just assumed — by loading the built package twice from two distinct resolved paths
- * (the original `dist/` and a filesystem copy of it, so Node's module registry, keyed by resolved
- * specifier, creates two genuinely separate instances) inside one subprocess.
+ * A consumer's dependency tree can end up with two installed copies of this package (a mismatched
+ * version somewhere else in the tree). This is what proves that's harmless — never just assumed —
+ * by loading the built package twice from two distinct resolved paths (the original `dist/` and a
+ * filesystem copy of it, so Node's module registry, keyed by resolved specifier, creates two
+ * genuinely separate instances) inside one subprocess.
  */
-describe('two copies of the loader are harmless (D18a, Risk #15)', () => {
+describe('two copies of the loader are harmless', () => {
   let copyBRoot: string;
 
   beforeAll(async () => {

@@ -194,13 +194,11 @@ describe('discoverConfigFile — dynamic trees', () => {
 
   it('name: a different consumer discovers its own <name>.config.* ladder', () => {
     const root = makeTempDir();
-    writeFileSync(join(root, 'studio.config.ts'), 'export default {};\n');
-    // A kafka.config.* in the same directory must not interfere with a "studio" search.
+    writeFileSync(join(root, 'app.config.ts'), 'export default {};\n');
+    // A kafka.config.* in the same directory must not interfere with an "app" search.
     writeFileSync(join(root, 'kafka.config.ts'), 'export default {};\n');
 
-    expect(discoverConfigFile({ cwd: root, name: 'studio', searchParents: false })).toBe(
-      join(root, 'studio.config.ts'),
-    );
+    expect(discoverConfigFile({ cwd: root, name: 'app', searchParents: false })).toBe(join(root, 'app.config.ts'));
   });
 
   it('name defaults to "kafka" when omitted', () => {

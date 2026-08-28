@@ -33,8 +33,8 @@ export interface DefineConfigFactory<T extends Record<string, unknown>> {
 
 /**
  * Builds a `defineConfig` + `assertValid` pair scoped to one set of known object sections. Each
- * consumer (core's five Kafka sections today, a future `kafka-studio` section set) gets its own
- * factory call instead of this package hardcoding any consumer's shape.
+ * consumer (core's five Kafka sections, or any other set) gets its own factory call instead of
+ * this package hardcoding any consumer's shape.
  */
 export function createDefineConfig<T extends Record<string, unknown> = Record<string, unknown>>(
   options: CreateDefineConfigOptions,

@@ -1,6 +1,6 @@
 /**
- * Subprocess driver for the duplicate-instances test (D18a / Risk #15). Runs in a fresh process
- * for the same reason `run-load-sync.mjs` does: `installConfigTransformHooks()` calls
+ * Subprocess driver for the duplicate-instances test. Runs in a fresh process for the same reason
+ * `run-load-sync.mjs` does: `installConfigTransformHooks()` calls
  * `module.registerHooks`, which has no `deregister` on this Node version, so calling it here must
  * never leak into the shared vitest worker.
  *

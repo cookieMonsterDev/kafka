@@ -5,10 +5,9 @@ TypeScript transform rescue, layer merging, and diagnostics. It has no knowledge
 any other specific consumer — that knowledge is injected via four extension points (below).
 
 `@cookiemonsterdev/kafka-core` builds its `KafkaFileConfig` / `defineConfig` / `loadKafkaConfig`
-facade on top of this package; `@cookiemonsterdev/kafka-cli` reads the same config file through
-that facade. See
-[the config-file reference](https://cookiemonsterdev.github.io/kafka/core/reference/config-file/)
-for the full documentation, including how a future consumer builds its own facade on this loader.
+facade on top of this package. See
+[the docs](https://cookiemonsterdev.github.io/kafka/config/reference/api/) for the full API
+reference.
 
 ## Install
 
@@ -21,18 +20,18 @@ npm install @cookiemonsterdev/kafka-config
 ```ts
 import { createDefineConfig, discoverConfigFile, loadConfigFileSync } from '@cookiemonsterdev/kafka-config';
 
-interface StudioConfig {
-  ui?: { port?: number };
+interface AppConfig {
+  server?: { port?: number };
 }
 
-const { defineConfig, assertValid } = createDefineConfig<StudioConfig>({ objectSections: ['ui'] });
+const { defineConfig, assertValid } = createDefineConfig<AppConfig>({ objectSections: ['server'] });
 
-// studio.config.ts
-export default defineConfig({ ui: { port: 4000 } } satisfies StudioConfig);
+// app.config.ts
+export default defineConfig({ server: { port: 4000 } } satisfies AppConfig);
 
 // elsewhere
-const path = discoverConfigFile({ cwd: process.cwd(), name: 'studio' });
-const config = path == null ? {} : loadConfigFileSync<StudioConfig>(path, { assertValid });
+const path = discoverConfigFile({ cwd: process.cwd(), name: 'app' });
+const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertValid });
 ```
 
 ## What's exported
@@ -41,8 +40,9 @@ const config = path == null ? {} : loadConfigFileSync<StudioConfig>(path, { asse
 - `loadConfigFileSync`, `loadConfigFileAsync` — load and validate one, once resolved.
 - `createDefineConfig` — build a `defineConfig` + `assertValid` pair for your own config shape.
 - `mergeConfigLayers` — merge two config layers with `undefined`-is-absent semantics.
-- `KafkaConfigError`, `KafkaConfigRequiresAsyncError` — typed, `.name`-matchable errors (never
-  `instanceof` across a possible duplicate-copy boundary — see D18a in the project's plan).
+- `KafkaConfigError`, `KafkaConfigRequiresAsyncError` — typed, `.name`-matchable errors. Match by
+  `.name`, not `instanceof` — if your project ends up with two installed copies of this package,
+  the classes are distinct objects even though the errors behave identically.
 - `defaultOnConfigDiagnostic`, `ConfigDiagnostic`, `OnConfigDiagnostic` — the diagnostics channel
   every discovery/load function accepts.
 - `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — the TypeScript transform

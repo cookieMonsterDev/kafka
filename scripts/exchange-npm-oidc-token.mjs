@@ -1,6 +1,14 @@
 #!/usr/bin/env node
-import { appendFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
+// Writes the exchanged token to a fixed path under RUNNER_TEMP — 'npm-oidc.npmrc', the same name
+// release-chain.mjs derives independently — rather than exporting it via $GITHUB_ENV: this script
+// runs as a child process of release-chain.mjs, which itself runs as a single workflow step
+// covering the whole chain. $GITHUB_ENV is only re-read by the Actions runner *between* steps, so
+// a write here would never reach a sibling child process (the npm publish this same step goes on
+// to run) — only a later, separate step. The caller reads the fixed path back out itself and
+// passes it as NPM_CONFIG_USERCONFIG to that child process directly.
 
 const packageName = process.argv[2];
 
@@ -10,10 +18,9 @@ if (!packageName) {
 
 const requestUrl = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
 const requestToken = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
-const githubEnv = process.env.GITHUB_ENV;
 const runnerTemp = process.env.RUNNER_TEMP;
 
-if (!requestUrl || !requestToken || !githubEnv || !runnerTemp) {
+if (!requestUrl || !requestToken || !runnerTemp) {
   throw new Error('GitHub Actions OIDC environment is unavailable');
 }
 
@@ -53,4 +60,3 @@ await writeFile(npmrcPath, `//registry.npmjs.org/:_authToken=${exchangeBody.toke
   encoding: 'utf8',
   mode: 0o600,
 });
-await appendFile(githubEnv, `NPM_CONFIG_USERCONFIG=${npmrcPath}\n`, 'utf8');

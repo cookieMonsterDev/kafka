@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
 
 // Walks RELEASE_PACKAGES in publish-dependency order (D19), releasing only the packages the
@@ -42,16 +43,22 @@ for (const pkg of RELEASE_PACKAGES) {
   }
 
   run('pnpm', ['--filter', pkg.publishesToNpm ? pkg.npmName : `${pkg.npmName}...`, 'build'], pkg.buildEnv);
+  // The exchanged npm token's path can't travel back to us via $GITHUB_ENV — that only takes
+  // effect for a *later workflow step*, and exchange-npm-oidc-token.mjs runs as our own child
+  // process within this single step. Compute the same fixed path it writes to and hand it
+  // directly to the semantic-release child below as NPM_CONFIG_USERCONFIG.
+  let npmAuthEnv;
   if (pkg.publishesToNpm) {
     run('pnpm', ['--filter', pkg.npmName, 'test']);
     if (!dryRun) {
       run('node', ['scripts/exchange-npm-oidc-token.mjs', pkg.npmName]);
+      npmAuthEnv = { NPM_CONFIG_USERCONFIG: path.join(process.env.RUNNER_TEMP, 'npm-oidc.npmrc') };
     }
   }
 
   const releaseArgs = ['scripts/run-semantic-release.mjs', pkg.name];
   if (dryRun) releaseArgs.push('--dry-run');
-  run('node', releaseArgs);
+  run('node', releaseArgs, npmAuthEnv);
 
   console.log('::endgroup::');
   released = true;

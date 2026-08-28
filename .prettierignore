@@ -6,3 +6,4 @@ coverage
 node_modules
 pnpm-lock.yaml
 packages/core/test/fixtures
+packages/config/test/fixtures

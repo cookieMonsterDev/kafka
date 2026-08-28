@@ -98,6 +98,9 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
+      # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
+      # so vitest's module resolution needs that dist built before tests run.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
   oauthbearer:
@@ -129,4 +132,7 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
+      # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
+      # so vitest's module resolution needs that dist built before tests run.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration

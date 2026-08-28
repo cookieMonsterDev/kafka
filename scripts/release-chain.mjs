@@ -42,7 +42,11 @@ for (const pkg of RELEASE_PACKAGES) {
     run('git', ['pull', '--ff-only', 'origin', 'master']);
   }
 
-  run('pnpm', ['--filter', pkg.publishesToNpm ? pkg.npmName : `${pkg.npmName}...`, 'build'], pkg.buildEnv);
+  // `${npmName}...` builds the package plus its workspace dependencies (e.g. core needs
+  // config's dist for tsc to resolve its types) — needed even for a publishable package,
+  // since a manual/partial chain run can reach it without that dependency's own build step
+  // having run first in this job.
+  run('pnpm', ['--filter', `${pkg.npmName}...`, 'build'], pkg.buildEnv);
   // The exchanged npm token's path can't travel back to us via $GITHUB_ENV — that only takes
   // effect for a *later workflow step*, and exchange-npm-oidc-token.mjs runs as our own child
   // process within this single step. Compute the same fixed path it writes to and hand it

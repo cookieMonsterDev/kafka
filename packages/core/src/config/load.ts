@@ -1,9 +1,14 @@
+import {
+  CANDIDATE_EXTENSIONS,
+  defaultOnConfigDiagnostic,
+  discoverConfigFile,
+  KafkaConfigError,
+  loadConfigFileSync,
+  type OnConfigDiagnostic,
+} from '@cookiemonsterdev/kafka-config';
 import { existsSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
-import { CANDIDATE_EXTENSIONS, discoverConfigFile } from './discover';
-import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
-import { KafkaConfigError } from './errors';
-import { loadConfigFileSync } from './load-sync';
+import { assertValidKafkaFileConfig } from './define-config';
 import type { KafkaFileConfig } from './types';
 
 export interface LoadKafkaConfigOptions {
@@ -76,9 +81,10 @@ export function loadKafkaConfig(options: LoadKafkaConfigOptions = {}): LoadKafka
       );
     }
 
-    const config = loadConfigFileSync(resolvedPath, {
+    const config = loadConfigFileSync<KafkaFileConfig>(resolvedPath, {
       allowTransformFallback: options.allowTransformFallback,
       onDiagnostic,
+      assertValid: assertValidKafkaFileConfig,
     });
 
     onDiagnostic({

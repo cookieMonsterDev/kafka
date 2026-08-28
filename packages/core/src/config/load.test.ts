@@ -1,10 +1,9 @@
+import type { ConfigDiagnostic, KafkaConfigError } from '@cookiemonsterdev/kafka-config';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ConfigDiagnostic } from './diagnostics';
-import type { KafkaConfigError } from './errors';
 import { loadKafkaConfig, type LoadKafkaConfigResult } from './load';
 import type { KafkaFileConfig } from './types';
 

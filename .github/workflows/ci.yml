@@ -39,6 +39,10 @@ jobs:
       - name: Lint last commit message
         if: github.event_name != 'pull_request'
         run: pnpm exec commitlint --last --verbose
+      # core now has a real workspace dependency on kafka-config (D1a): its package.json
+      # "exports"/"types" point at kafka-config's dist, so both typecheck and vitest module
+      # resolution need that dist built first — source-only workspace linking isn't enough.
+      - run: pnpm --filter @cookiemonsterdev/kafka-core... build
       # docs is excluded: `astro check` (packages/docs's typecheck script) fails under the
       # TypeScript 7.0.2 catalog pin — it dropped the programmatic API astro-language-server
       # needs (https://github.com/withastro/roadmap/discussions/1321). Pre-existing, tracked

@@ -1,25 +1,29 @@
 /**
  * `kafka.config.*` file discovery, loading, and validation. Imported from the `./config` subpath
  * (`@cookiemonsterdev/kafka-core/config`) — never re-exported from the package root.
+ *
+ * The generic loader machinery lives in `@cookiemonsterdev/kafka-config` (D1a) — this module
+ * re-exports it for compatibility with what `core-v2.1.0` originally shipped, plus core's own
+ * Kafka-typed facade (`KafkaFileConfig`, `defineConfig`, `loadKafkaConfig`).
  */
 export { defineConfig } from './define-config';
 export type { KafkaFileConfig, KafkaFileConfigFactory, KafkaFileConfigInput } from './types';
 
-export { CANDIDATE_EXTENSIONS, discoverConfigFile } from './discover';
-export type { DiscoverConfigFileOptions } from './discover';
-
-export { loadConfigFileSync } from './load-sync';
-export type { LoadConfigFileSyncOptions } from './load-sync';
-
-export { loadConfigFileAsync } from './load-async';
-
 export { loadKafkaConfig } from './load';
 export type { LoadKafkaConfigOptions, LoadKafkaConfigResult } from './load';
 
-export { mergeConfigLayers } from './merge';
+export { CANDIDATE_EXTENSIONS, discoverConfigFile } from '@cookiemonsterdev/kafka-config';
+export type { DiscoverConfigFileOptions } from '@cookiemonsterdev/kafka-config';
 
-export type { ConfigErrorTag, KafkaConfigErrorOptions } from './errors';
-export { KafkaConfigError, KafkaConfigRequiresAsyncError } from './errors';
+export { loadConfigFileSync } from '@cookiemonsterdev/kafka-config';
+export type { LoadConfigFileSyncOptions } from '@cookiemonsterdev/kafka-config';
 
-export { defaultOnConfigDiagnostic } from './diagnostics';
-export type { ConfigDiagnostic, OnConfigDiagnostic } from './diagnostics';
+export { loadConfigFileAsync } from '@cookiemonsterdev/kafka-config';
+
+export { mergeConfigLayers } from '@cookiemonsterdev/kafka-config';
+
+export type { ConfigErrorTag, KafkaConfigErrorOptions } from '@cookiemonsterdev/kafka-config';
+export { KafkaConfigError, KafkaConfigRequiresAsyncError } from '@cookiemonsterdev/kafka-config';
+
+export { defaultOnConfigDiagnostic } from '@cookiemonsterdev/kafka-config';
+export type { ConfigDiagnostic, OnConfigDiagnostic } from '@cookiemonsterdev/kafka-config';

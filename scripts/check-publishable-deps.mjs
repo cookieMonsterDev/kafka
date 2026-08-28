@@ -10,9 +10,9 @@ const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependen
 const CORE_NAME = '@cookiemonsterdev/kafka-core';
 const CONFIG_NAME = '@cookiemonsterdev/kafka-config';
 
-// core depends on kafka-config to resolve `kafka.config.*` files (D2/D3), plus its two
-// third-party codecs; kafka-config itself stays dependency-free — a runtime dependency in either
-// must be a deliberate decision, not a drive-by `pnpm add`.
+// core depends on kafka-config to resolve `kafka.config.*` files, plus its two third-party codecs;
+// kafka-config itself stays dependency-free — a runtime dependency in either must be a deliberate
+// decision, not a drive-by `pnpm add`.
 function expectedDependencies() {
   return {
     [CORE_NAME]: ['lz4-lite', 'snappyjs', CONFIG_NAME],

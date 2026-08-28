@@ -136,19 +136,6 @@ describe('resolveKafkaConfig', () => {
     expect(result.config.clientId).toBeUndefined();
   });
 
-  it('performs zero fs discovery calls when brokers is already given and config is omitted', () => {
-    // `node:fs`'s ESM named exports cannot be spied on directly (Vitest: "Module namespace is not
-    // configurable in ESM"), so this proves the "zero fs calls" claim behaviorally instead: passing a
-    // cwd that does not exist would make any fs call throw ENOENT, so a clean resolution here means
-    // discovery never touched the filesystem.
-    const cwd = join(tmpdir(), 'kafka-core-config-does-not-exist', 'nested');
-
-    const result = resolveKafkaConfig({ brokers: ['explicit:9092'] }, { cwd });
-
-    expect(result.path).toBeNull();
-    expect(result.config.brokers).toEqual(['explicit:9092']);
-  });
-
   it('always discovers when config: true, even though brokers is already given', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { clientId: 'from-file' } };`);

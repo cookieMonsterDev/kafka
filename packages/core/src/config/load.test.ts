@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -30,6 +30,26 @@ describe('loadKafkaConfig', () => {
 
   it("wraps a generic loader failure into this client's own KafkaConfigError, never leaking the foreign type", () => {
     const path = tempFile('{ not valid json', 'kafka.config.json');
+
+    let caught: unknown;
+    try {
+      loadKafkaConfig(path);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(KafkaConfigError);
+    expect((caught as KafkaConfigError).tag).toBe('ConfigLoadError');
+    expect((caught as KafkaConfigError).path).toBe(path);
+  });
+
+  it("wraps a bare filesystem error (not one the generic loader's own try/catch covers) into KafkaConfigError", () => {
+    // `.json` reads a file directly via `readFileSync`, outside any try/catch the generic loader
+    // installs for the require()/import() path — a directory where a file is expected throws a
+    // raw, un-tagged Node error (EISDIR) that must still come out of `loadKafkaConfig` wrapped.
+    dir = mkdtempSync(join(tmpdir(), 'kafka-core-config-load-'));
+    const path = join(dir, 'kafka.config.json');
+    mkdirSync(path);
 
     let caught: unknown;
     try {
@@ -85,6 +105,14 @@ describe('loadKafkaConfigAsync', () => {
 
   it("wraps a generic loader failure into this client's own KafkaConfigError", async () => {
     const path = tempFile('{ not valid json', 'kafka.config.json');
+
+    await expect(loadKafkaConfigAsync(path)).rejects.toBeInstanceOf(KafkaConfigError);
+  });
+
+  it('wraps a bare filesystem error into KafkaConfigError, same as the sync loader', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'kafka-core-config-load-'));
+    const path = join(dir, 'kafka.config.json');
+    mkdirSync(path);
 
     await expect(loadKafkaConfigAsync(path)).rejects.toBeInstanceOf(KafkaConfigError);
   });

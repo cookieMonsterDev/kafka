@@ -116,8 +116,15 @@ const fileConfig = loadKafkaConfig('./kafka.config.ts');
 const kafka = Kafka.from(fileConfig, { clientId: 'my-app' });
 ```
 
-Both share the same discovery and merge logic as `new Kafka()`, so the three entry points cannot
-drift on how a config file is applied.
+`Kafka.fromConfig()` shares `new Kafka()`'s discovery; every entry point — the constructor,
+`fromConfig`, and `from` — shares the same merge logic, so the three cannot drift on how a config
+file's values are applied. `Kafka.from()` alone does no discovery, by design: it exists precisely
+for a caller that already has a loaded `KafkaFileConfig` and wants to skip that step.
+
+Bundled or serverless deployments (Vite, webpack, Lambda) should prefer `Kafka.from()` with an
+inlined config object over letting `new Kafka()` discover a file at runtime — `new Kafka()` and
+`Kafka.fromConfig()` both resolve a config file path dynamically, which a bundler cannot analyze
+statically the way it can a plain import.
 
 ## `kafka.configSource()`
 

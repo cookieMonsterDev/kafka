@@ -25,7 +25,7 @@ import { ISOLATION_LEVEL, type IsolationLevel } from './protocol/enums/isolation
 import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig, ShareConsumerConfig } from './types/index';
 import { once } from './utils/once';
 
-/** Merges a file section (`producer`/`consumer`/`shareConsumer`/`admin`) under an explicit call argument — explicit always wins (D5). */
+/** Merges a file section (`producer`/`consumer`/`shareConsumer`/`admin`) under an explicit call argument — the explicit argument always wins. */
 function mergeFileSection<T>(explicit: T, fileSection: Partial<T> | undefined): T {
   if (fileSection === undefined) return explicit;
   return mergeConfigLayers<T & Record<string, unknown>>(

@@ -40,15 +40,15 @@ export interface ResolveKafkaConfigOptions {
 }
 
 /**
- * `undefined` `brokers` after merging every layer means neither the call nor any config file
- * resolved a value — the runtime error D3 promises, naming what was searched.
+ * `undefined` (or `null`) `brokers` after merging every layer means neither the call nor any
+ * config file resolved a value — the promised runtime error, naming what was searched.
  */
 function assertBrokersResolved(
   merged: Partial<KafkaConfig>,
   path: string | null,
   searchedDescription: string,
 ): asserts merged is ResolvedKafkaConfig {
-  if (merged.brokers !== undefined) return;
+  if (merged.brokers !== undefined && merged.brokers !== null) return;
   throw new KafkaConfigError(
     'MissingBrokers',
     `No "brokers" were provided, and none were found ${searchedDescription}. Fix: pass "brokers" directly, ` +
@@ -58,10 +58,10 @@ function assertBrokersResolved(
 }
 
 /**
- * Decides whether — and where — to look for a `kafka.config.*` file, per {@link KafkaConfig.config}
- * (D3): a string is an explicit path (a missing one is a hard error, never a silent fallback);
- * `false` never discovers; `true` always discovers; omitted discovers only when `brokers` is
- * absent, so a call that already passes `brokers` never touches the filesystem.
+ * Decides whether — and where — to look for a `kafka.config.*` file, per {@link KafkaConfig.config}:
+ * a string is an explicit path (a missing one is a hard error, never a silent fallback); `false`
+ * never discovers; `true` always discovers; omitted discovers only when `brokers` is absent, so a
+ * call that already passes `brokers` never touches the filesystem.
  */
 function findConfigPath(explicit: KafkaConfig, cwd: string, onDiagnostic: OnConfigDiagnostic): string | null {
   const configOption = explicit.config;
@@ -87,16 +87,27 @@ function findConfigPath(explicit: KafkaConfig, cwd: string, onDiagnostic: OnConf
   return discoverConfigFile({ cwd, onDiagnostic });
 }
 
+/**
+ * `config` is a resolution instruction, never a resolved value — it must not survive into the
+ * merged result (which is typed as excluding it, via {@link ResolvedKafkaConfig}) even though
+ * `explicit` itself carries it.
+ */
+function withoutConfigKey(explicit: KafkaConfig): MergeableKafkaConfig {
+  const rest: MergeableKafkaConfig = { ...explicit };
+  delete rest.config;
+  return rest;
+}
+
 function mergeWithExplicit(explicit: KafkaConfig, fileConfig: KafkaFileConfig | null): Partial<KafkaConfig> {
-  return mergeConfigLayers<MergeableKafkaConfig>(explicit as MergeableKafkaConfig, fileConfig?.client, {
+  return mergeConfigLayers<MergeableKafkaConfig>(withoutConfigKey(explicit), fileConfig?.client, {
     shallowMergeKeys: SHALLOW_MERGE_KEYS,
   });
 }
 
 /**
- * Resolves `new Kafka()`'s options: discover → load-sync → merge (D2). Resolution order, highest
- * first: explicit argument → config file → constructor default (D5) — a key defined nowhere is
- * omitted from the result, so the constructor's own destructuring default fires naturally.
+ * Resolves `new Kafka()`'s options: discover, load, merge. Resolution order, highest first:
+ * explicit argument → config file → constructor default — a key defined nowhere is omitted from
+ * the result, so the constructor's own destructuring default fires naturally.
  */
 export function resolveKafkaConfig(
   explicit: KafkaConfig,

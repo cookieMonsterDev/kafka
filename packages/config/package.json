@@ -1,0 +1,60 @@
+{
+  "name": "@cookiemonsterdev/kafka-config",
+  "version": "1.0.0",
+  "description": "Generic config-file loader — discovery, sync/async loading, TypeScript transform rescue, layer merging, and diagnostics. Zero runtime dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mykhailo Toporkov",
+  "homepage": "https://cookiemonsterdev.github.io/kafka/",
+  "bugs": {
+    "url": "https://github.com/cookieMonsterDev/kafka/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookieMonsterDev/kafka.git",
+    "directory": "packages/config"
+  },
+  "keywords": [
+    "config",
+    "config-loader",
+    "typescript",
+    "kafka"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm run build:js && pnpm run build:types",
+    "build:js": "vite build",
+    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "vite build --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -14,11 +14,13 @@ export default tseslint.config(
       'scripts/**',
       'packages/core/test/fixtures/**',
       'packages/core/test/helpers/**/*.mjs',
+      'packages/config/test/fixtures/**',
+      'packages/config/test/helpers/**/*.mjs',
     ],
   },
   js.configs.recommended,
   {
-    files: ['packages/core/{src,test}/**/*.ts'],
+    files: ['packages/core/{src,test}/**/*.ts', 'packages/config/{src,test}/**/*.ts'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
@@ -40,7 +42,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.test.ts', 'packages/core/test/**/*.ts'],
+    files: ['**/*.test.ts', 'packages/core/test/**/*.ts', 'packages/config/test/**/*.ts'],
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,

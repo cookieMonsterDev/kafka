@@ -1,0 +1,64 @@
+#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
+
+// Walks RELEASE_PACKAGES in publish-dependency order (D19), releasing only the packages the
+// caller reports as changed. Each package after the first fast-forwards to the version commit
+// the previous package's release just pushed, so it builds against what actually shipped.
+const dryRun = process.argv.includes('--dry-run');
+const changes = JSON.parse(process.env.RELEASE_CHANGES ?? '{}');
+
+let released = false;
+
+// A mid-chain failure still leaves earlier packages' version-bump commits on master needing a
+// master -> develop sync, so report whether anything released, success or not — the caller
+// (release.yml's sync-develop job) reads this even when the step itself fails.
+function reportReleasedAndExit(code) {
+  const githubOutput = process.env.GITHUB_OUTPUT;
+  if (githubOutput) {
+    appendFileSync(githubOutput, `released=${released}\n`, 'utf8');
+  }
+  process.exit(code);
+}
+
+function run(command, args, extraEnv) {
+  const result = spawnSync(command, args, {
+    stdio: 'inherit',
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+  });
+  if (result.status !== 0) {
+    reportReleasedAndExit(result.status ?? 1);
+  }
+}
+
+for (const pkg of RELEASE_PACKAGES) {
+  if (!changes[pkg.name]) continue;
+
+  console.log(`::group::release ${pkg.name}`);
+
+  if (released) {
+    run('git', ['pull', '--ff-only', 'origin', 'master']);
+  }
+
+  run('pnpm', ['--filter', pkg.publishesToNpm ? pkg.npmName : `${pkg.npmName}...`, 'build'], pkg.buildEnv);
+  if (pkg.publishesToNpm) {
+    run('pnpm', ['--filter', pkg.npmName, 'test']);
+    if (!dryRun) {
+      run('node', ['scripts/exchange-npm-oidc-token.mjs', pkg.npmName]);
+    }
+  }
+
+  const releaseArgs = ['scripts/run-semantic-release.mjs', pkg.name];
+  if (dryRun) releaseArgs.push('--dry-run');
+  run('node', releaseArgs);
+
+  console.log('::endgroup::');
+  released = true;
+}
+
+if (!released) {
+  console.log('No packages changed; nothing to release.');
+}
+
+reportReleasedAndExit(0);

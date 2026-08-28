@@ -17,7 +17,7 @@
   <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
 </p>
 
-`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
+`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@cookiemonsterdev/kafka-config` is a generic `kafka.config.*` file loader, published separately for anyone (this client included, eventually) to build a config-file layer on. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
 
 Install the client from npm. The workspace root is private and is not published.
 
@@ -78,10 +78,11 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev   # http://localhost:4321
 
 ## Packages
 
-| Package                        | Path            | What it is                                    |
-| ------------------------------ | --------------- | --------------------------------------------- |
-| `@cookiemonsterdev/kafka-core` | `packages/core` | TypeScript Kafka client (Kafka 0.10+), on npm |
-| `@cookiemonsterdev/kafka-docs` | `packages/docs` | Astro documentation site (GitHub Pages)       |
+| Package                          | Path              | What it is                                    |
+| -------------------------------- | ----------------- | --------------------------------------------- |
+| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm |
+| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm  |
+| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)       |
 
 ## Requirements
 
@@ -111,7 +112,7 @@ KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
-Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-config`](packages/config/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 

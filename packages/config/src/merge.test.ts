@@ -72,11 +72,12 @@ describe('mergeConfigLayers', () => {
     });
   });
 
-  describe('retry: shallow-merged one level', () => {
+  describe('shallowMergeKeys: opts into one-level-deep merging for named keys', () => {
     it('merges sub-keys, override winning per sub-key', () => {
       const result = mergeConfigLayers<Fixture>(
         { retry: { retries: 10 } },
         { retry: { retries: 5, maxRetryTime: 30_000 } },
+        { shallowMergeKeys: ['retry'] },
       );
 
       expect(result.retry).toEqual({ retries: 10, maxRetryTime: 30_000 });
@@ -86,21 +87,48 @@ describe('mergeConfigLayers', () => {
       const result = mergeConfigLayers<Fixture>(
         { retry: { retries: undefined, maxRetryTime: 1000 } },
         { retry: { retries: 5 } },
+        { shallowMergeKeys: ['retry'] },
       );
 
       expect(result.retry).toEqual({ retries: 5, maxRetryTime: 1000 });
     });
 
     it('takes retry from base alone when override never mentions it', () => {
-      const result = mergeConfigLayers<Fixture>({}, { retry: { retries: 5 } });
+      const result = mergeConfigLayers<Fixture>({}, { retry: { retries: 5 } }, { shallowMergeKeys: ['retry'] });
 
       expect(result.retry).toEqual({ retries: 5 });
     });
 
     it('omits retry when neither layer defines any sub-key', () => {
-      const result = mergeConfigLayers<Fixture>({ retry: {} }, {});
+      const result = mergeConfigLayers<Fixture>({ retry: {} }, {}, { shallowMergeKeys: ['retry'] });
 
       expect(Object.hasOwn(result, 'retry')).toBe(false);
+    });
+
+    it('defaults to an empty set — retry is replaced atomically unless a consumer opts in', () => {
+      const result = mergeConfigLayers<Fixture>(
+        { retry: { retries: 10 } },
+        { retry: { retries: 5, maxRetryTime: 30_000 } },
+      );
+
+      expect(result.retry).toEqual({ retries: 10 });
+    });
+
+    it('honours a custom multi-key set, leaving keys outside it atomic', () => {
+      interface WithFoo extends Fixture {
+        foo?: { a?: number; b?: number };
+      }
+
+      const result = mergeConfigLayers<WithFoo>(
+        { retry: { retries: 10 }, foo: { a: 1 }, sasl: { mechanism: 'plain' } },
+        { retry: { retries: 5, maxRetryTime: 30_000 }, foo: { a: 0, b: 2 }, sasl: { mechanism: 'scram-sha-256' } },
+        { shallowMergeKeys: ['retry', 'foo'] },
+      );
+
+      expect(result.retry).toEqual({ retries: 10, maxRetryTime: 30_000 });
+      expect(result.foo).toEqual({ a: 1, b: 2 });
+      // sasl is outside the custom set, so it stays atomic.
+      expect(result.sasl).toEqual({ mechanism: 'plain' });
     });
   });
 

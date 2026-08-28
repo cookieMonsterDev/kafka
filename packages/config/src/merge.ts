@@ -1,12 +1,3 @@
-/**
- * Keys merged one level deep (matches what `client.ts`'s producer/consumer already do for
- * `retry`). Every other key is replaced atomically — including `sasl`, `ssl`, `brokers`,
- * `metrics`, `socketFactory`, and `logCreator`, none of which are safe to merge field-by-field
- * (a discriminated union, a `boolean | object`, an array, or a function/object that may hold
- * live resources).
- */
-const SHALLOW_MERGE_KEYS: ReadonlySet<string> = new Set(['retry']);
-
 function mergeShallowObjects(
   low: Record<string, unknown> | undefined,
   high: Record<string, unknown> | undefined,
@@ -21,6 +12,17 @@ function mergeShallowObjects(
   return result;
 }
 
+export interface MergeConfigLayersOptions {
+  /**
+   * Keys merged one level deep instead of replaced atomically. Default **empty** — atomic
+   * replacement is the safe default for a value that might be a discriminated union, a
+   * `boolean | object`, an array, or a function/object that may hold live resources. A consumer
+   * with a key it knows is safe to merge shallowly (core passes `['retry']`, matching what
+   * `client.ts`'s producer/consumer already do) opts in explicitly.
+   */
+  shallowMergeKeys?: Iterable<string>;
+}
+
 /**
  * Merges two config layers, `override` taking precedence over `base`. For every key, the highest
  * layer where the value is `!== undefined` wins — `undefined` means "absent", never "unset to
@@ -28,13 +30,16 @@ function mergeShallowObjects(
  * (not set to `undefined`), so a caller destructuring it with its own default (`x = 5`) still
  * gets that default.
  *
- * `retry` is shallow-merged one level (itself subject to the same undefined-is-absent rule on its
- * sub-keys); every other key is replaced atomically — see {@link SHALLOW_MERGE_KEYS}.
+ * Every key is replaced atomically by default; see {@link MergeConfigLayersOptions.shallowMergeKeys}
+ * for the one-level-deep alternative (itself subject to the same undefined-is-absent rule on its
+ * sub-keys).
  */
 export function mergeConfigLayers<T extends Record<string, unknown>>(
   override: Partial<T> | undefined,
   base: Partial<T> | undefined,
+  options: MergeConfigLayersOptions = {},
 ): Partial<T> {
+  const shallowMergeKeys = new Set(options.shallowMergeKeys ?? []);
   const result: Record<string, unknown> = {};
   const keys = new Set([...Object.keys(override ?? {}), ...Object.keys(base ?? {})]);
 
@@ -42,7 +47,7 @@ export function mergeConfigLayers<T extends Record<string, unknown>>(
     const overrideValue = override?.[key];
     const baseValue = base?.[key];
 
-    if (SHALLOW_MERGE_KEYS.has(key)) {
+    if (shallowMergeKeys.has(key)) {
       const merged = mergeShallowObjects(
         baseValue as Record<string, unknown> | undefined,
         overrideValue as Record<string, unknown> | undefined,

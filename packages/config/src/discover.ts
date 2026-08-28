@@ -9,12 +9,12 @@ import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostic
  */
 export const CANDIDATE_EXTENSIONS = ['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'] as const;
 
-function topLevelCandidates(dir: string): string[] {
-  return CANDIDATE_EXTENSIONS.map((ext) => join(dir, `kafka.config${ext}`));
+function topLevelCandidates(dir: string, name: string): string[] {
+  return CANDIDATE_EXTENSIONS.map((ext) => join(dir, `${name}.config${ext}`));
 }
 
-function nestedCandidates(dir: string): string[] {
-  return CANDIDATE_EXTENSIONS.map((ext) => join(dir, '.config', `kafka${ext}`));
+function nestedCandidates(dir: string, name: string): string[] {
+  return CANDIDATE_EXTENSIONS.map((ext) => join(dir, '.config', `${name}${ext}`));
 }
 
 /** `.git`, `pnpm-workspace.yaml`, or a `package.json` carrying a `workspaces` field. */
@@ -38,13 +38,13 @@ function isSearchBoundary(dir: string): boolean {
   }
 }
 
-function resolveInDirectory(dir: string, onDiagnostic: OnConfigDiagnostic): string | null {
-  const found = topLevelCandidates(dir).filter((candidate) => existsSync(candidate));
+function resolveInDirectory(dir: string, name: string, onDiagnostic: OnConfigDiagnostic): string | null {
+  const found = topLevelCandidates(dir, name).filter((candidate) => existsSync(candidate));
   if (found.length > 0) {
     return reportAndPickFirst(found, dir, onDiagnostic);
   }
 
-  const foundNested = nestedCandidates(dir).filter((candidate) => existsSync(candidate));
+  const foundNested = nestedCandidates(dir, name).filter((candidate) => existsSync(candidate));
   if (foundNested.length > 0) {
     return reportAndPickFirst(foundNested, join(dir, '.config'), onDiagnostic);
   }
@@ -74,13 +74,19 @@ function reportAndPickFirst(candidates: string[], location: string, onDiagnostic
 export interface DiscoverConfigFileOptions {
   /** Directory to start the search from. */
   cwd: string;
+  /**
+   * Base name for the candidate ladder: `<name>.config.*` at the top level, `.config/<name>.*`
+   * nested. Default `'kafka'`. A future consumer (e.g. `kafka-studio`) passes its own name to
+   * discover `studio.config.ts` instead.
+   */
+  name?: string;
   /** Walk upward toward the filesystem root, stopping at a workspace boundary. Default `true`. */
   searchParents?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
 }
 
 /**
- * Finds a `kafka.config.*` / `.config/kafka.*` file starting at `cwd` (resolved against
+ * Finds a `<name>.config.*` / `.config/<name>.*` file starting at `cwd` (resolved against
  * `process.cwd()` first if relative, so every returned path is absolute — required downstream by
  * `pathToFileURL` and by the sync loader's per-absolute-path memoisation). The first directory
  * containing any candidate wins
@@ -90,13 +96,14 @@ export interface DiscoverConfigFileOptions {
  */
 export function discoverConfigFile({
   cwd,
+  name = 'kafka',
   searchParents = true,
   onDiagnostic = defaultOnConfigDiagnostic,
 }: DiscoverConfigFileOptions): string | null {
   let dir = resolve(cwd);
 
   for (;;) {
-    const found = resolveInDirectory(dir, onDiagnostic);
+    const found = resolveInDirectory(dir, name, onDiagnostic);
     if (found != null) return found;
 
     if (!searchParents || isSearchBoundary(dir)) return null;

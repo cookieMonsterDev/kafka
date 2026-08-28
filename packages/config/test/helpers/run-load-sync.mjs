@@ -3,17 +3,17 @@
  * Node version, so exercising the retry path must happen in a fresh process — never inside a
  * vitest worker, where it would silently change `.ts` resolution for every later import.
  *
- * Plain `.mjs`, not `.ts`: it imports `../../../src/config/*.ts` with an explicit extension, which
- * `node` (native type-stripping) requires for a relative import but `tsc` (`bundler` resolution,
+ * Plain `.mjs`, not `.ts`: it imports `../../src/*.ts` with an explicit extension, which `node`
+ * (native type-stripping) requires for a relative import but `tsc` (`bundler` resolution,
  * extensionless imports) rejects without `allowImportingTsExtensions`.
  *
- * `packages/core/src/**` itself uses extensionless relative imports (this repo's convention, for
+ * `packages/config/src/**` itself uses extensionless relative imports (this repo's convention, for
  * bundler/tsc `moduleResolution: "bundler"`), which plain `node` cannot resolve on its own. A
  * throwaway bootstrap resolve hook — separate from, and unrelated to, `installConfigTransformHooks`
  * under test — appends `.ts` purely so this harness can import the loader's own module graph. It
- * is scoped to `parentURL`s under `src/config/` so it never touches resolution *inside* a fixture
- * config file (that must be rescued by the loader's own hooks, or not at all — the thing under
- * test) and never installs a `load` hook, so it does not affect how anything is compiled.
+ * is scoped to `parentURL`s under `packages/config/src/` so it never touches resolution *inside* a
+ * fixture config file (that must be rescued by the loader's own hooks, or not at all — the thing
+ * under test) and never installs a `load` hook, so it does not affect how anything is compiled.
  *
  * Usage: `node run-load-sync.mjs <configPath> [allowTransformFallback=true|false]`. Prints one
  * JSON line to stdout: `{ ok, config | (name, tag, message), diagnostics, hooksInstalled }`.
@@ -22,7 +22,7 @@ import { registerHooks } from 'node:module';
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const fromLoaderSource = context.parentURL != null && context.parentURL.includes('/src/config/');
+    const fromLoaderSource = context.parentURL != null && context.parentURL.includes('/packages/config/src/');
     try {
       return nextResolve(specifier, context);
     } catch (error) {
@@ -39,8 +39,8 @@ registerHooks({
   },
 });
 
-const { loadConfigFileSync } = await import('../../../src/config/load-sync.ts');
-const { areConfigTransformHooksInstalled } = await import('../../../src/config/transform-hooks.ts');
+const { loadConfigFileSync } = await import('../../src/load-sync.ts');
+const { areConfigTransformHooksInstalled } = await import('../../src/transform-hooks.ts');
 
 const [, , configPath, allowTransformFallbackArg] = process.argv;
 if (configPath == null) {

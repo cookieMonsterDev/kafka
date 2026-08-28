@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { KafkaConfigRequiresAsyncError } from './errors';
 import { loadConfigFileSync } from './load-sync';
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../test/fixtures/config/load-sync');
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../test/fixtures/load-sync');
 
 describe('loadConfigFileSync', () => {
   it.each([

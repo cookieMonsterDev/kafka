@@ -4,11 +4,15 @@ import { extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
 import { KafkaConfigError, KafkaConfigRequiresAsyncError } from './errors';
-import { assertResolvedKafkaFileConfig, extractDefaultExport, isThenable } from './resolve-module';
+import {
+  type AssertValidFileConfig,
+  assertResolvedFileConfig,
+  extractDefaultExport,
+  isThenable,
+} from './resolve-module';
 import { installConfigTransformHooks } from './transform-hooks';
-import type { KafkaFileConfig } from './types';
 
-const cache = new Map<string, KafkaFileConfig>();
+const cache = new Map<string, unknown>();
 
 /**
  * A rescue is only attempted when `allowTransformFallback` is true, so a lenient load and a
@@ -138,7 +142,7 @@ function requireDefaultExport(
   }
 }
 
-export interface LoadConfigFileSyncOptions {
+export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
   /**
    * Rescue a TS `enum`, an extensionless relative import, or `export default` under a
    * CommonJS-resolved `.ts`/`.js` file behind a one-time process-wide transform-hook retry (D8).
@@ -155,6 +159,13 @@ export interface LoadConfigFileSyncOptions {
    */
   allowTransformFallback?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
+  /**
+   * Validates the fully-resolved (post-factory) config value. Defaults to accepting any plain
+   * object — see {@link import('./resolve-module').assertPlainObjectFileConfig}. A typed consumer
+   * (e.g. core's Kafka-typed facade) injects its own section-aware validator here instead of this
+   * generic loader importing one.
+   */
+  assertValid?: AssertValidFileConfig<T>;
 }
 
 /**
@@ -168,11 +179,14 @@ export interface LoadConfigFileSyncOptions {
  * `'ConfigFileInvalid'` for the latter. Use `Kafka.fromConfig()`, or the async loader directly, for
  * either case.
  */
-export function loadConfigFileSync(path: string, options: LoadConfigFileSyncOptions = {}): KafkaFileConfig {
+export function loadConfigFileSync<T = Record<string, unknown>>(
+  path: string,
+  options: LoadConfigFileSyncOptions<T> = {},
+): T {
   const allowTransformFallback = options.allowTransformFallback ?? true;
   const key = cacheKey(path, allowTransformFallback);
   const cached = cache.get(key);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined) return cached as T;
 
   const onDiagnostic = options.onDiagnostic ?? defaultOnConfigDiagnostic;
 
@@ -189,7 +203,7 @@ export function loadConfigFileSync(path: string, options: LoadConfigFileSyncOpti
     );
   }
 
-  assertResolvedKafkaFileConfig(value, path);
+  assertResolvedFileConfig<T>(value, path, options.assertValid);
   cache.set(key, value);
   return value;
 }

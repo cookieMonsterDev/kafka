@@ -2,8 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { KafkaConfigError } from './errors';
-import { assertResolvedKafkaFileConfig, extractDefaultExport } from './resolve-module';
-import type { KafkaFileConfig } from './types';
+import { type AssertValidFileConfig, assertResolvedFileConfig, extractDefaultExport } from './resolve-module';
 
 async function parseJson(path: string): Promise<unknown> {
   const raw = await readFile(path, 'utf8');
@@ -46,10 +45,18 @@ async function importDefaultExport(path: string): Promise<unknown> {
  * has no working path today; avoid the construct, or restructure the config to not need both at
  * once.
  */
-export async function loadConfigFileAsync(path: string): Promise<KafkaFileConfig> {
+export interface LoadConfigFileAsyncOptions<T = Record<string, unknown>> {
+  /** See {@link import('./load-sync').LoadConfigFileSyncOptions.assertValid}. */
+  assertValid?: AssertValidFileConfig<T>;
+}
+
+export async function loadConfigFileAsync<T = Record<string, unknown>>(
+  path: string,
+  options: LoadConfigFileAsyncOptions<T> = {},
+): Promise<T> {
   const resolved = extname(path) === '.json' ? await parseJson(path) : await importDefaultExport(path);
   const value = typeof resolved === 'function' ? await (resolved as () => unknown)() : resolved;
 
-  assertResolvedKafkaFileConfig(value, path);
+  assertResolvedFileConfig<T>(value, path, options.assertValid);
   return value;
 }

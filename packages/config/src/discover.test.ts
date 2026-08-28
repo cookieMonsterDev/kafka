@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { discoverConfigFile } from './discover';
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../test/fixtures/config/discover');
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../test/fixtures/discover');
 
 describe('discoverConfigFile — static fixtures', () => {
   it.each([
@@ -190,5 +190,23 @@ describe('discoverConfigFile — dynamic trees', () => {
     const root = makeTempDir();
 
     expect(discoverConfigFile({ cwd: root })).toBeNull();
+  });
+
+  it('name: a different consumer discovers its own <name>.config.* ladder', () => {
+    const root = makeTempDir();
+    writeFileSync(join(root, 'studio.config.ts'), 'export default {};\n');
+    // A kafka.config.* in the same directory must not interfere with a "studio" search.
+    writeFileSync(join(root, 'kafka.config.ts'), 'export default {};\n');
+
+    expect(discoverConfigFile({ cwd: root, name: 'studio', searchParents: false })).toBe(
+      join(root, 'studio.config.ts'),
+    );
+  });
+
+  it('name defaults to "kafka" when omitted', () => {
+    const root = makeTempDir();
+    writeFileSync(join(root, 'kafka.config.ts'), 'export default {};\n');
+
+    expect(discoverConfigFile({ cwd: root, searchParents: false })).toBe(join(root, 'kafka.config.ts'));
   });
 });

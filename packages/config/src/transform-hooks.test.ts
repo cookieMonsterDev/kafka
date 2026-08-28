@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FIXTURES = join(HERE, '../../test/fixtures/config');
-const DRIVER = join(HERE, '../../test/helpers/config/run-load-sync.mjs');
+const FIXTURES = join(HERE, '../test/fixtures');
+const DRIVER = join(HERE, '../test/helpers/run-load-sync.mjs');
 
 interface DriverResult {
   ok: boolean;

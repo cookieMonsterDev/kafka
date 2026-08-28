@@ -39,6 +39,9 @@ jobs:
       - name: Lint last commit message
         if: github.event_name != 'pull_request'
         run: pnpm exec commitlint --last --verbose
+      # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
+      # so both tsc and vitest's module resolution need that dist built before either runs.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
       # docs is excluded: `astro check` (packages/docs's typecheck script) fails under the
       # TypeScript 7.0.2 catalog pin — it dropped the programmatic API astro-language-server
       # needs (https://github.com/withastro/roadmap/discussions/1321). Pre-existing, tracked
@@ -95,6 +98,9 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
+      # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
+      # so vitest's module resolution needs that dist built before tests run.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
   oauthbearer:
@@ -126,4 +132,7 @@ jobs:
         run: |
           images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
           docker save ${images} -o /tmp/kafka-docker-images.tar
+      # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
+      # so vitest's module resolution needs that dist built before tests run.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration

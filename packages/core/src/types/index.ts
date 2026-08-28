@@ -125,8 +125,12 @@ export type SaslMechanismProvider = {
  * @see https://kafka.apache.org/43/security/security-overview/
  */
 export interface KafkaConfig {
-  /** Bootstrap servers as `host:port`, or a function that returns them. */
-  brokers: readonly string[] | BrokersFunction;
+  /**
+   * Bootstrap servers as `host:port`, or a function that returns them. Optional here only
+   * because a `kafka.config.*` file can supply it instead — see {@link KafkaConfig.config}. If
+   * neither this call nor a config file resolves brokers, the constructor throws.
+   */
+  brokers?: readonly string[] | BrokersFunction;
   /**
    * Enable TLS. `true` uses default Node TLS options; an object is passed to `tls.connect`.
    * @see https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/
@@ -203,6 +207,14 @@ export interface KafkaConfig {
    * [enable.metrics.push](https://kafka.apache.org/43/configuration/producer-configs/#enable.metrics.push)
    */
   enableMetricsPush?: boolean;
+  /**
+   * Whether `new Kafka()` reads a `kafka.config.*` file. Omitted (the default): discover only
+   * when {@link KafkaConfig.brokers} is absent, so a call that already passes `brokers` never
+   * touches the filesystem. `true`: always discover and merge the file under whatever options
+   * this call passes. `false`: never discover. A string: an explicit path, resolved against
+   * `cwd` — a path that does not exist is a hard error, never a silent fallback.
+   */
+  config?: boolean | string;
 }
 
 /**

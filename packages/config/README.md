@@ -4,8 +4,8 @@ A generic, **zero-runtime-dependency** config-file loader: discovery, sync/async
 TypeScript transform rescue, layer merging, and diagnostics. It has no knowledge of Kafka, or of
 any other specific consumer — that knowledge is injected via four extension points (below).
 
-`@cookiemonsterdev/kafka-core` builds its `KafkaFileConfig` / `defineConfig` / `loadKafkaConfig`
-facade on top of this package. See
+`@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
+options directly. See
 [the docs](https://cookiemonsterdev.github.io/kafka/config/reference/api/) for the full API
 reference.
 

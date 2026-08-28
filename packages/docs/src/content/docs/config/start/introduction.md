@@ -9,10 +9,9 @@ section: start
 TypeScript transform rescue, layer merging, and diagnostics. It has **zero runtime dependencies**
 and no knowledge of Kafka, or of any other specific consumer.
 
-`@cookiemonsterdev/kafka-core` builds its `KafkaFileConfig` / `defineConfig` / `loadKafkaConfig`
-facade on top of this package — see [Config file](../../core/reference/config-file/) for that side
-of it. This section documents the loader itself: what you'd reach for directly if you were reading
-a config file for something other than a Kafka client.
+`@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
+options directly. This package exists so that when it does (and so any other consumer that wants
+to), the discovery/loading/merging machinery doesn't need to be written twice.
 
 ## Install
 

@@ -5,9 +5,9 @@ export default defineConfig({
     target: 'node24',
     sourcemap: true,
     minify: false,
-    lib: { entry: { index: 'src/index.ts', 'config/index': 'src/config/index.ts' }, formats: ['es'] },
+    lib: { entry: { index: 'src/index.ts' }, formats: ['es'] },
     rollupOptions: {
-      external: [/^node:/, 'kerberos', 'lz4-lite', 'snappyjs', '@cookiemonsterdev/kafka-config'],
+      external: [/^node:/, 'kerberos', 'lz4-lite', 'snappyjs'],
       output: {
         // 1:1 with src, so the emitted .js tree matches the tsc-emitted .d.ts tree
         preserveModules: true,

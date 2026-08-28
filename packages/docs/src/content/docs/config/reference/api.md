@@ -101,8 +101,8 @@ export default defineConfig(async () => ({
 ```
 
 `assertValid` is the same validator `defineConfig` uses internally, exported separately so you can
-validate an already-resolved value (for example, inject it into `loadConfigFileSync`'s
-`assertValid` option, as core does for its own `KafkaFileConfig`).
+validate an already-resolved value — for example, inject it into `loadConfigFileSync`'s
+`assertValid` option.
 
 ## Merging layers
 

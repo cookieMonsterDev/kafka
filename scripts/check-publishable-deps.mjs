@@ -10,17 +10,11 @@ const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependen
 const CORE_NAME = '@cookiemonsterdev/kafka-core';
 const CONFIG_NAME = '@cookiemonsterdev/kafka-config';
 
-// D1/D1a's extraction triggers, one per package: core's dependencies stay third-party-only plus
-// the config loader (D1a) and kafka-config stays dependency-free (its inverted trigger — a
-// runtime dependency here must move to an optional peer). Bumping either list is a deliberate
-// decision, not a drive-by dependency add.
-//
-// core's expectation only names kafka-config once packages/config exists — this check lands
-// before the extraction (T0b) that adds the dependency, so it must stay inert until then rather
-// than failing every build on develop in the interim.
-function expectedDependencies(workspaceVersions) {
+// core's dependencies stay third-party-only, and kafka-config stays dependency-free — a runtime
+// dependency in either must be a deliberate decision, not a drive-by `pnpm add`.
+function expectedDependencies() {
   return {
-    [CORE_NAME]: ['lz4-lite', 'snappyjs', ...(CONFIG_NAME in workspaceVersions ? [CONFIG_NAME] : [])],
+    [CORE_NAME]: ['lz4-lite', 'snappyjs'],
     [CONFIG_NAME]: [],
   };
 }
@@ -62,8 +56,8 @@ function checkManifest(manifest, workspaceVersions, expectedDeps) {
     const isWorkspace = (dep) => dep.startsWith(WORKSPACE_SCOPE);
 
     // Reported separately so the failure message says which rule broke: a stray third-party
-    // dependency is a D1/D1a policy violation, a wrong workspace-internal dependency is very
-    // likely just a missed `pnpm add` after an extraction.
+    // dependency is a policy violation (this package's dependency set is meant to stay fixed), a
+    // wrong workspace-internal dependency is very likely just a missed `pnpm add`.
     for (const [label, keep] of [
       ['third-party', (dep) => !isWorkspace(dep)],
       ['workspace-internal', isWorkspace],
@@ -73,7 +67,7 @@ function checkManifest(manifest, workspaceVersions, expectedDeps) {
       if ([...expectedSet].join(',') !== [...actualSet].join(',')) {
         problems.push(
           `${name}: ${label} dependencies must be exactly {${[...expectedSet].join(', ') || 'none'}} ` +
-            `(found {${[...actualSet].join(', ') || 'none'}}) — see D1/D1a in the config-loader plan`,
+            `(found {${[...actualSet].join(', ') || 'none'}})`,
         );
       }
     }
@@ -92,7 +86,7 @@ const manifests = readdirSync(packagesDir, { withFileTypes: true })
 const workspaceVersions = Object.fromEntries(
   manifests.filter((manifest) => manifest.name).map((manifest) => [manifest.name, manifest.version]),
 );
-const expectedDeps = expectedDependencies(workspaceVersions);
+const expectedDeps = expectedDependencies();
 const problems = manifests.flatMap((manifest) => checkManifest(manifest, workspaceVersions, expectedDeps));
 
 if (problems.length > 0) {

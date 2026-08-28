@@ -82,17 +82,16 @@ To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartiti
 
 ## Documentation
 
-| Page                                                                            | Contents                                                      |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [Introduction](../docs/src/content/docs/core/start/introduction.md)             | What the client is and which brokers it talks to              |
-| [Getting started](../docs/src/content/docs/core/start/getting-started.md)       | Produce and consume                                           |
-| [Producer API](../docs/src/content/docs/core/reference/producer.md)             | `send`, `Message`, `RecordMetadata`                           |
-| [Consumer API](../docs/src/content/docs/core/reference/consumer.md)             | `run`, `stream`, `KafkaMessage`                               |
-| [Config file](../docs/src/content/docs/core/reference/config-file.md)           | `kafka.config.*` discovery, `defineConfig`, `loadKafkaConfig` |
-| [Errors](../docs/src/content/docs/core/reference/errors.md)                     | Public classes and protocol codes                             |
-| [Security](../docs/src/content/docs/core/guides/security.md)                    | TLS and SASL, including GSSAPI                                |
-| [Compatibility](../docs/src/content/docs/core/reference/compatibility.md)       | Defaults vs the Java client, missing APIs                     |
-| [Breaking changes](../docs/src/content/docs/core/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars                           |
+| Page                                                                            | Contents                                         |
+| ------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [Introduction](../docs/src/content/docs/core/start/introduction.md)             | What the client is and which brokers it talks to |
+| [Getting started](../docs/src/content/docs/core/start/getting-started.md)       | Produce and consume                              |
+| [Producer API](../docs/src/content/docs/core/reference/producer.md)             | `send`, `Message`, `RecordMetadata`              |
+| [Consumer API](../docs/src/content/docs/core/reference/consumer.md)             | `run`, `stream`, `KafkaMessage`                  |
+| [Errors](../docs/src/content/docs/core/reference/errors.md)                     | Public classes and protocol codes                |
+| [Security](../docs/src/content/docs/core/guides/security.md)                    | TLS and SASL, including GSSAPI                   |
+| [Compatibility](../docs/src/content/docs/core/reference/compatibility.md)       | Defaults vs the Java client, missing APIs        |
+| [Breaking changes](../docs/src/content/docs/core/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars              |
 
 Local site: `pnpm --filter @cookiemonsterdev/kafka-docs dev` → <http://localhost:4321>
 

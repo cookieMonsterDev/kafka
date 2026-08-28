@@ -33,7 +33,9 @@ export type KafkaErrorName =
   | 'KafkaFetcherRebalanceError'
   | 'KafkaNoBrokerAvailableError'
   | 'KafkaAlterPartitionReassignmentsError'
-  | 'KafkaUpdateFeaturesError';
+  | 'KafkaUpdateFeaturesError'
+  | 'KafkaConfigError'
+  | 'KafkaConfigRequiresAsyncError';
 
 export interface KafkaErrorOptions {
   retriable?: boolean;
@@ -487,6 +489,52 @@ export class KafkaNoBrokerAvailableError extends KafkaError {
 
   constructor() {
     super('No broker available');
+  }
+}
+
+/** Reason a `kafka.config.*` file could not be discovered, loaded, parsed, or resolved. */
+export type KafkaConfigErrorTag =
+  'MissingBrokers' | 'ConfigFileNotFound' | 'ConfigLoadError' | 'ConfigFileInvalid' | 'UnsupportedExtension';
+
+export interface KafkaConfigErrorOptions {
+  path?: string;
+  cause?: unknown;
+}
+
+/**
+ * Raised while discovering, loading, parsing, or resolving a `kafka.config.*` file. `tag` names
+ * the specific failure so callers can branch without parsing `.message`. Wraps
+ * `@cookiemonsterdev/kafka-config`'s own `KafkaConfigError` (never lets it escape the constructor
+ * directly), so every error `new Kafka()` throws belongs to this client's own error hierarchy.
+ */
+export class KafkaConfigError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaConfigError';
+  readonly tag: KafkaConfigErrorTag;
+  readonly path: string | undefined;
+
+  constructor(tag: KafkaConfigErrorTag, message: string, options: KafkaConfigErrorOptions = {}) {
+    super(message, { cause: options.cause });
+    this.tag = tag;
+    this.path = options.path;
+  }
+}
+
+/**
+ * A config file could not be loaded synchronously because it (or a module it imports) uses
+ * top-level `await`, which fails fast with Node's `ERR_REQUIRE_ASYNC_MODULE`. Use
+ * `Kafka.fromConfig()` instead of `new Kafka()`.
+ */
+export class KafkaConfigRequiresAsyncError extends KafkaNonRetriableError {
+  override readonly name: KafkaErrorName = 'KafkaConfigRequiresAsyncError';
+  readonly path: string;
+
+  constructor(path: string, options: { cause?: unknown } = {}) {
+    super(
+      `kafka config file "${path}" requires an async loader (it uses top-level await, directly or through an ` +
+        'import). Use Kafka.fromConfig() instead of `new Kafka()`.',
+      { cause: options.cause },
+    );
+    this.path = path;
   }
 }
 

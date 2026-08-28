@@ -17,7 +17,7 @@
   <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
 </p>
 
-`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `@cookiemonsterdev/kafka-config` is a generic `kafka.config.*` file loader, published separately for anyone (this client included, eventually) to build a config-file layer on. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
+`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `new Kafka()` fills in whatever a call omits from a `kafka.config.ts` file, resolved through `@cookiemonsterdev/kafka-config`, a generic `kafka.config.*` file loader published separately so other consumers (a CLI, a studio UI) can build their own config-file layer on it too. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
 
 Install the client from npm. The workspace root is private and is not published.
 

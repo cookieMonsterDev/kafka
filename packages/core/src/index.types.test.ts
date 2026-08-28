@@ -106,14 +106,19 @@ describe('public types', () => {
     expectTypeOf<Admin>().toHaveProperty('clientInstanceId');
   });
 
-  it('does not re-export the config surface — that is the ./config subpath only', () => {
-    expectTypeOf<typeof IndexModule>().not.toHaveProperty('defineConfig');
-    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadKafkaConfig');
+  it('re-exports the Kafka-typed config facade, but not the generic loader machinery it is built on', () => {
+    expectTypeOf<typeof IndexModule>().toHaveProperty('defineConfig');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('loadKafkaConfig');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('loadKafkaConfigAsync');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('resolveKafkaConfig');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('resolveKafkaConfigAsync');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('KafkaConfigError');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('KafkaConfigRequiresAsyncError');
+
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileSync');
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadConfigFileAsync');
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('discoverConfigFile');
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('mergeConfigLayers');
-    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigError');
-    expectTypeOf<typeof IndexModule>().not.toHaveProperty('KafkaConfigRequiresAsyncError');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('createDefineConfig');
   });
 });

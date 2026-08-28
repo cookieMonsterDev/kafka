@@ -73,6 +73,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
+    "@cookiemonsterdev/kafka-config": "^1.0.0",
     "lz4-lite": "^1.1.2",
     "snappyjs": "^0.7.0"
   },

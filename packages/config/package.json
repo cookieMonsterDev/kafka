@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Generic config-file loader — discovery, sync/async loading, TypeScript transform rescue, layer merging, and diagnostics. Zero runtime dependencies.",
   "type": "module",
-  "private": true,
   "license": "MIT",
   "author": "Mykhailo Toporkov",
   "homepage": "https://cookiemonsterdev.github.io/kafka/",
@@ -23,6 +22,11 @@
   ],
   "engines": {
     "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

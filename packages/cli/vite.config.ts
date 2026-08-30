@@ -8,7 +8,7 @@ export default defineConfig({
     // Bundled to a single file, unlike core/kafka-config's preserveModules build: the CLI's own
     // code should cost one cheap parse on every invocation, including --help/--version, and core
     // (kept external below) is meant to be await-imported only inside commands that connect.
-    lib: { entry: { index: 'src/index.ts' }, formats: ['es'] },
+    lib: { entry: { index: 'src/index.ts', bin: 'src/bin.ts' }, formats: ['es'] },
     rollupOptions: {
       external: [/^node:/, '@cookiemonsterdev/kafka-core'],
       output: {

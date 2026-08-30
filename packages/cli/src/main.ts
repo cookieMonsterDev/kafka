@@ -1,3 +1,4 @@
+import { dispatch } from './dispatch';
 import { EXIT_CODES } from './errors/exit-codes';
 import type { Runtime } from './runtime';
 
@@ -11,13 +12,16 @@ function exitCodeForSignal(reason: unknown): number {
  * run it, and resolve to an exit code. Never throws — every failure, expected or not, is caught
  * and turned into a code by the dispatcher's own error mapping, down to a genuine unexpected bug,
  * which becomes the internal-bug code with a bug-report line rather than an uncaught rejection.
+ *
+ * dispatch is imported statically (not lazily): every invocation runs it regardless, including
+ * --help/--version, so splitting it into a second chunk would only add a module-resolution step
+ * for no benefit. Core itself stays the one thing loaded lazily — see admin/open.ts.
  */
 export async function main(runtime: Runtime): Promise<number> {
   if (runtime.signal.aborted) {
     return exitCodeForSignal(runtime.signal.reason);
   }
 
-  const { dispatch } = await import('./dispatch');
   const code = await dispatch(runtime);
 
   if (runtime.signal.aborted) {

@@ -8,6 +8,7 @@ import { EXIT_CODES } from './exit-codes';
  */
 const EXIT_CODE_BY_NAME: Readonly<Record<string, number>> = {
   CliUsageError: EXIT_CODES.usage,
+  CliAbortedError: EXIT_CODES.abortedOrUnconfirmed,
   KafkaConfigError: EXIT_CODES.config,
   KafkaConfigRequiresAsyncError: EXIT_CODES.config,
   KafkaServerDoesNotSupportApiKey: EXIT_CODES.unsupportedByBroker,

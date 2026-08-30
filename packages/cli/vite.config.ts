@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts', 'test/suites/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'test/*.test.ts', 'test/suites/**/*.test.ts'],
     environment: 'node',
     coverage: {
       provider: 'v8',

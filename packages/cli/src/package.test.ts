@@ -16,8 +16,12 @@ describe('package.json', () => {
     expect(packageJson.engines).toEqual({ node: '>=24.0.0' });
   });
 
-  it('is private, not yet ready to publish', () => {
-    expect(packageJson.private).toBe(true);
+  // Published early, ahead of the walking skeleton, purely to reserve the npm name and unblock
+  // configuring npm Trusted Publishing — see packages/cli/CHANGELOG.md. There is still no `bin`
+  // and no command; a real user gains nothing from installing this version.
+  it('is public, on a pre-1.0 name-reservation version', () => {
+    expect(packageJson.private).toBeUndefined();
+    expect(packageJson.version).toBe('0.0.1');
   });
 
   // The scaffold reads no config file (`--brokers` only) and mounts no command yet, so the only

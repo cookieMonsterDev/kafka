@@ -1,9 +1,8 @@
 {
   "name": "@cookiemonsterdev/kafka-cli",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Command-line admin client for Apache Kafka, built on @cookiemonsterdev/kafka-core.",
   "type": "module",
-  "private": true,
   "license": "MIT",
   "author": "Mykhailo Toporkov",
   "homepage": "https://cookiemonsterdev.github.io/kafka/",
@@ -24,6 +23,11 @@
   ],
   "engines": {
     "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

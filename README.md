@@ -78,12 +78,12 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev   # http://localhost:4321
 
 ## Packages
 
-| Package                          | Path              | What it is                                                    |
-| -------------------------------- | ----------------- | ------------------------------------------------------------- |
-| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm                 |
-| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm                  |
-| `@cookiemonsterdev/kafka-cli`    | `packages/cli`    | Command-line admin client (private workspace scaffold so far) |
-| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)                       |
+| Package                          | Path              | What it is                                                                         |
+| -------------------------------- | ----------------- | ---------------------------------------------------------------------------------- |
+| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm                                      |
+| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm                                       |
+| `@cookiemonsterdev/kafka-cli`    | `packages/cli`    | Command-line admin client (`0.0.1` is a name-reservation release; no commands yet) |
+| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)                                            |
 
 ## Requirements
 
@@ -113,7 +113,7 @@ KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
-Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-config`](packages/config/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-config`](packages/config/README.md), [`@cookiemonsterdev/kafka-cli`](packages/cli/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 

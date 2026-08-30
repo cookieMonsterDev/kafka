@@ -13,9 +13,11 @@ type PackageSwitcherSelectProps = {
   packages: PackageOption[];
   value: string;
   className?: string;
+  /** When set, the select only reports the choice — the parent updates menu content. */
+  onPackageChange?: (id: string) => void;
 };
 
-export function PackageSwitcherSelect({ packages, value, className }: PackageSwitcherSelectProps) {
+export function PackageSwitcherSelect({ packages, value, className, onPackageChange }: PackageSwitcherSelectProps) {
   const labelId = useId();
   const active = packages.find((pkg) => pkg.id === value) ?? packages[0];
   if (active == null) {
@@ -25,6 +27,10 @@ export function PackageSwitcherSelect({ packages, value, className }: PackageSwi
   function onValueChange(next: string) {
     const pkg = packages.find((item) => item.id === next);
     if (pkg == null || pkg.id === value) {
+      return;
+    }
+    if (onPackageChange != null) {
+      onPackageChange(pkg.id);
       return;
     }
     window.location.assign(pkg.href);

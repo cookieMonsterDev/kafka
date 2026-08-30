@@ -112,6 +112,8 @@ describe('public types', () => {
     expectTypeOf<typeof IndexModule>().toHaveProperty('loadKafkaConfigAsync');
     expectTypeOf<typeof IndexModule>().toHaveProperty('resolveKafkaConfig');
     expectTypeOf<typeof IndexModule>().toHaveProperty('resolveKafkaConfigAsync');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('fromEnv');
+    expectTypeOf<typeof IndexModule>().toHaveProperty('redactKafkaConfig');
     expectTypeOf<typeof IndexModule>().toHaveProperty('KafkaConfigError');
     expectTypeOf<typeof IndexModule>().toHaveProperty('KafkaConfigRequiresAsyncError');
 
@@ -120,5 +122,6 @@ describe('public types', () => {
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('discoverConfigFile');
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('mergeConfigLayers');
     expectTypeOf<typeof IndexModule>().not.toHaveProperty('createDefineConfig');
+    expectTypeOf<typeof IndexModule>().not.toHaveProperty('loadEnvFiles');
   });
 });

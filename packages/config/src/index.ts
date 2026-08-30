@@ -17,6 +17,9 @@ export type { LoadConfigFileSyncOptions } from './load-sync';
 export { loadConfigFileAsync } from './load-async';
 export type { LoadConfigFileAsyncOptions } from './load-async';
 
+export { loadEnvFiles } from './load-env-files';
+export type { LoadEnvFilesOptions, LoadEnvFilesResult } from './load-env-files';
+
 export { mergeConfigLayers } from './merge';
 export type { MergeConfigLayersOptions } from './merge';
 

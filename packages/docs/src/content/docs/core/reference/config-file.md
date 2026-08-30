@@ -148,3 +148,5 @@ regardless of which key — including `sasl` — it names.
 - [Configuration reference](../configuration/) for every `KafkaConfig` / `ProducerConfig` /
   `ConsumerConfig` / `ShareConsumerConfig` / `AdminConfig` field and its default.
 - [Configuration guide](../../guides/configuration/) for a walkthrough of setting up a config file.
+- [Environment variables and secrets](../environment-variables/) for `fromEnv`, `loadEnvFiles`, and
+  `redactKafkaConfig`.

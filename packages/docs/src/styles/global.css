@@ -230,13 +230,25 @@ html.dark .astro-code span {
   text-decoration: var(--shiki-dark-text-decoration) !important;
 }
 
+/* Long lines must scroll inside the sample, not grow the article flex item. */
+pre.astro-code,
+.prose table {
+  max-width: 100%;
+  overflow-x: auto;
+  /* Keep a visible thumb so desktop pointers can drag. Page chrome still fades. */
+  --scrollbar-alpha: 1;
+}
+
 .prose pre.astro-code {
   position: relative;
   border: 1px solid var(--border);
 }
 
-.copy-block {
+.copy-block,
+.code-tabs {
   position: relative;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .copy-block > .copy-btn {
@@ -449,6 +461,14 @@ html.dark .astro-code span {
       transform 200ms ease,
       visibility 200ms ease;
     padding-left: max(1rem, env(safe-area-inset-left));
+  }
+
+  .docs-nav-drawer > astro-island {
+    display: flex;
+    flex: 1 1 0%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .docs-nav-pane {

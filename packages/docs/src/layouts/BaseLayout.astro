@@ -1,13 +1,14 @@
 ---
 import '@/styles/global.css'
+import { getCollection } from 'astro:content'
 import { Beer, Hamburger } from 'lucide-react'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
+import { DocsMobileNav } from '@/components/docs-mobile-nav'
 import { DocsSearch } from '@/components/docs-search'
-import PackageSwitcher from '@/components/package-switcher.astro'
-import SectionTabs from '@/components/section-tabs.astro'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
+import { docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
 import { getSearchIndex } from '@/lib/search-index'
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, THEME_STORAGE_KEY } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -24,6 +25,9 @@ const canonicalUrl = Astro.url.href
 const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
 const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
 const searchIndex = await getSearchIndex()
+const pathname = Astro.url.pathname
+const navPackages = docsNavPackages(await getCollection('docs'))
+const currentPackage = docsPackageFromPathname(pathname)
 ---
 
 <!doctype html>
@@ -178,34 +182,35 @@ const searchIndex = await getSearchIndex()
       aria-modal="true"
       aria-label={docs ? 'Documentation' : 'Menu'}
     >
-      <PackageSwitcher class="mb-6 shrink-0" />
-      <button
-        type="button"
-        id="docs-mobile-search"
-        class="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 mb-6 flex h-11 w-full shrink-0 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3"
-        aria-label="Search documentation"
-        aria-haspopup="dialog"
-        aria-keyshortcuts="Control+K Meta+K"
+      <DocsMobileNav
+        client:load
+        packages={navPackages}
+        currentPackage={currentPackage}
+        currentPath={pathname}
       >
-        <svg
-          class="size-5 shrink-0"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          aria-hidden="true"
+        <button
+          type="button"
+          id="docs-mobile-search"
+          class="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 mb-6 flex h-11 w-full shrink-0 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3"
+          aria-label="Search documentation"
+          aria-haspopup="dialog"
+          aria-keyshortcuts="Control+K Meta+K"
         >
-          <circle cx="11" cy="11" r="7"></circle>
-          <path d="m20 20-3-3"></path>
-        </svg>
-        <span class="min-w-0 flex-1 truncate text-left">Search documentation…</span>
-      </button>
-      <div class="docs-nav-pane pb-2">
-        <slot name="mobile-nav">
-          <SectionTabs />
-        </slot>
-      </div>
+          <svg
+            class="size-5 shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="m20 20-3-3"></path>
+          </svg>
+          <span class="min-w-0 flex-1 truncate text-left">Search documentation…</span>
+        </button>
+      </DocsMobileNav>
       <div class="border-border mt-2 shrink-0 border-t pt-2">
         <a
           href="https://github.com/cookieMonsterDev/kafka"

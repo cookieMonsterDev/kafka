@@ -17,8 +17,27 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/*.test.ts', 'test/*.test.ts', 'test/suites/**/*.test.ts'],
-    environment: 'node',
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          // The tarball suite needs no broker (it packs and installs a real tarball), so it
+          // stays in the unit project alongside everything else `pnpm test` runs.
+          include: ['src/**/*.test.ts', 'test/*.test.ts', 'test/suites/tarball.test.ts'],
+          environment: 'node',
+        },
+      },
+      {
+        test: {
+          name: 'integration',
+          include: ['test/suites/topic-lifecycle.test.ts'],
+          environment: 'node',
+          globalSetup: ['./test/helpers/global-setup.ts'],
+          testTimeout: 30_000,
+          hookTimeout: 60_000,
+        },
+      },
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],

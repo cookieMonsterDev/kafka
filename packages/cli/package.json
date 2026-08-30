@@ -1,0 +1,61 @@
+{
+  "name": "@cookiemonsterdev/kafka-cli",
+  "version": "1.0.0",
+  "description": "Command-line admin client for Apache Kafka, built on @cookiemonsterdev/kafka-core.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "author": "Mykhailo Toporkov",
+  "homepage": "https://cookiemonsterdev.github.io/kafka/",
+  "bugs": {
+    "url": "https://github.com/cookieMonsterDev/kafka/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookieMonsterDev/kafka.git",
+    "directory": "packages/cli"
+  },
+  "keywords": [
+    "kafka",
+    "apache-kafka",
+    "cli",
+    "admin",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm run build:js && pnpm run build:types",
+    "build:js": "vite build",
+    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
+    "dev": "vite build --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "eslint": "^10.8.1",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@cookiemonsterdev/kafka-core": "^2.0.0"
+  }
+}

@@ -9,16 +9,21 @@ export { Kafka } from './client';
 
 export {
   defineConfig,
+  fromEnv,
   loadKafkaConfig,
   loadKafkaConfigAsync,
+  redactKafkaConfig,
   resolveKafkaConfig,
   resolveKafkaConfigAsync,
 } from './config/index';
 export type {
   ConfigKeySource,
+  FromEnvDiagnostic,
+  FromEnvOptions,
   KafkaConfigSource,
   KafkaFileConfig,
   LoadKafkaConfigOptions,
+  OnFromEnvDiagnostic,
   ResolvedKafkaConfig,
   ResolveKafkaConfigOptions,
   ResolveKafkaConfigResult,

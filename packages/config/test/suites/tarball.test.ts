@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -26,30 +26,46 @@ describe('npm tarball', () => {
   let installDir: string;
 
   beforeAll(async () => {
-    // Self-contained, same reasoning as the other build-output suites: this only means something
-    // against real build output, and nothing upstream guarantees a fresh `dist` exists.
-    const { build } = await import('vite');
-    await build({ configFile: join(PACKAGE_ROOT, 'vite.config.ts'), logLevel: 'silent' });
-    execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly'], { cwd: PACKAGE_ROOT });
+    // Self-contained: this only means something against real build output, and nothing upstream
+    // guarantees a fresh `dist` exists. Build into an isolated tree — never the package `dist/` —
+    // so this suite's `vite.build()` cannot empty a directory a sibling suite is still importing.
+    const packSource = mkdtempSync(join(tmpdir(), 'kafka-config-pack-source-'));
+    try {
+      const distDir = join(packSource, 'dist');
 
-    const packOutputDir = mkdtempSync(join(tmpdir(), 'kafka-config-pack-'));
-    const packOutput = execFileSync(
-      'npm',
-      ['pack', '--json', '--pack-destination', packOutputDir, '--ignore-scripts'],
-      { cwd: PACKAGE_ROOT, encoding: 'utf8' },
-    );
-    const [packed] = JSON.parse(packOutput) as { filename: string }[];
-    if (packed === undefined) throw new Error('npm pack produced no tarball');
-    const tarballPath = join(packOutputDir, packed.filename);
+      const { build } = await import('vite');
+      await build({
+        configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
+        logLevel: 'silent',
+        build: { outDir: distDir, emptyOutDir: true },
+      });
+      execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', distDir], {
+        cwd: PACKAGE_ROOT,
+      });
+      cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
+      cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));
 
-    installDir = mkdtempSync(join(tmpdir(), 'kafka-config-install-'));
-    writeFileSync(join(installDir, 'package.json'), JSON.stringify({ name: 'tarball-test', private: true }));
-    execFileSync('npm', ['install', tarballPath, '--no-audit', '--no-fund', '--ignore-scripts'], {
-      cwd: installDir,
-      encoding: 'utf8',
-    });
+      const packOutputDir = mkdtempSync(join(tmpdir(), 'kafka-config-pack-'));
+      const packOutput = execFileSync(
+        'npm',
+        ['pack', '--json', '--pack-destination', packOutputDir, '--ignore-scripts'],
+        { cwd: packSource, encoding: 'utf8' },
+      );
+      const [packed] = JSON.parse(packOutput) as { filename: string }[];
+      if (packed === undefined) throw new Error('npm pack produced no tarball');
+      const tarballPath = join(packOutputDir, packed.filename);
 
-    rmSync(packOutputDir, { recursive: true, force: true });
+      installDir = mkdtempSync(join(tmpdir(), 'kafka-config-install-'));
+      writeFileSync(join(installDir, 'package.json'), JSON.stringify({ name: 'tarball-test', private: true }));
+      execFileSync('npm', ['install', tarballPath, '--no-audit', '--no-fund', '--ignore-scripts'], {
+        cwd: installDir,
+        encoding: 'utf8',
+      });
+
+      rmSync(packOutputDir, { recursive: true, force: true });
+    } finally {
+      rmSync(packSource, { recursive: true, force: true });
+    }
   }, 120_000);
 
   afterAll(() => {

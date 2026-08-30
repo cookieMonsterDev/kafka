@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
-const DIST = join(PACKAGE_ROOT, 'dist');
 const SRC = join(PACKAGE_ROOT, 'src');
 const DRIVER = join(PACKAGE_ROOT, 'test/helpers/run-duplicate-instances.mjs');
 const FIXTURES = join(PACKAGE_ROOT, 'test/fixtures');
@@ -25,24 +24,33 @@ interface DriverResult {
 /**
  * A consumer's dependency tree can end up with two installed copies of this package (a mismatched
  * version somewhere else in the tree). This is what proves that's harmless — never just assumed —
- * by loading the built package twice from two distinct resolved paths (the original `dist/` and a
- * filesystem copy of it, so Node's module registry, keyed by resolved specifier, creates two
- * genuinely separate instances) inside one subprocess.
+ * by loading the built package twice from two distinct resolved paths (two filesystem copies of
+ * the emit, so Node's module registry, keyed by resolved specifier, creates two genuinely
+ * separate instances) inside one subprocess.
  */
 describe('two copies of the loader are harmless', () => {
+  let copyARoot: string;
   let copyBRoot: string;
 
   beforeAll(async () => {
-    // Self-contained, same reasoning as core's build-output.test.ts: this assertion is only
-    // meaningful against real build output, and nothing upstream guarantees `dist` exists yet.
-    const { build } = await import('vite');
-    await build({ configFile: join(PACKAGE_ROOT, 'vite.config.ts'), logLevel: 'silent' });
-
+    // Self-contained: this assertion is only meaningful against real build output, and nothing
+    // upstream guarantees `dist` exists yet. Write into two isolated trees — never the package
+    // `dist/` — so a sibling suite's `vite.build()` (which empties that directory) cannot delete
+    // the files this subprocess is about to import.
+    copyARoot = mkdtempSync(join(tmpdir(), 'kafka-config-copy-a-'));
     copyBRoot = mkdtempSync(join(tmpdir(), 'kafka-config-copy-b-'));
-    cpSync(DIST, copyBRoot, { recursive: true });
+
+    const { build } = await import('vite');
+    await build({
+      configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
+      logLevel: 'silent',
+      build: { outDir: copyARoot, emptyOutDir: true },
+    });
+    cpSync(copyARoot, copyBRoot, { recursive: true });
   }, 60_000);
 
   afterAll(() => {
+    if (copyARoot !== undefined) rmSync(copyARoot, { recursive: true, force: true });
     if (copyBRoot !== undefined) rmSync(copyBRoot, { recursive: true, force: true });
   });
 
@@ -51,7 +59,7 @@ describe('two copies of the loader are harmless', () => {
       'node',
       [
         DRIVER,
-        join(DIST, 'index.js'),
+        join(copyARoot, 'index.js'),
         join(copyBRoot, 'index.js'),
         join(FIXTURES, 'load-sync/ladder/kafka.config.ts'),
         join(FIXTURES, 'load-sync/invalid-json/kafka.config.json'),

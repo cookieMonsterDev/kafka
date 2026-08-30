@@ -5,13 +5,13 @@ export default defineConfig({
     target: 'node24',
     sourcemap: true,
     minify: false,
+    // Bundled to a single file, unlike core/kafka-config's preserveModules build: the CLI's own
+    // code should cost one cheap parse on every invocation, including --help/--version, and core
+    // (kept external below) is meant to be await-imported only inside commands that connect.
     lib: { entry: { index: 'src/index.ts' }, formats: ['es'] },
     rollupOptions: {
       external: [/^node:/, '@cookiemonsterdev/kafka-core'],
       output: {
-        // 1:1 with src, so the emitted .js tree matches the tsc-emitted .d.ts tree
-        preserveModules: true,
-        preserveModulesRoot: 'src',
         entryFileNames: '[name].js',
       },
     },

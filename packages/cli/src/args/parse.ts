@@ -112,16 +112,17 @@ export function parseCommandArgs(
   }
 
   const positionalValues = raw.positionals;
-  if (positionals.length > 0) {
-    const variadicIndex = positionals.findIndex((spec) => spec.variadic === true);
-    const fixedCount = variadicIndex === -1 ? positionals.length : variadicIndex;
-    if (positionalValues.length < fixedCount) {
-      const missing = positionals[positionalValues.length];
-      throw new CliUsageError(`missing required argument <${missing?.name ?? 'argument'}>`);
-    }
-    if (variadicIndex === -1 && positionalValues.length > fixedCount) {
-      throw new CliUsageError(`unexpected argument "${positionalValues[fixedCount] ?? ''}"`);
-    }
+  // Runs even when the command declares no positionals at all (positionals === []) — that's
+  // exactly the case where fixedCount is 0 and variadicIndex is -1, so any positional value the
+  // user passed is unexpected and should be rejected rather than silently discarded.
+  const variadicIndex = positionals.findIndex((spec) => spec.variadic === true);
+  const fixedCount = variadicIndex === -1 ? positionals.length : variadicIndex;
+  if (positionalValues.length < fixedCount) {
+    const missing = positionals[positionalValues.length];
+    throw new CliUsageError(`missing required argument <${missing?.name ?? 'argument'}>`);
+  }
+  if (variadicIndex === -1 && positionalValues.length > fixedCount) {
+    throw new CliUsageError(`unexpected argument "${positionalValues[fixedCount] ?? ''}"`);
   }
 
   return { flags: result, positionals: positionalValues };

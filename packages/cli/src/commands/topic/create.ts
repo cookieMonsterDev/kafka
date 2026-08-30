@@ -65,13 +65,25 @@ export const topicCreateCommand: CommandSpec = {
     try {
       let results: TopicResult[];
 
-      if (configs.length === 1 || failFast) {
+      if (configs.length === 1) {
+        const created = await admin.createTopics({ topics: configs, validateOnly: dryRun });
+        const ok = created || ifNotExists;
+        results = [{ topic: configs[0]!.topic, ok, detail: ok ? undefined : 'already exists' }];
+      } else if (failFast) {
+        // core's createTopics() reports one boolean for the whole batch — `false` only means
+        // "every failing topic in this call already existed", never which specific topics those
+        // were, and a topic that genuinely got created leaves no positive trace either. Claiming
+        // per-topic status here (e.g. "already exists" on a topic that may have just been
+        // created) would be a false report, so a batched multi-topic call gets one honest,
+        // combined result instead of N fabricated ones.
         const created = await admin.createTopics({ topics: configs, validateOnly: dryRun });
         const ok = created || ifNotExists;
         results = positionals.map((topic) => ({
           topic,
           ok,
-          detail: ok ? undefined : 'already exists',
+          detail: ok
+            ? undefined
+            : 'batched call did not report full success; per-topic detail is unavailable with --fail-fast',
         }));
       } else {
         results = await mapWithConcurrency(configs, CONCURRENCY, async (config) => {

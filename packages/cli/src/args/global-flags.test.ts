@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CliUsageError } from './coerce';
 import { extractGlobalFlags } from './pre-parse';
 
 describe('extractGlobalFlags', () => {
@@ -58,5 +59,20 @@ describe('extractGlobalFlags', () => {
     expect(global.jsonFlag).toBe(false);
     expect(global.verbosity).toBe(0);
     expect(rest).toEqual(['topic', 'create', '--', '--json', '-v']);
+  });
+
+  it('throws CliUsageError for an unrecognized --format value instead of silently defaulting', () => {
+    expect(() => extractGlobalFlags(['--format', 'yaml'])).toThrow(CliUsageError);
+    expect(() => extractGlobalFlags(['--format', 'yaml'])).toThrow(/--format expects "human" or "json"/);
+  });
+
+  it('throws CliUsageError when --format is the last token, rather than swallowing nothing', () => {
+    expect(() => extractGlobalFlags(['topic', 'list', '--format'])).toThrow(CliUsageError);
+  });
+
+  it("does not swallow the next flag as --format's value when it is not a valid format", () => {
+    // Regression: --format used to consume *any* next token unconditionally, so a real flag
+    // right after it (e.g. -v) would be silently discarded instead of being parsed.
+    expect(() => extractGlobalFlags(['--format', '-v', '--brokers', 'x'])).toThrow(CliUsageError);
   });
 });

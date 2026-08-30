@@ -92,4 +92,12 @@ describe('dispatch', () => {
     await expect(dispatch(runtime)).resolves.toBe(2);
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('unknown command'));
   });
+
+  it('maps a malformed global flag to the usage exit code instead of throwing', async () => {
+    // Regression: a bad --format value used to throw out of extractGlobalFlags before an output
+    // port existed to report it, crashing the process instead of resolving to an exit code.
+    const { runtime, stderrWrite } = fakeRuntime(['topic', 'list', '--format', 'yaml']);
+    await expect(dispatch(runtime)).resolves.toBe(2);
+    expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('--format'));
+  });
 });

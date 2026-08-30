@@ -67,7 +67,8 @@ describe('parseCommandArgs', () => {
 
   it('passes everything after -- through as positionals, untouched', () => {
     const flags: FlagSpec[] = [{ name: 'wait', type: 'boolean', brief: '' }];
-    const result = parseCommandArgs(['--', '--wait', 'literal'], flags);
+    const positionals: PositionalSpec[] = [{ name: 'args', variadic: true, brief: '' }];
+    const result = parseCommandArgs(['--', '--wait', 'literal'], flags, positionals);
     expect(result.positionals).toEqual(['--wait', 'literal']);
     expect(result.flags).toEqual({});
   });
@@ -77,9 +78,22 @@ describe('parseCommandArgs', () => {
     expect(() => parseCommandArgs(['--nope'], flags)).toThrow(CliUsageError);
   });
 
-  it('collects ordinary positionals', () => {
-    const result = parseCommandArgs(['orders', 'payments'], []);
+  it('collects ordinary positionals when the command declares a variadic one', () => {
+    const positionals: PositionalSpec[] = [{ name: 'topics', variadic: true, brief: '' }];
+    const result = parseCommandArgs(['orders', 'payments'], [], positionals);
     expect(result.positionals).toEqual(['orders', 'payments']);
+  });
+
+  it('rejects any positional when the command declares none at all', () => {
+    // Regression: a command with no `positionals` spec (e.g. `ping`, `admin methods`) used to
+    // skip positional validation entirely, silently discarding a stray extra argument instead
+    // of rejecting it the way a command that does declare positionals already does.
+    expect(() => parseCommandArgs(['orders'], [])).toThrow(CliUsageError);
+    expect(() => parseCommandArgs(['orders'], [])).toThrow(/unexpected argument/);
+  });
+
+  it('accepts an empty argv when the command declares no positionals', () => {
+    expect(parseCommandArgs([], []).positionals).toEqual([]);
   });
 
   it('requires a declared positional', () => {

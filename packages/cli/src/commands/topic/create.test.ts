@@ -93,6 +93,40 @@ describe('topicCreateCommand', () => {
     });
   });
 
+  it('never falsely claims a specific topic "already exists" for a mixed --fail-fast batch', async () => {
+    // core's createTopics() reports one boolean for the whole call: false only means "every
+    // failing topic already existed", never which ones — a topic that really was created (e.g.
+    // "orders" here) leaves no positive trace in that boolean. Regression for a bug where every
+    // topic in the batch was reported as "already exists", even one that had just been created.
+    const createTopics = vi.fn(async () => false);
+    const admin = createFakeAdmin({ createTopics, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'fail-fast': true },
+      positionals: ['orders', 'payments'],
+      openAdmin: async () => admin,
+    });
+
+    const code = await topicCreateCommand.run(context);
+
+    expect(code).toBe(1);
+    const written = stdoutWrite.mock.calls[0]?.[0] ?? '';
+    expect(written).not.toContain('already exists');
+    expect(written).toContain('per-topic detail is unavailable');
+  });
+
+  it('reports a mixed --fail-fast batch as fully ok when --if-not-exists is set', async () => {
+    const createTopics = vi.fn(async () => false);
+    const admin = createFakeAdmin({ createTopics, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'fail-fast': true, 'if-not-exists': true },
+      positionals: ['orders', 'payments'],
+      openAdmin: async () => admin,
+    });
+
+    const code = await topicCreateCommand.run(context);
+    expect(code).toBe(0);
+  });
+
   it('returns exit 4 on a fanned-out partial failure', async () => {
     const createTopics = vi.fn(async ({ topics }: { topics: { topic: string }[] }) => {
       if (topics[0]?.topic === 'orders') return true;

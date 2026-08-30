@@ -1,23 +1,7 @@
 import type { OutputFormat } from '../output/format';
+import { CliUsageError } from './coerce';
 
 export type { OutputFormat } from '../output/format';
-
-/**
- * A cheap, tolerant scan of the raw argv for `--json`/`--format`, done before the real parser
- * runs. A usage error (an unknown flag, a bad enum value, …) needs to know up front whether it
- * should itself be emitted as JSON — by the time the real parser has thrown, it's too late to
- * ask it.
- */
-export function preParseOutputFormat(argv: readonly string[]): OutputFormat {
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
-    if (token === '--') break;
-    if (token === '--json') return 'json';
-    if (token === '--format=json') return 'json';
-    if (token === '--format' && argv[i + 1] === 'json') return 'json';
-  }
-  return 'human';
-}
 
 export interface GlobalFlags {
   readonly jsonFlag: boolean;
@@ -33,7 +17,9 @@ export interface GlobalFlags {
 /**
  * Strips every global flag (output format, verbosity, color, `--help`/`-h`, `--version`) out of
  * `argv`, wherever it appears, so a command's own flag parser never has to know about them —
- * they're reserved names a command may not redeclare (see `RESERVED_FLAG_NAMES`).
+ * they're reserved names a command may not redeclare (see `RESERVED_FLAG_NAMES`). This runs
+ * before any command-specific parsing, including on a path that will end in a usage error, which
+ * is what lets that error itself be reported as JSON when `--json`/`--format json` was given.
  */
 export function extractGlobalFlags(argv: readonly string[]): { global: GlobalFlags; rest: string[] } {
   let jsonFlag = false;
@@ -70,10 +56,17 @@ export function extractGlobalFlags(argv: readonly string[]): { global: GlobalFla
       case '--format=json':
         formatFlag = 'json';
         continue;
-      case '--format':
-        formatFlag = argv[i + 1] === 'json' ? 'json' : 'human';
+      case '--format': {
+        const value = argv[i + 1];
+        if (value !== 'human' && value !== 'json') {
+          throw new CliUsageError(
+            `--format expects "human" or "json", got ${value === undefined ? 'nothing' : `"${value}"`}`,
+          );
+        }
+        formatFlag = value;
         i += 1;
         continue;
+      }
       case '-q':
       case '--quiet':
         quiet = true;

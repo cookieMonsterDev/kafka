@@ -78,11 +78,12 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev   # http://localhost:4321
 
 ## Packages
 
-| Package                          | Path              | What it is                                    |
-| -------------------------------- | ----------------- | --------------------------------------------- |
-| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm |
-| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm  |
-| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)       |
+| Package                          | Path              | What it is                                                    |
+| -------------------------------- | ----------------- | ------------------------------------------------------------- |
+| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm                 |
+| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm                  |
+| `@cookiemonsterdev/kafka-cli`    | `packages/cli`    | Command-line admin client (private workspace scaffold so far) |
+| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)                       |
 
 ## Requirements
 

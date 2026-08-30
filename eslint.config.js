@@ -20,7 +20,11 @@ export default tseslint.config(
   },
   js.configs.recommended,
   {
-    files: ['packages/core/{src,test}/**/*.ts', 'packages/config/{src,test}/**/*.ts'],
+    files: [
+      'packages/core/{src,test}/**/*.ts',
+      'packages/config/{src,test}/**/*.ts',
+      'packages/cli/{src,test}/**/*.ts',
+    ],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
@@ -42,7 +46,23 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.test.ts', 'packages/core/test/**/*.ts', 'packages/config/test/**/*.ts'],
+    // Every CLI command is routed through an injected Runtime port so it can be unit-tested
+    // without a real process — only the process entry point and the port itself may touch
+    // `process` directly.
+    files: ['packages/cli/src/**/*.ts'],
+    ignores: ['packages/cli/src/bin.ts', 'packages/cli/src/runtime.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message: 'Route through the injected Runtime port instead of the global `process`.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/*.test.ts', 'packages/core/test/**/*.ts', 'packages/config/test/**/*.ts', 'packages/cli/test/**/*.ts'],
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,

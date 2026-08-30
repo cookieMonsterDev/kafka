@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`0.0.1` on npm is a name-reservation release; no commands yet), `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
+Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`ping`, the `topic` family, and an `admin call` passthrough for everything else on `Admin`), `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 

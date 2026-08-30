@@ -8,9 +8,9 @@ function exitCodeForSignal(reason: unknown): number {
 
 /**
  * The whole program as a pure function of a {@link Runtime}: parse `argv`, route to a command,
- * run it, and resolve to an exit code. Never throws for an ordinary failure — every expected
- * failure is caught and turned into a code; only a genuine bug propagates, and `bin.ts` maps that
- * to the internal-bug code before it ever reaches a real process.
+ * run it, and resolve to an exit code. Never throws — every failure, expected or not, is caught
+ * and turned into a code by the dispatcher's own error mapping, down to a genuine unexpected bug,
+ * which becomes the internal-bug code with a bug-report line rather than an uncaught rejection.
  */
 export async function main(runtime: Runtime): Promise<number> {
   if (runtime.signal.aborted) {

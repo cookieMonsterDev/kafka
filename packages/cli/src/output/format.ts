@@ -1,5 +1,6 @@
 import { createPalette } from './colors';
 import { createLogger, type CliLogLevel } from './logger';
+import type { CliError } from '../errors/cli-error';
 
 export type OutputFormat = 'human' | 'json';
 
@@ -54,6 +55,24 @@ export function writeError(
   }
 }
 
+/**
+ * Reports a full {@link CliError}: as the one JSON document on stdout when `format` is `json`
+ * (including any sub-`items`, e.g. a flattened `KafkaAggregateError`), otherwise as a message
+ * plus one indented line per item on stderr.
+ */
+export function writeCliError(
+  streams: { stdout: { write(chunk: string): unknown }; stderr: { write(chunk: string): unknown } },
+  format: OutputFormat,
+  error: CliError,
+): void {
+  if (format === 'json') {
+    streams.stdout.write(`${JSON.stringify({ error: { message: error.message, items: error.items } })}\n`);
+    return;
+  }
+  const lines = [`kafka: ${error.message}`, ...(error.items ?? []).map((item) => `  - ${item.message}`)];
+  streams.stderr.write(`${lines.join('\n')}\n`);
+}
+
 export interface CreateCommandOutputInput {
   readonly stdout: { write(chunk: string): unknown };
   readonly stderr: { write(chunk: string): unknown };
@@ -74,6 +93,9 @@ export function createCommandOutput(input: CreateCommandOutputInput) {
     },
     error(message: string) {
       writeError({ stdout: input.stdout, stderr: input.stderr }, input.format, message);
+    },
+    cliError(error: CliError) {
+      writeCliError({ stdout: input.stdout, stderr: input.stderr }, input.format, error);
     },
   };
 }

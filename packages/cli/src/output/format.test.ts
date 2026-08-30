@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CLI_LOG_LEVELS } from './logger';
-import { createCommandOutput, resolveOutputFormat, writeError, writeFormatted } from './format';
+import { createCommandOutput, resolveOutputFormat, writeCliError, writeError, writeFormatted } from './format';
 
 describe('resolveOutputFormat', () => {
   it('defaults to human', () => {
@@ -59,6 +59,35 @@ describe('writeError', () => {
     expect(stdout).toHaveBeenCalledTimes(1);
     const written = stdout.mock.calls[0]?.[0] ?? '';
     expect(JSON.parse(written)).toEqual({ error: { message: 'boom' } });
+  });
+});
+
+describe('writeCliError', () => {
+  it('writes the message and one indented line per item to stderr in human mode', () => {
+    const stdout = vi.fn((_chunk: string) => true);
+    const stderr = vi.fn((_chunk: string) => true);
+    writeCliError({ stdout: { write: stdout }, stderr: { write: stderr } }, 'human', {
+      exitCode: 1,
+      message: 'two topics failed',
+      items: [{ message: 'orders exists' }, { message: 'payments: timeout' }],
+    });
+
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).toHaveBeenCalledWith('kafka: two topics failed\n  - orders exists\n  - payments: timeout\n');
+  });
+
+  it('writes message and items as JSON on stdout in json mode', () => {
+    const stdout = vi.fn((_chunk: string) => true);
+    const stderr = vi.fn((_chunk: string) => true);
+    writeCliError({ stdout: { write: stdout }, stderr: { write: stderr } }, 'json', {
+      exitCode: 1,
+      message: 'boom',
+      items: [{ message: 'a' }],
+    });
+
+    expect(stderr).not.toHaveBeenCalled();
+    const written = stdout.mock.calls[0]?.[0] ?? '';
+    expect(JSON.parse(written)).toEqual({ error: { message: 'boom', items: [{ message: 'a' }] } });
   });
 });
 

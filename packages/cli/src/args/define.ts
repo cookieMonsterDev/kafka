@@ -1,3 +1,4 @@
+import type { CliError } from '../errors/cli-error';
 import type { Palette } from '../output/colors';
 import type { Rendered } from '../output/format';
 import type { CliLogger } from '../output/logger';
@@ -34,6 +35,8 @@ export interface CommandOutput {
   write(rendered: Rendered): void;
   /** Reports a failure — JSON on stdout when the format is JSON, otherwise a line on stderr. */
   error(message: string): void;
+  /** Reports a full {@link CliError}, including any sub-items (a flattened aggregate error). */
+  cliError(error: CliError): void;
 }
 
 export interface CommandContext {

@@ -1,14 +1,13 @@
-import { CliUsageError } from './args/coerce';
 import type { CommandSpec } from './args/define';
 import { extractGlobalFlags } from './args/pre-parse';
 import { parseCommandArgs } from './args/parse';
 import { ALL_COMMANDS } from './commands/index';
 import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
+import { mapKafkaError } from './errors/map-kafka-error';
 import { shouldUseColor } from './output/colors';
 import { createCommandOutput, resolveOutputFormat } from './output/format';
 import { verbosityToLogLevel } from './output/logger';
-import { EXIT_CODES } from './errors/exit-codes';
 import type { HelpRenderOptions } from './help/render';
 import { commandGroups, createRegistry } from './registry';
 import type { Runtime } from './runtime';
@@ -85,10 +84,8 @@ export async function dispatch(runtime: Runtime): Promise<number> {
     const parsed = parseCommandArgs(rest, command.flags ?? [], command.positionals ?? []);
     return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output });
   } catch (error) {
-    if (error instanceof CliUsageError) {
-      output.error(error.message);
-      return EXIT_CODES.usage;
-    }
-    throw error;
+    const mapped = mapKafkaError(error);
+    output.cliError(mapped);
+    return mapped.exitCode;
   }
 }

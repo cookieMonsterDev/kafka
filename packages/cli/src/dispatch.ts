@@ -1,12 +1,16 @@
 import { CliUsageError } from './args/coerce';
+import type { CommandSpec } from './args/define';
+import { extractGlobalFlags } from './args/pre-parse';
 import { parseCommandArgs } from './args/parse';
 import { ALL_COMMANDS } from './commands/index';
 import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
+import { shouldUseColor } from './output/colors';
+import { createCommandOutput, resolveOutputFormat } from './output/format';
+import { verbosityToLogLevel } from './output/logger';
 import { EXIT_CODES } from './errors/exit-codes';
 import type { HelpRenderOptions } from './help/render';
 import { commandGroups, createRegistry } from './registry';
-import type { CommandSpec } from './args/define';
 import type { Runtime } from './runtime';
 
 const HELP_OPTIONS: HelpRenderOptions = { programName: 'kafka' };
@@ -38,23 +42,33 @@ function attemptedPath(argv: readonly string[]): string[] {
 
 /**
  * Parses `runtime.argv`, routes to the matching command (or to help/version), runs it, and
- * resolves to an exit code. The only place that decides *which* command runs; a command itself
- * never touches the registry or the raw argv.
+ * resolves to an exit code. The only place that decides *which* command runs and how its output
+ * is formatted; a command itself never touches the registry, the raw argv, or a global flag.
  */
 export async function dispatch(runtime: Runtime): Promise<number> {
   const registry = createRegistry(ALL_COMMANDS);
   const groups = commandGroups(registry);
-  const argv = runtime.argv;
+  const { global, rest: withoutGlobalFlags } = extractGlobalFlags(runtime.argv);
 
-  if (argv[0] === 'version' || argv.includes('--version')) {
+  if (global.version || withoutGlobalFlags[0] === 'version') {
     return runVersionCommand(runtime);
   }
 
-  const helpRequested = argv[0] === 'help';
-  const searchArgv = helpRequested ? argv.slice(1) : argv;
+  const format = resolveOutputFormat({ jsonFlag: global.jsonFlag, formatFlag: global.formatFlag, env: runtime.env });
+  const useColor = shouldUseColor({
+    isTty: runtime.isTty,
+    env: runtime.env,
+    colorFlag: global.colorFlag,
+    noColorFlag: global.noColorFlag,
+  });
+  const logLevel = verbosityToLogLevel(global.quiet, global.verbosity);
+  const output = createCommandOutput({ stdout: runtime.stdout, stderr: runtime.stderr, format, useColor, logLevel });
+
+  const helpRequested = withoutGlobalFlags[0] === 'help';
+  const searchArgv = helpRequested ? withoutGlobalFlags.slice(1) : withoutGlobalFlags;
   const { path, rest } = resolveCommandPath(registry, searchArgv);
   const candidatePath = path.length > 0 ? path : attemptedPath(searchArgv);
-  const wantsHelp = helpRequested || rest.includes('--help') || rest.includes('-h');
+  const wantsHelp = helpRequested || global.help;
   const isKnownPath =
     candidatePath.length === 0 || registry.has(candidatePath.join(' ')) || groups.has(candidatePath.join(' '));
 
@@ -69,10 +83,10 @@ export async function dispatch(runtime: Runtime): Promise<number> {
 
   try {
     const parsed = parseCommandArgs(rest, command.flags ?? [], command.positionals ?? []);
-    return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals });
+    return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output });
   } catch (error) {
     if (error instanceof CliUsageError) {
-      runtime.stderr.write(`kafka: ${error.message}\n`);
+      output.error(error.message);
       return EXIT_CODES.usage;
     }
     throw error;

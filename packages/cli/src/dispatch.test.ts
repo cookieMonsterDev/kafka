@@ -29,7 +29,13 @@ const { dispatch } = await import('./dispatch');
 function fakeRuntime(argv: readonly string[]) {
   const stdoutWrite = vi.fn((_chunk: string) => true);
   const stderrWrite = vi.fn((_chunk: string) => true);
-  const runtime = { argv, stdout: { write: stdoutWrite }, stderr: { write: stderrWrite } } as unknown as Runtime;
+  const runtime = {
+    argv,
+    env: {},
+    isTty: false,
+    stdout: { write: stdoutWrite },
+    stderr: { write: stderrWrite },
+  } as unknown as Runtime;
   return { runtime, stdoutWrite, stderrWrite };
 }
 

@@ -1,3 +1,6 @@
+import type { Palette } from '../output/colors';
+import type { Rendered } from '../output/format';
+import type { CliLogger } from '../output/logger';
 import type { Runtime } from '../runtime';
 
 export type FlagType = 'string' | 'boolean' | 'number' | 'enum';
@@ -24,10 +27,20 @@ export interface PositionalSpec {
   readonly brief: string;
 }
 
+export interface CommandOutput {
+  readonly palette: Palette;
+  readonly log: CliLogger;
+  /** Writes exactly one of `human`/`json` to stdout, chosen by the resolved output format. */
+  write(rendered: Rendered): void;
+  /** Reports a failure — JSON on stdout when the format is JSON, otherwise a line on stderr. */
+  error(message: string): void;
+}
+
 export interface CommandContext {
   readonly runtime: Runtime;
   readonly flags: Readonly<Record<string, unknown>>;
   readonly positionals: readonly string[];
+  readonly output: CommandOutput;
 }
 
 export interface CommandSpec {

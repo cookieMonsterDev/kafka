@@ -16,18 +16,18 @@ describe('package.json', () => {
     expect(packageJson.engines).toEqual({ node: '>=24.0.0' });
   });
 
-  // Published early, ahead of the walking skeleton, purely to reserve the npm name and unblock
-  // configuring npm Trusted Publishing — see packages/cli/CHANGELOG.md. There is still no `bin`
-  // and no command; a real user gains nothing from installing this version.
-  it('is public, on a pre-1.0 name-reservation version', () => {
+  // The very first published version was a deliberately inert name-reservation release (no `bin`,
+  // no command) to unblock configuring npm Trusted Publishing ahead of schedule — see
+  // packages/cli/CHANGELOG.md. That version stays on disk here until an actual release runs;
+  // this test only pins the package staying public, never flipping back to private.
+  it('is public', () => {
     expect(packageJson.private).toBeUndefined();
-    expect(packageJson.version).toBe('0.0.1');
   });
 
-  // The scaffold reads no config file (`--brokers` only) and mounts no command yet, so the only
-  // runtime dependency it needs is the client itself. `@cookiemonsterdev/kafka-config` is added
-  // later, once a command actually reads a config file — adding it here would ship an unused
-  // dependency. A stray third-party `pnpm add` should fail this test, not slip through review.
+  // Every command reads connection options from `--brokers` only, so the only runtime dependency
+  // is the client itself. `@cookiemonsterdev/kafka-config` is added later, once a command reads a
+  // config file — adding it here would ship an unused dependency. A stray third-party `pnpm add`
+  // should fail this test, not slip through review.
   it('declares exactly one dependency: kafka-core', () => {
     expect(packageJson.dependencies).toEqual({
       '@cookiemonsterdev/kafka-core': '^2.0.0',

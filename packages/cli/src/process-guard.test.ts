@@ -1,10 +1,9 @@
 import { Linter } from 'eslint';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-// `bin.ts` and `runtime.ts` don't exist yet (they land with the walking skeleton), but the guard
-// that exempts them must already be wired up correctly — this fixture exercises the real block
-// from the repo's own eslint.config.js, not a re-typed copy of it, so a future edit that loosens
-// or drops the guard fails this test rather than only failing an eventual manual review.
+// This fixture exercises the real no-restricted-globals block from the repo's own
+// eslint.config.js, not a re-typed copy of it, so a future edit that loosens or drops the guard
+// fails this test rather than only failing an eventual manual review.
 let processGuardBlock: Linter.Config;
 
 beforeAll(async () => {

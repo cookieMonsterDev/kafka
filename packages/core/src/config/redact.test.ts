@@ -99,6 +99,52 @@ describe('redactKafkaConfig', () => {
     expect(() => JSON.stringify(redacted)).not.toThrow();
   });
 
+  it('does not throw when a property getter itself throws, reporting it as [Unreadable]', () => {
+    const config: Record<string, unknown> = {
+      clientId: 'app',
+      get sasl(): never {
+        throw new Error('boom');
+      },
+    };
+
+    let redacted: unknown;
+    expect(() => {
+      redacted = redactKafkaConfig(config);
+    }).not.toThrow();
+    expect((redacted as { sasl: unknown }).sasl).toBe('[Unreadable]');
+    expect(() => JSON.stringify(redacted)).not.toThrow();
+  });
+
+  it('redacts every secret field even when the same object is aliased as both sasl and ssl', () => {
+    const shared = { password: 'sasl-secret', key: 'ssl-secret' };
+    const config = { sasl: shared, ssl: shared };
+
+    const redacted = redactKafkaConfig(config) as { sasl: typeof shared; ssl: typeof shared };
+
+    expect(redacted.sasl.password).toBe('[REDACTED]');
+    expect(redacted.sasl.key).toBe('[REDACTED]');
+    expect(redacted.ssl.password).toBe('[REDACTED]');
+    expect(redacted.ssl.key).toBe('[REDACTED]');
+    const serialized = JSON.stringify(redacted);
+    expect(serialized).not.toContain('sasl-secret');
+    expect(serialized).not.toContain('ssl-secret');
+  });
+
+  it('redacts secret fields inside an array of sasl-like objects', () => {
+    const redacted = redactKafkaConfig({ sasl: [{ password: 'secret1' }, { password: 'secret2' }] }) as {
+      sasl: { password: string }[];
+    };
+
+    expect(redacted.sasl[0]?.password).toBe('[REDACTED]');
+    expect(redacted.sasl[1]?.password).toBe('[REDACTED]');
+  });
+
+  it('matches sasl/ssl case-insensitively', () => {
+    const redacted = redactKafkaConfig({ SASL: { password: 'secret3' } }) as { SASL: { password: string } };
+
+    expect(redacted.SASL.password).toBe('[REDACTED]');
+  });
+
   it('JSON.stringify(redactKafkaConfig(x)) is safe for any input', () => {
     expect(() => JSON.stringify(redactKafkaConfig(null))).not.toThrow();
     expect(() => JSON.stringify(redactKafkaConfig(undefined))).not.toThrow();

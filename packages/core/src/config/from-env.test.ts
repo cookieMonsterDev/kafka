@@ -24,6 +24,16 @@ describe('fromEnv', () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it('omits and warns when KAFKA_BROKERS resolves to no addresses at all', () => {
+    const { diagnostics, onDiagnostic } = collect();
+
+    const config = fromEnv({ KAFKA_BROKERS: ' , , ' }, { onDiagnostic });
+
+    expect(config).not.toHaveProperty('brokers');
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.key).toBe('KAFKA_BROKERS');
+  });
+
   it('passes KAFKA_CLIENT_ID through unchanged', () => {
     expect(fromEnv({ KAFKA_CLIENT_ID: 'my-app' })).toEqual({ clientId: 'my-app' });
   });
@@ -41,6 +51,16 @@ describe('fromEnv', () => {
       level: 'warn',
       key: 'KAFKA_CONNECTION_TIMEOUT',
     });
+  });
+
+  it('omits KAFKA_CONNECTION_TIMEOUT and warns when it is blank, never silently 0', () => {
+    const { diagnostics, onDiagnostic } = collect();
+
+    const config = fromEnv({ KAFKA_CONNECTION_TIMEOUT: '   ' }, { onDiagnostic });
+
+    expect(config).not.toHaveProperty('connectionTimeout');
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]?.key).toBe('KAFKA_CONNECTION_TIMEOUT');
   });
 
   it('parses KAFKA_CONNECTION_TIMEOUT and KAFKA_REQUEST_TIMEOUT as numbers', () => {
@@ -160,14 +180,38 @@ describe('fromEnv', () => {
       });
     });
 
-    it('warns and omits just the one field when a referenced ssl file does not exist', () => {
+    it('warns and omits ssl entirely when the only referenced file does not exist — never a present-but-empty object', () => {
       const { diagnostics, onDiagnostic } = collect();
 
       const config = fromEnv({ KAFKA_SSL_CA_FILE: '/does/not/exist.pem' }, { onDiagnostic });
 
-      expect(config.ssl).toEqual({ ca: undefined, cert: undefined, key: undefined, rejectUnauthorized: undefined });
+      expect(config).not.toHaveProperty('ssl');
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0]?.key).toBe('KAFKA_SSL_CA_FILE');
+    });
+
+    it('warns for the file that fails but still builds ssl from the ones that succeed', () => {
+      const caFile = tempFile('ca-contents', 'ca.pem');
+      const { diagnostics, onDiagnostic } = collect();
+
+      const config = fromEnv(
+        { KAFKA_SSL_CA_FILE: caFile, KAFKA_SSL_CERT_FILE: '/does/not/exist.pem' },
+        { onDiagnostic },
+      );
+
+      expect(config.ssl).toEqual({ ca: 'ca-contents', cert: undefined, key: undefined, rejectUnauthorized: undefined });
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.key).toBe('KAFKA_SSL_CERT_FILE');
+    });
+
+    it('an explicit KAFKA_SSL=false wins over ssl file options and warns about the conflict, rather than being silently discarded', () => {
+      const { diagnostics, onDiagnostic } = collect();
+
+      const config = fromEnv({ KAFKA_SSL: 'false', KAFKA_SSL_REJECT_UNAUTHORIZED: 'true' }, { onDiagnostic });
+
+      expect(config.ssl).toBe(false);
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.key).toBe('KAFKA_SSL');
     });
   });
 

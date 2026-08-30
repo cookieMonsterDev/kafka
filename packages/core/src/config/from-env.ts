@@ -34,11 +34,14 @@ function warn(onDiagnostic: OnFromEnvDiagnostic, key: string, message: string): 
   onDiagnostic({ code: 'config.env-invalid', level: 'warn', key, message: `${message} (from "${key}")` });
 }
 
-function parseBrokers(raw: string): readonly string[] {
-  return raw
+function parseBrokers(raw: string, key: string, onDiagnostic: OnFromEnvDiagnostic): readonly string[] | undefined {
+  const brokers = raw
     .split(',')
     .map((broker) => broker.trim())
     .filter((broker) => broker.length > 0);
+  if (brokers.length > 0) return brokers;
+  warn(onDiagnostic, key, `"${raw}" contains no broker addresses`);
+  return undefined;
 }
 
 function parseBoolean(raw: string, key: string, onDiagnostic: OnFromEnvDiagnostic): boolean | undefined {
@@ -50,8 +53,9 @@ function parseBoolean(raw: string, key: string, onDiagnostic: OnFromEnvDiagnosti
 }
 
 function parseInteger(raw: string, key: string, onDiagnostic: OnFromEnvDiagnostic): number | undefined {
-  const value = Number(raw.trim());
-  if (Number.isFinite(value)) return value;
+  const trimmed = raw.trim();
+  const value = Number(trimmed);
+  if (trimmed.length > 0 && Number.isFinite(value)) return value;
   warn(onDiagnostic, key, `"${raw}" is not a number`);
   return undefined;
 }
@@ -142,8 +146,19 @@ function readSsl(
     certFileRaw !== undefined ||
     keyFileRaw !== undefined ||
     rejectUnauthorizedRaw !== undefined;
+  const sslBoolean = sslRaw === undefined ? undefined : parseBoolean(sslRaw, sslKey, onDiagnostic);
+
   if (!hasFileOptions) {
-    return sslRaw === undefined ? undefined : parseBoolean(sslRaw, sslKey, onDiagnostic);
+    return sslBoolean;
+  }
+
+  if (sslBoolean === false) {
+    warn(
+      onDiagnostic,
+      sslKey,
+      `ignored because "${sslKey}" is "false" while ssl file options are also set — ssl stays disabled`,
+    );
+    return false;
   }
 
   const ca = caFileRaw === undefined ? undefined : readSslFile(caFileRaw, caFileKey, onDiagnostic);
@@ -153,6 +168,12 @@ function readSsl(
     rejectUnauthorizedRaw === undefined
       ? undefined
       : parseBoolean(rejectUnauthorizedRaw, rejectUnauthorizedKey, onDiagnostic);
+
+  if (ca === undefined && cert === undefined && key === undefined && rejectUnauthorized === undefined) {
+    // Every file/boolean option that was set failed to resolve (already diagnosed above) —
+    // nothing usable came out of it, so this must behave like "unset", not like `{}`.
+    return undefined;
+  }
 
   return { ca, cert, key, rejectUnauthorized };
 }
@@ -180,7 +201,10 @@ export function fromEnv(env: NodeJS.ProcessEnv, options: FromEnvOptions = {}): P
 
   const brokersKey = `${prefix}BROKERS`;
   const brokersRaw = env[brokersKey];
-  if (brokersRaw !== undefined) config.brokers = parseBrokers(brokersRaw);
+  if (brokersRaw !== undefined) {
+    const brokers = parseBrokers(brokersRaw, brokersKey, onDiagnostic);
+    if (brokers !== undefined) config.brokers = brokers;
+  }
 
   const clientIdRaw = env[`${prefix}CLIENT_ID`];
   if (clientIdRaw !== undefined) config.clientId = clientIdRaw;

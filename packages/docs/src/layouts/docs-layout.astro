@@ -19,16 +19,12 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
 ---
 
 <BaseLayout title={title} description={description} docs>
-  <div slot="mobile-nav">
-    <DocsSidebar />
-  </div>
-
   <div class="flex w-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
     <aside
-      class="bg-sidebar hidden w-60 shrink-0 flex-col overflow-hidden px-3 py-8 lg:flex lg:min-h-0"
+      class="bg-sidebar hidden w-60 max-w-60 min-w-0 shrink-0 flex-col overflow-hidden px-3 py-8 lg:flex lg:min-h-0"
     >
       <PackageSwitcher class="mb-6 shrink-0" />
-      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]">
         <DocsSidebar />
       </div>
     </aside>
@@ -38,8 +34,8 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
       class="min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
     >
       {/* Padding on an inner wrapper so lg scrollport includes space below prev/next */}
-      <div class="flex justify-center pb-12 lg:pb-16">
-        <main id="main-content" tabindex="-1" class="w-full max-w-3xl px-6 pt-10">
+      <div class="flex w-full min-w-0 justify-center pb-12 lg:pb-16">
+        <main id="main-content" tabindex="-1" class="w-full min-w-0 max-w-3xl px-6 pt-10 2xl:max-w-6xl">
           {
             tocHeadings.length > 0 && (
               <details class="border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">

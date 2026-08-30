@@ -23,7 +23,7 @@ const group = `tabs-${crypto.randomUUID()}`
 
 {
   available.length > 0 && (
-    <div class={cn('code-tabs not-prose my-4 overflow-hidden rounded-lg border border-border', Astro.props.class)}>
+    <div class={cn('code-tabs not-prose my-4 min-w-0 overflow-hidden rounded-lg border border-border', Astro.props.class)}>
       <div
         class="bg-muted/50 flex gap-1 overflow-x-auto border-b border-border p-1"
         role="radiogroup"

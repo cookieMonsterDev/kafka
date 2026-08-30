@@ -69,6 +69,42 @@ export function packageHomeHref(entries: DocsEntry[], pkg: DocsPackage): string 
   return first != null ? hrefFor(first) : withBase(`/docs/${pkg}/`);
 }
 
+export type DocsNavEntry = {
+  href: string;
+  label: string;
+};
+
+export type DocsNavGroup = {
+  section: DocsSection;
+  label: string;
+  entries: DocsNavEntry[];
+};
+
+export type DocsNavPackage = {
+  id: DocsPackage;
+  label: string;
+  blurb: string;
+  href: string;
+  groups: DocsNavGroup[];
+};
+
+/** Serializable nav trees for every docs package, used by the mobile menu island. */
+export function docsNavPackages(entries: DocsEntry[]): DocsNavPackage[] {
+  return DOCS_PACKAGES.map((id) => ({
+    id,
+    ...DOCS_PACKAGE_META[id],
+    href: packageHomeHref(entries, id),
+    groups: groupDocs(entries, id).map((group) => ({
+      section: group.section,
+      label: group.label,
+      entries: group.entries.map((entry) => ({
+        href: hrefFor(entry),
+        label: navLabel(entry),
+      })),
+    })),
+  }));
+}
+
 export function sortDocs(entries: DocsEntry[]): DocsEntry[] {
   const sectionIndex = new Map(SECTION_ORDER.map((section, index) => [section, index]));
   return [...entries].sort((a, b) => {

@@ -50,6 +50,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "eslint": "^10.8.1",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

@@ -11,10 +11,10 @@ const pathname = Astro.url.pathname
 const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pathname))
 ---
 
-<nav class={cn('text-sm', Astro.props.class)} aria-label="Documentation">
+<nav class={cn('min-w-0 text-sm', Astro.props.class)} aria-label="Documentation">
   {
     groups.map((group) => (
-      <details open class="group/section mb-2">
+      <details open class="group/section mb-2 min-w-0">
         <summary class="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-2 py-2 text-xs font-medium tracking-wide uppercase [&::-webkit-details-marker]:hidden">
           {group.label}
           <svg
@@ -39,7 +39,7 @@ const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pa
                   href={href}
                   aria-current={current ? 'page' : undefined}
                   class={cn(
-                    'block rounded-md px-2 py-1.5 transition-colors',
+                    'block min-w-0 rounded-md px-2 py-1.5 break-words transition-colors',
                     current
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
                       : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',

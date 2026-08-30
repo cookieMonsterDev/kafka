@@ -31,6 +31,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "kafka": "./dist/bin.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -46,15 +49,16 @@
     "build:js": "vite build",
     "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
     "dev": "vite build --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

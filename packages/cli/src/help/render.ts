@@ -69,7 +69,9 @@ export function renderGroupHelp(
     `Usage: ${options.programName} ${prefix} <subcommand> [flags]`,
     '',
     'Subcommands:',
-    ...children.map((command) => `  ${command.path.join(' ')}  ${command.summary}`),
+    ...children.map(
+      (command) => `  ${command.path.join(' ')}  ${command.summary}${command.unstable === true ? ' (unstable)' : ''}`,
+    ),
     '',
     `Run "${options.programName} help ${prefix} <subcommand>" for details.`,
   ];
@@ -77,7 +79,14 @@ export function renderGroupHelp(
 }
 
 export function renderLeafHelp(command: CommandSpec, options: HelpRenderOptions): string {
-  const lines = [`Usage: ${options.programName} ${renderCommandLine(command)} [flags]`, '', command.summary];
+  const unstableSuffix = command.unstable === true ? ' [unstable]' : '';
+  const lines = [
+    `Usage: ${options.programName} ${renderCommandLine(command)} [flags]${unstableSuffix}`,
+    '',
+    command.unstable === true
+      ? `${command.summary} — unstable: its argument and result shape tracks core's own types and is not frozen for 1.x.`
+      : command.summary,
+  ];
 
   if (command.flags !== undefined && command.flags.length > 0) {
     lines.push('', 'Flags:');

@@ -6,6 +6,7 @@ import {
   type AdminMethodName,
 } from '../../admin/method-classification';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
+import { redactSecrets } from '../../admin/redact';
 import { suggestMethodNames } from '../../admin/suggest-method-names';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
@@ -47,6 +48,11 @@ export const adminCallCommand: CommandSpec = {
     { name: 'from-file', type: 'string', brief: 'path to a JSON file with the method arguments' },
     { name: 'yes', type: 'boolean', brief: 'confirm a non-read-only method' },
     { name: 'force', type: 'boolean', brief: 'confirm a non-read-only method (required alongside --yes)' },
+    {
+      name: 'show-secrets',
+      type: 'boolean',
+      brief: 'print credential fields (password, hmac, …) instead of redacting them',
+    },
   ],
   positionals: [{ name: 'method', brief: 'Admin method name, e.g. listTopics' }],
   examples: [
@@ -54,6 +60,7 @@ export const adminCallCommand: CommandSpec = {
     'admin call createAcls --from-file ./acls.json --yes --force',
   ],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage, EXIT_CODES.abortedOrUnconfirmed],
+  unstable: true,
   async run({ flags, positionals, runtime, output }) {
     const method = positionals[0];
     if (method === undefined) {
@@ -76,13 +83,14 @@ export const adminCallCommand: CommandSpec = {
     const admin = await runtime.openAdmin({ brokers });
     try {
       // `admin call`'s whole point is invoking a method whose name and argument shape are only
-      // known at runtime — an unstable escape hatch by design, not something a static Admin
-      // method signature can describe. See its own `help` entry, marked unstable for this reason.
+      // known at runtime — a static Admin method signature can't describe that, which is exactly
+      // why this command is marked `unstable` above.
       const call = (admin as unknown as Record<string, (input?: unknown) => Promise<unknown>>)[method];
       if (call === undefined) {
         throw new CliUsageError(`unknown Admin method "${method}"`);
       }
-      const result = args === undefined ? await call() : await call(args);
+      const rawResult = args === undefined ? await call() : await call(args);
+      const result = flags['show-secrets'] === true ? rawResult : redactSecrets(rawResult);
       output.write({
         human: () => JSON.stringify(result, bigintAwareReplacer, 2),
         json: () => stringifyJsonSafe(result),

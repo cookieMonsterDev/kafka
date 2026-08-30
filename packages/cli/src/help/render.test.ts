@@ -93,4 +93,17 @@ describe('renderLeafHelp', () => {
         kafka topic create orders payments --dry-run"
     `);
   });
+
+  it('marks an unstable command in the usage line and summary', () => {
+    const command: CommandSpec = {
+      path: ['admin', 'call'],
+      summary: 'Call any Admin method by name',
+      exitCodes: [0],
+      unstable: true,
+      run: async () => 0,
+    };
+    const rendered = renderLeafHelp(command, OPTIONS);
+    expect(rendered).toContain('[unstable]');
+    expect(rendered).toContain('unstable: its argument and result shape');
+  });
 });

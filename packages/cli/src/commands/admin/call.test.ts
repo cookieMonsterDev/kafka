@@ -104,4 +104,66 @@ describe('adminCallCommand', () => {
     const code = await adminCallCommand.run(context);
     expect(code).toBe(0);
   });
+
+  it('is marked unstable', () => {
+    expect(adminCallCommand.unstable).toBe(true);
+  });
+
+  it('redacts a credential field in the result by default', async () => {
+    const hmac = Buffer.from('super-secret-hmac');
+    const describeDelegationToken = vi.fn(async () => ({
+      tokens: [
+        {
+          owner: { principalType: 'User', name: 'alice' },
+          issueTimestamp: 0n,
+          expiryTimestamp: 0n,
+          maxTimestamp: 0n,
+          tokenId: 't1',
+          hmac,
+          renewers: [],
+        },
+      ],
+    }));
+    const admin = createFakeAdmin({ describeDelegationToken, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092' },
+      positionals: ['describeDelegationToken'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    await adminCallCommand.run(context);
+    const written = stdoutWrite.mock.calls[0]?.[0] ?? '';
+    expect(written).not.toContain(hmac.toString('base64'));
+    const parsed = JSON.parse(written) as { tokens: { hmac: string }[] };
+    expect(parsed.tokens[0]?.hmac).toBe('[REDACTED]');
+  });
+
+  it('shows a credential field when --show-secrets is passed', async () => {
+    const hmac = Buffer.from('super-secret-hmac');
+    const describeDelegationToken = vi.fn(async () => ({
+      tokens: [
+        {
+          owner: { principalType: 'User', name: 'alice' },
+          issueTimestamp: 0n,
+          expiryTimestamp: 0n,
+          maxTimestamp: 0n,
+          tokenId: 't1',
+          hmac,
+          renewers: [],
+        },
+      ],
+    }));
+    const admin = createFakeAdmin({ describeDelegationToken, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'show-secrets': true },
+      positionals: ['describeDelegationToken'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    await adminCallCommand.run(context);
+    const written = stdoutWrite.mock.calls[0]?.[0] ?? '';
+    expect(written).toContain(hmac.toString('base64'));
+  });
 });

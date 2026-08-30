@@ -54,5 +54,11 @@ export interface CommandSpec {
   readonly examples?: readonly string[];
   /** Every exit code this command can resolve to — validated against the shared taxonomy at mount time. */
   readonly exitCodes: readonly number[];
+  /**
+   * Marks a command whose argument/result shape tracks core's own types too closely to hold a
+   * stable contract — shown in its help output so a caller knows not to script against it as
+   * confidently as a command with a frozen shape.
+   */
+  readonly unstable?: boolean;
   readonly run: (context: CommandContext) => Promise<number>;
 }

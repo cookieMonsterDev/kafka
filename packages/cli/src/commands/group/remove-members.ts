@@ -18,11 +18,18 @@ interface MemberResult {
   readonly ok: boolean;
 }
 
-/** `memberId` or `memberId:groupInstanceId`, split on the first colon. */
+/**
+ * `memberId` or `memberId:groupInstanceId`, split on the first colon. A trailing colon with
+ * nothing after it (`"m1:"`) is treated as the bare form — an empty-string `groupInstanceId`
+ * would otherwise be sent to the broker as a real (never-matching) instance id instead of "no
+ * instance id", silently changing which member gets targeted.
+ */
 function parseMember(raw: string): MemberInput {
   const index = raw.indexOf(':');
   if (index === -1) return { memberId: raw };
-  return { memberId: raw.slice(0, index), groupInstanceId: raw.slice(index + 1) };
+  const groupInstanceId = raw.slice(index + 1);
+  if (groupInstanceId === '') return { memberId: raw.slice(0, index) };
+  return { memberId: raw.slice(0, index), groupInstanceId };
 }
 
 export const groupRemoveMembersCommand: CommandSpec = {

@@ -125,8 +125,11 @@ reads back each group's state, join protocol, and member count — like `config 
 broker's `DescribeGroups` response throws on the first requested group with a non-zero error
 code and discards every other group's result in that same call, so describing more than one
 group fans out one call per group id; a partial failure exits `4` rather than one bad group name
-failing the whole batch. `group offsets <groupId>` reads a group's committed offsets — narrowed to
-specific topics with a repeatable `--topic`, or every topic the group has offsets for by default —
+failing the whole batch. A group id the broker has never seen (or has fully forgotten) comes back
+as `state: "Dead"` with no error code rather than an error, so that's treated as a failed describe
+too, printing "group does not exist". `group offsets <groupId>` reads a group's committed offsets
+— narrowed to specific topics with a repeatable `--topic`, or every topic the group has offsets for
+by default —
 without resolving or committing anything back to the broker.
 
 `group reset-offsets <groupId> --topic <name> --to earliest|latest` is a dry run by default: it

@@ -52,6 +52,25 @@ describe('groupRemoveMembersCommand', () => {
     });
   });
 
+  it('treats a trailing colon with nothing after it as a bare memberId, not an empty groupInstanceId', async () => {
+    const removeMembersFromConsumerGroup = vi.fn(async () => ({
+      members: [{ memberId: 'm1', groupInstanceId: null, errorCode: 0 }],
+    }));
+    const admin = createFakeAdmin({ removeMembersFromConsumerGroup, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', yes: true, member: ['m1:'] },
+      positionals: ['my-group'],
+      openAdmin: async () => admin,
+    });
+
+    await groupRemoveMembersCommand.run(context);
+
+    expect(removeMembersFromConsumerGroup).toHaveBeenCalledWith({
+      groupId: 'my-group',
+      members: [{ memberId: 'm1' }],
+    });
+  });
+
   it('returns exit 4 when some members fail and others succeed', async () => {
     const removeMembersFromConsumerGroup = vi.fn(async () => ({
       members: [

@@ -35,6 +35,11 @@ async function describeOne(admin: Admin, groupId: string): Promise<DescribedGrou
   const found = groups[0];
   if (found === undefined) return { groupId, ok: false, detail: 'broker returned no result' };
 
+  // A group id the coordinator has never seen (or has fully forgotten) isn't reported as an
+  // error — the broker replies with `errorCode: 0` and `state: "Dead"` — so this has to be
+  // checked explicitly, or `group describe nonexistent-group` would exit 0.
+  if (found.state === 'Dead') return { groupId, ok: false, detail: 'group does not exist' };
+
   return {
     groupId,
     ok: true,

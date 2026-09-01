@@ -132,6 +132,27 @@ describe('groupDescribeCommand', () => {
     expect(code).toBe(1);
   });
 
+  it('treats a "Dead" group state as a failure, not a successful describe', async () => {
+    // The broker reports a group id it has never seen (or has fully forgotten) with
+    // `errorCode: 0` and `state: "Dead"` rather than an error — this must not read as success.
+    const describeGroups = vi.fn(async () => ({ groups: [{ ...fakeGroup('g1'), state: 'Dead', members: [] }] }));
+    const admin = createFakeAdmin({ describeGroups, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092' },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    const code = await groupDescribeCommand.run(context);
+
+    expect(code).toBe(1);
+    const written = JSON.parse(stdoutWrite.mock.calls[0]![0]) as {
+      groups: { groupId: string; ok: boolean; detail?: string }[];
+    };
+    expect(written.groups[0]).toEqual({ groupId: 'g1', ok: false, detail: 'group does not exist' });
+  });
+
   it('disconnects even when a single-group call throws', async () => {
     const disconnect = vi.fn(async () => {});
     const admin = createFakeAdmin({

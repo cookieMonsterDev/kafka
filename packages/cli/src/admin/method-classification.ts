@@ -34,7 +34,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   fetchTopicOffsets: 'mounted',
   fetchTopicOffsetsByTimestamp: 'mounted',
   setOffsets: 'passthrough-only',
-  resetOffsets: 'passthrough-only',
+  resetOffsets: 'mounted',
   describeConfigs: 'mounted',
   alterConfigs: 'passthrough-only',
   incrementalAlterConfigs: 'mounted',

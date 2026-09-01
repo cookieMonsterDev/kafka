@@ -8,6 +8,7 @@ import { configUnsetCommand } from './config/unset';
 import { groupDescribeCommand } from './group/describe';
 import { groupListCommand } from './group/list';
 import { groupOffsetsCommand } from './group/offsets';
+import { groupResetOffsetsCommand } from './group/reset-offsets';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -42,6 +43,7 @@ export const ALL_COMMANDS: CommandSpec[] = [
   groupListCommand,
   groupDescribeCommand,
   groupOffsetsCommand,
+  groupResetOffsetsCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

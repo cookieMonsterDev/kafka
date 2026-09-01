@@ -8,9 +8,11 @@ import { profilesCommand } from './meta/profiles';
 import { topicAddPartitionsCommand } from './topic/add-partitions';
 import { topicCreateCommand } from './topic/create';
 import { topicDeleteCommand } from './topic/delete';
+import { topicDeleteRecordsCommand } from './topic/delete-records';
 import { topicDescribeCommand } from './topic/describe';
 import { topicListCommand } from './topic/list';
 import { topicOffsetsCommand } from './topic/offsets';
+import { topicProducersCommand } from './topic/producers';
 
 /** Every command the CLI mounts, in no particular order — the registry sorts them out. */
 export const ALL_COMMANDS: CommandSpec[] = [
@@ -24,6 +26,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   topicDeleteCommand,
   topicAddPartitionsCommand,
   topicOffsetsCommand,
+  topicDeleteRecordsCommand,
+  topicProducersCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

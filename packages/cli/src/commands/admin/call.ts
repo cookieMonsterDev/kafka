@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { decodeArgs } from '../../admin/decode-args';
 import {
   ADMIN_METHOD_CLASSIFICATION,
@@ -6,6 +5,7 @@ import {
   type AdminMethodName,
 } from '../../admin/method-classification';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
+import { readJsonFile } from '../../admin/read-json-file';
 import { redactSecrets } from '../../admin/redact';
 import { suggestMethodNames } from '../../admin/suggest-method-names';
 import { CliUsageError } from '../../args/coerce';
@@ -20,24 +20,6 @@ function bigintAwareReplacer(_key: string, value: unknown): unknown {
 
 function isAdminMethodName(name: string): name is AdminMethodName {
   return Object.hasOwn(ADMIN_METHOD_CLASSIFICATION, name);
-}
-
-function readArgsFile(path: string): unknown {
-  let text: string;
-  try {
-    text = readFileSync(path, 'utf8');
-  } catch (error) {
-    throw new CliUsageError(
-      `could not read --from-file "${path}": ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    throw new CliUsageError(
-      `--from-file "${path}" is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 }
 
 export const adminCallCommand: CommandSpec = {
@@ -78,7 +60,8 @@ export const adminCallCommand: CommandSpec = {
     }
 
     const brokers = parseBrokersFlag(flags.brokers);
-    const args = typeof flags['from-file'] === 'string' ? decodeArgs(readArgsFile(flags['from-file'])) : undefined;
+    const args =
+      typeof flags['from-file'] === 'string' ? decodeArgs(readJsonFile(flags['from-file'], 'from-file')) : undefined;
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {

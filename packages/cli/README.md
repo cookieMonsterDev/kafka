@@ -36,6 +36,10 @@ kafka topic offsets orders --brokers localhost:9092
 kafka topic offsets orders --time earliest --brokers localhost:9092
 kafka topic delete-records --from-file offsets.json --brokers localhost:9092 --yes
 kafka topic producers orders --brokers localhost:9092
+kafka config describe --type topic orders --brokers localhost:9092
+kafka config set --type topic orders --entry retention.ms=604800000 --brokers localhost:9092
+kafka config unset --type topic orders --key retention.ms --brokers localhost:9092
+kafka config list-resources --type topic --brokers localhost:9092
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -82,6 +86,28 @@ exiting `4` on a partial failure. `topic producers <topic>` shows each queried p
 producer state (producer id, epoch, last sequence); with no `--partition` given it queries every
 partition on the topic, and `--broker-id` targets one specific replica instead of the partition
 leaders.
+
+### Config commands
+
+`--type` accepts a case-insensitive resource-type name (`topic`, `broker`, `broker-logger`,
+`client-metrics`, `group`) or the broker's raw numeric code. `config describe <names...>` reads
+back every config entry for one or more resources of that type — `--config-name` (repeatable)
+narrows it to specific keys, and `--include-synonyms`/`--include-documentation` add the extra
+detail those flags name. Describing more than one resource fans out one call per resource, so a
+partial failure exits `4` rather than one bad name failing the whole batch.
+
+`config set <names...> --entry key=value` (repeatable) and `config unset <names...> --key <key>`
+(repeatable) apply an incremental set/delete to each named resource — `--dry-run` validates
+without changing anything. Like `describe`, more than one resource name fans out one call per
+resource. `config list-resources` lists every config resource the broker knows about, optionally
+narrowed with a repeatable `--type`.
+
+```sh
+kafka config describe --type topic orders --include-synonyms --brokers localhost:9092
+kafka config set --type topic orders --entry cleanup.policy=compact --brokers localhost:9092
+kafka config unset --type topic orders --key cleanup.policy --brokers localhost:9092
+kafka config list-resources --type topic --type group --brokers localhost:9092
+```
 
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class
 command yet — `kafka admin methods` lists all of them and which ones are mounted vs.

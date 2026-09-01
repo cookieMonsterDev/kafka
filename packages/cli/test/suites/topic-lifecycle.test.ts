@@ -9,12 +9,12 @@ const TOPIC = `kafka-cli-it-${Date.now()}-${Math.random().toString(36).slice(2, 
 
 /**
  * Runs against a real broker started by `test/helpers/global-setup.ts`. Adapted from the
- * originally scoped "create -> list -> describe -> delete" shape in two ways, both because this
- * track's command surface doesn't cover them yet: there is no `topic delete` command (a later
- * track's job), so this suite stops at describe; and `ping`/`admin call` connect over a plain
- * broker rather than a SASL one, since the runtime's admin port doesn't accept SASL options yet
- * (that lands once the CLI reads a config file). Both gaps are expected to close in later tracks
- * — re-tighten this suite's scope when they do.
+ * originally scoped "create -> list -> describe -> delete" shape in one remaining way:
+ * `ping`/`admin call` connect over a plain broker rather than a SASL one, since the runtime's
+ * admin port doesn't accept SASL options yet (that lands once the CLI reads a config file).
+ * Re-tighten this suite's scope once that gap closes. `topic delete` and the other mutation
+ * commands (`add-partitions`, `offsets`, `delete-records`, `producers`) are covered below, in
+ * their own describe block against their own topic.
  */
 describe('topic lifecycle against a real broker', () => {
   let argsFileDir: string;
@@ -112,5 +112,86 @@ describe('topic lifecycle against a real broker', () => {
       expect(typeof entry.offset).toBe('string');
       expect(() => BigInt(entry.offset)).not.toThrow();
     }
+  });
+});
+
+describe('topic mutations against a real broker', () => {
+  const MUTATIONS_TOPIC = `kafka-cli-it-mut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  let offsetsFileDir: string;
+
+  beforeAll(async () => {
+    offsetsFileDir = mkdtempSync(join(tmpdir(), 'kafka-cli-it-mut-'));
+    const created = await runCli([
+      'topic',
+      'create',
+      MUTATIONS_TOPIC,
+      '--brokers',
+      BROKERS,
+      '--partitions',
+      '1',
+      '--replication-factor',
+      '1',
+    ]);
+    if (created.code !== 0) {
+      throw new Error(`setup: topic create failed with exit ${created.code}: ${created.stderr}`);
+    }
+  });
+
+  afterAll(() => {
+    rmSync(offsetsFileDir, { recursive: true, force: true });
+  });
+
+  it('raises the topic to a new total partition count', async () => {
+    const result = await runCli(['topic', 'add-partitions', MUTATIONS_TOPIC, '--count', '2', '--brokers', BROKERS]);
+    expect(result.code).toBe(0);
+
+    const described = await runCli(['topic', 'describe', MUTATIONS_TOPIC, '--brokers', BROKERS, '--json']);
+    const topics = (JSON.parse(described.stdout) as { topics: { partitions: unknown[] }[] }).topics;
+    expect(topics[0]?.partitions).toHaveLength(2);
+  });
+
+  it('reads offsets for the topic', async () => {
+    const result = await runCli(['topic', 'offsets', MUTATIONS_TOPIC, '--brokers', BROKERS, '--json']);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { partitions: { partition: number; offset: string }[] };
+    expect(parsed.partitions.length).toBeGreaterThan(0);
+    for (const entry of parsed.partitions) {
+      expect(typeof entry.offset).toBe('string');
+    }
+
+    const earliest = await runCli([
+      'topic',
+      'offsets',
+      MUTATIONS_TOPIC,
+      '--time',
+      'earliest',
+      '--brokers',
+      BROKERS,
+      '--json',
+    ]);
+    expect(earliest.code).toBe(0);
+  });
+
+  it('shows producer state for the topic (empty, with no producer connected)', async () => {
+    const result = await runCli(['topic', 'producers', MUTATIONS_TOPIC, '--brokers', BROKERS, '--json']);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { partitions: unknown[] };
+    expect(Array.isArray(parsed.partitions)).toBe(true);
+  });
+
+  it('deletes records from the topic via --from-file', async () => {
+    const offsetsPath = join(offsetsFileDir, 'delete-records.json');
+    writeFileSync(offsetsPath, JSON.stringify({ partitions: [{ topic: MUTATIONS_TOPIC, partition: 0, offset: 0 }] }));
+
+    const result = await runCli(['topic', 'delete-records', '--from-file', offsetsPath, '--brokers', BROKERS, '--yes']);
+    expect(result.code).toBe(0);
+  });
+
+  it('deletes the topic with --yes', async () => {
+    const result = await runCli(['topic', 'delete', MUTATIONS_TOPIC, '--brokers', BROKERS, '--yes']);
+    expect(result.code).toBe(0);
+
+    const listed = await runCli(['topic', 'list', '--brokers', BROKERS, '--json']);
+    expect((JSON.parse(listed.stdout) as { topics: string[] }).topics).not.toContain(MUTATIONS_TOPIC);
   });
 });

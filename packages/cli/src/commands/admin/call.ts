@@ -61,7 +61,7 @@ export const adminCallCommand: CommandSpec = {
   ],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage, EXIT_CODES.abortedOrUnconfirmed],
   unstable: true,
-  async run({ flags, positionals, runtime, output }) {
+  async run({ flags, positionals, runtime, output, config }) {
     const method = positionals[0];
     if (method === undefined) {
       throw new CliUsageError('admin call requires a method name');
@@ -80,7 +80,7 @@ export const adminCallCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
     const args = typeof flags['from-file'] === 'string' ? decodeArgs(readArgsFile(flags['from-file'])) : undefined;
 
-    const admin = await runtime.openAdmin({ brokers });
+    const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
       // `admin call`'s whole point is invoking a method whose name and argument shape are only
       // known at runtime — a static Admin method signature can't describe that, which is exactly

@@ -64,6 +64,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@cookiemonsterdev/kafka-core": "^2.0.0"
+    "@cookiemonsterdev/kafka-config": "^1.0.0",
+    "@cookiemonsterdev/kafka-core": "^2.4.0"
   }
 }

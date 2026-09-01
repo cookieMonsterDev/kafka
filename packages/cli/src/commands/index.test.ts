@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseCommandArgs } from '../args/parse';
+import { extractGlobalFlags } from '../args/pre-parse';
 import { createRegistry } from '../registry';
 import { ALL_COMMANDS } from './index';
 
@@ -23,7 +24,10 @@ describe('every mounted command', () => {
     'the documented example "$example" re-parses without a usage error',
     ({ command, example }) => {
       const tokens = example.split(' ').slice(command.path.length);
-      expect(() => parseCommandArgs(tokens, command.flags ?? [], command.positionals ?? [])).not.toThrow();
+      // Mirrors dispatch()'s own order: global flags (--profile, --config-file, --json, …) are
+      // stripped before a command's own parser ever sees the rest, so an example may use either.
+      const { rest } = extractGlobalFlags(tokens);
+      expect(() => parseCommandArgs(rest, command.flags ?? [], command.positionals ?? [])).not.toThrow();
     },
   );
 });

@@ -75,8 +75,15 @@ describe('topicDescribeCommand', () => {
     await expect(topicDescribeCommand.run(context)).rejects.toThrow(/at least one topic/);
   });
 
-  it('throws a usage error when --brokers is missing', async () => {
-    const { context } = createFakeCommandContext({ positionals: ['orders'] });
-    await expect(topicDescribeCommand.run(context)).rejects.toThrow(/--brokers/);
+  it('omits brokers from openAdmin when --brokers is missing, deferring to a lower config layer', async () => {
+    const admin = createFakeAdmin({
+      describeTopicPartitions: async () => ({ nextCursor: null, topics: [] }),
+      disconnect: async () => {},
+    });
+    const { context, openAdmin } = createFakeCommandContext({ positionals: ['orders'], openAdmin: async () => admin });
+
+    await topicDescribeCommand.run(context);
+
+    expect(openAdmin).toHaveBeenCalledWith(expect.objectContaining({ brokers: undefined }));
   });
 });

@@ -9,7 +9,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
 const INSTALLED_PACKAGE_DIR = 'node_modules/@cookiemonsterdev/kafka-cli';
 
 const RELATIVE_OR_NODE_IMPORT_PATTERN = /^(?:\.\.?\/|node:)/;
-const DECLARED_DEPENDENCIES = ['@cookiemonsterdev/kafka-core'];
+const DECLARED_DEPENDENCIES = ['@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config'];
 const STATIC_IMPORT_LINE_PATTERN = /^\s*(?:import|export)\s[^;]*?\sfrom\s*['"]([^'"]+)['"]/gm;
 const DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
 

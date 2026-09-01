@@ -49,6 +49,8 @@ describe('renderRootHelp', () => {
       Global flags:
         --json                 emit exactly one JSON document on stdout
         --format <human|json>  same as --json when set to json
+        --config-file <path>   use this kafka.config.* file instead of discovering one
+        --profile <name>       select a named connection profile from cli.profiles
         -q, --quiet            only errors on stderr
         -v, --verbose          more detail on stderr (repeatable: -vv)
         --no-color             disable colored output

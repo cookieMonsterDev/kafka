@@ -15,8 +15,8 @@ describe('parseBrokersFlag', () => {
     expect(parseBrokersFlag('a:1,,b:2,')).toEqual(['a:1', 'b:2']);
   });
 
-  it('throws CliUsageError when the flag is missing', () => {
-    expect(() => parseBrokersFlag(undefined)).toThrow(CliUsageError);
+  it('returns undefined when the flag is missing, letting a lower layer resolve brokers', () => {
+    expect(parseBrokersFlag(undefined)).toBeUndefined();
   });
 
   it('throws CliUsageError when the flag resolves to nothing usable', () => {

@@ -1,4 +1,6 @@
+import type { OnConfigDiagnostic } from '@cookiemonsterdev/kafka-config';
 import { openAdmin, type OpenAdmin } from './admin/open';
+import { resolveCliConfig, type ResolvedCliConfig } from './config/resolve';
 
 /** Minimal writable stream contract — enough for `process.stdout`/`process.stderr`. */
 export interface RuntimeWriter {
@@ -16,13 +18,17 @@ export interface RuntimeReader {
 }
 
 export type { OpenAdmin, OpenAdminOptions } from './admin/port';
+export type { ResolvedCliConfig } from './config/resolve';
 
-/**
- * Placeholder for reading a `kafka.config.*` file — not wired up yet. Every field the config
- * file could someday supply defaults to `undefined`, so a command written against this today
- * behaves identically once it is implemented.
- */
-export type LoadConfig = () => Promise<Record<string, unknown>>;
+export interface LoadConfigOptions {
+  readonly configFlag?: string;
+  readonly profileFlag?: string;
+  readonly onDiagnostic?: OnConfigDiagnostic;
+  readonly onWarn?: (message: string) => void;
+}
+
+/** Resolves this invocation's `kafka.config.*` file — see `config/resolve.ts` for what that means. */
+export type LoadConfig = (options: LoadConfigOptions) => Promise<ResolvedCliConfig>;
 
 /**
  * Everything a command touches instead of the ambient `process` global, so every command is
@@ -75,10 +81,12 @@ export function createRuntime(proc: RuntimeProcessLike): Runtime {
   proc.on('SIGINT', () => controller.abort('SIGINT'));
   proc.on('SIGTERM', () => controller.abort('SIGTERM'));
 
+  const cwd = proc.cwd();
+
   return {
     argv: proc.argv.slice(2),
     env: proc.env,
-    cwd: proc.cwd(),
+    cwd,
     stdout: proc.stdout,
     stderr: proc.stderr,
     stdin: proc.stdin,
@@ -89,7 +97,7 @@ export function createRuntime(proc: RuntimeProcessLike): Runtime {
       throw new RuntimeExitCalledError(code);
     },
     openAdmin,
-    loadConfig: async () => ({}),
+    loadConfig: (options) => resolveCliConfig({ cwd, env: proc.env, ...options }),
     signal: controller.signal,
   };
 }

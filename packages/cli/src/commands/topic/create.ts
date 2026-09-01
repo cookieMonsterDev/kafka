@@ -43,7 +43,7 @@ export const topicCreateCommand: CommandSpec = {
   positionals: [{ name: 'topics', variadic: true, brief: 'topic names to create' }],
   examples: ['topic create orders --partitions 3 --replication-factor 1', 'topic create orders payments --dry-run'],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage, EXIT_CODES.partialBatch],
-  async run({ flags, positionals, runtime, output }) {
+  async run({ flags, positionals, runtime, output, config }) {
     if (positionals.length === 0) {
       throw new CliUsageError('topic create requires at least one topic name');
     }
@@ -53,15 +53,24 @@ export const topicCreateCommand: CommandSpec = {
     const ifNotExists = flags['if-not-exists'] === true;
     const failFast = flags['fail-fast'] === true;
 
+    const replicaAssignment = flags['replica-assignment'] as string[] | undefined;
+    const hasAssignment = replicaAssignment !== undefined && replicaAssignment.length > 0;
+    const topicDefaults = config.cli.topicDefaults;
+
+    // `cli.topicDefaults` only fills in what a flag left unset, and never applies alongside an
+    // explicit `--replica-assignment` — `buildTopicConfig` itself rejects combining assignment
+    // with a partition/replication-factor count, and a default is not an exception to that.
     const topicFlags = {
-      partitions: flags.partitions as number | undefined,
-      replicationFactor: flags['replication-factor'] as number | undefined,
-      replicaAssignment: flags['replica-assignment'] as string[] | undefined,
+      partitions: (flags.partitions as number | undefined) ?? (hasAssignment ? undefined : topicDefaults?.partitions),
+      replicationFactor:
+        (flags['replication-factor'] as number | undefined) ??
+        (hasAssignment ? undefined : topicDefaults?.replicationFactor),
+      replicaAssignment,
       config: flags.config as Record<string, string> | undefined,
     };
     const configs = positionals.map((topic) => buildTopicConfig(topic, topicFlags));
 
-    const admin = await runtime.openAdmin({ brokers });
+    const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
       let results: TopicResult[];
 
@@ -86,13 +95,17 @@ export const topicCreateCommand: CommandSpec = {
             : 'batched call did not report full success; per-topic detail is unavailable with --fail-fast',
         }));
       } else {
-        results = await mapWithConcurrency(configs, CONCURRENCY, async (config) => {
+        results = await mapWithConcurrency(configs, CONCURRENCY, async (topicConfig) => {
           try {
-            const created = await admin.createTopics({ topics: [config], validateOnly: dryRun });
+            const created = await admin.createTopics({ topics: [topicConfig], validateOnly: dryRun });
             const ok = created || ifNotExists;
-            return { topic: config.topic, ok, detail: ok ? undefined : 'already exists' };
+            return { topic: topicConfig.topic, ok, detail: ok ? undefined : 'already exists' };
           } catch (error) {
-            return { topic: config.topic, ok: false, detail: error instanceof Error ? error.message : String(error) };
+            return {
+              topic: topicConfig.topic,
+              ok: false,
+              detail: error instanceof Error ? error.message : String(error),
+            };
           }
         });
       }

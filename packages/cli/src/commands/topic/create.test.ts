@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ResolvedCliConfig } from '../../config/resolve';
 import { createFakeAdmin } from '../../testing/create-fake-admin';
-import { createFakeCommandContext } from '../../testing/create-command-context';
+import { createFakeCommandContext, EMPTY_RESOLVED_CLI_CONFIG } from '../../testing/create-command-context';
 import { topicCreateCommand } from './create';
+
+function configWithTopicDefaults(partitions?: number, replicationFactor?: number): ResolvedCliConfig {
+  return { ...EMPTY_RESOLVED_CLI_CONFIG, cli: { topicDefaults: { partitions, replicationFactor } } };
+}
 
 describe('topicCreateCommand', () => {
   it('creates a single topic with partitions and replication factor', async () => {
@@ -187,5 +192,60 @@ describe('topicCreateCommand', () => {
       positionals: ['orders'],
     });
     await expect(topicCreateCommand.run(context)).rejects.toThrow(/cannot be combined/);
+  });
+
+  describe('cli.topicDefaults', () => {
+    it('fills in partitions/replicationFactor when the flags omit them', async () => {
+      const createTopics = vi.fn(async () => true);
+      const admin = createFakeAdmin({ createTopics, disconnect: async () => {} });
+      const { context } = createFakeCommandContext({
+        flags: { brokers: 'localhost:9092' },
+        positionals: ['orders'],
+        openAdmin: async () => admin,
+        config: configWithTopicDefaults(3, 2),
+      });
+
+      await topicCreateCommand.run(context);
+
+      expect(createTopics).toHaveBeenCalledWith({
+        topics: [{ topic: 'orders', numPartitions: 3, replicationFactor: 2 }],
+        validateOnly: false,
+      });
+    });
+
+    it('flags always beat cli.topicDefaults', async () => {
+      const createTopics = vi.fn(async () => true);
+      const admin = createFakeAdmin({ createTopics, disconnect: async () => {} });
+      const { context } = createFakeCommandContext({
+        flags: { brokers: 'localhost:9092', partitions: 7 },
+        positionals: ['orders'],
+        openAdmin: async () => admin,
+        config: configWithTopicDefaults(3, 2),
+      });
+
+      await topicCreateCommand.run(context);
+
+      expect(createTopics).toHaveBeenCalledWith(
+        expect.objectContaining({ topics: [expect.objectContaining({ numPartitions: 7, replicationFactor: 2 })] }),
+      );
+    });
+
+    it('never applies alongside an explicit --replica-assignment', async () => {
+      const createTopics = vi.fn(async () => true);
+      const admin = createFakeAdmin({ createTopics, disconnect: async () => {} });
+      const { context } = createFakeCommandContext({
+        flags: { brokers: 'localhost:9092', 'replica-assignment': ['0=1,2'] },
+        positionals: ['orders'],
+        openAdmin: async () => admin,
+        config: configWithTopicDefaults(3, 2),
+      });
+
+      await topicCreateCommand.run(context);
+
+      expect(createTopics).toHaveBeenCalledWith({
+        topics: [{ topic: 'orders', replicaAssignment: [{ partition: 0, replicas: [1, 2] }] }],
+        validateOnly: false,
+      });
+    });
   });
 });

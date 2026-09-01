@@ -1,3 +1,4 @@
+import type { ResolvedCliConfig } from '../config/resolve';
 import type { CliError } from '../errors/cli-error';
 import type { Palette } from '../output/colors';
 import type { Rendered } from '../output/format';
@@ -44,6 +45,8 @@ export interface CommandContext {
   readonly flags: Readonly<Record<string, unknown>>;
   readonly positionals: readonly string[];
   readonly output: CommandOutput;
+  /** This invocation's already-resolved `kafka.config.*` file — see `config/resolve.ts`. */
+  readonly config: ResolvedCliConfig;
 }
 
 export interface CommandSpec {

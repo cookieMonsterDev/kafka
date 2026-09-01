@@ -10,7 +10,7 @@ export default defineConfig({
     // (kept external below) is meant to be await-imported only inside commands that connect.
     lib: { entry: { index: 'src/index.ts', bin: 'src/bin.ts' }, formats: ['es'] },
     rollupOptions: {
-      external: [/^node:/, '@cookiemonsterdev/kafka-core'],
+      external: [/^node:/, '@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config'],
       output: {
         entryFileNames: '[name].js',
       },

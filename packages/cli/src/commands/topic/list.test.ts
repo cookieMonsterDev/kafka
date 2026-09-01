@@ -44,8 +44,12 @@ describe('topicListCommand', () => {
     expect(JSON.parse(written)).toEqual({ topics: ['orders'] });
   });
 
-  it('throws a usage error when --brokers is missing', async () => {
-    const { context } = createFakeCommandContext({});
-    await expect(topicListCommand.run(context)).rejects.toThrow(/--brokers/);
+  it('omits brokers from openAdmin when --brokers is missing, deferring to a lower config layer', async () => {
+    const admin = createFakeAdmin({ listTopics: async () => [], disconnect: async () => {} });
+    const { context, openAdmin } = createFakeCommandContext({ openAdmin: async () => admin });
+
+    await topicListCommand.run(context);
+
+    expect(openAdmin).toHaveBeenCalledWith(expect.objectContaining({ brokers: undefined }));
   });
 });

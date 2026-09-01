@@ -30,12 +30,12 @@ export const topicDescribeCommand: CommandSpec = {
   positionals: [{ name: 'topics', variadic: true, brief: 'topic names to describe' }],
   examples: ['topic describe orders --brokers localhost:9092'],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
-  async run({ flags, positionals, runtime, output }) {
+  async run({ flags, positionals, runtime, output, config }) {
     if (positionals.length === 0) {
       throw new CliUsageError('topic describe requires at least one topic name');
     }
     const brokers = parseBrokersFlag(flags.brokers);
-    const admin = await runtime.openAdmin({ brokers });
+    const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     let topics: DescribedTopic[];
     try {
       topics = await describeTopics(admin, positionals);

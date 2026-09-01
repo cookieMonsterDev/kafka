@@ -2,8 +2,18 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type * as KafkaConfigModule from '@cookiemonsterdev/kafka-config';
 import { CliConfigError } from '../errors/cli-config-error';
 import { resolveCliConfig } from './resolve';
+
+// `loadEnvFiles()` calls `process.loadEnvFile()`, which mutates the real global `process.env`
+// with no undo — mocked here (everything else from the real module passes through) so the "calls
+// it, with this cwd, before anything else" test below never actually touches real global state.
+const { loadEnvFilesMock } = vi.hoisted(() => ({ loadEnvFilesMock: vi.fn() }));
+vi.mock('@cookiemonsterdev/kafka-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof KafkaConfigModule>();
+  return { ...actual, loadEnvFiles: loadEnvFilesMock };
+});
 
 let dir: string;
 
@@ -145,5 +155,35 @@ describe('resolveCliConfig', () => {
     writeFileSync(join(cwd, 'kafka.config.json'), '{ not valid json');
 
     await expect(resolveCliConfig({ cwd, env: {} })).rejects.toThrow(CliConfigError);
+  });
+
+  it('rejects a known section that is not an object, naming the actual problem', async () => {
+    // `Kafka.from()` doesn't re-validate section shapes itself (only `new Kafka()`/
+    // `Kafka.fromConfig()` do), so without this check a malformed `client` would silently flow
+    // through the merge and surface as a misleading "no brokers were provided" error instead.
+    const cwd = makeDir();
+    writeFileSync(join(cwd, 'kafka.config.mjs'), 'export default { client: ["localhost:9092"] };\n');
+
+    await expect(resolveCliConfig({ cwd, env: {} })).rejects.toThrow(/"client".*must be an object, not an array/);
+  });
+
+  it('accepts every known section when each is a plain object', async () => {
+    const cwd = makeDir();
+    writeFileSync(
+      join(cwd, 'kafka.config.mjs'),
+      'export default { client: { brokers: ["a:1"] }, producer: {}, consumer: {}, shareConsumer: {}, admin: {} };\n',
+    );
+
+    const resolved = await resolveCliConfig({ cwd, env: {} });
+    expect(resolved.fileConfig?.client).toEqual({ brokers: ['a:1'] });
+  });
+
+  it('loads .env files from cwd before doing anything else', async () => {
+    const cwd = makeDir();
+    loadEnvFilesMock.mockClear();
+
+    await resolveCliConfig({ cwd, env: {} });
+
+    expect(loadEnvFilesMock).toHaveBeenCalledWith({ cwd });
   });
 });

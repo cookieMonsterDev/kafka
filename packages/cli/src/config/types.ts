@@ -23,6 +23,12 @@ export interface CliProfile {
  */
 export interface CliFileConfig {
   readonly output?: 'human' | 'json';
+  /**
+   * Reserved for an upcoming destructive-operation confirmation feature (a `--yes`/`--force`
+   * layer for commands like `topic delete`, none of which exist on this CLI yet). Parsed and
+   * round-tripped today so a config file written against that feature already validates; nothing
+   * reads it yet.
+   */
   readonly confirmDestructive?: boolean;
   readonly timeoutMs?: number;
   readonly topicDefaults?: CliTopicDefaults;

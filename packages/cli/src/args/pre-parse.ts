@@ -26,6 +26,20 @@ const CONFIG_FLAG_PREFIX = '--config-file=';
 const PROFILE_FLAG_PREFIX = '--profile=';
 
 /**
+ * The next token, unless it's missing or itself looks like a flag — in which case that flag's own
+ * value was never given. Without this, `--config-file --profile staging` would silently consume
+ * `"--profile"` as the path and leave `staging` behind as a stray positional, the same class of
+ * bug `--format` already guards against for its own (closed) value set.
+ */
+function requireNextValue(argv: readonly string[], i: number, flagName: string, expected: string): string {
+  const value = argv[i + 1];
+  if (value === undefined || value.startsWith('-')) {
+    throw new CliUsageError(`${flagName} expects ${expected}, got ${value === undefined ? 'nothing' : `"${value}"`}`);
+  }
+  return value;
+}
+
+/**
  * Strips every global flag (output format, verbosity, color, `--help`/`-h`, `--version`,
  * `--config-file`, `--profile`) out of `argv`, wherever it appears, so a command's own flag
  * parser never has to know about them — they're reserved names a command may not redeclare (see
@@ -110,24 +124,14 @@ export function extractGlobalFlags(argv: readonly string[]): { global: GlobalFla
       case '--version':
         version = true;
         continue;
-      case '--config-file': {
-        const value = argv[i + 1];
-        if (value === undefined) {
-          throw new CliUsageError('--config-file expects a path');
-        }
-        configFlag = value;
+      case '--config-file':
+        configFlag = requireNextValue(argv, i, '--config-file', 'a path');
         i += 1;
         continue;
-      }
-      case '--profile': {
-        const value = argv[i + 1];
-        if (value === undefined) {
-          throw new CliUsageError('--profile expects a profile name');
-        }
-        profileFlag = value;
+      case '--profile':
+        profileFlag = requireNextValue(argv, i, '--profile', 'a profile name');
         i += 1;
         continue;
-      }
       default:
         rest.push(token);
     }

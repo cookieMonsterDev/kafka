@@ -12,15 +12,37 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function readOutput(raw: unknown, warn: (message: string) => void): 'human' | 'json' | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === 'human' || raw === 'json') return raw;
+  warn('"cli.output" must be "human" or "json"; ignoring it');
+  return undefined;
+}
+
+function readBoolean(raw: unknown, key: string, warn: (message: string) => void): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === 'boolean') return raw;
+  warn(`"cli.${key}" must be a boolean; ignoring it`);
+  return undefined;
+}
+
+function readNumber(raw: unknown, key: string, warn: (message: string) => void): number | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === 'number') return raw;
+  warn(`"cli.${key}" must be a number; ignoring it`);
+  return undefined;
+}
+
 function readTopicDefaults(raw: unknown, warn: (message: string) => void): CliTopicDefaults | undefined {
   if (raw === undefined) return undefined;
   if (!isPlainObject(raw)) {
     warn('"cli.topicDefaults" must be an object; ignoring it');
     return undefined;
   }
-  const partitions = typeof raw.partitions === 'number' ? raw.partitions : undefined;
-  const replicationFactor = typeof raw.replicationFactor === 'number' ? raw.replicationFactor : undefined;
-  return { partitions, replicationFactor };
+  return {
+    partitions: readNumber(raw.partitions, 'topicDefaults.partitions', warn),
+    replicationFactor: readNumber(raw.replicationFactor, 'topicDefaults.replicationFactor', warn),
+  };
 }
 
 function readProfiles(raw: unknown, warn: (message: string) => void): Readonly<Record<string, CliProfile>> | undefined {
@@ -63,9 +85,9 @@ export function readCliSection(
   }
 
   return {
-    output: raw.output === 'human' || raw.output === 'json' ? raw.output : undefined,
-    confirmDestructive: typeof raw.confirmDestructive === 'boolean' ? raw.confirmDestructive : undefined,
-    timeoutMs: typeof raw.timeoutMs === 'number' ? raw.timeoutMs : undefined,
+    output: readOutput(raw.output, warn),
+    confirmDestructive: readBoolean(raw.confirmDestructive, 'confirmDestructive', warn),
+    timeoutMs: readNumber(raw.timeoutMs, 'timeoutMs', warn),
     topicDefaults: readTopicDefaults(raw.topicDefaults, warn),
     profiles: readProfiles(raw.profiles, warn),
   };

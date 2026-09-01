@@ -62,6 +62,24 @@ describe('readCliSection', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('cli.profiles.bogus'));
   });
 
+  it.each([
+    ['output', 'yaml', 'cli.output'],
+    ['confirmDestructive', 'yes', 'cli.confirmDestructive'],
+    ['timeoutMs', '30000', 'cli.timeoutMs'],
+  ])('warns and drops %s when it holds the wrong type, instead of silently ignoring it', (key, badValue, expected) => {
+    const warn = vi.fn();
+    const section = readCliSection({ cli: { [key]: badValue } }, warn) as Record<string, unknown>;
+    expect(section[key]).toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(expected));
+  });
+
+  it('warns and drops a wrong-typed field inside topicDefaults, keeping the well-typed one', () => {
+    const warn = vi.fn();
+    const section = readCliSection({ cli: { topicDefaults: { partitions: 'three', replicationFactor: 2 } } }, warn);
+    expect(section.topicDefaults).toEqual({ partitions: undefined, replicationFactor: 2 });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('cli.topicDefaults.partitions'));
+  });
+
   it('never throws for any input', () => {
     expect(() => readCliSection({ cli: null })).not.toThrow();
     expect(() => readCliSection({ cli: [] })).not.toThrow();

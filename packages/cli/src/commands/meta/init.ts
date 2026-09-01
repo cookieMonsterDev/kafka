@@ -8,8 +8,8 @@ import { stringifyJsonSafe } from '../../output/json';
 // A bare object, not `defineConfig({...})`: this file has to load standalone, for a user who
 // only installed the CLI and never added `@cookiemonsterdev/kafka-core` to their own project.
 // `defineConfig` is documented as the preferred form for a project that already depends on core
-// directly (it adds compile-time section typing and a freeze); D6 accepts a bare object too, and
-// that's what every consumer here — the CLI, and core's own loader — accepts identically.
+// directly (it adds compile-time section typing and a freeze), but a bare object is accepted
+// identically — by the CLI's own loader here and by core's, so nothing is lost by defaulting to it.
 const TEMPLATE = `export default {
   client: {
     brokers: ['localhost:9092'],

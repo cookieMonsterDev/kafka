@@ -102,6 +102,9 @@ whenever the equivalent flag is omitted — never alongside an explicit `--repli
 unknown key inside `cli:` warns on stderr; it's never a hard error, so a config written for a newer
 CLI still loads.
 
+`confirmDestructive` is accepted and validated today but has no effect yet — it's reserved for a
+future confirmation layer in front of destructive operations (none of which this CLI has yet).
+
 ## Output
 
 Human output goes to stdout; `--json` (or `--format json`, or `KAFKA_OUTPUT=json`) puts exactly

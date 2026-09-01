@@ -85,9 +85,20 @@ describe('extractGlobalFlags', () => {
     expect(() => extractGlobalFlags(['ping', '--config-file'])).toThrow(CliUsageError);
   });
 
+  it("does not swallow a following flag as --config-file's value", () => {
+    // Regression: --config-file used to take argv[i+1] unconditionally, so
+    // "--config-file --profile staging" silently consumed "--profile" as the path and left
+    // "staging" behind as a stray token instead of reporting a usage error.
+    expect(() => extractGlobalFlags(['--config-file', '--profile', 'staging'])).toThrow(CliUsageError);
+  });
+
   it('extracts --profile <name> and --profile=<name>', () => {
     expect(extractGlobalFlags(['--profile', 'staging']).global.profileFlag).toBe('staging');
     expect(extractGlobalFlags(['--profile=staging']).global.profileFlag).toBe('staging');
+  });
+
+  it("does not swallow a following flag as --profile's value", () => {
+    expect(() => extractGlobalFlags(['--profile', '--config-file', 'x.ts'])).toThrow(CliUsageError);
   });
 
   it('throws CliUsageError when --profile is the last token', () => {

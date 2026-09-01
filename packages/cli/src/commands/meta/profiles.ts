@@ -13,9 +13,9 @@ export const profilesCommand: CommandSpec = {
     const names = Object.keys(profiles);
 
     // Secrets are unlikely in a profile (it's usually just an alternate broker list), but a
-    // profile is a plain KafkaConfig-shaped object with no restriction on what it holds — the
-    // same redaction contract as every other output boundary applies here (D10), so this is the
-    // one place `profiles` needs core at all.
+    // profile is a plain KafkaConfig-shaped object with no restriction on what it holds — every
+    // other output boundary in this CLI redacts credential fields before printing, and this one
+    // is no exception, so this is the one place `profiles` needs core at all.
     const { redactKafkaConfig } = await import('@cookiemonsterdev/kafka-core');
     const redacted = redactKafkaConfig(profiles) as Record<string, { brokers?: readonly string[] }>;
 

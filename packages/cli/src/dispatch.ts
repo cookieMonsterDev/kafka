@@ -119,9 +119,9 @@ export async function dispatch(runtime: Runtime): Promise<number> {
         onWarn: (message) => output.log.warn(`[kafka] ${message}`),
       });
 
-      // `cli.output` is the lowest-precedence output-format source (D13) — only applied when
-      // nothing above it (`--json`, `--format`, `KAFKA_OUTPUT`) already chose one, and rebuilt
-      // after config load since format has to exist before then to report a config error itself.
+      // `cli.output` is the lowest-precedence output-format source — only applied when nothing
+      // above it (`--json`, `--format`, `KAFKA_OUTPUT`) already chose one, and rebuilt after
+      // config load since format has to exist before then to report a config error itself.
       if (
         !global.jsonFlag &&
         global.formatFlag === undefined &&

@@ -30,6 +30,12 @@ kafka topic list --brokers localhost:9092
 kafka topic describe orders --brokers localhost:9092
 kafka topic create orders --brokers localhost:9092 --partitions 3 --replication-factor 1
 kafka topic create orders payments --brokers localhost:9092   # fans out one call per topic
+kafka topic delete orders --brokers localhost:9092 --yes
+kafka topic add-partitions orders --count 6 --brokers localhost:9092
+kafka topic offsets orders --brokers localhost:9092
+kafka topic offsets orders --time earliest --brokers localhost:9092
+kafka topic delete-records --from-file offsets.json --brokers localhost:9092 --yes
+kafka topic producers orders --brokers localhost:9092
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -40,6 +46,42 @@ kafka --version
 `--replica-assignment partition=replica,replica` (repeatable) — not both. `--config key=value`
 (repeatable) sets topic-level configs. `--dry-run` validates without creating anything;
 `--if-not-exists` treats an already-existing topic as success instead of a failure exit.
+
+### Destructive topic operations
+
+`topic delete` and `topic delete-records` refuse to run without confirmation: off a TTY (or under
+`CI=true`), that means passing `--yes`; on a TTY, an interactive `[y/N]` prompt (asked on stderr)
+does the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
+requirement — but never the separate `--force` tier below, which no config setting can waive.
+
+`topic delete` additionally requires `--force` before it will delete an internal (`__`-prefixed)
+topic, or more than 10 topics in one call — both are treated as "you probably didn't mean to do
+that in one shot" rather than as something to confirm away. `--if-exists` treats a topic that was
+already gone as success instead of a failure exit. Deleting more than one topic fans out one
+`deleteTopics` call per topic (core reports no per-topic result for a batched call), so a partial
+failure exits `4` rather than masking which topics actually went away.
+
+`topic add-partitions <topics...> --count <n>` raises each topic to `--count` total partitions —
+not a delta, matching `kafka-topics.sh --alter --partitions`. `topic offsets <topic>` prints each
+partition's current high/low watermark, or with `--time earliest|latest|max-timestamp|<ms>`, the
+offset as of that point — the same three named timestamps `kafka-run-class
+kafka.tools.GetOffsetShell` accepts, plus a literal millisecond epoch.
+
+`topic delete-records --from-file <path>` deletes every record before the given offset, per
+partition, reading the same JSON shape as `kafka-delete-records.sh --offset-json-file`:
+
+```json
+{
+  "partitions": [{ "topic": "orders", "partition": 0, "offset": 3 }],
+  "version": 1
+}
+```
+
+A file spanning more than one topic fans out one `deleteTopicRecords` call per topic, again
+exiting `4` on a partial failure. `topic producers <topic>` shows each queried partition's active
+producer state (producer id, epoch, last sequence); with no `--partition` given it queries every
+partition on the topic, and `--broker-id` targets one specific replica instead of the partition
+leaders.
 
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class
 command yet — `kafka admin methods` lists all of them and which ones are mounted vs.
@@ -102,8 +144,10 @@ whenever the equivalent flag is omitted — never alongside an explicit `--repli
 unknown key inside `cli:` warns on stderr; it's never a hard error, so a config written for a newer
 CLI still loads.
 
-`confirmDestructive` is accepted and validated today but has no effect yet — it's reserved for a
-future confirmation layer in front of destructive operations (none of which this CLI has yet).
+`confirmDestructive: false` skips the `--yes`/interactive-prompt tier in front of a destructive
+command (`topic delete`, `topic delete-records`) — see [Destructive topic
+operations](#destructive-topic-operations). It never waives a command's own `--force`-gated safety
+checks.
 
 ## Output
 

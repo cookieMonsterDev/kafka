@@ -40,6 +40,14 @@ kafka config describe --type topic orders --brokers localhost:9092
 kafka config set --type topic orders --entry retention.ms=604800000 --brokers localhost:9092
 kafka config unset --type topic orders --key retention.ms --brokers localhost:9092
 kafka config list-resources --type topic --brokers localhost:9092
+kafka group list --brokers localhost:9092
+kafka group describe my-group --brokers localhost:9092
+kafka group offsets my-group --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --execute --yes --brokers localhost:9092
+kafka group delete my-group --brokers localhost:9092 --yes
+kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --yes
+kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -110,6 +118,49 @@ kafka config unset --type topic orders --key cleanup.policy --brokers localhost:
 kafka config list-resources --type topic --type group --brokers localhost:9092
 ```
 
+### Group commands
+
+`group list` prints every consumer group's id and protocol type. `group describe <groupIds...>`
+reads back each group's state, join protocol, and member count — like `config describe`, the
+broker's `DescribeGroups` response throws on the first requested group with a non-zero error
+code and discards every other group's result in that same call, so describing more than one
+group fans out one call per group id; a partial failure exits `4` rather than one bad group name
+failing the whole batch. A group id the broker has never seen (or has fully forgotten) comes back
+as `state: "Dead"` with no error code rather than an error, so that's treated as a failed describe
+too, printing "group does not exist". `group offsets <groupId>` reads a group's committed offsets
+— narrowed to specific topics with a repeatable `--topic`, or every topic the group has offsets for
+by default —
+without resolving or committing anything back to the broker.
+
+`group reset-offsets <groupId> --topic <name> --to earliest|latest` is a dry run by default: it
+prints the offset each topic's partitions _would_ move to, without changing anything and without
+asking for confirmation. Passing `--execute` makes it real — gated behind the same `--yes`/
+interactive-prompt tier as every other destructive command — and fans out one `resetOffsets` call
+per `--topic`, exiting `4` on a partial failure.
+
+`group delete <groupIds...>` and `group delete-offsets <groupId> --topic <name>` are both gated
+behind confirmation. Deleting groups is a single call for the whole list (the broker's
+`DeleteGroups` response either succeeds for every group or names only the ones that failed), so a
+partial failure is read back from that per-group failure list rather than fanned out. Deleting a
+group's offsets fans out one call per `--topic` (its response, like `DescribeGroups`, discards
+every other topic's result once one partition in the call fails) — `--partition` (repeatable)
+narrows which partitions are cleared for every named topic, or every partition of a topic is
+discovered automatically when it's omitted. `group remove-members <groupId> --member <id>`
+(repeatable, `memberId` or `memberId:groupInstanceId`) removes one or more static members from a
+group's session in a single call; since the broker never fails that call outright, a member's own
+result code decides whether it succeeded.
+
+```sh
+kafka group list --brokers localhost:9092
+kafka group describe my-group --brokers localhost:9092
+kafka group offsets my-group --topic orders --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --execute --yes --brokers localhost:9092
+kafka group delete my-group --brokers localhost:9092 --yes
+kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --yes
+kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
+```
+
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class
 command yet — `kafka admin methods` lists all of them and which ones are mounted vs.
 passthrough-only. Arguments come from a JSON file (`--from-file`); a string value prefixed
@@ -172,9 +223,10 @@ unknown key inside `cli:` warns on stderr; it's never a hard error, so a config 
 CLI still loads.
 
 `confirmDestructive: false` skips the `--yes`/interactive-prompt tier in front of a destructive
-command (`topic delete`, `topic delete-records`) — see [Destructive topic
-operations](#destructive-topic-operations). It never waives a command's own `--force`-gated safety
-checks.
+command (`topic delete`, `topic delete-records`, `group delete`, `group delete-offsets`,
+`group remove-members`, and `group reset-offsets --execute`) — see [Destructive topic
+operations](#destructive-topic-operations) and [Group commands](#group-commands). It never waives
+a command's own `--force`-gated safety checks.
 
 ## Output
 

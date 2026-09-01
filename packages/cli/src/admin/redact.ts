@@ -14,7 +14,8 @@ const SECRET_FIELD_NAMES: ReadonlySet<string> = new Set([
   'passphrase',
 ]);
 
-const REDACTED = '[REDACTED]';
+/** The fixed placeholder every secret-redaction path in this CLI uses, so they can't drift apart. */
+export const REDACTED = '[REDACTED]';
 
 /**
  * Recursively replaces any object property whose name matches a known secret field with a fixed

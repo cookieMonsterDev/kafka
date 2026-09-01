@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIG_RESOURCE_TYPES, describeCode, formatCode } from './codes';
+import { CONFIG_OPERATIONS, CONFIG_RESOURCE_TYPES, CONFIG_SOURCE, describeCode, formatCode } from './codes';
 
 describe('CONFIG_RESOURCE_TYPES', () => {
   it("deep-equals core's real export", async () => {
     const core = await import('@cookiemonsterdev/kafka-core');
     expect(CONFIG_RESOURCE_TYPES).toEqual(core.ConfigResourceTypes);
+  });
+});
+
+describe('CONFIG_SOURCE', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(CONFIG_SOURCE).toEqual(core.ConfigSource);
+  });
+});
+
+describe('CONFIG_OPERATIONS', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(CONFIG_OPERATIONS).toEqual(core.ConfigOperations);
   });
 });
 

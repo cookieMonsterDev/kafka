@@ -6,6 +6,7 @@ import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
 import { profilesCommand } from './meta/profiles';
 import { topicCreateCommand } from './topic/create';
+import { topicDeleteCommand } from './topic/delete';
 import { topicDescribeCommand } from './topic/describe';
 import { topicListCommand } from './topic/list';
 
@@ -18,6 +19,7 @@ export const ALL_COMMANDS: CommandSpec[] = [
   topicListCommand,
   topicDescribeCommand,
   topicCreateCommand,
+  topicDeleteCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

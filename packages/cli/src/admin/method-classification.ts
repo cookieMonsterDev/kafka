@@ -23,7 +23,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   clientInstanceId: 'passthrough-only',
   listTopics: 'mounted',
   createTopics: 'mounted',
-  deleteTopics: 'passthrough-only',
+  deleteTopics: 'mounted',
   createPartitions: 'passthrough-only',
   fetchTopicMetadata: 'mounted',
   describeCluster: 'mounted',

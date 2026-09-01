@@ -5,6 +5,9 @@ import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
 import { configSetCommand } from './config/set';
 import { configUnsetCommand } from './config/unset';
+import { groupDescribeCommand } from './group/describe';
+import { groupListCommand } from './group/list';
+import { groupOffsetsCommand } from './group/offsets';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -36,6 +39,9 @@ export const ALL_COMMANDS: CommandSpec[] = [
   configListResourcesCommand,
   configSetCommand,
   configUnsetCommand,
+  groupListCommand,
+  groupDescribeCommand,
+  groupOffsetsCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

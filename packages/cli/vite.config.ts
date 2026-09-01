@@ -30,7 +30,11 @@ export default defineConfig({
       {
         test: {
           name: 'integration',
-          include: ['test/suites/topic-lifecycle.test.ts', 'test/suites/config-lifecycle.test.ts'],
+          include: [
+            'test/suites/topic-lifecycle.test.ts',
+            'test/suites/config-lifecycle.test.ts',
+            'test/suites/group-lifecycle.test.ts',
+          ],
           environment: 'node',
           globalSetup: ['./test/helpers/global-setup.ts'],
           testTimeout: 30_000,

@@ -5,6 +5,13 @@ import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
 import { configSetCommand } from './config/set';
 import { configUnsetCommand } from './config/unset';
+import { groupDeleteCommand } from './group/delete';
+import { groupDeleteOffsetsCommand } from './group/delete-offsets';
+import { groupDescribeCommand } from './group/describe';
+import { groupListCommand } from './group/list';
+import { groupOffsetsCommand } from './group/offsets';
+import { groupRemoveMembersCommand } from './group/remove-members';
+import { groupResetOffsetsCommand } from './group/reset-offsets';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -36,6 +43,13 @@ export const ALL_COMMANDS: CommandSpec[] = [
   configListResourcesCommand,
   configSetCommand,
   configUnsetCommand,
+  groupListCommand,
+  groupDescribeCommand,
+  groupOffsetsCommand,
+  groupResetOffsetsCommand,
+  groupDeleteCommand,
+  groupDeleteOffsetsCommand,
+  groupRemoveMembersCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

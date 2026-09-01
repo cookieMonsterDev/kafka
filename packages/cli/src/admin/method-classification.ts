@@ -37,7 +37,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   resetOffsets: 'passthrough-only',
   describeConfigs: 'mounted',
   alterConfigs: 'passthrough-only',
-  incrementalAlterConfigs: 'passthrough-only',
+  incrementalAlterConfigs: 'mounted',
   listGroups: 'passthrough-only',
   describeGroups: 'passthrough-only',
   describeClassicGroups: 'passthrough-only',

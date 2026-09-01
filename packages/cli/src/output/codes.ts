@@ -22,6 +22,13 @@ export const CONFIG_SOURCE = Object.freeze({
   DYNAMIC_BROKER_LOGGER_CONFIG: 6,
 });
 
+export const CONFIG_OPERATIONS = Object.freeze({
+  SET: 0,
+  DELETE: 1,
+  APPEND: 2,
+  SUBTRACT: 3,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

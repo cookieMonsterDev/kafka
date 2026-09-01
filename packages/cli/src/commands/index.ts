@@ -3,6 +3,8 @@ import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
 import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
+import { configSetCommand } from './config/set';
+import { configUnsetCommand } from './config/unset';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -32,6 +34,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   topicProducersCommand,
   configDescribeCommand,
   configListResourcesCommand,
+  configSetCommand,
+  configUnsetCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

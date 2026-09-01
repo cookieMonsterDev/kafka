@@ -15,6 +15,7 @@ describe('ADMIN_METHOD_CLASSIFICATION', () => {
     expect(ADMIN_METHOD_CLASSIFICATION.fetchTopicMetadata).toBe('mounted');
     expect(ADMIN_METHOD_CLASSIFICATION.describeCluster).toBe('mounted');
     expect(ADMIN_METHOD_CLASSIFICATION.describeConfigs).toBe('mounted');
+    expect(ADMIN_METHOD_CLASSIFICATION.incrementalAlterConfigs).toBe('mounted');
     expect(ADMIN_METHOD_CLASSIFICATION.listConfigResources).toBe('mounted');
   });
 });

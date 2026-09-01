@@ -6,7 +6,7 @@ import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
 import { mapKafkaError } from './errors/map-kafka-error';
 import { shouldUseColor } from './output/colors';
-import { createCommandOutput, resolveOutputFormat } from './output/format';
+import { createCommandOutput, resolveOutputFormat, type OutputFormat } from './output/format';
 import { verbosityToLogLevel } from './output/logger';
 import type { HelpRenderOptions } from './help/render';
 import { commandGroups, createRegistry } from './registry';
@@ -66,7 +66,7 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       return runVersionCommand(runtime);
     }
 
-    const format = resolveOutputFormat({
+    let format: OutputFormat = resolveOutputFormat({
       jsonFlag: global.jsonFlag,
       formatFlag: global.formatFlag,
       env: runtime.env,
@@ -78,7 +78,7 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       noColorFlag: global.noColorFlag,
     });
     const logLevel = verbosityToLogLevel(global.quiet, global.verbosity);
-    const output = createCommandOutput({
+    let output = createCommandOutput({
       stdout: runtime.stdout,
       stderr: runtime.stderr,
       format,
@@ -104,8 +104,36 @@ export async function dispatch(runtime: Runtime): Promise<number> {
     }
 
     try {
+      // Resolved once here — not inside the command, and not inside `openAdmin` — so every
+      // command sees the same config for this invocation, and a command that never connects
+      // (`profiles`, `admin methods`) still gets to read `cli:` section defaults. `--help`/
+      // `--version` (both handled above) never reach this, so they never pay for it.
+      const config = await runtime.loadConfig({
+        configFlag: global.configFlag,
+        profileFlag: global.profileFlag,
+        onDiagnostic: (diagnostic) => {
+          const message = `[kafka] ${diagnostic.message}`;
+          if (diagnostic.level === 'warn') output.log.warn(message);
+          else output.log.info(message);
+        },
+        onWarn: (message) => output.log.warn(`[kafka] ${message}`),
+      });
+
+      // `cli.output` is the lowest-precedence output-format source — only applied when nothing
+      // above it (`--json`, `--format`, `KAFKA_OUTPUT`) already chose one, and rebuilt after
+      // config load since format has to exist before then to report a config error itself.
+      if (
+        !global.jsonFlag &&
+        global.formatFlag === undefined &&
+        runtime.env.KAFKA_OUTPUT === undefined &&
+        config.cli.output !== undefined
+      ) {
+        format = config.cli.output;
+        output = createCommandOutput({ stdout: runtime.stdout, stderr: runtime.stderr, format, useColor, logLevel });
+      }
+
       const parsed = parseCommandArgs(rest, command.flags ?? [], command.positionals ?? []);
-      return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output });
+      return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output, config });
     } catch (error) {
       const mapped = mapKafkaError(error);
       output.cliError(mapped);

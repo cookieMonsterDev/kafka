@@ -17,6 +17,8 @@ export const RESERVED_FLAG_NAMES: ReadonlySet<string> = new Set([
   'quiet',
   'verbose',
   'color',
+  'config-file',
+  'profile',
 ]);
 
 const VALID_EXIT_CODES: ReadonlySet<number> = new Set(Object.values(EXIT_CODES));

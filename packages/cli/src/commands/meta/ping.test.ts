@@ -43,8 +43,15 @@ describe('pingCommand', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
-  it('throws a usage error when --brokers is missing', async () => {
-    const { context } = createFakeCommandContext({});
-    await expect(pingCommand.run(context)).rejects.toThrow(/--brokers/);
+  it('omits brokers from openAdmin when --brokers is missing, deferring to a lower config layer', async () => {
+    const admin = createFakeAdmin({
+      describeCluster: async () => ({ brokers: [], controller: -1, clusterId: null }),
+      disconnect: async () => {},
+    });
+    const { context, openAdmin } = createFakeCommandContext({ openAdmin: async () => admin });
+
+    await pingCommand.run(context);
+
+    expect(openAdmin).toHaveBeenCalledWith(expect.objectContaining({ brokers: undefined }));
   });
 });

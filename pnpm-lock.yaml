@@ -89,8 +89,11 @@ importers:
 
   packages/cli:
     dependencies:
+      '@cookiemonsterdev/kafka-config':
+        specifier: ^1.0.0
+        version: link:../config
       '@cookiemonsterdev/kafka-core':
-        specifier: ^2.0.0
+        specifier: ^2.4.0
         version: link:../core
     devDependencies:
       '@types/node':

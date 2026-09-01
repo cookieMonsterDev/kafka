@@ -24,13 +24,14 @@ describe('package.json', () => {
     expect(packageJson.private).toBeUndefined();
   });
 
-  // Every command reads connection options from `--brokers` only, so the only runtime dependency
-  // is the client itself. `@cookiemonsterdev/kafka-config` is added later, once a command reads a
-  // config file — adding it here would ship an unused dependency. A stray third-party `pnpm add`
-  // should fail this test, not slip through review.
-  it('declares exactly one dependency: kafka-core', () => {
+  // A command's connection options now also come from a resolved `kafka.config.*` file
+  // (`@cookiemonsterdev/kafka-config`, the generic discovery/loading machinery) and from core's
+  // `fromEnv`/`redactKafkaConfig`/`Kafka.from`, which shipped in core 2.4.0 — hence the raised
+  // floor. A stray third-party `pnpm add` should fail this test, not slip through review.
+  it('declares exactly kafka-config and kafka-core as dependencies', () => {
     expect(packageJson.dependencies).toEqual({
-      '@cookiemonsterdev/kafka-core': '^2.0.0',
+      '@cookiemonsterdev/kafka-config': '^1.0.0',
+      '@cookiemonsterdev/kafka-core': '^2.4.0',
     });
   });
 });

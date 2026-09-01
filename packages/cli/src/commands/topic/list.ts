@@ -10,9 +10,9 @@ export const topicListCommand: CommandSpec = {
   flags: [{ name: 'brokers', type: 'string', brief: 'comma-separated broker list, e.g. localhost:9092' }],
   examples: ['topic list --brokers localhost:9092'],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
-  async run({ flags, runtime, output }) {
+  async run({ flags, runtime, output, config }) {
     const brokers = parseBrokersFlag(flags.brokers);
-    const admin = await runtime.openAdmin({ brokers });
+    const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     let topics: string[];
     try {
       topics = await admin.listTopics();

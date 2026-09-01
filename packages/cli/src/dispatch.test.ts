@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { CommandSpec } from './args/define';
 import type { Runtime } from './runtime';
+import { EMPTY_RESOLVED_CLI_CONFIG } from './testing/create-command-context';
+
+const echoConfigRun = vi.fn(async () => 0);
+let capturedFormat: 'human' | 'json' | undefined;
 
 const FIXTURE_COMMANDS: CommandSpec[] = [
   {
@@ -8,6 +12,30 @@ const FIXTURE_COMMANDS: CommandSpec[] = [
     summary: 'list topics',
     exitCodes: [0],
     run: vi.fn(async () => 0),
+  },
+  {
+    path: ['echo'],
+    summary: 'echoes the config it received, for dispatch-level assertions',
+    exitCodes: [0],
+    run: echoConfigRun,
+  },
+  {
+    path: ['probe-format'],
+    summary: 'reports which renderer its output port actually called, for format-precedence tests',
+    exitCodes: [0],
+    run: async ({ output }) => {
+      output.write({
+        human: () => {
+          capturedFormat = 'human';
+          return 'human';
+        },
+        json: () => {
+          capturedFormat = 'json';
+          return '{}';
+        },
+      });
+      return 0;
+    },
   },
   {
     path: ['topic', 'create'],
@@ -26,17 +54,23 @@ vi.mock('./commands/index', () => ({ ALL_COMMANDS: FIXTURE_COMMANDS }));
 
 const { dispatch } = await import('./dispatch');
 
-function fakeRuntime(argv: readonly string[]) {
+function fakeRuntime(
+  argv: readonly string[],
+  overrides: { loadConfig?: Runtime['loadConfig']; env?: Record<string, string | undefined> } = {},
+) {
   const stdoutWrite = vi.fn((_chunk: string) => true);
   const stderrWrite = vi.fn((_chunk: string) => true);
+  const loadConfig = vi.fn(overrides.loadConfig ?? (async () => EMPTY_RESOLVED_CLI_CONFIG));
   const runtime = {
     argv,
-    env: {},
+    env: overrides.env ?? {},
+    cwd: '/work',
     isTty: false,
     stdout: { write: stdoutWrite },
     stderr: { write: stderrWrite },
+    loadConfig,
   } as unknown as Runtime;
-  return { runtime, stdoutWrite, stderrWrite };
+  return { runtime, stdoutWrite, stderrWrite, loadConfig };
 }
 
 describe('dispatch', () => {
@@ -99,5 +133,83 @@ describe('dispatch', () => {
     const { runtime, stderrWrite } = fakeRuntime(['topic', 'list', '--format', 'yaml']);
     await expect(dispatch(runtime)).resolves.toBe(2);
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('--format'));
+  });
+
+  describe('config resolution', () => {
+    it('never calls loadConfig for --help or --version', async () => {
+      const { runtime, loadConfig } = fakeRuntime(['--version']);
+      await dispatch(runtime);
+      expect(loadConfig).not.toHaveBeenCalled();
+
+      const { runtime: helpRuntime, loadConfig: helpLoadConfig } = fakeRuntime(['topic', 'list', '--help']);
+      await dispatch(helpRuntime);
+      expect(helpLoadConfig).not.toHaveBeenCalled();
+    });
+
+    it('forwards --config-file and --profile to loadConfig', async () => {
+      const { runtime, loadConfig } = fakeRuntime(['echo', '--config-file', './my.config.ts', '--profile', 'staging']);
+
+      await dispatch(runtime);
+
+      expect(loadConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ configFlag: './my.config.ts', profileFlag: 'staging' }),
+      );
+    });
+
+    it("passes the resolved config through to the command's context", async () => {
+      const resolved = { ...EMPTY_RESOLVED_CLI_CONFIG, profile: 'staging' };
+      const { runtime } = fakeRuntime(['echo'], { loadConfig: async () => resolved });
+
+      await dispatch(runtime);
+
+      expect(echoConfigRun).toHaveBeenCalledWith(expect.objectContaining({ config: resolved }));
+    });
+
+    it('a loadConfig failure (e.g. an unknown --profile) maps to the config exit code', async () => {
+      class FakeCliConfigError extends Error {
+        override name = 'CliConfigError';
+      }
+      const { runtime, stderrWrite } = fakeRuntime(['echo', '--profile', 'bogus'], {
+        loadConfig: async () => {
+          throw new FakeCliConfigError('unknown profile "bogus"');
+        },
+      });
+
+      await expect(dispatch(runtime)).resolves.toBe(3);
+      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('unknown profile'));
+    });
+
+    it('applies cli.output as the lowest-precedence output format', async () => {
+      capturedFormat = undefined;
+      const resolved = { ...EMPTY_RESOLVED_CLI_CONFIG, cli: { output: 'json' as const } };
+      const { runtime } = fakeRuntime(['probe-format'], { loadConfig: async () => resolved });
+
+      await dispatch(runtime);
+
+      expect(capturedFormat).toBe('json');
+    });
+
+    it('an explicit --format beats cli.output', async () => {
+      capturedFormat = undefined;
+      const resolved = { ...EMPTY_RESOLVED_CLI_CONFIG, cli: { output: 'json' as const } };
+      const { runtime } = fakeRuntime(['probe-format', '--format', 'human'], { loadConfig: async () => resolved });
+
+      await dispatch(runtime);
+
+      expect(capturedFormat).toBe('human');
+    });
+
+    it('KAFKA_OUTPUT beats cli.output', async () => {
+      capturedFormat = undefined;
+      const resolved = { ...EMPTY_RESOLVED_CLI_CONFIG, cli: { output: 'json' as const } };
+      const { runtime } = fakeRuntime(['probe-format'], {
+        loadConfig: async () => resolved,
+        env: { KAFKA_OUTPUT: 'human' },
+      });
+
+      await dispatch(runtime);
+
+      expect(capturedFormat).toBe('human');
+    });
   });
 });

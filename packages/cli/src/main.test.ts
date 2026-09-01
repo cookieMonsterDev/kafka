@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { main } from './main';
 import type { Runtime } from './runtime';
+import { EMPTY_RESOLVED_CLI_CONFIG } from './testing/create-command-context';
 
 function createFakeRuntime(overrides: Partial<Runtime> = {}): Runtime {
   const controller = new AbortController();
@@ -18,7 +19,7 @@ function createFakeRuntime(overrides: Partial<Runtime> = {}): Runtime {
       throw new Error('exit() should never be called by main()');
     }),
     openAdmin: vi.fn(),
-    loadConfig: vi.fn(async () => ({})),
+    loadConfig: vi.fn(async () => EMPTY_RESOLVED_CLI_CONFIG),
     signal: controller.signal,
     ...overrides,
   };

@@ -31,6 +31,19 @@ describe('createRegistry', () => {
     ).toThrow(/reserved for global use/);
   });
 
+  it.each(['config-file', 'profile'])('reserves --%s for global use', (name) => {
+    expect(() =>
+      createRegistry([command({ path: ['topic', 'list'], flags: [{ name, type: 'string', brief: '' }] })]),
+    ).toThrow(/reserved for global use/);
+  });
+
+  it('does not reserve --config, so topic create can keep its own key=value flag', () => {
+    const registry = createRegistry([
+      command({ path: ['topic', 'create'], flags: [{ name: 'config', type: 'string', brief: '' }] }),
+    ]);
+    expect(registry.has('topic create')).toBe(true);
+  });
+
   it('throws when a command declares the same flag name twice', () => {
     expect(() =>
       createRegistry([

@@ -75,4 +75,41 @@ describe('extractGlobalFlags', () => {
     // right after it (e.g. -v) would be silently discarded instead of being parsed.
     expect(() => extractGlobalFlags(['--format', '-v', '--brokers', 'x'])).toThrow(CliUsageError);
   });
+
+  it('extracts --config-file <path> and --config-file=<path>', () => {
+    expect(extractGlobalFlags(['--config-file', './kafka.config.ts']).global.configFlag).toBe('./kafka.config.ts');
+    expect(extractGlobalFlags(['--config-file=./kafka.config.ts']).global.configFlag).toBe('./kafka.config.ts');
+  });
+
+  it('throws CliUsageError when --config-file is the last token', () => {
+    expect(() => extractGlobalFlags(['ping', '--config-file'])).toThrow(CliUsageError);
+  });
+
+  it("does not swallow a following flag as --config-file's value", () => {
+    // Regression: --config-file used to take argv[i+1] unconditionally, so
+    // "--config-file --profile staging" silently consumed "--profile" as the path and left
+    // "staging" behind as a stray token instead of reporting a usage error.
+    expect(() => extractGlobalFlags(['--config-file', '--profile', 'staging'])).toThrow(CliUsageError);
+  });
+
+  it('extracts --profile <name> and --profile=<name>', () => {
+    expect(extractGlobalFlags(['--profile', 'staging']).global.profileFlag).toBe('staging');
+    expect(extractGlobalFlags(['--profile=staging']).global.profileFlag).toBe('staging');
+  });
+
+  it("does not swallow a following flag as --profile's value", () => {
+    expect(() => extractGlobalFlags(['--profile', '--config-file', 'x.ts'])).toThrow(CliUsageError);
+  });
+
+  it('throws CliUsageError when --profile is the last token', () => {
+    expect(() => extractGlobalFlags(['ping', '--profile'])).toThrow(CliUsageError);
+  });
+
+  it("never confuses --config-file with topic create's own --config key=value flag", () => {
+    // Regression risk: a global flag reserved under the wrong name would swallow a command's own
+    // same-named flag before that command's parser ever saw it (see registry.ts's reserved names).
+    const { global, rest } = extractGlobalFlags(['topic', 'create', 'orders', '--config', 'retention.ms=1000']);
+    expect(global.configFlag).toBeUndefined();
+    expect(rest).toEqual(['topic', 'create', 'orders', '--config', 'retention.ms=1000']);
+  });
 });

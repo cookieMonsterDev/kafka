@@ -16,6 +16,10 @@ describe('mapKafkaError', () => {
     expect(mapKafkaError(fakeError('KafkaConfigRequiresAsyncError')).exitCode).toBe(EXIT_CODES.config);
   });
 
+  it("maps the CLI's own CliConfigError to the config exit code", () => {
+    expect(mapKafkaError(fakeError('CliConfigError')).exitCode).toBe(EXIT_CODES.config);
+  });
+
   it('maps KafkaServerDoesNotSupportApiKey to the unsupported-by-broker exit code', () => {
     expect(mapKafkaError(fakeError('KafkaServerDoesNotSupportApiKey')).exitCode).toBe(EXIT_CODES.unsupportedByBroker);
   });

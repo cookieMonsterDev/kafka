@@ -86,6 +86,80 @@ describe('configDescribeCommand', () => {
     );
   });
 
+  it('redacts a sensitive entry value by default', async () => {
+    const describeConfigs = vi.fn(async () => ({
+      resources: [
+        {
+          errorCode: 0,
+          errorMessage: null,
+          resourceType: 2,
+          resourceName: 'orders',
+          configEntries: [
+            {
+              configName: 'sasl.jaas.config',
+              configValue: 'super-secret',
+              readOnly: false,
+              isDefault: false,
+              configSource: 1,
+              isSensitive: true,
+              configSynonyms: [],
+            },
+          ],
+        },
+      ],
+    }));
+    const admin = createFakeAdmin({ describeConfigs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', type: 'topic' },
+      positionals: ['orders'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    await configDescribeCommand.run(context);
+    const written = JSON.parse(stdoutWrite.mock.calls[0]![0]) as {
+      resources: { entries: { value: string | null }[] }[];
+    };
+    expect(written.resources[0]!.entries[0]!.value).toBe('[REDACTED]');
+  });
+
+  it('--show-secrets prints a sensitive entry value unredacted', async () => {
+    const describeConfigs = vi.fn(async () => ({
+      resources: [
+        {
+          errorCode: 0,
+          errorMessage: null,
+          resourceType: 2,
+          resourceName: 'orders',
+          configEntries: [
+            {
+              configName: 'sasl.jaas.config',
+              configValue: 'super-secret',
+              readOnly: false,
+              isDefault: false,
+              configSource: 1,
+              isSensitive: true,
+              configSynonyms: [],
+            },
+          ],
+        },
+      ],
+    }));
+    const admin = createFakeAdmin({ describeConfigs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', type: 'topic', 'show-secrets': true },
+      positionals: ['orders'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    await configDescribeCommand.run(context);
+    const written = JSON.parse(stdoutWrite.mock.calls[0]![0]) as {
+      resources: { entries: { value: string | null }[] }[];
+    };
+    expect(written.resources[0]!.entries[0]!.value).toBe('super-secret');
+  });
+
   it('requires at least one resource name', async () => {
     const { context } = createFakeCommandContext({ flags: { type: 'topic' }, positionals: [] });
     await expect(configDescribeCommand.run(context)).rejects.toThrow(/at least one resource name/);

@@ -19,7 +19,7 @@ export const configListResourcesCommand: CommandSpec = {
     },
   ],
   examples: ['config list-resources --brokers localhost:9092', 'config list-resources --type topic --type group'],
-  exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed],
+  exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
   async run({ flags, runtime, output, config }) {
     const brokers = parseBrokersFlag(flags.brokers);
     const typeFlags = flags.type as string[] | undefined;

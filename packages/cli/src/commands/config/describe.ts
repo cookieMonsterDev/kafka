@@ -1,5 +1,6 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
+import { REDACTED } from '../../admin/redact';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
@@ -33,6 +34,7 @@ async function describeOne(
   configNames: readonly string[] | undefined,
   includeSynonyms: boolean,
   includeDocumentation: boolean,
+  showSecrets: boolean,
 ): Promise<DescribedResource> {
   const { resources } = await admin.describeConfigs({
     resources: [{ type, name, configNames: configNames !== undefined ? [...configNames] : undefined }],
@@ -47,7 +49,10 @@ async function describeOne(
     ok: true,
     entries: found.configEntries.map((entry) => ({
       name: entry.configName,
-      value: entry.configValue,
+      // The broker already nulls a sensitive value it doesn't want to disclose, but that's its
+      // policy, not this CLI's contract — an entry marked `isSensitive` gets redacted here too,
+      // the same belt-and-suspenders `--show-secrets` opt-out `admin call` already applies.
+      value: entry.isSensitive && !showSecrets ? REDACTED : entry.configValue,
       isDefault: entry.isDefault,
       isSensitive: entry.isSensitive,
       source: formatCode(describeCode(CONFIG_SOURCE, entry.configSource)),
@@ -91,6 +96,11 @@ export const configDescribeCommand: CommandSpec = {
     },
     { name: 'include-synonyms', type: 'boolean', brief: "include each entry's config synonyms" },
     { name: 'include-documentation', type: 'boolean', brief: "include each entry's documentation string" },
+    {
+      name: 'show-secrets',
+      type: 'boolean',
+      brief: 'print a sensitive config value instead of redacting it',
+    },
   ],
   positionals: [{ name: 'names', variadic: true, brief: 'resource names to describe' }],
   examples: [
@@ -112,17 +122,36 @@ export const configDescribeCommand: CommandSpec = {
     const configNames = flags['config-name'] as string[] | undefined;
     const includeSynonyms = flags['include-synonyms'] === true;
     const includeDocumentation = flags['include-documentation'] === true;
+    const showSecrets = flags['show-secrets'] === true;
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
       let results: DescribedResource[];
 
       if (positionals.length === 1) {
-        results = [await describeOne(admin, type, positionals[0]!, configNames, includeSynonyms, includeDocumentation)];
+        results = [
+          await describeOne(
+            admin,
+            type,
+            positionals[0]!,
+            configNames,
+            includeSynonyms,
+            includeDocumentation,
+            showSecrets,
+          ),
+        ];
       } else {
         results = await mapWithConcurrency(positionals, CONCURRENCY, async (name) => {
           try {
-            return await describeOne(admin, type, name, configNames, includeSynonyms, includeDocumentation);
+            return await describeOne(
+              admin,
+              type,
+              name,
+              configNames,
+              includeSynonyms,
+              includeDocumentation,
+              showSecrets,
+            );
           } catch (error) {
             return { resource: name, ok: false, detail: error instanceof Error ? error.message : String(error) };
           }

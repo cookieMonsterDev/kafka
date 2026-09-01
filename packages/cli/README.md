@@ -94,7 +94,8 @@ leaders.
 back every config entry for one or more resources of that type — `--config-name` (repeatable)
 narrows it to specific keys, and `--include-synonyms`/`--include-documentation` add the extra
 detail those flags name. Describing more than one resource fans out one call per resource, so a
-partial failure exits `4` rather than one bad name failing the whole batch.
+partial failure exits `4` rather than one bad name failing the whole batch. A config entry the
+broker marks sensitive is redacted in the output unless `--show-secrets` is given.
 
 `config set <names...> --entry key=value` (repeatable) and `config unset <names...> --key <key>`
 (repeatable) apply an incremental set/delete to each named resource — `--dry-run` validates

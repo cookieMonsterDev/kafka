@@ -1,9 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
+import { CliUsageError } from '../../args/coerce';
 import { createFakeAdmin } from '../../testing/create-fake-admin';
 import { createFakeCommandContext } from '../../testing/create-command-context';
 import { configListResourcesCommand } from './list-resources';
 
 describe('configListResourcesCommand', () => {
+  it('rejects an unknown --type before ever calling the admin', async () => {
+    const listConfigResources = vi.fn(async () => ({ resources: [] }));
+    const admin = createFakeAdmin({ listConfigResources, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', type: ['bogus'] },
+      openAdmin: async () => admin,
+    });
+
+    await expect(configListResourcesCommand.run(context)).rejects.toThrow(CliUsageError);
+    expect(listConfigResources).not.toHaveBeenCalled();
+  });
+
   it('lists every resource with no --type filter', async () => {
     const listConfigResources = vi.fn(async () => ({
       resources: [

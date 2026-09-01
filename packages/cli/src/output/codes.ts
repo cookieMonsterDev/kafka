@@ -12,6 +12,16 @@ export const CONFIG_RESOURCE_TYPES = Object.freeze({
   GROUP: 32,
 });
 
+export const CONFIG_SOURCE = Object.freeze({
+  UNKNOWN: 0,
+  TOPIC_CONFIG: 1,
+  DYNAMIC_BROKER_CONFIG: 2,
+  DYNAMIC_DEFAULT_BROKER_CONFIG: 3,
+  STATIC_BROKER_CONFIG: 4,
+  DEFAULT_CONFIG: 5,
+  DYNAMIC_BROKER_LOGGER_CONFIG: 6,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

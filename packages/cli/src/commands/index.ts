@@ -1,6 +1,8 @@
 import type { CommandSpec } from '../args/define';
 import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
+import { configDescribeCommand } from './config/describe';
+import { configListResourcesCommand } from './config/list-resources';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -28,6 +30,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   topicOffsetsCommand,
   topicDeleteRecordsCommand,
   topicProducersCommand,
+  configDescribeCommand,
+  configListResourcesCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

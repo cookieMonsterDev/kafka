@@ -9,6 +9,8 @@ import { clusterFeaturesCommand } from './cluster/features';
 import { clusterInfoCommand } from './cluster/info';
 import { clusterLogDirsCommand } from './cluster/log-dirs';
 import { clusterQuorumCommand } from './cluster/quorum';
+import { clusterReassignExecuteCommand } from './cluster/reassign-execute';
+import { clusterReassignListCommand } from './cluster/reassign-list';
 import { clusterUpdateFeaturesCommand } from './cluster/update-features';
 import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
@@ -61,6 +63,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   clusterLogDirsCommand,
   clusterUpdateFeaturesCommand,
   clusterElectLeadersCommand,
+  clusterReassignListCommand,
+  clusterReassignExecuteCommand,
   groupListCommand,
   groupDescribeCommand,
   groupOffsetsCommand,

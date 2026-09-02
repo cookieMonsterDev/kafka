@@ -329,6 +329,21 @@ passthrough-only. Arguments come from a JSON file (`--from-file`); a string valu
 `bigint:`, `base64:`, or `uuid:` decodes to a real `bigint`/`Buffer` before the call. A method that
 isn't read-only refuses to run without both `--yes` and `--force`.
 
+Already familiar with `kafka-topics.sh` and friends? See
+[Migrating from the Kafka shell scripts](docs/migrating-from-shell-scripts.md) for a flag-by-flag
+map from each shell tool to its `kafka` equivalent.
+
+### Shell completion
+
+```sh
+eval "$(kafka completion bash)"   # or: zsh, fish
+```
+
+Persist it instead of `eval`-ing it on every shell start by redirecting the same command's output
+to your shell's own completion directory (each script's own header comment names one). Completion
+covers command and subcommand names, long flags, and closed flag values (like `--format`); it never
+connects to a broker, so it can't suggest a real topic or group name.
+
 ## Configuration
 
 `kafka init` scaffolds a `kafka.config.ts` (or `.mjs`, with `--js`) file in the current directory —

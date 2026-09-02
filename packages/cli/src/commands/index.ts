@@ -26,6 +26,8 @@ import { groupListCommand } from './group/list';
 import { groupOffsetsCommand } from './group/offsets';
 import { groupRemoveMembersCommand } from './group/remove-members';
 import { groupResetOffsetsCommand } from './group/reset-offsets';
+import { createCompleteCommand } from './meta/complete';
+import { completionCommand } from './meta/completion';
 import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
@@ -66,6 +68,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   initCommand,
   doctorCommand,
   profilesCommand,
+  createCompleteCommand(() => ALL_COMMANDS),
+  completionCommand,
   topicListCommand,
   topicDescribeCommand,
   topicCreateCommand,

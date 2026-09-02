@@ -99,6 +99,10 @@ describe('initCommand', () => {
     expect(readFileSync(target, 'utf8')).toContain('brokers');
   });
 
+  // These two go through the real dynamic loader (Node's `import()`/`createRequire()`, including
+  // its TypeScript-stripping retry path), not a fake — real filesystem I/O plus a real module
+  // load, occasionally slow under CI's shared, resource-constrained runners. The default 5s unit
+  // timeout is fine locally but has been observed to trip in CI, so these get a longer one.
   it('emits a kafka.config.mjs that imports cleanly via the real loader', async () => {
     const cwd = makeDir();
     const { context } = createFakeCommandContext({ cwd });
@@ -108,7 +112,7 @@ describe('initCommand', () => {
     const { loadConfigFileAsync } = await import('@cookiemonsterdev/kafka-config');
     const loaded = await loadConfigFileAsync(join(cwd, 'kafka.config.mjs'));
     expect(loaded).toEqual({ client: { brokers: ['localhost:9092'] } });
-  });
+  }, 15_000);
 
   it('emits a kafka.config.ts that the real (core-typed) loader accepts', async () => {
     const cwd = makeDir();
@@ -119,5 +123,5 @@ describe('initCommand', () => {
     const { loadKafkaConfig } = await import('@cookiemonsterdev/kafka-core');
     const loaded = loadKafkaConfig(join(cwd, 'kafka.config.ts'));
     expect(loaded).toEqual({ client: { brokers: ['localhost:9092'] } });
-  });
+  }, 15_000);
 });

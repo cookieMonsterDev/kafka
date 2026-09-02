@@ -32,6 +32,7 @@ export function createFakeCommandContext(input: {
   config?: ResolvedCliConfig;
   env?: Record<string, string | undefined>;
   cwd?: string;
+  stdin?: Runtime['stdin'];
 }): FakeCommandContext {
   const stdoutWrite = createWriteSpy();
   const stderrWrite = createWriteSpy();
@@ -49,7 +50,7 @@ export function createFakeCommandContext(input: {
     cwd: input.cwd ?? '/work',
     stdout: { write: stdoutWrite },
     stderr: { write: stderrWrite },
-    stdin: { setEncoding: vi.fn(), on: vi.fn() },
+    stdin: input.stdin ?? { setEncoding: vi.fn(), on: vi.fn() },
     isTty: false,
     columns: 80,
     now: () => new Date(),

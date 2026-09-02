@@ -53,6 +53,12 @@ kafka acl add User:alice --resource-type topic --resource-name orders --operatio
 kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
 kafka cluster info --brokers localhost:9092
 kafka cluster reassign list --brokers localhost:9092
+kafka txn list --brokers localhost:9092
+kafka txn describe orders-producer-1 --brokers localhost:9092
+kafka token create --renewer User:alice --brokers localhost:9092
+kafka scram set alice --mechanism scram-sha-256 --password-stdin --brokers localhost:9092
+kafka quota describe --entity user=alice --brokers localhost:9092
+kafka share-group list --brokers localhost:9092
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -242,6 +248,79 @@ kafka cluster reassign execute --from-file reassignment.json --brokers localhost
 kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
 kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
 kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
+```
+
+### Transaction, token, SCRAM, quota, and share group commands
+
+`txn list` lists transactions known to the cluster, optionally narrowed with `--state-filter`,
+`--producer-id-filter` (both repeatable), `--duration-filter`, or `--transactional-id-pattern`.
+`txn describe <transactionalIds...>` reads back each transaction's state, producer id/epoch, and
+timeout — like `group describe`, the broker's response throws on the first requested id with a
+non-zero error code and discards every other id's result in that same call, so describing more
+than one transactional id fans out one call per id; a partial failure exits `4`. `txn fence
+<transactionalIds...>` bumps a stale producer's epoch,
+fencing it out without confirmation (fencing is the mechanism a new producer instance uses to take
+over cleanly, not a destructive action on its own); a partial failure across several ids exits `4`.
+`txn terminate <transactionalId>` and `txn abort --topic <t> --partition <p> --producer-id <id>
+--producer-epoch <e>` are both gated behind confirmation — the first force-terminates a
+transactional id's in-flight transaction (internally, fencing its producer), the second writes an
+abort marker for one specific in-flight transaction when the transactional id itself isn't
+enough to identify it.
+
+`token create` creates a delegation token — `--owner`/`--renewer` (repeatable) take a
+`PrincipalType:name` value (e.g. `User:alice`), and `--max-life-time-ms` bounds its lifetime. Like
+every credential-bearing command in this package, the token's `hmac` is redacted unless
+`--show-secrets` is given. `token renew`/`token expire` take that `hmac` back either as base64 on
+`--hmac` or piped via `--hmac-stdin` — never as a value that could land in shell history — and
+`token expire` is gated behind confirmation since it invalidates the token immediately by default
+(`--expiry-time-period-ms` extends that instead). `token list` describes existing tokens, optionally
+narrowed with a repeatable `--owner`.
+
+`scram list [users...]` describes SCRAM credentials for the given users, or every user in a single
+call when none are given. `scram set <users...> --mechanism scram-sha-256|scram-sha-512
+--password-stdin` creates or replaces a credential — the password is only ever read from stdin,
+never accepted as a plain flag, and `--iterations` overrides the broker's default PBKDF2 iteration
+count. `scram delete <users...> --mechanism <mechanism>` removes a credential, gated behind
+confirmation like every other deletion in this package. `list`, `set`, and `delete` all fan out one
+call per named user — a user with no matching credential fails that broker call outright rather
+than coming back as an error entry alongside the others — so a partial per-user failure exits `4`.
+
+`quota describe` filters client quotas with a repeatable `--entity type=name` (an empty name
+matches that entity type's cluster default) and `--entity-any type` (any specified name), rendering
+one row per entity/key pair. `quota alter --entity type=name` applies a repeatable `--set key=value`
+and/or `--unset key` to that one entity in a single call — `--dry-run` maps to the API's own
+`validateOnly`, matching `config set`.
+
+`share-group list` filters `listGroups` down to share groups (KIP-932's `share` protocol type,
+alongside `consumer`). `share-group describe <groupIds...>` reads back each group's state, epoch,
+assignor, and member count — like `group describe`, this fans out one call per group id, so a
+partial failure exits `4`. `share-group offsets <groupId>` reads a group's committed start offsets
+and lag per partition by default; a single `--topic` (or none, for every topic the group has) is one
+call, but more than one `--topic` filter fans out one call per topic for the same reason. Passing a
+repeatable `--set topic:partition:offset` or `--delete-topic` instead writes new start offsets or
+deletes committed offsets for those topics — each fanned out one call per topic too — both gated
+behind confirmation. `share-group delete <groupIds...>` deletes one or more share groups in a single
+call, gated behind confirmation like `group delete`, with the same per-group partial-failure
+handling.
+
+```sh
+kafka txn list --state-filter Ongoing --brokers localhost:9092
+kafka txn describe orders-producer-1 --brokers localhost:9092
+kafka txn fence orders-producer-1 --brokers localhost:9092
+kafka txn terminate orders-producer-1 --brokers localhost:9092 --yes
+kafka txn abort --topic orders --partition 0 --producer-id 1000 --producer-epoch 0 --brokers localhost:9092 --yes
+kafka token create --renewer User:alice --brokers localhost:9092 --show-secrets
+kafka token renew --hmac-stdin --renew-time-period-ms 86400000 --brokers localhost:9092
+kafka token expire --hmac-stdin --brokers localhost:9092 --yes
+kafka token list --brokers localhost:9092
+kafka scram set alice --mechanism scram-sha-256 --password-stdin --brokers localhost:9092
+kafka scram delete alice --mechanism scram-sha-256 --brokers localhost:9092 --yes
+kafka quota describe --entity user=alice --brokers localhost:9092
+kafka quota alter --entity user=alice --set producer_byte_rate=1048576 --brokers localhost:9092
+kafka share-group list --brokers localhost:9092
+kafka share-group describe orders-readers --brokers localhost:9092
+kafka share-group offsets orders-readers --brokers localhost:9092
+kafka share-group delete orders-readers --brokers localhost:9092 --yes
 ```
 
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class

@@ -79,6 +79,18 @@ describe('admin/topics', () => {
       expect(broker.metadata).not.toHaveBeenCalled();
     });
 
+    it('does not wait for leaders on a validateOnly call, even with waitForLeaders left at its default', async () => {
+      const broker = { createTopics: vi.fn().mockResolvedValue(undefined), metadata: vi.fn() };
+      const cluster = {
+        refreshMetadata: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue(broker),
+      };
+      await expect(makeApi(cluster).createTopics({ topics: [{ topic: 'orders' }], validateOnly: true })).resolves.toBe(
+        true,
+      );
+      expect(broker.metadata).not.toHaveBeenCalled();
+    });
+
     it('returns false when every partition error is TOPIC_ALREADY_EXISTS', async () => {
       const error = new KafkaAggregateError('exists', [
         Object.assign(new Error('exists'), { type: 'TOPIC_ALREADY_EXISTS' }),

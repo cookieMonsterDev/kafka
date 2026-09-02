@@ -114,7 +114,9 @@ export function createTopicsApi(
         const broker = await cluster.findControllerBroker();
         await broker.createTopics({ topics, validateOnly, timeout });
 
-        if (waitForLeaders) {
+        // `validateOnly` never actually creates the topic, so its partitions never get a leader —
+        // waiting for one here would just run out the clock on every dry-run call.
+        if (waitForLeaders && !validateOnly) {
           const topicNamesArray = [...topicNames];
           await retryOnLeaderNotAvailable(async () => broker.metadata(topicNamesArray), {
             delay: 100,

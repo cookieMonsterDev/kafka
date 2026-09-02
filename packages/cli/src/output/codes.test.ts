@@ -10,6 +10,7 @@ import {
   FEATURE_UPDATE_UPGRADE_TYPES,
   formatCode,
   RESOURCE_PATTERN_TYPES,
+  SCRAM_MECHANISMS,
 } from './codes';
 
 describe('CONFIG_RESOURCE_TYPES', () => {
@@ -65,6 +66,13 @@ describe('FEATURE_UPDATE_UPGRADE_TYPES', () => {
   it("deep-equals core's real export", async () => {
     const core = await import('@cookiemonsterdev/kafka-core');
     expect(FEATURE_UPDATE_UPGRADE_TYPES).toEqual(core.FeatureUpdateUpgradeTypes);
+  });
+});
+
+describe('SCRAM_MECHANISMS', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(SCRAM_MECHANISMS).toEqual(core.ScramMechanisms);
   });
 });
 

@@ -70,6 +70,12 @@ export const RESOURCE_PATTERN_TYPES = Object.freeze({
   PREFIXED: 4,
 });
 
+export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
+  UPGRADE: 1,
+  SAFE_DOWNGRADE: 2,
+  UNSAFE_DOWNGRADE: 3,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

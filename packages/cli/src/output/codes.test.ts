@@ -7,6 +7,7 @@ import {
   CONFIG_RESOURCE_TYPES,
   CONFIG_SOURCE,
   describeCode,
+  FEATURE_UPDATE_UPGRADE_TYPES,
   formatCode,
   RESOURCE_PATTERN_TYPES,
 } from './codes';
@@ -57,6 +58,13 @@ describe('RESOURCE_PATTERN_TYPES', () => {
   it("deep-equals core's real export", async () => {
     const core = await import('@cookiemonsterdev/kafka-core');
     expect(RESOURCE_PATTERN_TYPES).toEqual(core.ResourcePatternTypes);
+  });
+});
+
+describe('FEATURE_UPDATE_UPGRADE_TYPES', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(FEATURE_UPDATE_UPGRADE_TYPES).toEqual(core.FeatureUpdateUpgradeTypes);
   });
 });
 

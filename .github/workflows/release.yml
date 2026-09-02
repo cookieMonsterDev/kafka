@@ -80,6 +80,12 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
       - uses: ./.github/actions/setup-node-pnpm
       - uses: ./.github/actions/require-npm-oidc
+      # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. release-chain.mjs runs each
+      # publishable package's own test script before releasing it, and the CLI's shell-completion
+      # suite spawns zsh to verify what it actually generates — see
+      # packages/cli/src/completion/scripts.test.ts (same as ci.yml's "Install zsh" step).
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - name: Run the release chain
         id: chain
         env:

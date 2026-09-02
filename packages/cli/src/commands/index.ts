@@ -4,6 +4,10 @@ import { aclListCommand } from './acl/list';
 import { aclRemoveCommand } from './acl/remove';
 import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
+import { clusterFeaturesCommand } from './cluster/features';
+import { clusterInfoCommand } from './cluster/info';
+import { clusterLogDirsCommand } from './cluster/log-dirs';
+import { clusterQuorumCommand } from './cluster/quorum';
 import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
 import { configSetCommand } from './config/set';
@@ -49,6 +53,10 @@ export const ALL_COMMANDS: CommandSpec[] = [
   configListResourcesCommand,
   configSetCommand,
   configUnsetCommand,
+  clusterInfoCommand,
+  clusterQuorumCommand,
+  clusterFeaturesCommand,
+  clusterLogDirsCommand,
   groupListCommand,
   groupDescribeCommand,
   groupOffsetsCommand,

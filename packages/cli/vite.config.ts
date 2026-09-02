@@ -35,6 +35,7 @@ export default defineConfig({
             'test/suites/config-lifecycle.test.ts',
             'test/suites/group-lifecycle.test.ts',
             'test/suites/acl-lifecycle.test.ts',
+            'test/suites/cluster-lifecycle.test.ts',
           ],
           environment: 'node',
           globalSetup: ['./test/helpers/global-setup.ts'],

@@ -1,4 +1,7 @@
 import type { CommandSpec } from '../args/define';
+import { aclAddCommand } from './acl/add';
+import { aclListCommand } from './acl/list';
+import { aclRemoveCommand } from './acl/remove';
 import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
 import { configDescribeCommand } from './config/describe';
@@ -28,6 +31,9 @@ import { topicProducersCommand } from './topic/producers';
 /** Every command the CLI mounts, in no particular order — the registry sorts them out. */
 export const ALL_COMMANDS: CommandSpec[] = [
   pingCommand,
+  aclListCommand,
+  aclAddCommand,
+  aclRemoveCommand,
   initCommand,
   doctorCommand,
   profilesCommand,

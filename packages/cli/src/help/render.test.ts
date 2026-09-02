@@ -60,6 +60,16 @@ describe('renderRootHelp', () => {
       Run "kafka help <command>" for details on one command."
     `);
   });
+
+  it('omits a hidden command from the top-level listing', () => {
+    const withHidden: CommandSpec[] = [
+      ...FIXTURE_COMMANDS,
+      { path: ['complete'], summary: 'Internal', hidden: true, exitCodes: [0], run: async () => 0 },
+    ];
+    const registry = createRegistry(withHidden);
+    const groups = commandGroups(registry);
+    expect(renderRootHelp(withHidden, groups, OPTIONS)).not.toContain('complete');
+  });
 });
 
 describe('renderGroupHelp', () => {
@@ -73,6 +83,14 @@ describe('renderGroupHelp', () => {
 
       Run "kafka help topic <subcommand>" for details."
     `);
+  });
+
+  it('omits a hidden subcommand from the group listing', () => {
+    const withHidden: CommandSpec[] = [
+      ...FIXTURE_COMMANDS,
+      { path: ['topic', 'secret'], summary: 'Internal', hidden: true, exitCodes: [0], run: async () => 0 },
+    ];
+    expect(renderGroupHelp(['topic'], withHidden, OPTIONS)).not.toContain('secret');
   });
 });
 

@@ -20,6 +20,7 @@
     "format:check": "prettier --check .",
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules",
     "prepare": "husky",
+    "docs:generate:cli": "node scripts/generate-cli-docs.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
   },

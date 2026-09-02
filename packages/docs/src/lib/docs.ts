@@ -1,7 +1,7 @@
 import type { CollectionEntry } from 'astro:content';
 import { withBase } from '@/lib/base';
 
-export const DOCS_PACKAGES = ['core', 'config'] as const;
+export const DOCS_PACKAGES = ['core', 'config', 'cli'] as const;
 
 export type DocsPackage = (typeof DOCS_PACKAGES)[number];
 
@@ -16,6 +16,10 @@ export const DOCS_PACKAGE_META: Record<DocsPackage, { label: string; blurb: stri
   config: {
     label: 'Config',
     blurb: 'Config-file loader',
+  },
+  cli: {
+    label: 'CLI',
+    blurb: 'Admin command line',
   },
 };
 

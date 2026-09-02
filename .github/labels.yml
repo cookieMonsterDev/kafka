@@ -1,0 +1,72 @@
+# Canonical label set for this repo, kept in sync by
+# .github/workflows/label-sync.yml (crazy-max/ghaction-github-labeler).
+# Edit here, not in the GitHub UI — UI edits are overwritten on the next sync.
+
+# Type — what kind of change or report this is
+- name: bug
+  color: 'd73a4a'
+  description: Something is broken or behaves unexpectedly
+- name: enhancement
+  color: 'a2eeef'
+  description: A new feature or improvement
+- name: documentation
+  color: '0075ca'
+  description: Docs-only change or request
+- name: question
+  color: 'd876e3'
+  description: Further information is requested
+- name: chore
+  color: 'fef2c0'
+  description: Maintenance work with no user-facing behavior change
+
+# Scope — which package a PR or issue touches
+- name: 'package: core'
+  color: 'c5def5'
+  description: '@cookiemonsterdev/kafka-core'
+- name: 'package: cli'
+  color: 'c5def5'
+  description: '@cookiemonsterdev/kafka-cli'
+- name: 'package: config'
+  color: 'c5def5'
+  description: '@cookiemonsterdev/kafka-config'
+- name: 'package: docs'
+  color: 'c5def5'
+  description: '@cookiemonsterdev/kafka-docs'
+
+# Status — where something stands in the review/triage flow
+- name: needs-triage
+  color: 'ededed'
+  description: Not yet reviewed by a maintainer
+- name: needs-repro
+  color: 'ededed'
+  description: Waiting on a minimal reproduction from the reporter
+- name: blocked
+  color: 'b60205'
+  description: Blocked on another issue, PR, or external dependency
+- name: breaking-change
+  color: 'b60205'
+  description: Introduces a breaking change; needs a major version bump
+
+# Community — signals for external contributors
+- name: good-first-issue
+  color: '7057ff'
+  description: Small, well-scoped, good for a first contribution
+- name: help-wanted
+  color: '008672'
+  description: A maintainer would welcome a PR for this
+
+# Resolution — how an issue or PR was closed
+- name: duplicate
+  color: 'cfd3d7'
+  description: This already exists elsewhere
+- name: wontfix
+  color: 'ffffff'
+  description: This will not be worked on
+- name: invalid
+  color: 'e4e669'
+  description: "This doesn't seem right"
+
+# Automation
+- name: dependencies
+  color: '0366d6'
+  description: Dependency updates (applied by Dependabot)

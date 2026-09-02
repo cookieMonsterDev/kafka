@@ -1,8 +1,37 @@
 # @cookiemonsterdev/kafka-cli
 
-Command-line admin client for Apache Kafka, built on
-[`@cookiemonsterdev/kafka-core`](../core/README.md). See the
+<p>
+  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-cli"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-cli.svg" alt="npm" /></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+</p>
+
+A `kafka` command for your terminal — list topics, tail consumer groups, manage ACLs, and reach
+almost anything else on a cluster's admin API, without writing a script. It's built on top of
+[`@cookiemonsterdev/kafka-core`](../core/README.md) and lives in the
 [kafka monorepo](https://github.com/cookieMonsterDev/kafka).
+
+Already using `kafka-topics.sh` and the other shell tools that ship with Kafka? See
+[Migrating from the Kafka shell scripts](docs/migrating-from-shell-scripts.md) for a flag-by-flag
+map to the `kafka` equivalent.
+
+## Contents
+
+- [Install](#install)
+- [Try it](#try-it)
+- [Commands](#commands)
+  - [Destructive topic operations](#destructive-topic-operations)
+  - [Config commands](#config-commands)
+  - [Group commands](#group-commands)
+  - [ACL commands](#acl-commands)
+  - [Cluster commands](#cluster-commands)
+  - [Transaction, token, SCRAM, quota, and share group commands](#transaction-token-scram-quota-and-share-group-commands)
+  - [Reaching the rest of the Admin API](#reaching-the-rest-of-the-admin-api)
+- [Shell completion](#shell-completion)
+- [Configuration](#configuration)
+- [Output](#output)
+- [Exit codes](#exit-codes)
+- [Development](#development)
 
 ## Install
 
@@ -15,11 +44,25 @@ npm install -g @cookiemonsterdev/kafka-cli
 kafka --version
 ```
 
-Every command that connects takes `--brokers` directly (`localhost:9092`, or a comma-separated
-list for a multi-broker cluster) — but it's optional. See [Configuration](#configuration) below
-for the other ways brokers (and everything else) can be resolved.
+## Try it
+
+Every command that connects takes `--brokers` directly — a single `localhost:9092`, or a
+comma-separated list for a multi-broker cluster. It's optional too: see
+[Configuration](#configuration) for the other ways brokers (and everything else) can be resolved,
+so you don't have to type `--brokers` on every call.
+
+```sh
+kafka ping --brokers localhost:9092
+kafka topic list --brokers localhost:9092
+kafka topic create orders --brokers localhost:9092 --partitions 3 --replication-factor 1
+kafka topic describe orders --brokers localhost:9092
+kafka group list --brokers localhost:9092
+```
 
 ## Commands
+
+<details>
+<summary><strong>Full command list</strong> — every subcommand this CLI ships, one line each</summary>
 
 ```sh
 kafka init
@@ -65,6 +108,8 @@ kafka help topic create
 kafka --version
 ```
 
+</details>
+
 `kafka topic create` accepts either `--partitions`/`--replication-factor` or an explicit
 `--replica-assignment partition=replica,replica` (repeatable) — not both. `--config key=value`
 (repeatable) sets topic-level configs. `--dry-run` validates without creating anything;
@@ -72,10 +117,16 @@ kafka --version
 
 ### Destructive topic operations
 
+In short: deleting things asks for confirmation first, and a few especially risky deletes need an
+explicit `--force` on top of that.
+
 `topic delete` and `topic delete-records` refuse to run without confirmation: off a TTY (or under
 `CI=true`), that means passing `--yes`; on a TTY, an interactive `[y/N]` prompt (asked on stderr)
 does the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
 requirement — but never the separate `--force` tier below, which no config setting can waive.
+
+<details>
+<summary>Extra safety rails, and how batches of deletes are reported</summary>
 
 `topic delete` additionally requires `--force` before it will delete an internal (`__`-prefixed)
 topic, or more than 10 topics in one call — both are treated as "you probably didn't mean to do
@@ -106,7 +157,21 @@ producer state (producer id, epoch, last sequence); with no `--partition` given 
 partition on the topic, and `--broker-id` targets one specific replica instead of the partition
 leaders.
 
+</details>
+
 ### Config commands
+
+Reads and writes broker/topic-level configs — think `kafka-configs.sh`.
+
+```sh
+kafka config describe --type topic orders --include-synonyms --brokers localhost:9092
+kafka config set --type topic orders --entry cleanup.policy=compact --brokers localhost:9092
+kafka config unset --type topic orders --key cleanup.policy --brokers localhost:9092
+kafka config list-resources --type topic --type group --brokers localhost:9092
+```
+
+<details>
+<summary>Flag reference and edge cases</summary>
 
 `--type` accepts a case-insensitive resource-type name (`topic`, `broker`, `broker-logger`,
 `client-metrics`, `group`) or the broker's raw numeric code. `config describe <names...>` reads
@@ -122,14 +187,26 @@ without changing anything. Like `describe`, more than one resource name fans out
 resource. `config list-resources` lists every config resource the broker knows about, optionally
 narrowed with a repeatable `--type`.
 
-```sh
-kafka config describe --type topic orders --include-synonyms --brokers localhost:9092
-kafka config set --type topic orders --entry cleanup.policy=compact --brokers localhost:9092
-kafka config unset --type topic orders --key cleanup.policy --brokers localhost:9092
-kafka config list-resources --type topic --type group --brokers localhost:9092
-```
+</details>
 
 ### Group commands
+
+Inspect and manage consumer groups — list them, see their committed offsets, roll offsets back,
+or remove a group and its members entirely.
+
+```sh
+kafka group list --brokers localhost:9092
+kafka group describe my-group --brokers localhost:9092
+kafka group offsets my-group --topic orders --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --brokers localhost:9092
+kafka group reset-offsets my-group --topic orders --to earliest --execute --yes --brokers localhost:9092
+kafka group delete my-group --brokers localhost:9092 --yes
+kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --yes
+kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
+```
+
+<details>
+<summary>Flag reference and edge cases</summary>
 
 `group list` prints every consumer group's id and protocol type. `group describe <groupIds...>`
 reads back each group's state, join protocol, and member count — like `config describe`, the
@@ -140,8 +217,7 @@ failing the whole batch. A group id the broker has never seen (or has fully forg
 as `state: "Dead"` with no error code rather than an error, so that's treated as a failed describe
 too, printing "group does not exist". `group offsets <groupId>` reads a group's committed offsets
 — narrowed to specific topics with a repeatable `--topic`, or every topic the group has offsets for
-by default —
-without resolving or committing anything back to the broker.
+by default — without resolving or committing anything back to the broker.
 
 `group reset-offsets <groupId> --topic <name> --to earliest|latest` is a dry run by default: it
 prints the offset each topic's partitions _would_ move to, without changing anything and without
@@ -161,18 +237,22 @@ discovered automatically when it's omitted. `group remove-members <groupId> --me
 group's session in a single call; since the broker never fails that call outright, a member's own
 result code decides whether it succeeded.
 
-```sh
-kafka group list --brokers localhost:9092
-kafka group describe my-group --brokers localhost:9092
-kafka group offsets my-group --topic orders --brokers localhost:9092
-kafka group reset-offsets my-group --topic orders --to earliest --brokers localhost:9092
-kafka group reset-offsets my-group --topic orders --to earliest --execute --yes --brokers localhost:9092
-kafka group delete my-group --brokers localhost:9092 --yes
-kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --yes
-kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
-```
+</details>
 
 ### ACL commands
+
+Grant, list, and revoke access-control entries.
+
+```sh
+kafka acl list --brokers localhost:9092
+kafka acl list --resource-type topic --resource-name orders --brokers localhost:9092
+kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
+kafka acl add User:alice User:bob --resource-type topic --resource-name orders --operation read --operation write --brokers localhost:9092
+kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
+```
+
+<details>
+<summary>Flag reference and edge cases</summary>
 
 Every ACL flag — `--resource-type`, `--pattern-type`, `--operation`, `--permission-type` — accepts
 a case-insensitive name (`topic`, `describe-configs`, `allow`, …) or the broker's raw numeric code;
@@ -194,15 +274,30 @@ connection.
 `deleteAcls` call per principal, exiting `4` on a partial failure; a successful principal reports
 how many ACLs actually matched and were removed.
 
-```sh
-kafka acl list --brokers localhost:9092
-kafka acl list --resource-type topic --resource-name orders --brokers localhost:9092
-kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
-kafka acl add User:alice User:bob --resource-type topic --resource-name orders --operation read --operation write --brokers localhost:9092
-kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
-```
+</details>
 
 ### Cluster commands
+
+Inspect the cluster itself — brokers, controller, metadata quorum, log directories — and run
+cluster-level operations like feature upgrades, leader elections, reassignments, and quorum
+membership changes.
+
+```sh
+kafka cluster info --brokers localhost:9092
+kafka cluster quorum --brokers localhost:9092
+kafka cluster features --brokers localhost:9092
+kafka cluster log-dirs --topic orders --brokers localhost:9092
+kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
+kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes
+kafka cluster reassign list --brokers localhost:9092
+kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
+kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
+kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
+kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
+```
+
+<details>
+<summary>Flag reference and edge cases</summary>
 
 `cluster info` describes the cluster's brokers, controller, and cluster id. `cluster quorum`
 describes the metadata quorum — each `__cluster_metadata` partition's leader, voters, and
@@ -236,21 +331,35 @@ name=host:port` (repeatable) and `cluster raft-voter remove --voter-id <id> --vo
 <uuid>` add or remove a voter from the metadata quorum — `remove` is gated behind confirmation like
 every other removal in this package.
 
-```sh
-kafka cluster info --brokers localhost:9092
-kafka cluster quorum --brokers localhost:9092
-kafka cluster features --brokers localhost:9092
-kafka cluster log-dirs --topic orders --brokers localhost:9092
-kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
-kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes
-kafka cluster reassign list --brokers localhost:9092
-kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
-kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
-kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
-kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
-```
+</details>
 
 ### Transaction, token, SCRAM, quota, and share group commands
+
+Everything else the broker's admin API covers that doesn't fit the categories above: in-flight
+transactions, delegation tokens, SCRAM credentials, client quotas, and KIP-932 share groups.
+
+```sh
+kafka txn list --state-filter Ongoing --brokers localhost:9092
+kafka txn describe orders-producer-1 --brokers localhost:9092
+kafka txn fence orders-producer-1 --brokers localhost:9092
+kafka txn terminate orders-producer-1 --brokers localhost:9092 --yes
+kafka txn abort --topic orders --partition 0 --producer-id 1000 --producer-epoch 0 --brokers localhost:9092 --yes
+kafka token create --renewer User:alice --brokers localhost:9092 --show-secrets
+kafka token renew --hmac-stdin --renew-time-period-ms 86400000 --brokers localhost:9092
+kafka token expire --hmac-stdin --brokers localhost:9092 --yes
+kafka token list --brokers localhost:9092
+kafka scram set alice --mechanism scram-sha-256 --password-stdin --brokers localhost:9092
+kafka scram delete alice --mechanism scram-sha-256 --brokers localhost:9092 --yes
+kafka quota describe --entity user=alice --brokers localhost:9092
+kafka quota alter --entity user=alice --set producer_byte_rate=1048576 --brokers localhost:9092
+kafka share-group list --brokers localhost:9092
+kafka share-group describe orders-readers --brokers localhost:9092
+kafka share-group offsets orders-readers --brokers localhost:9092
+kafka share-group delete orders-readers --brokers localhost:9092 --yes
+```
+
+<details>
+<summary>Flag reference and edge cases</summary>
 
 `txn list` lists transactions known to the cluster, optionally narrowed with `--state-filter`,
 `--producer-id-filter` (both repeatable), `--duration-filter`, or `--transactional-id-pattern`.
@@ -303,31 +412,33 @@ behind confirmation. `share-group delete <groupIds...>` deletes one or more shar
 call, gated behind confirmation like `group delete`, with the same per-group partial-failure
 handling.
 
+</details>
+
+### Reaching the rest of the Admin API
+
+Not every admin method has a first-class command yet — `kafka admin call <method>` reaches all of
+them, including the ones above.
+
 ```sh
-kafka txn list --state-filter Ongoing --brokers localhost:9092
-kafka txn describe orders-producer-1 --brokers localhost:9092
-kafka txn fence orders-producer-1 --brokers localhost:9092
-kafka txn terminate orders-producer-1 --brokers localhost:9092 --yes
-kafka txn abort --topic orders --partition 0 --producer-id 1000 --producer-epoch 0 --brokers localhost:9092 --yes
-kafka token create --renewer User:alice --brokers localhost:9092 --show-secrets
-kafka token renew --hmac-stdin --renew-time-period-ms 86400000 --brokers localhost:9092
-kafka token expire --hmac-stdin --brokers localhost:9092 --yes
-kafka token list --brokers localhost:9092
-kafka scram set alice --mechanism scram-sha-256 --password-stdin --brokers localhost:9092
-kafka scram delete alice --mechanism scram-sha-256 --brokers localhost:9092 --yes
-kafka quota describe --entity user=alice --brokers localhost:9092
-kafka quota alter --entity user=alice --set producer_byte_rate=1048576 --brokers localhost:9092
-kafka share-group list --brokers localhost:9092
-kafka share-group describe orders-readers --brokers localhost:9092
-kafka share-group offsets orders-readers --brokers localhost:9092
-kafka share-group delete orders-readers --brokers localhost:9092 --yes
+kafka admin methods
+kafka admin call listTopics --brokers localhost:9092
 ```
 
-`kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class
-command yet — `kafka admin methods` lists all of them and which ones are mounted vs.
+`kafka admin methods` lists every method on `Admin` and which ones are mounted vs.
 passthrough-only. Arguments come from a JSON file (`--from-file`); a string value prefixed
 `bigint:`, `base64:`, or `uuid:` decodes to a real `bigint`/`Buffer` before the call. A method that
 isn't read-only refuses to run without both `--yes` and `--force`.
+
+## Shell completion
+
+```sh
+eval "$(kafka completion bash)"   # or: zsh, fish
+```
+
+Persist it instead of `eval`-ing it on every shell start by redirecting the same command's output
+to your shell's own completion directory (each script's own header comment names one). Completion
+covers command and subcommand names, long flags, and closed flag values (like `--format`); it never
+connects to a broker, so it can't suggest a real topic or group name.
 
 ## Configuration
 
@@ -426,3 +537,7 @@ KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-cli test:integration
 ```
 
 See the root [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full workspace workflow.
+
+## License
+
+[MIT](../../LICENSE) © Mykhailo Toporkov

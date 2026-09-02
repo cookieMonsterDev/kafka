@@ -1,0 +1,24 @@
+# Path-based rules for .github/workflows/pr-labeler.yml (actions/labeler).
+# A PR gets every label whose rule matches at least one changed file.
+
+'package: core':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/core/**'
+
+'package: cli':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/cli/**'
+
+'package: config':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/config/**'
+
+'package: docs':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/docs/**'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.md'
+          - 'packages/docs/**'

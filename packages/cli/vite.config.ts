@@ -30,18 +30,15 @@ export default defineConfig({
       {
         test: {
           name: 'integration',
-          include: [
-            'test/suites/topic-lifecycle.test.ts',
-            'test/suites/config-lifecycle.test.ts',
-            'test/suites/group-lifecycle.test.ts',
-            'test/suites/acl-lifecycle.test.ts',
-            'test/suites/cluster-lifecycle.test.ts',
-            'test/suites/advanced-lifecycle.test.ts',
-          ],
+          include: ['test/suites/**/*.test.ts'],
+          // Already covered by the unit project above (needs no broker), so it doesn't belong to
+          // this project's `globalSetup` — same pattern as core's own vite.config.ts.
+          exclude: ['test/suites/tarball.test.ts'],
           environment: 'node',
           globalSetup: ['./test/helpers/global-setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 60_000,
+          retry: Number(process.env.TEST_RETRIES ?? 0),
         },
       },
     ],

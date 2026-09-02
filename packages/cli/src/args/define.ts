@@ -63,5 +63,11 @@ export interface CommandSpec {
    * confidently as a command with a frozen shape.
    */
   readonly unstable?: boolean;
+  /**
+   * Excludes this command from `help`'s root and group listings without changing how it's
+   * routed, parsed, or invoked — for machinery meant to be called by a generated shell script
+   * rather than typed by a person.
+   */
+  readonly hidden?: boolean;
   readonly run: (context: CommandContext) => Promise<number>;
 }

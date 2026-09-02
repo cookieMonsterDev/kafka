@@ -1,14 +1,30 @@
 # @cookiemonsterdev/kafka-core
 
-TypeScript Apache Kafka client for **Kafka 0.10+**. Protocol versions are negotiated from `ApiVersions`. Offsets are `bigint`. Types are generated from source.
-
-This package is the library in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is published to npm as [`@cookiemonsterdev/kafka-core`](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core).
-
 <p>
   <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
   <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-core"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-core.svg" alt="npm" /></a>
   <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
 </p>
+
+A TypeScript Apache Kafka client for Node.js that talks the wire protocol directly — no Java
+client, no native bindings. Protocol versions are negotiated from `ApiVersions` at connect time,
+so it works against **Kafka 0.10 and up**. Offsets are `bigint` (Kafka offsets can exceed what a
+JS `number` represents exactly), and its `.d.ts` types are generated from source rather than
+hand-maintained.
+
+This package is the library at the center of the [kafka](https://github.com/cookieMonsterDev/kafka)
+workspace, published to npm as
+[`@cookiemonsterdev/kafka-core`](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core).
+
+## Contents
+
+- [Features](#features)
+- [Usage](#usage)
+- [Documentation](#documentation)
+- [Local development](#local-development)
+- [Tests](#tests)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 

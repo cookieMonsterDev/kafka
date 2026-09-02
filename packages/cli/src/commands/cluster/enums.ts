@@ -1,3 +1,4 @@
+import type { FeatureUpdateUpgradeType } from '@cookiemonsterdev/kafka-core';
 import { CliUsageError } from '../../args/coerce';
 import { FEATURE_UPDATE_UPGRADE_TYPES } from '../../output/codes';
 
@@ -29,10 +30,8 @@ function createResolver<T extends number>(
 }
 
 /** `--upgrade-type` — case-insensitive name (`upgrade`, `safe-downgrade`, `unsafe-downgrade`) or raw numeric code. */
-export const resolveFeatureUpgradeType: (raw: string) => number = createResolver(
-  'upgrade-type',
-  FEATURE_UPDATE_UPGRADE_TYPES,
-);
+export const resolveFeatureUpgradeType: (raw: string) => FeatureUpdateUpgradeType =
+  createResolver<FeatureUpdateUpgradeType>('upgrade-type', FEATURE_UPDATE_UPGRADE_TYPES);
 
 /**
  * `election_type` (0 preferred, 1 unclean) has no name table exported anywhere in core — verified

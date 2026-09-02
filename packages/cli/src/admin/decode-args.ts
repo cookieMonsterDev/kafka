@@ -5,7 +5,8 @@ const BASE64_PREFIX = 'base64:';
 const UUID_PREFIX = 'uuid:';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function decodeUuid(uuid: string): Buffer {
+/** Decodes a `uuid` string (e.g. a directory id) into its raw 16-byte form. */
+export function decodeUuid(uuid: string): Buffer {
   if (!UUID_PATTERN.test(uuid)) {
     throw new CliUsageError(`invalid uuid: value "${uuid}"`);
   }

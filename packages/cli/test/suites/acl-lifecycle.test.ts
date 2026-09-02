@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../helpers/run-cli';
+import { waitFor } from '../helpers/wait-for';
 
 const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
 const TOPIC = `kafka-cli-it-acl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -79,10 +80,6 @@ describe('acl lifecycle against a real broker', () => {
     expect(parsed.resources).toEqual([]);
   });
 
-  // Occasionally flaky against a real broker: `acl add` returns before the ACL has finished
-  // propagating, so the immediate `acl list` sometimes still returns the pre-add state. Genuine
-  // broker-side timing, not a one-line bug in this CLI — `vite.config.ts`'s `retry` (set from
-  // `TEST_RETRIES` in CI) absorbs it rather than a `sleep`/poll here.
   it('adds an ACL, then lists it back', async () => {
     const added = await runCli([
       'acl',
@@ -99,25 +96,34 @@ describe('acl lifecycle against a real broker', () => {
     ]);
     expect(added.code).toBe(0);
 
-    const listed = await runCli([
-      'acl',
-      'list',
-      '--resource-type',
-      'topic',
-      '--resource-name',
-      TOPIC,
-      '--principal',
-      PRINCIPAL,
-      '--brokers',
-      BROKERS,
-      '--json',
-    ]);
-    expect(listed.code).toBe(0);
-    const parsed = JSON.parse(listed.stdout) as {
-      resources: { resourceName: string; acls: { principal: string }[] }[];
-    };
+    // `acl add` returning 0 means the broker that handled it accepted the ACL — not that the
+    // one this `acl list` call happens to reach in a 3-broker cluster has caught up yet. Polls
+    // rather than asserting once, since a fixed `sleep` is either too short (still flaky) or too
+    // long (slows down the common case where propagation already finished).
+    const parsed = await waitFor(
+      async () => {
+        const listed = await runCli([
+          'acl',
+          'list',
+          '--resource-type',
+          'topic',
+          '--resource-name',
+          TOPIC,
+          '--principal',
+          PRINCIPAL,
+          '--brokers',
+          BROKERS,
+          '--json',
+        ]);
+        if (listed.code !== 0) return false;
+        const result = JSON.parse(listed.stdout) as {
+          resources: { resourceName: string; acls: { principal: string }[] }[];
+        };
+        return result.resources[0]?.acls.some((acl) => acl.principal === PRINCIPAL) === true ? result : false;
+      },
+      { message: `an ACL for ${PRINCIPAL} to appear on ${TOPIC}` },
+    );
     expect(parsed.resources[0]?.resourceName).toBe(TOPIC);
-    expect(parsed.resources[0]?.acls.some((acl) => acl.principal === PRINCIPAL)).toBe(true);
   });
 
   it('removes the ACL, then confirms it is gone', async () => {
@@ -135,20 +141,26 @@ describe('acl lifecycle against a real broker', () => {
     ]);
     expect(removed.code).toBe(0);
 
-    const listed = await runCli([
-      'acl',
-      'list',
-      '--resource-type',
-      'topic',
-      '--resource-name',
-      TOPIC,
-      '--principal',
-      PRINCIPAL,
-      '--brokers',
-      BROKERS,
-      '--json',
-    ]);
-    const parsed = JSON.parse(listed.stdout) as { resources: unknown[] };
-    expect(parsed.resources).toEqual([]);
+    await waitFor(
+      async () => {
+        const listed = await runCli([
+          'acl',
+          'list',
+          '--resource-type',
+          'topic',
+          '--resource-name',
+          TOPIC,
+          '--principal',
+          PRINCIPAL,
+          '--brokers',
+          BROKERS,
+          '--json',
+        ]);
+        if (listed.code !== 0) return false;
+        const parsed = JSON.parse(listed.stdout) as { resources: unknown[] };
+        return parsed.resources.length === 0 ? true : false;
+      },
+      { message: `the ACL for ${PRINCIPAL} on ${TOPIC} to disappear` },
+    );
   });
 });

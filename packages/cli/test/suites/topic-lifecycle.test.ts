@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../helpers/run-cli';
+import { waitFor } from '../helpers/wait-for';
 
 const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
 const TOPIC = `kafka-cli-it-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -145,9 +146,17 @@ describe('topic mutations against a real broker', () => {
     const result = await runCli(['topic', 'add-partitions', MUTATIONS_TOPIC, '--count', '2', '--brokers', BROKERS]);
     expect(result.code).toBe(0);
 
-    const described = await runCli(['topic', 'describe', MUTATIONS_TOPIC, '--brokers', BROKERS, '--json']);
-    const topics = (JSON.parse(described.stdout) as { topics: { partitions: unknown[] }[] }).topics;
-    expect(topics[0]?.partitions).toHaveLength(2);
+    // The new partition doesn't always show up in the very next describe — metadata propagation
+    // across this suite's multi-broker cluster, not a bug in the add-partitions call itself.
+    await waitFor(
+      async () => {
+        const described = await runCli(['topic', 'describe', MUTATIONS_TOPIC, '--brokers', BROKERS, '--json']);
+        if (described.code !== 0) return false;
+        const topics = (JSON.parse(described.stdout) as { topics: { partitions: unknown[] }[] }).topics;
+        return topics[0]?.partitions.length === 2 ? true : false;
+      },
+      { message: `${MUTATIONS_TOPIC} to reach 2 partitions` },
+    );
   });
 
   it('reads offsets for the topic', async () => {
@@ -191,7 +200,14 @@ describe('topic mutations against a real broker', () => {
     const result = await runCli(['topic', 'delete', MUTATIONS_TOPIC, '--brokers', BROKERS, '--yes']);
     expect(result.code).toBe(0);
 
-    const listed = await runCli(['topic', 'list', '--brokers', BROKERS, '--json']);
-    expect((JSON.parse(listed.stdout) as { topics: string[] }).topics).not.toContain(MUTATIONS_TOPIC);
+    await waitFor(
+      async () => {
+        const listed = await runCli(['topic', 'list', '--brokers', BROKERS, '--json']);
+        if (listed.code !== 0) return false;
+        const topics = (JSON.parse(listed.stdout) as { topics: string[] }).topics;
+        return topics.includes(MUTATIONS_TOPIC) ? false : true;
+      },
+      { message: `${MUTATIONS_TOPIC} to disappear from topic list` },
+    );
   });
 });

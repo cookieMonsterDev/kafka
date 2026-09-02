@@ -20,6 +20,7 @@
     "format:check": "prettier --check .",
     "clean": "pnpm -r --if-present run clean && rm -rf node_modules",
     "prepare": "husky",
+    "docs:generate:cli": "node scripts/generate-cli-docs.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
   },
@@ -35,13 +36,13 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@vitest/eslint-plugin": "^1.6.27",
-    "eslint": "^10.9.0",
+    "eslint": "^10.9.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",
     "prettier": "^3.9.6",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.5",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.68.0"
   }
 }

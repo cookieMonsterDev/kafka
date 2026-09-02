@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCli } from '../helpers/run-cli';
+import { waitFor } from '../helpers/wait-for';
 
 const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
 const TOPIC = `kafka-cli-it-config-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -55,12 +56,27 @@ describe('config lifecycle against a real broker', () => {
     ]);
     expect(set.code).toBe(0);
 
-    const described = await runCli(['config', 'describe', '--type', 'topic', TOPIC, '--brokers', BROKERS, '--json']);
-    const parsed = JSON.parse(described.stdout) as {
-      resources: { entries: { name: string; value: string | null }[] }[];
-    };
-    const entry = parsed.resources[0]?.entries.find((e) => e.name === 'cleanup.policy');
-    expect(entry?.value).toBe('compact');
+    await waitFor(
+      async () => {
+        const described = await runCli([
+          'config',
+          'describe',
+          '--type',
+          'topic',
+          TOPIC,
+          '--brokers',
+          BROKERS,
+          '--json',
+        ]);
+        if (described.code !== 0) return false;
+        const parsed = JSON.parse(described.stdout) as {
+          resources: { entries: { name: string; value: string | null }[] }[];
+        };
+        const entry = parsed.resources[0]?.entries.find((e) => e.name === 'cleanup.policy');
+        return entry?.value === 'compact' ? true : false;
+      },
+      { message: `${TOPIC}'s cleanup.policy to read back as compact` },
+    );
   });
 
   it('unsets the config entry, reverting it to default', async () => {
@@ -77,12 +93,27 @@ describe('config lifecycle against a real broker', () => {
     ]);
     expect(unset.code).toBe(0);
 
-    const described = await runCli(['config', 'describe', '--type', 'topic', TOPIC, '--brokers', BROKERS, '--json']);
-    const parsed = JSON.parse(described.stdout) as {
-      resources: { entries: { name: string; isDefault: boolean }[] }[];
-    };
-    const entry = parsed.resources[0]?.entries.find((e) => e.name === 'cleanup.policy');
-    expect(entry?.isDefault).toBe(true);
+    await waitFor(
+      async () => {
+        const described = await runCli([
+          'config',
+          'describe',
+          '--type',
+          'topic',
+          TOPIC,
+          '--brokers',
+          BROKERS,
+          '--json',
+        ]);
+        if (described.code !== 0) return false;
+        const parsed = JSON.parse(described.stdout) as {
+          resources: { entries: { name: string; isDefault: boolean }[] }[];
+        };
+        const entry = parsed.resources[0]?.entries.find((e) => e.name === 'cleanup.policy');
+        return entry?.isDefault === true ? true : false;
+      },
+      { message: `${TOPIC}'s cleanup.policy to revert to its default` },
+    );
   });
 
   it('--dry-run validates a config set without changing anything', async () => {
@@ -109,9 +140,15 @@ describe('config lifecycle against a real broker', () => {
   });
 
   it('lists the topic among the topic-type config resources', async () => {
-    const result = await runCli(['config', 'list-resources', '--type', 'topic', '--brokers', BROKERS, '--json']);
-    expect(result.code).toBe(0);
-    const parsed = JSON.parse(result.stdout) as { resources: { resourceName: string }[] };
-    expect(parsed.resources.some((r) => r.resourceName === TOPIC)).toBe(true);
+    const found = await waitFor(
+      async () => {
+        const result = await runCli(['config', 'list-resources', '--type', 'topic', '--brokers', BROKERS, '--json']);
+        if (result.code !== 0) return false;
+        const parsed = JSON.parse(result.stdout) as { resources: { resourceName: string }[] };
+        return parsed.resources.some((r) => r.resourceName === TOPIC);
+      },
+      { message: `${TOPIC} to appear among topic-type config resources` },
+    );
+    expect(found).toBe(true);
   });
 });

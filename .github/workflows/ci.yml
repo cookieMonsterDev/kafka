@@ -50,6 +50,11 @@ jobs:
       # needs (https://github.com/withastro/roadmap/discussions/1321). Pre-existing, tracked
       # as a follow-up; `pnpm typecheck` from the repo root still runs it for local dev.
       - run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
+      # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. The CLI's shell-completion
+      # suite spawns both to verify what it actually generates, not just its syntax — see
+      # packages/cli/src/completion/scripts.test.ts.
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
       - run: pnpm test
       - run: node scripts/check-publishable-deps.mjs
 

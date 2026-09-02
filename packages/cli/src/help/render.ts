@@ -39,6 +39,7 @@ export function renderRootHelp(
 ): string {
   const topLevel = new Set<string>();
   for (const command of leaves) {
+    if (command.hidden === true) continue;
     const [first] = command.path;
     if (first !== undefined) topLevel.add(groups.has(first) ? first : command.path.join(' '));
   }
@@ -65,7 +66,9 @@ export function renderGroupHelp(
   options: HelpRenderOptions,
 ): string {
   const prefix = groupPath.join(' ');
-  const children = leaves.filter((command) => command.path.slice(0, groupPath.length).join(' ') === prefix);
+  const children = leaves.filter(
+    (command) => command.hidden !== true && command.path.slice(0, groupPath.length).join(' ') === prefix,
+  );
 
   const lines = [
     `Usage: ${options.programName} ${prefix} <subcommand> [flags]`,

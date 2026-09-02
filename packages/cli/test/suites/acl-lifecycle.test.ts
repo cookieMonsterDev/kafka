@@ -79,6 +79,10 @@ describe('acl lifecycle against a real broker', () => {
     expect(parsed.resources).toEqual([]);
   });
 
+  // Occasionally flaky against a real broker: `acl add` returns before the ACL has finished
+  // propagating, so the immediate `acl list` sometimes still returns the pre-add state. Genuine
+  // broker-side timing, not a one-line bug in this CLI — `vite.config.ts`'s `retry` (set from
+  // `TEST_RETRIES` in CI) absorbs it rather than a `sleep`/poll here.
   it('adds an ACL, then lists it back', async () => {
     const added = await runCli([
       'acl',

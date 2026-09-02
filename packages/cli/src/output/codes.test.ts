@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { CONFIG_OPERATIONS, CONFIG_RESOURCE_TYPES, CONFIG_SOURCE, describeCode, formatCode } from './codes';
+import {
+  ACL_OPERATION_TYPES,
+  ACL_PERMISSION_TYPES,
+  ACL_RESOURCE_TYPES,
+  CONFIG_OPERATIONS,
+  CONFIG_RESOURCE_TYPES,
+  CONFIG_SOURCE,
+  describeCode,
+  formatCode,
+  RESOURCE_PATTERN_TYPES,
+} from './codes';
 
 describe('CONFIG_RESOURCE_TYPES', () => {
   it("deep-equals core's real export", async () => {
@@ -19,6 +29,34 @@ describe('CONFIG_OPERATIONS', () => {
   it("deep-equals core's real export", async () => {
     const core = await import('@cookiemonsterdev/kafka-core');
     expect(CONFIG_OPERATIONS).toEqual(core.ConfigOperations);
+  });
+});
+
+describe('ACL_RESOURCE_TYPES', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(ACL_RESOURCE_TYPES).toEqual(core.AclResourceTypes);
+  });
+});
+
+describe('ACL_OPERATION_TYPES', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(ACL_OPERATION_TYPES).toEqual(core.AclOperationTypes);
+  });
+});
+
+describe('ACL_PERMISSION_TYPES', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(ACL_PERMISSION_TYPES).toEqual(core.AclPermissionTypes);
+  });
+});
+
+describe('RESOURCE_PATTERN_TYPES', () => {
+  it("deep-equals core's real export", async () => {
+    const core = await import('@cookiemonsterdev/kafka-core');
+    expect(RESOURCE_PATTERN_TYPES).toEqual(core.ResourcePatternTypes);
   });
 });
 

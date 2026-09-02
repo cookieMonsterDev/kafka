@@ -1,3 +1,4 @@
+import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
@@ -5,7 +6,26 @@ import { EXIT_CODES } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
+import { mapWithConcurrency } from '../topic/concurrency';
 import { resolveScramMechanism } from './enums';
+
+const CONCURRENCY = 8;
+
+interface UserResult {
+  readonly user: string;
+  readonly ok: boolean;
+  readonly detail?: string;
+}
+
+/**
+ * One `alterUserScramCredentials` call per user: the broker's response throws on the first
+ * deletion with a non-zero error code (a user with no credential to delete included), discarding
+ * every other user's result in the same call — the same hazard `scram set` works around.
+ */
+async function deleteOne(admin: Admin, user: string, mechanism: number): Promise<UserResult> {
+  await admin.alterUserScramCredentials({ deletions: [{ name: user, mechanism }] });
+  return { user, ok: true };
+}
 
 export const scramDeleteCommand: CommandSpec = {
   path: ['scram', 'delete'],
@@ -44,23 +64,30 @@ export const scramDeleteCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      const { results } = await admin.alterUserScramCredentials({
-        deletions: positionals.map((name) => ({ name, mechanism })),
-      });
+      let results: UserResult[];
+
+      if (positionals.length === 1) {
+        results = [await deleteOne(admin, positionals[0]!, mechanism)];
+      } else {
+        results = await mapWithConcurrency(positionals, CONCURRENCY, async (user) => {
+          try {
+            return await deleteOne(admin, user, mechanism);
+          } catch (error) {
+            return { user, ok: false, detail: error instanceof Error ? error.message : String(error) };
+          }
+        });
+      }
 
       output.write({
         human: () =>
           renderTable(
             ['USER', 'STATUS'],
-            results.map((r) => [
-              r.user,
-              r.errorCode === 0 ? 'deleted' : (r.errorMessage ?? `failed (code ${String(r.errorCode)})`),
-            ]),
+            results.map((r) => [r.user, r.ok ? 'deleted' : (r.detail ?? 'failed')]),
           ),
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.errorCode === 0).length;
+      const okCount = results.filter((r) => r.ok).length;
       if (okCount === results.length) return EXIT_CODES.ok;
       if (okCount === 0) return EXIT_CODES.operationFailed;
       return EXIT_CODES.partialBatch;

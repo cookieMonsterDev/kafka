@@ -1,3 +1,4 @@
+import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError, coerceNumber } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
@@ -5,6 +6,15 @@ import { EXIT_CODES } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
+import { mapWithConcurrency } from '../topic/concurrency';
+
+const CONCURRENCY = 8;
+
+interface TopicResult {
+  readonly topic: string;
+  readonly ok: boolean;
+  readonly detail?: string;
+}
 
 interface SetEntry {
   readonly topic: string;
@@ -32,14 +42,49 @@ function parseSetFlags(raw: readonly string[]): SetEntry[] {
 
 function groupSetEntriesByTopic(
   entries: readonly SetEntry[],
-): { topicName: string; partitions: { partitionIndex: number; startOffset: bigint }[] }[] {
+): Map<string, { partitionIndex: number; startOffset: bigint }[]> {
   const byTopic = new Map<string, { partitionIndex: number; startOffset: bigint }[]>();
   for (const entry of entries) {
     const partitions = byTopic.get(entry.topic) ?? [];
     partitions.push({ partitionIndex: entry.partition, startOffset: entry.offset });
     byTopic.set(entry.topic, partitions);
   }
-  return [...byTopic.entries()].map(([topicName, partitions]) => ({ topicName, partitions }));
+  return byTopic;
+}
+
+/**
+ * One `alterShareGroupOffsets` call per topic: the broker's response throws on the first
+ * partition error code found across every topic in one call, discarding info about every other
+ * topic — the same hazard `group delete-offsets` already works around for `deleteGroupOffsets`.
+ */
+async function setOffsetsForTopic(
+  admin: Admin,
+  groupId: string,
+  topicName: string,
+  partitions: { partitionIndex: number; startOffset: bigint }[],
+): Promise<TopicResult> {
+  await admin.alterShareGroupOffsets({ groupId, topics: [{ topicName, partitions }] });
+  return { topic: topicName, ok: true };
+}
+
+/** One `deleteShareGroupOffsets` call per topic, for the same reason `setOffsetsForTopic` is. */
+async function deleteOffsetsForTopic(admin: Admin, groupId: string, topic: string): Promise<TopicResult> {
+  await admin.deleteShareGroupOffsets({ groupId, topics: [topic] });
+  return { topic, ok: true };
+}
+
+function renderResults(results: readonly TopicResult[]): string {
+  return renderTable(
+    ['TOPIC', 'STATUS'],
+    results.map((r) => [r.topic, r.ok ? 'ok' : (r.detail ?? 'failed')]),
+  );
+}
+
+function exitForResults(results: readonly TopicResult[]): number {
+  const okCount = results.filter((r) => r.ok).length;
+  if (okCount === results.length) return EXIT_CODES.ok;
+  if (okCount === 0) return EXIT_CODES.operationFailed;
+  return EXIT_CODES.partialBatch;
 }
 
 export const shareGroupOffsetsCommand: CommandSpec = {
@@ -68,7 +113,13 @@ export const shareGroupOffsetsCommand: CommandSpec = {
     'share-group offsets orders-readers --set orders:0:1000 --yes --brokers localhost:9092',
     'share-group offsets orders-readers --delete-topic orders --yes --brokers localhost:9092',
   ],
-  exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage, EXIT_CODES.abortedOrUnconfirmed],
+  exitCodes: [
+    EXIT_CODES.ok,
+    EXIT_CODES.operationFailed,
+    EXIT_CODES.usage,
+    EXIT_CODES.partialBatch,
+    EXIT_CODES.abortedOrUnconfirmed,
+  ],
   async run({ flags, positionals, runtime, output, config }) {
     const groupId = positionals[0];
     if (groupId === undefined) {
@@ -88,7 +139,7 @@ export const shareGroupOffsetsCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
 
     if (setFlags !== undefined && setFlags.length > 0) {
-      const topics = groupSetEntriesByTopic(parseSetFlags(setFlags));
+      const byTopic = groupSetEntriesByTopic(parseSetFlags(setFlags));
       await confirmDestructive({
         runtime,
         yes: flags.yes === true,
@@ -98,23 +149,22 @@ export const shareGroupOffsetsCommand: CommandSpec = {
 
       const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
       try {
-        const { responses } = await admin.alterShareGroupOffsets({ groupId, topics });
-        output.write({
-          human: () =>
-            renderTable(
-              ['TOPIC', 'PARTITION', 'STATUS'],
-              responses.flatMap((topicResult) =>
-                topicResult.partitions.map((p) => [
-                  topicResult.topicName,
-                  String(p.partitionIndex),
-                  p.errorCode === 0 ? 'set' : (p.errorMessage ?? `failed (code ${String(p.errorCode)})`),
-                ]),
-              ),
-            ),
-          json: () => stringifyJsonSafe({ responses }),
-        });
-        const allOk = responses.every((t) => t.partitions.every((p) => p.errorCode === 0));
-        return allOk ? EXIT_CODES.ok : EXIT_CODES.operationFailed;
+        const entries = [...byTopic.entries()];
+        let results: TopicResult[];
+        if (entries.length === 1) {
+          const [topicName, partitions] = entries[0]!;
+          results = [await setOffsetsForTopic(admin, groupId, topicName, partitions)];
+        } else {
+          results = await mapWithConcurrency(entries, CONCURRENCY, async ([topicName, partitions]) => {
+            try {
+              return await setOffsetsForTopic(admin, groupId, topicName, partitions);
+            } catch (error) {
+              return { topic: topicName, ok: false, detail: error instanceof Error ? error.message : String(error) };
+            }
+          });
+        }
+        output.write({ human: () => renderResults(results), json: () => stringifyJsonSafe({ results }) });
+        return exitForResults(results);
       } finally {
         await admin.disconnect();
       }
@@ -130,20 +180,20 @@ export const shareGroupOffsetsCommand: CommandSpec = {
 
       const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
       try {
-        const { responses } = await admin.deleteShareGroupOffsets({ groupId, topics: deleteTopics });
-        output.write({
-          human: () =>
-            renderTable(
-              ['TOPIC', 'STATUS'],
-              responses.map((r) => [
-                r.topicName,
-                r.errorCode === 0 ? 'deleted' : (r.errorMessage ?? `failed (code ${String(r.errorCode)})`),
-              ]),
-            ),
-          json: () => stringifyJsonSafe({ responses }),
-        });
-        const allOk = responses.every((r) => r.errorCode === 0);
-        return allOk ? EXIT_CODES.ok : EXIT_CODES.operationFailed;
+        let results: TopicResult[];
+        if (deleteTopics.length === 1) {
+          results = [await deleteOffsetsForTopic(admin, groupId, deleteTopics[0]!)];
+        } else {
+          results = await mapWithConcurrency(deleteTopics, CONCURRENCY, async (topic) => {
+            try {
+              return await deleteOffsetsForTopic(admin, groupId, topic);
+            } catch (error) {
+              return { topic, ok: false, detail: error instanceof Error ? error.message : String(error) };
+            }
+          });
+        }
+        output.write({ human: () => renderResults(results), json: () => stringifyJsonSafe({ results }) });
+        return exitForResults(results);
       } finally {
         await admin.disconnect();
       }

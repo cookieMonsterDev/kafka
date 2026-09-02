@@ -107,17 +107,18 @@ describe('shareGroupOffsetsCommand — --set mode', () => {
     expect(await shareGroupOffsetsCommand.run(context)).toBe(0);
   });
 
-  it('groups multiple --set entries by topic', async () => {
+  it('groups multiple partitions for the same topic into one call', async () => {
     const alterShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
     const admin = createFakeAdmin({ alterShareGroupOffsets, disconnect: async () => {} });
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', set: ['orders:0:1000', 'orders:1:2000', 'payments:0:0'], yes: true },
+      flags: { brokers: 'localhost:9092', set: ['orders:0:1000', 'orders:1:2000'], yes: true },
       positionals: ['g1'],
       openAdmin: async () => admin,
     });
 
     await shareGroupOffsetsCommand.run(context);
 
+    expect(alterShareGroupOffsets).toHaveBeenCalledTimes(1);
     expect(alterShareGroupOffsets).toHaveBeenCalledWith({
       groupId: 'g1',
       topics: [
@@ -128,22 +129,53 @@ describe('shareGroupOffsetsCommand — --set mode', () => {
             { partitionIndex: 1, startOffset: 2000n },
           ],
         },
-        { topicName: 'payments', partitions: [{ partitionIndex: 0, startOffset: 0n }] },
       ],
     });
   });
 
-  it('returns exit 1 when a partition alteration fails', async () => {
+  it('fans out one call per topic when --set spans more than one topic', async () => {
+    const alterShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
+    const admin = createFakeAdmin({ alterShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', set: ['orders:0:1000', 'payments:0:0'], yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    const code = await shareGroupOffsetsCommand.run(context);
+
+    expect(code).toBe(0);
+    expect(alterShareGroupOffsets).toHaveBeenCalledTimes(2);
+    expect(alterShareGroupOffsets).toHaveBeenCalledWith({
+      groupId: 'g1',
+      topics: [{ topicName: 'orders', partitions: [{ partitionIndex: 0, startOffset: 1000n }] }],
+    });
+    expect(alterShareGroupOffsets).toHaveBeenCalledWith({
+      groupId: 'g1',
+      topics: [{ topicName: 'payments', partitions: [{ partitionIndex: 0, startOffset: 0n }] }],
+    });
+  });
+
+  it('returns exit 4 on a fanned-out partial failure', async () => {
+    const alterShareGroupOffsets = vi.fn(async (options: { topics: { topicName: string }[] }) => {
+      if (options.topics[0]!.topicName === 'payments') throw new Error('UNKNOWN_TOPIC_OR_PARTITION');
+      return { responses: [] };
+    });
+    const admin = createFakeAdmin({ alterShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', set: ['orders:0:1000', 'payments:0:0'], yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    expect(await shareGroupOffsetsCommand.run(context)).toBe(4);
+  });
+
+  it('propagates a single-topic failure rather than reporting a result row', async () => {
     const admin = createFakeAdmin({
-      alterShareGroupOffsets: async () => ({
-        responses: [
-          {
-            topicName: 'orders',
-            topicId: Buffer.alloc(16),
-            partitions: [{ partitionIndex: 0, errorCode: 1, errorMessage: 'boom' }],
-          },
-        ],
-      }),
+      alterShareGroupOffsets: async () => {
+        throw new Error('UNKNOWN_TOPIC_OR_PARTITION');
+      },
       disconnect: async () => {},
     });
     const { context } = createFakeCommandContext({
@@ -152,7 +184,25 @@ describe('shareGroupOffsetsCommand — --set mode', () => {
       openAdmin: async () => admin,
     });
 
-    expect(await shareGroupOffsetsCommand.run(context)).toBe(1);
+    await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow('UNKNOWN_TOPIC_OR_PARTITION');
+  });
+
+  it('disconnects even when a single-topic call throws', async () => {
+    const disconnect = vi.fn(async () => {});
+    const admin = createFakeAdmin({
+      alterShareGroupOffsets: async () => {
+        throw new Error('boom');
+      },
+      disconnect,
+    });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', set: ['orders:0:1000'], yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow('boom');
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -173,10 +223,8 @@ describe('shareGroupOffsetsCommand — --delete-topic mode', () => {
     await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow(CliAbortedError);
   });
 
-  it('deletes offsets for the given topics', async () => {
-    const deleteShareGroupOffsets = vi.fn(async () => ({
-      responses: [{ topicName: 'orders', topicId: Buffer.alloc(16), errorCode: 0, errorMessage: null }],
-    }));
+  it('deletes offsets for a single topic with one call', async () => {
+    const deleteShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
     const admin = createFakeAdmin({ deleteShareGroupOffsets, disconnect: async () => {} });
     const { context } = createFakeCommandContext({
       flags: { brokers: 'localhost:9092', 'delete-topic': ['orders'], yes: true },
@@ -187,10 +235,43 @@ describe('shareGroupOffsetsCommand — --delete-topic mode', () => {
     const code = await shareGroupOffsetsCommand.run(context);
 
     expect(code).toBe(0);
+    expect(deleteShareGroupOffsets).toHaveBeenCalledTimes(1);
     expect(deleteShareGroupOffsets).toHaveBeenCalledWith({ groupId: 'g1', topics: ['orders'] });
   });
 
-  it('disconnects even when deleteShareGroupOffsets throws', async () => {
+  it('fans out one call per topic when more than one --delete-topic is given', async () => {
+    const deleteShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
+    const admin = createFakeAdmin({ deleteShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'delete-topic': ['orders', 'payments'], yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    const code = await shareGroupOffsetsCommand.run(context);
+
+    expect(code).toBe(0);
+    expect(deleteShareGroupOffsets).toHaveBeenCalledTimes(2);
+    expect(deleteShareGroupOffsets).toHaveBeenCalledWith({ groupId: 'g1', topics: ['orders'] });
+    expect(deleteShareGroupOffsets).toHaveBeenCalledWith({ groupId: 'g1', topics: ['payments'] });
+  });
+
+  it('returns exit 4 on a fanned-out partial failure', async () => {
+    const deleteShareGroupOffsets = vi.fn(async (options: { topics: string[] }) => {
+      if (options.topics[0] === 'payments') throw new Error('UNKNOWN_TOPIC_OR_PARTITION');
+      return { responses: [] };
+    });
+    const admin = createFakeAdmin({ deleteShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'delete-topic': ['orders', 'payments'], yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    expect(await shareGroupOffsetsCommand.run(context)).toBe(4);
+  });
+
+  it('disconnects even when a single-topic deleteShareGroupOffsets call throws', async () => {
     const disconnect = vi.fn(async () => {});
     const admin = createFakeAdmin({
       deleteShareGroupOffsets: async () => {

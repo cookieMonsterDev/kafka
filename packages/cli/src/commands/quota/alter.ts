@@ -47,19 +47,16 @@ export const quotaAlterCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
+      // `alterClientQuotas` targets exactly one entity per call here, and its response resolves
+      // only when every op on that entity succeeded — any op error rejects the whole call instead
+      // of returning an error entry, so a resolved promise always means success.
       const { entries } = await admin.alterClientQuotas({ entries: [{ entity, ops }], validateOnly: dryRun });
 
-      const failed = entries.find((e) => e.errorCode !== 0);
       output.write({
-        human: () =>
-          failed === undefined
-            ? dryRun
-              ? 'validated'
-              : 'ok'
-            : (failed.errorMessage ?? `failed (code ${String(failed.errorCode)})`),
+        human: () => (dryRun ? 'validated' : 'ok'),
         json: () => stringifyJsonSafe({ entries }),
       });
-      return failed === undefined ? EXIT_CODES.ok : EXIT_CODES.operationFailed;
+      return EXIT_CODES.ok;
     } finally {
       await admin.disconnect();
     }

@@ -66,21 +66,19 @@ describe('quotaAlterCommand', () => {
     expect(stdoutWrite.mock.calls[0]![0]).toContain('validated');
   });
 
-  it('returns exit 1 and surfaces the error message on failure', async () => {
+  it('propagates a failure rather than reporting an error entry — the API rejects on the first bad op instead of returning one', async () => {
     const admin = createFakeAdmin({
-      alterClientQuotas: async () => ({
-        entries: [{ errorCode: 35, errorMessage: 'invalid quota configuration', entity: [] }],
-      }),
+      alterClientQuotas: async () => {
+        throw new Error('invalid quota configuration');
+      },
       disconnect: async () => {},
     });
-    const { context, stdoutWrite } = createFakeCommandContext({
+    const { context } = createFakeCommandContext({
       flags: { brokers: 'localhost:9092', entity: { user: 'alice' }, set: { producer_byte_rate: '1' } },
       openAdmin: async () => admin,
     });
 
-    const code = await quotaAlterCommand.run(context);
-    expect(code).toBe(1);
-    expect(stdoutWrite.mock.calls[0]![0]).toContain('invalid quota configuration');
+    await expect(quotaAlterCommand.run(context)).rejects.toThrow('invalid quota configuration');
   });
 
   it('disconnects even when alterClientQuotas throws', async () => {

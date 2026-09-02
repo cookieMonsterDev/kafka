@@ -1,3 +1,4 @@
+import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { readStdinToEnd } from '../../admin/read-stdin';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError } from '../../args/coerce';
@@ -5,7 +6,32 @@ import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
+import { mapWithConcurrency } from '../topic/concurrency';
 import { resolveScramMechanism } from './enums';
+
+const CONCURRENCY = 8;
+
+interface UserResult {
+  readonly user: string;
+  readonly ok: boolean;
+  readonly detail?: string;
+}
+
+/**
+ * One `alterUserScramCredentials` call per user: the broker's response throws on the first
+ * upsertion with a non-zero error code, discarding every other user's result in the same call —
+ * the same hazard `config set` already works around for `incrementalAlterConfigs`.
+ */
+async function setOne(
+  admin: Admin,
+  user: string,
+  mechanism: number,
+  iterations: number | undefined,
+  password: string,
+): Promise<UserResult> {
+  await admin.alterUserScramCredentials({ upsertions: [{ name: user, mechanism, iterations, password }] });
+  return { user, ok: true };
+}
 
 export const scramSetCommand: CommandSpec = {
   path: ['scram', 'set'],
@@ -46,23 +72,30 @@ export const scramSetCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      const { results } = await admin.alterUserScramCredentials({
-        upsertions: positionals.map((name) => ({ name, mechanism, iterations, password })),
-      });
+      let results: UserResult[];
+
+      if (positionals.length === 1) {
+        results = [await setOne(admin, positionals[0]!, mechanism, iterations, password)];
+      } else {
+        results = await mapWithConcurrency(positionals, CONCURRENCY, async (user) => {
+          try {
+            return await setOne(admin, user, mechanism, iterations, password);
+          } catch (error) {
+            return { user, ok: false, detail: error instanceof Error ? error.message : String(error) };
+          }
+        });
+      }
 
       output.write({
         human: () =>
           renderTable(
             ['USER', 'STATUS'],
-            results.map((r) => [
-              r.user,
-              r.errorCode === 0 ? 'set' : (r.errorMessage ?? `failed (code ${String(r.errorCode)})`),
-            ]),
+            results.map((r) => [r.user, r.ok ? 'set' : (r.detail ?? 'failed')]),
           ),
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.errorCode === 0).length;
+      const okCount = results.filter((r) => r.ok).length;
       if (okCount === results.length) return EXIT_CODES.ok;
       if (okCount === 0) return EXIT_CODES.operationFailed;
       return EXIT_CODES.partialBatch;

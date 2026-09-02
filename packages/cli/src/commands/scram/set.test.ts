@@ -1,3 +1,4 @@
+import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { describe, expect, it, vi } from 'vitest';
 import { CliUsageError } from '../../args/coerce';
 import { createFakeAdmin } from '../../testing/create-fake-admin';
@@ -43,12 +44,34 @@ describe('scramSetCommand', () => {
     await expect(promise).rejects.toThrow(/empty password/);
   });
 
-  it('reads the password from stdin and upserts every positional with the same credential', async () => {
+  it('reads the password from stdin and sets it for a single user with one call', async () => {
     const alterUserScramCredentials = vi.fn(async () => ({
-      results: [
-        { user: 'alice', errorCode: 0, errorMessage: null },
-        { user: 'bob', errorCode: 0, errorMessage: null },
-      ],
+      results: [{ user: 'alice', errorCode: 0, errorMessage: null }],
+    }));
+    const admin = createFakeAdmin({ alterUserScramCredentials, disconnect: async () => {} });
+    const stdin = createFakeStdin();
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', mechanism: 'scram-sha-256', 'password-stdin': true },
+      positionals: ['alice'],
+      openAdmin: async () => admin,
+      stdin,
+    });
+
+    const promise = scramSetCommand.run(context);
+    stdin.emitData('hunter2\n');
+    stdin.emitEnd();
+    const code = await promise;
+
+    expect(code).toBe(0);
+    expect(alterUserScramCredentials).toHaveBeenCalledTimes(1);
+    expect(alterUserScramCredentials).toHaveBeenCalledWith({
+      upsertions: [{ name: 'alice', mechanism: 1, iterations: undefined, password: 'hunter2' }],
+    });
+  });
+
+  it('fans out one call per user when more than one user is given, reusing the same password', async () => {
+    const alterUserScramCredentials = vi.fn(async () => ({
+      results: [{ user: 'x', errorCode: 0, errorMessage: null }],
     }));
     const admin = createFakeAdmin({ alterUserScramCredentials, disconnect: async () => {} });
     const stdin = createFakeStdin();
@@ -60,16 +83,16 @@ describe('scramSetCommand', () => {
     });
 
     const promise = scramSetCommand.run(context);
-    stdin.emitData('hunter2\n');
+    stdin.emitData('hunter2');
     stdin.emitEnd();
-    const code = await promise;
+    await promise;
 
-    expect(code).toBe(0);
+    expect(alterUserScramCredentials).toHaveBeenCalledTimes(2);
     expect(alterUserScramCredentials).toHaveBeenCalledWith({
-      upsertions: [
-        { name: 'alice', mechanism: 1, iterations: undefined, password: 'hunter2' },
-        { name: 'bob', mechanism: 1, iterations: undefined, password: 'hunter2' },
-      ],
+      upsertions: [{ name: 'alice', mechanism: 1, iterations: undefined, password: 'hunter2' }],
+    });
+    expect(alterUserScramCredentials).toHaveBeenCalledWith({
+      upsertions: [{ name: 'bob', mechanism: 1, iterations: undefined, password: 'hunter2' }],
     });
   });
 
@@ -144,16 +167,13 @@ describe('scramSetCommand', () => {
     expect(stdoutWrite.mock.calls[0]![0]).not.toContain('hunter2');
   });
 
-  it('derives a partial failure (exit 4) when one user fails', async () => {
-    const admin = createFakeAdmin({
-      alterUserScramCredentials: async () => ({
-        results: [
-          { user: 'alice', errorCode: 0, errorMessage: null },
-          { user: 'bob', errorCode: 58, errorMessage: 'unsupported SASL mechanism' },
-        ],
-      }),
-      disconnect: async () => {},
+  it('returns exit 4 on a fanned-out partial failure', async () => {
+    const alterUserScramCredentials = vi.fn(async (options: Parameters<Admin['alterUserScramCredentials']>[0]) => {
+      const name = options.upsertions![0]!.name;
+      if (name === 'bob') throw new Error('unsupported SASL mechanism');
+      return { results: [{ user: name, errorCode: 0, errorMessage: null }] };
     });
+    const admin = createFakeAdmin({ alterUserScramCredentials, disconnect: async () => {} });
     const stdin = createFakeStdin();
     const { context } = createFakeCommandContext({
       flags: { brokers: 'localhost:9092', mechanism: 'scram-sha-256', 'password-stdin': true },
@@ -168,7 +188,28 @@ describe('scramSetCommand', () => {
     expect(await promise).toBe(4);
   });
 
-  it('disconnects even when alterUserScramCredentials throws', async () => {
+  it('propagates a single-user call failure rather than reporting a result row', async () => {
+    const admin = createFakeAdmin({
+      alterUserScramCredentials: async () => {
+        throw new Error('unsupported SASL mechanism');
+      },
+      disconnect: async () => {},
+    });
+    const stdin = createFakeStdin();
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', mechanism: 'scram-sha-256', 'password-stdin': true },
+      positionals: ['alice'],
+      openAdmin: async () => admin,
+      stdin,
+    });
+
+    const promise = scramSetCommand.run(context);
+    stdin.emitData('hunter2');
+    stdin.emitEnd();
+    await expect(promise).rejects.toThrow('unsupported SASL mechanism');
+  });
+
+  it('disconnects even when a single-user call throws', async () => {
     const disconnect = vi.fn(async () => {});
     const admin = createFakeAdmin({
       alterUserScramCredentials: async () => {

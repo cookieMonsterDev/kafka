@@ -255,7 +255,10 @@ kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-
 `txn list` lists transactions known to the cluster, optionally narrowed with `--state-filter`,
 `--producer-id-filter` (both repeatable), `--duration-filter`, or `--transactional-id-pattern`.
 `txn describe <transactionalIds...>` reads back each transaction's state, producer id/epoch, and
-timeout in a single call. `txn fence <transactionalIds...>` bumps a stale producer's epoch,
+timeout — like `group describe`, the broker's response throws on the first requested id with a
+non-zero error code and discards every other id's result in that same call, so describing more
+than one transactional id fans out one call per id; a partial failure exits `4`. `txn fence
+<transactionalIds...>` bumps a stale producer's epoch,
 fencing it out without confirmation (fencing is the mechanism a new producer instance uses to take
 over cleanly, not a destructive action on its own); a partial failure across several ids exits `4`.
 `txn terminate <transactionalId>` and `txn abort --topic <t> --partition <p> --producer-id <id>
@@ -273,13 +276,14 @@ every credential-bearing command in this package, the token's `hmac` is redacted
 (`--expiry-time-period-ms` extends that instead). `token list` describes existing tokens, optionally
 narrowed with a repeatable `--owner`.
 
-`scram list [users...]` describes SCRAM credentials for the given users, or every user when none
-are given. `scram set <users...> --mechanism scram-sha-256|scram-sha-512 --password-stdin` creates
-or replaces a credential — the password is only ever read from stdin, never accepted as a plain
-flag, and `--iterations` overrides the broker's default PBKDF2 iteration count. `scram delete
-<users...> --mechanism <mechanism>` removes a credential, gated behind confirmation like every
-other deletion in this package. Both `set` and `delete` apply to every named user in one call, so a
-partial per-user failure exits `4`.
+`scram list [users...]` describes SCRAM credentials for the given users, or every user in a single
+call when none are given. `scram set <users...> --mechanism scram-sha-256|scram-sha-512
+--password-stdin` creates or replaces a credential — the password is only ever read from stdin,
+never accepted as a plain flag, and `--iterations` overrides the broker's default PBKDF2 iteration
+count. `scram delete <users...> --mechanism <mechanism>` removes a credential, gated behind
+confirmation like every other deletion in this package. `list`, `set`, and `delete` all fan out one
+call per named user — a user with no matching credential fails that broker call outright rather
+than coming back as an error entry alongside the others — so a partial per-user failure exits `4`.
 
 `quota describe` filters client quotas with a repeatable `--entity type=name` (an empty name
 matches that entity type's cluster default) and `--entity-any type` (any specified name), rendering
@@ -289,12 +293,15 @@ and/or `--unset key` to that one entity in a single call — `--dry-run` maps to
 
 `share-group list` filters `listGroups` down to share groups (KIP-932's `share` protocol type,
 alongside `consumer`). `share-group describe <groupIds...>` reads back each group's state, epoch,
-assignor, and member count. `share-group offsets <groupId>` reads a group's committed start offsets
-and lag per partition by default (narrowed with a repeatable `--topic`); passing a repeatable `--set
-topic:partition:offset` or `--delete-topic` instead writes new start offsets or deletes committed
-offsets for those topics, both gated behind confirmation. `share-group delete <groupIds...>` deletes
-one or more share groups in a single call, gated behind confirmation like `group delete`, with the
-same per-group partial-failure handling.
+assignor, and member count — like `group describe`, this fans out one call per group id, so a
+partial failure exits `4`. `share-group offsets <groupId>` reads a group's committed start offsets
+and lag per partition by default; a single `--topic` (or none, for every topic the group has) is one
+call, but more than one `--topic` filter fans out one call per topic for the same reason. Passing a
+repeatable `--set topic:partition:offset` or `--delete-topic` instead writes new start offsets or
+deletes committed offsets for those topics — each fanned out one call per topic too — both gated
+behind confirmation. `share-group delete <groupIds...>` deletes one or more share groups in a single
+call, gated behind confirmation like `group delete`, with the same per-group partial-failure
+handling.
 
 ```sh
 kafka txn list --state-filter Ongoing --brokers localhost:9092

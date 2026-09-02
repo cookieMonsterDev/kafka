@@ -1,3 +1,4 @@
+import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { describe, expect, it, vi } from 'vitest';
 import { CliAbortedError } from '../../errors/aborted-error';
 import { CliUsageError } from '../../args/coerce';
@@ -74,6 +75,79 @@ describe('shareGroupOffsetsCommand — read mode', () => {
     expect(written).toContain('orders');
     expect(written).toContain('100');
     expect(written).toContain('5');
+  });
+
+  it('fans out one call per topic when more than one --topic filter is given', async () => {
+    const listShareGroupOffsets = vi.fn(async (options: Parameters<Admin['listShareGroupOffsets']>[0]) => ({
+      groups: [
+        {
+          groupId: 'g1',
+          errorCode: 0,
+          errorMessage: null,
+          topics: [{ topicName: options.groups[0]!.topics![0]!.topicName, topicId: Buffer.alloc(16), partitions: [] }],
+        },
+      ],
+    }));
+    const admin = createFakeAdmin({ listShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', topic: ['orders', 'payments'] },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    const code = await shareGroupOffsetsCommand.run(context);
+
+    expect(code).toBe(0);
+    expect(listShareGroupOffsets).toHaveBeenCalledTimes(2);
+    expect(listShareGroupOffsets).toHaveBeenCalledWith({
+      groups: [{ groupId: 'g1', topics: [{ topicName: 'orders' }] }],
+    });
+    expect(listShareGroupOffsets).toHaveBeenCalledWith({
+      groups: [{ groupId: 'g1', topics: [{ topicName: 'payments' }] }],
+    });
+  });
+
+  it('returns exit 4 on a fanned-out partial read failure', async () => {
+    const listShareGroupOffsets = vi.fn(async (options: Parameters<Admin['listShareGroupOffsets']>[0]) => {
+      const topicName = options.groups[0]!.topics![0]!.topicName;
+      if (topicName === 'payments') throw new Error('UNKNOWN_TOPIC_OR_PARTITION');
+      return {
+        groups: [
+          {
+            groupId: 'g1',
+            errorCode: 0,
+            errorMessage: null,
+            topics: [{ topicName, topicId: Buffer.alloc(16), partitions: [] }],
+          },
+        ],
+      };
+    });
+    const admin = createFakeAdmin({ listShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', topic: ['orders', 'payments'] },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    expect(await shareGroupOffsetsCommand.run(context)).toBe(4);
+  });
+
+  it('disconnects even when a fanned-out read call throws', async () => {
+    const disconnect = vi.fn(async () => {});
+    const admin = createFakeAdmin({
+      listShareGroupOffsets: async () => {
+        throw new Error('boom');
+      },
+      disconnect,
+    });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', topic: ['orders', 'payments'] },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    await shareGroupOffsetsCommand.run(context);
+    expect(disconnect).toHaveBeenCalledTimes(1);
   });
 });
 

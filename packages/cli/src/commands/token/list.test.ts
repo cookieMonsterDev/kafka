@@ -59,7 +59,7 @@ describe('tokenListCommand', () => {
     expect(stdoutWrite.mock.calls[0]![0]).toContain('(no tokens)');
   });
 
-  it('renders a table row per token, without the hmac', async () => {
+  it('renders a table row per token, without the hmac, by default', async () => {
     const admin = createFakeAdmin({
       describeDelegationToken: async () => ({ tokens: [TOKEN] }),
       disconnect: async () => {},
@@ -74,6 +74,22 @@ describe('tokenListCommand', () => {
     expect(written).toContain('token-1');
     expect(written).toContain('User:alice');
     expect(written).not.toContain('secret');
+  });
+
+  it('includes an HMAC column in human output with --show-secrets', async () => {
+    const admin = createFakeAdmin({
+      describeDelegationToken: async () => ({ tokens: [TOKEN] }),
+      disconnect: async () => {},
+    });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'show-secrets': true },
+      openAdmin: async () => admin,
+    });
+
+    await tokenListCommand.run(context);
+    const written = stdoutWrite.mock.calls[0]![0];
+    expect(written).toContain('HMAC');
+    expect(written).toContain(Buffer.from('secret').toString('base64'));
   });
 
   it('redacts the hmac in json output by default', async () => {

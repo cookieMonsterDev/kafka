@@ -16,6 +16,16 @@ interface TopicResult {
   readonly detail?: string;
 }
 
+interface OffsetPartition {
+  readonly partitionIndex: number;
+  readonly startOffset: bigint;
+  readonly lag: bigint;
+}
+
+interface ReadResult extends TopicResult {
+  readonly partitions?: readonly OffsetPartition[];
+}
+
 interface SetEntry {
   readonly topic: string;
   readonly partition: number;
@@ -73,11 +83,33 @@ async function deleteOffsetsForTopic(admin: Admin, groupId: string, topic: strin
   return { topic, ok: true };
 }
 
+/**
+ * One `listShareGroupOffsets` call per topic: `describeShareGroupOffsets`'s response throws on
+ * the first topic/partition error code found across every topic in one call, discarding every
+ * other topic's data — the same hazard `setOffsetsForTopic`/`deleteOffsetsForTopic` work around,
+ * so a bad `--topic` filter among several shouldn't blank out the ones that are fine.
+ */
+async function listOffsetsForTopic(admin: Admin, groupId: string, topicName: string): Promise<ReadResult> {
+  const { groups } = await admin.listShareGroupOffsets({ groups: [{ groupId, topics: [{ topicName }] }] });
+  const found = groups[0]?.topics[0];
+  if (found === undefined) return { topic: topicName, ok: false, detail: 'broker returned no result' };
+  return { topic: topicName, ok: true, partitions: found.partitions };
+}
+
 function renderResults(results: readonly TopicResult[]): string {
   return renderTable(
     ['TOPIC', 'STATUS'],
     results.map((r) => [r.topic, r.ok ? 'ok' : (r.detail ?? 'failed')]),
   );
+}
+
+function renderReadResults(results: readonly ReadResult[]): string {
+  const rows = results.flatMap((r) => {
+    if (!r.ok) return [[r.topic, '(error)', r.detail ?? 'failed', '']];
+    if (r.partitions === undefined || r.partitions.length === 0) return [[r.topic, '(no offsets)', '', '']];
+    return r.partitions.map((p) => [r.topic, String(p.partitionIndex), p.startOffset.toString(), p.lag.toString()]);
+  });
+  return rows.length === 0 ? '(no offsets)' : renderTable(['TOPIC', 'PARTITION', 'START OFFSET', 'LAG'], rows);
 }
 
 function exitForResults(results: readonly TopicResult[]): number {
@@ -202,27 +234,30 @@ export const shareGroupOffsetsCommand: CommandSpec = {
     const topics = flags.topic as string[] | undefined;
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      const { groups } = await admin.listShareGroupOffsets({
-        groups: [{ groupId, topics: topics?.map((topicName) => ({ topicName })) }],
-      });
+      let results: ReadResult[];
 
-      const rows = groups.flatMap((group) =>
-        group.topics.flatMap((topic) =>
-          topic.partitions.map((p) => [
-            topic.topicName,
-            String(p.partitionIndex),
-            p.startOffset.toString(),
-            p.lag.toString(),
-          ]),
-        ),
-      );
+      if (topics === undefined || topics.length <= 1) {
+        const { groups } = await admin.listShareGroupOffsets({
+          groups: [{ groupId, topics: topics?.map((topicName) => ({ topicName })) }],
+        });
+        results = groups.flatMap((group) =>
+          group.topics.map((topic) => ({ topic: topic.topicName, ok: true, partitions: topic.partitions })),
+        );
+      } else {
+        results = await mapWithConcurrency(topics, CONCURRENCY, async (topicName) => {
+          try {
+            return await listOffsetsForTopic(admin, groupId, topicName);
+          } catch (error) {
+            return { topic: topicName, ok: false, detail: error instanceof Error ? error.message : String(error) };
+          }
+        });
+      }
 
       output.write({
-        human: () =>
-          rows.length === 0 ? '(no offsets)' : renderTable(['TOPIC', 'PARTITION', 'START OFFSET', 'LAG'], rows),
-        json: () => stringifyJsonSafe({ groups }),
+        human: () => renderReadResults(results),
+        json: () => stringifyJsonSafe({ results }),
       });
-      return EXIT_CODES.ok;
+      return exitForResults(results);
     } finally {
       await admin.disconnect();
     }

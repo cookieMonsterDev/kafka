@@ -35,11 +35,12 @@ export const tokenListCommand: CommandSpec = {
           tokens.length === 0
             ? '(no tokens)'
             : renderTable(
-                ['TOKEN ID', 'OWNER', 'EXPIRY'],
+                showSecrets ? ['TOKEN ID', 'OWNER', 'EXPIRY', 'HMAC'] : ['TOKEN ID', 'OWNER', 'EXPIRY'],
                 tokens.map((token) => [
                   token.tokenId,
                   `${token.owner.principalType}:${token.owner.name}`,
                   token.expiryTimestamp.toString(),
+                  ...(showSecrets ? [token.hmac.toString('base64')] : []),
                 ]),
               ),
         json: () => stringifyJsonSafe({ tokens: showSecrets ? tokens : redactSecrets(tokens) }),

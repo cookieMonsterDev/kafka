@@ -48,6 +48,9 @@ kafka group reset-offsets my-group --topic orders --to earliest --execute --yes 
 kafka group delete my-group --brokers localhost:9092 --yes
 kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --yes
 kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
+kafka acl list --brokers localhost:9092
+kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
+kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -161,6 +164,36 @@ kafka group delete-offsets my-group --topic orders --brokers localhost:9092 --ye
 kafka group remove-members my-group --member consumer-1-abc --brokers localhost:9092 --yes
 ```
 
+### ACL commands
+
+Every ACL flag — `--resource-type`, `--pattern-type`, `--operation`, `--permission-type` — accepts
+a case-insensitive name (`topic`, `describe-configs`, `allow`, …) or the broker's raw numeric code;
+an unrecognized value is a usage error listing every valid choice. `acl list` filters on resource
+type, resource name, pattern type, principal, host, operation, and permission type — any field left
+unset defaults to `any`, matching `describeAcls`'s own filter semantics — and renders one row per
+resource/principal pair.
+
+`acl add <principals...> --resource-type <type> --resource-name <name> --operation <op>` creates an
+ACL entry for every principal x `--operation` combination (both repeatable), so granting several
+operations to several principals in one invocation reports each combination's own success or
+failure rather than one combined result. `--pattern-type` defaults to `literal`, `--permission-type`
+to `allow`, and `--host` to `*`. The underlying `createAcls` call has no `validateOnly` of its own,
+so `--dry-run` prints the entries that would be created and exits without ever opening an admin
+connection.
+
+`acl remove <principals...>` deletes every ACL matching a filter, gated behind confirmation like
+`group delete`. Filters default to `any` exactly like `acl list`, and the command fans out one
+`deleteAcls` call per principal, exiting `4` on a partial failure; a successful principal reports
+how many ACLs actually matched and were removed.
+
+```sh
+kafka acl list --brokers localhost:9092
+kafka acl list --resource-type topic --resource-name orders --brokers localhost:9092
+kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
+kafka acl add User:alice User:bob --resource-type topic --resource-name orders --operation read --operation write --brokers localhost:9092
+kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
+```
+
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class
 command yet — `kafka admin methods` lists all of them and which ones are mounted vs.
 passthrough-only. Arguments come from a JSON file (`--from-file`); a string value prefixed
@@ -224,9 +257,9 @@ CLI still loads.
 
 `confirmDestructive: false` skips the `--yes`/interactive-prompt tier in front of a destructive
 command (`topic delete`, `topic delete-records`, `group delete`, `group delete-offsets`,
-`group remove-members`, and `group reset-offsets --execute`) — see [Destructive topic
-operations](#destructive-topic-operations) and [Group commands](#group-commands). It never waives
-a command's own `--force`-gated safety checks.
+`group remove-members`, `group reset-offsets --execute`, and `acl remove`) — see [Destructive topic
+operations](#destructive-topic-operations), [Group commands](#group-commands), and
+[ACL commands](#acl-commands). It never waives a command's own `--force`-gated safety checks.
 
 ## Output
 

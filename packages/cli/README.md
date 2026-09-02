@@ -51,6 +51,8 @@ kafka group remove-members my-group --member consumer-1-abc --brokers localhost:
 kafka acl list --brokers localhost:9092
 kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
 kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
+kafka cluster info --brokers localhost:9092
+kafka cluster reassign list --brokers localhost:9092
 kafka admin methods
 kafka admin call listTopics --brokers localhost:9092
 kafka help topic create
@@ -192,6 +194,53 @@ kafka acl list --resource-type topic --resource-name orders --brokers localhost:
 kafka acl add User:alice --resource-type topic --resource-name orders --operation read --brokers localhost:9092
 kafka acl add User:alice User:bob --resource-type topic --resource-name orders --operation read --operation write --brokers localhost:9092
 kafka acl remove User:alice --resource-type topic --resource-name orders --brokers localhost:9092 --yes
+```
+
+### Cluster commands
+
+`cluster info` describes the cluster's brokers, controller, and cluster id. `cluster quorum`
+describes the metadata quorum — each `__cluster_metadata` partition's leader, voters, and
+observers. `cluster features` lists supported vs. finalized feature versions, merged by name.
+`cluster log-dirs` describes every broker's log directories and their partition sizes, narrowed
+with a repeatable `--broker`/`--topic` — the topic filter is applied client-side, matching
+`kafka-log-dirs.sh --topic-list` itself rather than a server-side option.
+
+`cluster update-features --feature name=maxVersionLevel` (repeatable) upgrades, safe-downgrades,
+or unsafe-downgrades one or more finalized features in one call — `--upgrade-type` applies to
+every named feature, and `--dry-run` maps to the API's own `validateOnly`. An unsafe downgrade
+additionally requires `--force`, since it can lose data. A partial per-feature failure is reported
+per feature rather than failing the whole call.
+
+`cluster elect-leaders --election-type preferred|unclean` triggers a leader election over exactly
+one of `--topic-partition topic:partition` (repeatable), `--all-topic-partitions`, or `--from-file`
+(the `kafka-leader-election.sh --path-to-json-file` shape). `--election-type unclean` requires
+`--force`, since it can lose data; `--dry-run` prints the election target without connecting.
+
+`cluster reassign list` lists every active partition reassignment — like the real
+`kafka-reassign-partitions.sh --list`, it takes no topic filter. `cluster reassign execute
+--from-file <path>` submits a reassignment from the `kafka-reassign-partitions.sh
+--reassignment-json-file` shape, gated behind confirmation; `--dry-run` prints the plan without
+connecting. That file's `log_dirs` entries are parsed and validated but not applied — moving a
+replica between log dirs on the same broker needs a separate command.
+
+`cluster unregister-broker --broker-id <id>` decommissions a broker from a KRaft cluster, gated
+behind confirmation. `cluster raft-voter add --voter-id <id> --voter-directory-id <uuid> --listener
+name=host:port` (repeatable) and `cluster raft-voter remove --voter-id <id> --voter-directory-id
+<uuid>` add or remove a voter from the metadata quorum — `remove` is gated behind confirmation like
+every other removal in this package.
+
+```sh
+kafka cluster info --brokers localhost:9092
+kafka cluster quorum --brokers localhost:9092
+kafka cluster features --brokers localhost:9092
+kafka cluster log-dirs --topic orders --brokers localhost:9092
+kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
+kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092
+kafka cluster reassign list --brokers localhost:9092
+kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
+kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
+kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
+kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
 ```
 
 `kafka admin call <method>` reaches every method on `Admin`, including ones without a first-class

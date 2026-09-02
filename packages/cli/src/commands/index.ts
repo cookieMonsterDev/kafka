@@ -30,6 +30,19 @@ import { doctorCommand } from './meta/doctor';
 import { initCommand } from './meta/init';
 import { pingCommand } from './meta/ping';
 import { profilesCommand } from './meta/profiles';
+import { quotaAlterCommand } from './quota/alter';
+import { quotaDescribeCommand } from './quota/describe';
+import { scramDeleteCommand } from './scram/delete';
+import { scramListCommand } from './scram/list';
+import { scramSetCommand } from './scram/set';
+import { shareGroupDeleteCommand } from './share-group/delete';
+import { shareGroupDescribeCommand } from './share-group/describe';
+import { shareGroupListCommand } from './share-group/list';
+import { shareGroupOffsetsCommand } from './share-group/offsets';
+import { tokenCreateCommand } from './token/create';
+import { tokenExpireCommand } from './token/expire';
+import { tokenListCommand } from './token/list';
+import { tokenRenewCommand } from './token/renew';
 import { topicAddPartitionsCommand } from './topic/add-partitions';
 import { topicCreateCommand } from './topic/create';
 import { topicDeleteCommand } from './topic/delete';
@@ -38,6 +51,11 @@ import { topicDescribeCommand } from './topic/describe';
 import { topicListCommand } from './topic/list';
 import { topicOffsetsCommand } from './topic/offsets';
 import { topicProducersCommand } from './topic/producers';
+import { txnAbortCommand } from './txn/abort';
+import { txnDescribeCommand } from './txn/describe';
+import { txnFenceCommand } from './txn/fence';
+import { txnListCommand } from './txn/list';
+import { txnTerminateCommand } from './txn/terminate';
 
 /** Every command the CLI mounts, in no particular order — the registry sorts them out. */
 export const ALL_COMMANDS: CommandSpec[] = [
@@ -78,6 +96,24 @@ export const ALL_COMMANDS: CommandSpec[] = [
   groupDeleteCommand,
   groupDeleteOffsetsCommand,
   groupRemoveMembersCommand,
+  txnListCommand,
+  txnDescribeCommand,
+  txnFenceCommand,
+  txnTerminateCommand,
+  txnAbortCommand,
+  tokenCreateCommand,
+  tokenRenewCommand,
+  tokenExpireCommand,
+  tokenListCommand,
+  scramListCommand,
+  scramSetCommand,
+  scramDeleteCommand,
+  quotaDescribeCommand,
+  quotaAlterCommand,
+  shareGroupListCommand,
+  shareGroupDescribeCommand,
+  shareGroupOffsetsCommand,
+  shareGroupDeleteCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

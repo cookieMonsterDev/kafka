@@ -12,11 +12,8 @@ import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { CliAbortedError } from '../../errors/aborted-error';
 import { EXIT_CODES } from '../../errors/exit-codes';
+import { bigintAwareReplacer } from '../../output/bigint-replacer';
 import { stringifyJsonSafe } from '../../output/json';
-
-function bigintAwareReplacer(_key: string, value: unknown): unknown {
-  return typeof value === 'bigint' ? value.toString() : value;
-}
 
 function isAdminMethodName(name: string): name is AdminMethodName {
   return Object.hasOwn(ADMIN_METHOD_CLASSIFICATION, name);

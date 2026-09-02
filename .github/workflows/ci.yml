@@ -106,6 +106,43 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
+  cli-integration:
+    name: Integration (CLI / Kafka 4.3)
+    needs: [unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # 4.3 rather than the CLI's other supported version (4.0): share group commands (KIP-932)
+    # need a broker at least at 4.1, and this is the one leg that exercises them.
+    env:
+      KAFKA_VERSION: '4.3'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Restore Kafka Docker images
+        id: docker-cache
+        uses: actions/cache@v6
+        with:
+          path: /tmp/kafka-docker-images.tar
+          key: kafka-docker-4.3-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
+          restore-keys: |
+            kafka-docker-4.3-
+      - name: Load cached Docker images
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/kafka-docker-images.tar
+      - name: Pull Docker images
+        run: bash packages/core/scripts/compose-pull.sh
+      - name: Save Docker images
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
+          docker save ${images} -o /tmp/kafka-docker-images.tar
+      # cli resolves both `@cookiemonsterdev/kafka-config` and `@cookiemonsterdev/kafka-core`
+      # through their published `exports` (dist), so vitest's module resolution needs both built
+      # before tests run — config first, since core depends on it in turn.
+      - run: pnpm --filter @cookiemonsterdev/kafka-config build
+      - run: pnpm --filter @cookiemonsterdev/kafka-core build
+      - run: pnpm --filter @cookiemonsterdev/kafka-cli test:integration
+
   oauthbearer:
     name: Integration (OAUTHBEARER / 4.0)
     needs: [unit]

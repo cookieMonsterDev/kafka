@@ -29,6 +29,47 @@ export const CONFIG_OPERATIONS = Object.freeze({
   SUBTRACT: 3,
 });
 
+export const ACL_RESOURCE_TYPES = Object.freeze({
+  UNKNOWN: 0,
+  ANY: 1,
+  TOPIC: 2,
+  GROUP: 3,
+  CLUSTER: 4,
+  TRANSACTIONAL_ID: 5,
+  DELEGATION_TOKEN: 6,
+});
+
+export const ACL_OPERATION_TYPES = Object.freeze({
+  UNKNOWN: 0,
+  ANY: 1,
+  ALL: 2,
+  READ: 3,
+  WRITE: 4,
+  CREATE: 5,
+  DELETE: 6,
+  ALTER: 7,
+  DESCRIBE: 8,
+  CLUSTER_ACTION: 9,
+  DESCRIBE_CONFIGS: 10,
+  ALTER_CONFIGS: 11,
+  IDEMPOTENT_WRITE: 12,
+});
+
+export const ACL_PERMISSION_TYPES = Object.freeze({
+  UNKNOWN: 0,
+  ANY: 1,
+  DENY: 2,
+  ALLOW: 3,
+});
+
+export const RESOURCE_PATTERN_TYPES = Object.freeze({
+  UNKNOWN: 0,
+  ANY: 1,
+  MATCH: 2,
+  LITERAL: 3,
+  PREFIXED: 4,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

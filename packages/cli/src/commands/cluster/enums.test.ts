@@ -21,6 +21,11 @@ describe('resolveFeatureUpgradeType', () => {
   it('rejects a numeric code outside the known set', () => {
     expect(() => resolveFeatureUpgradeType('99')).toThrow(CliUsageError);
   });
+
+  it('rejects an empty or blank value rather than coercing it to 0', () => {
+    expect(() => resolveFeatureUpgradeType('')).toThrow(CliUsageError);
+    expect(() => resolveFeatureUpgradeType('   ')).toThrow(CliUsageError);
+  });
 });
 
 describe('resolveElectionType', () => {
@@ -36,5 +41,10 @@ describe('resolveElectionType', () => {
 
   it('rejects an unrecognized value', () => {
     expect(() => resolveElectionType('bogus')).toThrow(CliUsageError);
+  });
+
+  it('rejects an empty or blank value rather than coercing it to the 0 ("preferred") code', () => {
+    expect(() => resolveElectionType('')).toThrow(CliUsageError);
+    expect(() => resolveElectionType('   ')).toThrow(CliUsageError);
   });
 });

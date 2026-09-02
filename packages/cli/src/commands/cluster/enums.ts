@@ -20,8 +20,13 @@ function createResolver<T extends number>(
     const byName = nameToCode.get(raw.toLowerCase());
     if (byName !== undefined) return byName as T;
 
-    const asNumber = Number(raw);
-    if (Number.isInteger(asNumber) && validCodes.has(asNumber)) return asNumber as T;
+    // `Number('')` (and `Number('   ')`) is `0`, not `NaN` — guard explicitly so an empty or
+    // blank value never silently resolves to whichever valid code happens to be `0` (e.g.
+    // `ELECTION_TYPES.PREFERRED`) instead of raising a usage error.
+    if (raw.trim() !== '') {
+      const asNumber = Number(raw);
+      if (Number.isInteger(asNumber) && validCodes.has(asNumber)) return asNumber as T;
+    }
 
     throw new CliUsageError(
       `--${flagName} must be one of: ${[...nameToCode.keys()].join(', ')} (or the matching numeric code), got "${raw}"`,

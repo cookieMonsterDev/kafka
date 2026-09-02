@@ -213,8 +213,9 @@ per feature rather than failing the whole call.
 
 `cluster elect-leaders --election-type preferred|unclean` triggers a leader election over exactly
 one of `--topic-partition topic:partition` (repeatable), `--all-topic-partitions`, or `--from-file`
-(the `kafka-leader-election.sh --path-to-json-file` shape). `--election-type unclean` requires
-`--force`, since it can lose data; `--dry-run` prints the election target without connecting.
+(the `kafka-leader-election.sh --path-to-json-file` shape), gated behind confirmation like every
+other mutating command in this package. `--election-type unclean` additionally requires `--force`,
+since it can lose data; `--dry-run` prints the election target without connecting or prompting.
 
 `cluster reassign list` lists every active partition reassignment — like the real
 `kafka-reassign-partitions.sh --list`, it takes no topic filter. `cluster reassign execute
@@ -235,7 +236,7 @@ kafka cluster quorum --brokers localhost:9092
 kafka cluster features --brokers localhost:9092
 kafka cluster log-dirs --topic orders --brokers localhost:9092
 kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
-kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092
+kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes
 kafka cluster reassign list --brokers localhost:9092
 kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
 kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes

@@ -3,7 +3,7 @@ import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError, coerceNumber } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
-import { requireForce } from '../../interaction/confirm';
+import { confirmDestructive, requireForce } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
 import { parseElectionFile, type TopicPartitions } from './election-file';
@@ -57,11 +57,12 @@ export const clusterElectLeadersCommand: CommandSpec = {
     { name: 'from-file', type: 'string', brief: 'path to a kafka-leader-election.sh --path-to-json-file JSON file' },
     { name: 'timeout', type: 'number', brief: 'request timeout in ms' },
     { name: 'dry-run', type: 'boolean', brief: 'print the election target and exit without connecting' },
+    { name: 'yes', type: 'boolean', brief: 'confirm the election without an interactive prompt' },
     { name: 'force', type: 'boolean', brief: 'required for --election-type unclean, which can lose data' },
   ],
   examples: [
-    'cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092',
-    'cluster elect-leaders --election-type unclean --topic-partition orders:0 --force --brokers localhost:9092',
+    'cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes',
+    'cluster elect-leaders --election-type unclean --topic-partition orders:0 --force --yes --brokers localhost:9092',
   ],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage, EXIT_CODES.abortedOrUnconfirmed],
   async run({ flags, runtime, output, config }) {
@@ -95,10 +96,6 @@ export const clusterElectLeadersCommand: CommandSpec = {
     const timeout = flags.timeout as number | undefined;
     const dryRun = flags['dry-run'] === true;
 
-    if (!dryRun && electionType === UNCLEAN_ELECTION_TYPE) {
-      requireForce({ force: flags.force === true, reason: 'an unclean leader election, which can lose data' });
-    }
-
     if (dryRun) {
       const target = describeTarget(topicPartitions);
       output.write({
@@ -107,6 +104,17 @@ export const clusterElectLeadersCommand: CommandSpec = {
       });
       return EXIT_CODES.ok;
     }
+
+    if (electionType === UNCLEAN_ELECTION_TYPE) {
+      requireForce({ force: flags.force === true, reason: 'an unclean leader election, which can lose data' });
+    }
+
+    await confirmDestructive({
+      runtime,
+      yes: flags.yes === true,
+      message: `Elect leaders (${electionTypeFlag}) on: ${describeTarget(topicPartitions)}?`,
+      confirmDestructive: config.cli.confirmDestructive,
+    });
 
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });

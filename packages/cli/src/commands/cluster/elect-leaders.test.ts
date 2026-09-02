@@ -55,6 +55,14 @@ describe('clusterElectLeadersCommand', () => {
     await expect(clusterElectLeadersCommand.run(context)).rejects.toThrow(CliUsageError);
   });
 
+  it('aborts without --yes off a TTY', async () => {
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true },
+    });
+
+    await expect(clusterElectLeadersCommand.run(context)).rejects.toThrow(CliAbortedError);
+  });
+
   it('groups --topic-partition entries by topic', async () => {
     const electLeaders = vi.fn(async () => fakeElectResult());
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
@@ -63,6 +71,7 @@ describe('clusterElectLeadersCommand', () => {
         brokers: 'localhost:9092',
         'election-type': 'preferred',
         'topic-partition': ['orders:0', 'orders:1'],
+        yes: true,
       },
       openAdmin: async () => admin,
     });
@@ -80,7 +89,7 @@ describe('clusterElectLeadersCommand', () => {
     const electLeaders = vi.fn(async () => fakeElectResult());
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true },
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true, yes: true },
       openAdmin: async () => admin,
     });
 
@@ -97,7 +106,7 @@ describe('clusterElectLeadersCommand', () => {
     const electLeaders = vi.fn(async () => fakeElectResult());
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'from-file': file },
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'from-file': file, yes: true },
       openAdmin: async () => admin,
     });
 
@@ -145,19 +154,33 @@ describe('clusterElectLeadersCommand', () => {
     expect(code).toBe(0);
   });
 
-  it('requires --force for an unclean election on a real run', async () => {
+  it('requires --force for an unclean election on a real run, even with --yes', async () => {
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'unclean', 'all-topic-partitions': true },
+      flags: { brokers: 'localhost:9092', 'election-type': 'unclean', 'all-topic-partitions': true, yes: true },
     });
 
     await expect(clusterElectLeadersCommand.run(context)).rejects.toThrow(CliAbortedError);
   });
 
-  it('runs an unclean election once --force is given', async () => {
+  it('still requires --yes for an unclean election once --force is given', async () => {
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'election-type': 'unclean', 'all-topic-partitions': true, force: true },
+    });
+
+    await expect(clusterElectLeadersCommand.run(context)).rejects.toThrow(CliAbortedError);
+  });
+
+  it('runs an unclean election once --force and --yes are given', async () => {
     const electLeaders = vi.fn(async () => fakeElectResult());
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'unclean', 'all-topic-partitions': true, force: true },
+      flags: {
+        brokers: 'localhost:9092',
+        'election-type': 'unclean',
+        'all-topic-partitions': true,
+        force: true,
+        yes: true,
+      },
       openAdmin: async () => admin,
     });
 
@@ -180,7 +203,7 @@ describe('clusterElectLeadersCommand', () => {
     }));
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
     const { context, stdoutWrite } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true },
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true, yes: true },
       openAdmin: async () => admin,
     });
 
@@ -195,7 +218,7 @@ describe('clusterElectLeadersCommand', () => {
     const electLeaders = vi.fn(async () => fakeElectResult());
     const admin = createFakeAdmin({ electLeaders, disconnect: async () => {} });
     const { context, stdoutWrite } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true },
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true, yes: true },
       openAdmin: async () => admin,
       format: 'json',
     });
@@ -215,7 +238,7 @@ describe('clusterElectLeadersCommand', () => {
       disconnect,
     });
     const { context } = createFakeCommandContext({
-      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true },
+      flags: { brokers: 'localhost:9092', 'election-type': 'preferred', 'all-topic-partitions': true, yes: true },
       openAdmin: async () => admin,
     });
 

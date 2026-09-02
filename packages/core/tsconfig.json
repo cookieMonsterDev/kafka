@@ -3,7 +3,12 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "types": ["node"],
+    // `files: ["dist"]` in package.json never publishes `src`, so a `.d.ts.map`'s `sources`
+    // pointer to `../src/...` resolves to nothing in an installed tarball, and there is no
+    // `sourcesContent` fallback either — every one of these files is dead weight on the `npx`
+    // cold path, roughly a third of the published file count.
+    "declarationMap": false
   },
   "include": ["src/**/*.ts"]
 }

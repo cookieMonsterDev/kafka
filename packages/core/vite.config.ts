@@ -21,7 +21,9 @@ export default defineConfig({
       {
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts', 'test/helpers/**/*.test.ts'],
+          // The published-file-count suite needs no broker (it only builds and packs the
+          // package), so it stays in the unit project alongside everything else `pnpm test` runs.
+          include: ['src/**/*.test.ts', 'test/helpers/**/*.test.ts', 'test/suites/publishable-file-count.test.ts'],
           environment: 'node',
         },
       },
@@ -29,6 +31,9 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['test/suites/**/*.test.ts'],
+          // Already covered by the unit project above — it needs no broker, so it doesn't belong
+          // to this project's `globalSetup`, and running it under both would just be redundant.
+          exclude: ['test/suites/publishable-file-count.test.ts'],
           environment: 'node',
           globalSetup: ['./test/helpers/global-setup.ts'],
           testTimeout: 30_000,

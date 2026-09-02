@@ -155,6 +155,16 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 - Docs UI changes must keep [accessibility](#accessibility) (keyboard, names, focus, contrast, reduced motion).
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
 
+### Labels
+
+A [`package: <name>`](.github/pr-labeler.yml) label is applied automatically once a PR touches
+that package's directory (`core`, `cli`, `config`, or `docs`) — no need to set it by hand. The
+`bug` / `enhancement` / `documentation` labels come from whichever issue template was used; add
+one yourself on a PR that has no linked issue. `good-first-issue` and `help-wanted` mark issues a
+maintainer is happy to see a community PR for. The full label set lives in
+[`.github/labels.yml`](.github/labels.yml) and is kept in sync with what you see on GitHub — edit
+that file, not the labels list in repo settings.
+
 ## Code style
 
 Do not hand-format. Prettier and ESLint run on commit and in CI.

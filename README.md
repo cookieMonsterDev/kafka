@@ -17,9 +17,16 @@
   <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
 </p>
 
-`@cookiemonsterdev/kafka-core` speaks the Kafka protocol directly: it negotiates API versions with the broker, uses `bigint` for offsets, and ships TypeScript types from source. `new Kafka()` fills in whatever a call omits from a `kafka.config.ts` file, resolved through `@cookiemonsterdev/kafka-config`, a generic `kafka.config.*` file loader published separately so other consumers (a CLI, a studio UI) can build their own config-file layer on it too. `@cookiemonsterdev/kafka-docs` is the documentation site for that client.
+This repo is a small family of packages built around one Kafka client for Node.js:
 
-Install the client from npm. The workspace root is private and is not published.
+- **[`kafka-core`](packages/core)** — the client itself: producer, consumer, and admin, talking directly to the Kafka wire protocol (no Java client, no native bindings).
+- **[`kafka-cli`](packages/cli)** — a `kafka` command you run from a terminal, built on top of `kafka-core`.
+- **[`kafka-config`](packages/config)** — the generic `kafka.config.*` file loader both of the above use to read settings from disk.
+- **[`kafka-docs`](packages/docs)** — the documentation site you're one click away from below.
+
+Under the hood, `kafka-core` negotiates API versions with the broker itself, uses `bigint` for offsets (Kafka offsets can exceed what JavaScript's `number` can represent exactly), and ships TypeScript types generated from source rather than hand-maintained.
+
+Install the client from npm — the workspace root itself is private and is not published.
 
 ```sh
 npm install @cookiemonsterdev/kafka-core
@@ -78,12 +85,15 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev   # http://localhost:4321
 
 ## Packages
 
-| Package                          | Path              | What it is                                                                          |
-| -------------------------------- | ----------------- | ----------------------------------------------------------------------------------- |
-| `@cookiemonsterdev/kafka-core`   | `packages/core`   | TypeScript Kafka client (Kafka 0.10+), on npm                                       |
-| `@cookiemonsterdev/kafka-config` | `packages/config` | Generic `kafka.config.*` file loader, on npm                                        |
-| `@cookiemonsterdev/kafka-cli`    | `packages/cli`    | Command-line admin client — topics, ping, and a passthrough for the rest of `Admin` |
-| `@cookiemonsterdev/kafka-docs`   | `packages/docs`   | Astro documentation site (GitHub Pages)                                             |
+Versions below are live badges pulled from the npm registry, so they always match what
+`npm install` would actually give you.
+
+| Package                                                       | Version                                                                                                                                     | What it is                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`@cookiemonsterdev/kafka-core`](packages/core/README.md)     | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-core.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core)     | TypeScript Kafka client (Kafka 0.10+)                                               |
+| [`@cookiemonsterdev/kafka-config`](packages/config/README.md) | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-config.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-config) | Generic `kafka.config.*` file loader                                                |
+| [`@cookiemonsterdev/kafka-cli`](packages/cli/README.md)       | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-cli.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-cli)       | Command-line admin client — topics, ping, and a passthrough for the rest of `Admin` |
+| [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md)     | `private`, not published                                                                                                                    | Astro documentation site (GitHub Pages)                                             |
 
 ## Requirements
 
@@ -113,7 +123,9 @@ KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
-Branch names, Conventional Commits, PR flow, code style, releasing, and how to add a package: **[CONTRIBUTING.md](CONTRIBUTING.md)**. Per-package details: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-config`](packages/config/README.md), [`@cookiemonsterdev/kafka-cli`](packages/cli/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md). Integration clusters: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
+Want to contribute? Branch names, Conventional Commits, PR flow, code style, releasing, and how to
+add a package all live in **[CONTRIBUTING.md](CONTRIBUTING.md)**. Setting up an integration
+cluster locally: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 ## License
 

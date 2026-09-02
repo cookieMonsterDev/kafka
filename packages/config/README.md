@@ -1,11 +1,21 @@
 # @cookiemonsterdev/kafka-config
 
-A generic, **zero-runtime-dependency** config-file loader: discovery, sync/async loading, a
-TypeScript transform rescue, layer merging, and diagnostics. It has no knowledge of Kafka, or of
-any other specific consumer — that knowledge is injected via four extension points (below).
+<p>
+  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-config"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-config.svg" alt="npm" /></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+</p>
+
+Finds and loads a project's `<name>.config.*` file — think the same idea as `eslint.config.js` or
+`vite.config.ts`, but generic enough for you to point at your own app's name. It's a **zero-runtime-
+dependency** loader that handles discovery, sync/async loading, a TypeScript transform rescue,
+layer merging, and diagnostics. It has no knowledge of Kafka, or of any other specific consumer —
+that knowledge is injected via four extension points (below).
 
 `@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
-options directly. See
+options directly. This package is what [`@cookiemonsterdev/kafka-cli`](../cli/README.md) uses to
+load `kafka.config.ts`, published on its own so anything else (a studio UI, another CLI) can build
+the same kind of config-file layer without depending on the rest of this workspace. See
 [the docs](https://cookiemonsterdev.github.io/kafka/config/reference/api/) for the full API
 reference.
 
@@ -62,3 +72,7 @@ pnpm --filter @cookiemonsterdev/kafka-config typecheck
 ```
 
 See the root [CONTRIBUTING.md](../../CONTRIBUTING.md) for the full workspace workflow.
+
+## License
+
+[MIT](../../LICENSE) © Mykhailo Toporkov

@@ -4,9 +4,27 @@
 
 # @cookiemonsterdev/kafka-docs
 
-Astro documentation site for [`@cookiemonsterdev/kafka-core`](../core/README.md). Every Markdown file under `src/content/docs/` becomes a page.
+<p>
+  <a href="https://github.com/cookieMonsterDev/kafka/actions/workflows/pages.yml"><img src="https://github.com/cookieMonsterDev/kafka/actions/workflows/pages.yml/badge.svg?branch=master" alt="Pages" /></a>
+  <a href="../../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+</p>
+
+The Astro-powered site behind [cookiemonsterdev.github.io/kafka](https://cookiemonsterdev.github.io/kafka/), documenting [`@cookiemonsterdev/kafka-core`](../core/README.md). Every Markdown file under `src/content/docs/` becomes a page — there's no separate step to wire up routing.
 
 This package lives in the [kafka](https://github.com/cookieMonsterDev/kafka) workspace. It is not a published npm library.
+
+## Contents
+
+- [What is documented](#what-is-documented)
+- [Local development](#local-development)
+- [Adding a page](#adding-a-page)
+- [Adding a package](#adding-a-package)
+- [UI: shadcn/ui](#ui-shadcnui)
+- [Layout](#layout)
+- [Notes](#notes)
+- [Releasing](#releasing)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## What is documented
 
@@ -117,6 +135,9 @@ pnpm dlx shadcn@latest add <component>   # e.g. dialog, input, badge
 
 It lands in `src/components/ui/` and is importable via the `@/*` alias.
 
+<details>
+<summary>Static vs. interactive components, the <code>asChild</code> gotcha, accessibility, and theming</summary>
+
 ### Two ways to use a component
 
 **Static (no JavaScript shipped).** Rendering a React component from `.astro`
@@ -178,6 +199,8 @@ Design tokens live as CSS variables in `src/styles/global.css` (base color `oliv
 `@tailwindcss/typography` is enabled there too — rendered Markdown uses `prose`, since
 Tailwind's preflight would otherwise reset it to unstyled HTML.
 
+</details>
+
 ## Layout
 
 ```
@@ -219,10 +242,14 @@ change where content lives, edit the `base` path there — the routing follows.
 
 ## Releasing
 
-`@cookiemonsterdev/kafka-docs` is **private** and **not published to npm**. Releases still
-get a semver in `package.json`, a git tag, a GitHub release, and entries in
-[`CHANGELOG.md`](./CHANGELOG.md) — the same semantic-release flow as
-[`@cookiemonsterdev/kafka-core`](../core/CHANGELOG.md), minus the npm publish step.
+`@cookiemonsterdev/kafka-docs` is **private** and **not published to npm** — but it still gets a
+proper release: a semver in `package.json`, a git tag, a GitHub release, and a changelog entry,
+the same semantic-release flow as [`@cookiemonsterdev/kafka-core`](../core/CHANGELOG.md), minus the
+npm publish step. Most contributors never need to trigger this by hand; a maintainer runs it from
+`master`.
+
+<details>
+<summary>Full release mechanics: tags, versioning, dry-run, and rollback</summary>
 
 | Artifact       | Docs                          | Core (for comparison)        |
 | -------------- | ----------------------------- | ---------------------------- |
@@ -273,6 +300,8 @@ Dry-run prints the next version and release notes without creating a tag, releas
    next one that touches `packages/docs/**`).
 4. To remove a mistaken release: **Actions → Unrelease**, package `docs`, version `X.Y.Z`,
    confirm `DELETE` (drops tag + GitHub release; does not roll back Pages).
+
+</details>
 
 Full repo release process: [CONTRIBUTING.md § Releasing](../../CONTRIBUTING.md#releasing).
 

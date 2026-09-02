@@ -9,8 +9,11 @@ import { clusterFeaturesCommand } from './cluster/features';
 import { clusterInfoCommand } from './cluster/info';
 import { clusterLogDirsCommand } from './cluster/log-dirs';
 import { clusterQuorumCommand } from './cluster/quorum';
+import { clusterRaftVoterAddCommand } from './cluster/raft-voter-add';
+import { clusterRaftVoterRemoveCommand } from './cluster/raft-voter-remove';
 import { clusterReassignExecuteCommand } from './cluster/reassign-execute';
 import { clusterReassignListCommand } from './cluster/reassign-list';
+import { clusterUnregisterBrokerCommand } from './cluster/unregister-broker';
 import { clusterUpdateFeaturesCommand } from './cluster/update-features';
 import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
@@ -65,6 +68,9 @@ export const ALL_COMMANDS: CommandSpec[] = [
   clusterElectLeadersCommand,
   clusterReassignListCommand,
   clusterReassignExecuteCommand,
+  clusterUnregisterBrokerCommand,
+  clusterRaftVoterAddCommand,
+  clusterRaftVoterRemoveCommand,
   groupListCommand,
   groupDescribeCommand,
   groupOffsetsCommand,

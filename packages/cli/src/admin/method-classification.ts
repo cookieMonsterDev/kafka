@@ -50,7 +50,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   alterShareGroupOffsets: 'passthrough-only',
   deleteShareGroupOffsets: 'passthrough-only',
   deleteShareGroups: 'passthrough-only',
-  createAcls: 'passthrough-only',
+  createAcls: 'mounted',
   describeAcls: 'mounted',
   deleteAcls: 'passthrough-only',
   alterPartitionReassignments: 'passthrough-only',

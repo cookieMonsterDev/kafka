@@ -1,4 +1,5 @@
 import type { CommandSpec } from '../args/define';
+import { aclAddCommand } from './acl/add';
 import { aclListCommand } from './acl/list';
 import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
@@ -30,6 +31,7 @@ import { topicProducersCommand } from './topic/producers';
 export const ALL_COMMANDS: CommandSpec[] = [
   pingCommand,
   aclListCommand,
+  aclAddCommand,
   initCommand,
   doctorCommand,
   profilesCommand,

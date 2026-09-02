@@ -80,6 +80,11 @@ describe('getCompletions', () => {
     expect(result).toEqual([]);
   });
 
+  it('stops suggesting a non-multiple flag once it has already been given by its short alias', () => {
+    const result = getCompletions(FIXTURE, ['topic', 'create', '-p', '3', '--part']);
+    expect(result).toEqual([]);
+  });
+
   it('keeps suggesting a repeatable flag after it has already been given once', () => {
     const result = getCompletions(FIXTURE, ['topic', 'create', '--tag', 'a', '--tag']);
     expect(result).toEqual(['--tag']);

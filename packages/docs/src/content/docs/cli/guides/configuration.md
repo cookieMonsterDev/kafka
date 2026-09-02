@@ -65,4 +65,4 @@ kafka doctor --profile staging
 
 Reach for it first whenever a command connects to the wrong cluster, or fails to connect at all.
 
-Next: [Output and scripting with JSON](./output-and-scripting/).
+Next: [Output and scripting with JSON](../output-and-scripting/).

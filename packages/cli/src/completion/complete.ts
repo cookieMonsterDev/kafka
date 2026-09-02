@@ -53,7 +53,8 @@ function flagCandidates(matchedLeaf: CommandSpec | undefined, priorWords: readon
   const used = new Set(priorWords.filter((word) => word.startsWith('-')).map(flagNameFromToken));
   const out = new Set<string>(GLOBAL_FLAG_TOKENS);
   for (const flag of matchedLeaf?.flags ?? []) {
-    if (used.has(flag.name) && flag.multiple !== true) continue;
+    const alreadyGiven = used.has(flag.name) || (flag.alias !== undefined && used.has(flag.alias));
+    if (alreadyGiven && flag.multiple !== true) continue;
     out.add(`--${flag.name}`);
     if (flag.negatable === true) out.add(`--no-${flag.name}`);
     if (flag.alias !== undefined) out.add(`-${flag.alias}`);

@@ -6,7 +6,7 @@ section: start
 ---
 
 `@cookiemonsterdev/kafka-cli` is a command-line admin client for Apache Kafka, built on
-[`@cookiemonsterdev/kafka-core`](../../core/start/introduction/): `kafka topic list`,
+[`@cookiemonsterdev/kafka-core`](../../../core/start/introduction/): `kafka topic list`,
 `kafka group describe`, `kafka acl add`, and the rest of the broker admin surface, runnable with
 `npx`/`pnpm dlx` or installed globally.
 
@@ -23,7 +23,7 @@ This site documents the command surface. The package lives in
 [`packages/cli`](https://github.com/cookieMonsterDev/kafka/tree/develop/packages/cli); this Astro
 site is `packages/docs`.
 
-Next: [Installation](./installation/), [Getting started](./getting-started/),
+Next: [Installation](../installation/), [Getting started](../getting-started/),
 [Command reference](../../reference/commands/), [Exit codes](../../reference/exit-codes/).
 
 ## Coming from the shell scripts

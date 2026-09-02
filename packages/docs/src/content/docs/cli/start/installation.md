@@ -32,4 +32,4 @@ Shell completion (bash, zsh, fish) is generated on demand — nothing to install
 eval "$(kafka completion bash)"   # or: zsh, fish
 ```
 
-Next: [Getting started](./getting-started/).
+Next: [Getting started](../getting-started/).

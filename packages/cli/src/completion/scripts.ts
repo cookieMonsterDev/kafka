@@ -34,11 +34,16 @@ function renderZshScript(programName: string): string {
 # Or persist it as a file named _${programName} somewhere on your $fpath.
 
 _${programName}_completions() {
-  local -a words
-  words=("\${(@)words[2,CURRENT]}")
+  # Reads the completion system's own special $words/$CURRENT into a differently-named local —
+  # \`local -a words\` would shadow $words with a fresh empty array *before* the assignment on the
+  # next line ever runs, since a local declaration takes effect immediately, not lazily. That
+  # shadowing silently reads back an empty array, so every completion request would fall through
+  # to "nothing typed yet" regardless of what the user actually typed.
+  local -a cli_words
+  cli_words=("\${(@)words[2,CURRENT]}")
   local IFS=$'\\n'
   local -a completions
-  completions=("\${(@f)$(${programName} complete -- "\${words[@]}")}")
+  completions=("\${(@f)$(${programName} complete -- "\${cli_words[@]}")}")
   compadd -a completions
 }
 

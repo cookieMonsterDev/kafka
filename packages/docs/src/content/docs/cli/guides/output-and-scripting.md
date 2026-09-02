@@ -40,7 +40,7 @@ disable color; `FORCE_COLOR` forces it even off a TTY. None of these affect `--j
 ## Exit codes
 
 Check the exit code before parsing stdout — a non-zero code means the JSON document (when present
-at all) describes a failure, not a result. See [Exit codes](../reference/exit-codes/) for the full
+at all) describes a failure, not a result. See [Exit codes](../../reference/exit-codes/) for the full
 table; `4` (partial batch failure) is the one worth calling out here, since it's specific to this
 CLI's fan-out commands: passing multiple topics/principals/ids to a command that issues one call
 per item exits `4` when some succeeded and others didn't, with each item's own outcome in the JSON

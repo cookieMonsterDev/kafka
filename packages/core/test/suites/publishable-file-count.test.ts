@@ -27,10 +27,14 @@ interface PackResult {
 
 describe('published file count', () => {
   let packSource: string;
+  let packed: PackResult;
 
   beforeAll(async () => {
     // Self-contained, into an isolated temp dir — never the package's own `dist/` — so this
-    // suite's build cannot race a sibling suite that is still importing from it.
+    // suite's build cannot race a sibling suite that is still importing from it. `npm pack` runs
+    // here too, not inside the `it` below: under a loaded machine (e.g. the pre-commit hook's
+    // `pnpm -r test` running every package's suite at once) spawning `npm` can outrun vitest's
+    // default 5s per-test timeout on its own, and this whole setup already has a generous 60s.
     packSource = mkdtempSync(join(tmpdir(), 'kafka-core-pack-source-'));
     const distDir = join(packSource, 'dist');
 
@@ -45,6 +49,14 @@ describe('published file count', () => {
     });
     cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
     cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));
+
+    const output = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: packSource,
+      encoding: 'utf8',
+    });
+    const [result] = JSON.parse(output) as PackResult[];
+    if (result === undefined) throw new Error('npm pack --dry-run produced no result');
+    packed = result;
   }, 60_000);
 
   afterAll(() => {
@@ -52,13 +64,6 @@ describe('published file count', () => {
   });
 
   it('ships zero .d.ts.map files and stays under the file-count ceiling', () => {
-    const output = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-      cwd: packSource,
-      encoding: 'utf8',
-    });
-    const [packed] = JSON.parse(output) as PackResult[];
-    if (packed === undefined) throw new Error('npm pack --dry-run produced no result');
-
     const declarationMaps = packed.files.filter((file) => file.path.endsWith('.d.ts.map'));
     expect(declarationMaps).toEqual([]);
     expect(packed.files.length).toBeLessThan(FILE_COUNT_CEILING);

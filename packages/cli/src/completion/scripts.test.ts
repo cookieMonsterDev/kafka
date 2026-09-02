@@ -52,6 +52,30 @@ describe('renderCompletionScript', () => {
     const path = writeToTempFile(script, 'completion.fish');
     expect(() => execFileSync('fish', ['--no-execute', path], { stdio: 'pipe' })).not.toThrow();
   });
+
+  it('zsh: actually forwards the typed words to kafka complete --, not an empty list', () => {
+    // A syntax check (`zsh -n`, above) can't catch this: `local -a words` followed by an
+    // assignment that reads `$words` shadows the completion system's own special `$words` with a
+    // fresh empty array *before* the assignment runs, silently discarding every typed word. This
+    // fakes just enough of a zsh completion invocation (the special `$words`/`$CURRENT`
+    // parameters, a `kafka` function standing in for the real binary, a `compadd` that prints the
+    // array it's given) to exercise the real rendered function and prove it forwards them.
+    const script = renderCompletionScript('zsh', 'kafka');
+    const harness = `
+kafka() { shift 2; printf '%s\\n' "$@"; }
+compadd() { eval "print -l -- \\"\\\${\${2}[@]}\\""; }
+compdef() { :; }
+
+${script}
+
+words=(kafka topic create)
+CURRENT=3
+_kafka_completions
+`;
+    const path = writeToTempFile(harness, 'completion-harness.zsh');
+    const output = execFileSync('zsh', [path], { encoding: 'utf8' });
+    expect(output.trim().split('\n')).toEqual(['topic', 'create']);
+  });
 });
 
 describe('isCompletionShell', () => {

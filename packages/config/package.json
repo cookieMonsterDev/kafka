@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-config",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Generic config-file loader — discovery, sync/async loading, TypeScript transform rescue, layer merging, and diagnostics. Zero runtime dependencies.",
   "type": "module",
   "license": "MIT",

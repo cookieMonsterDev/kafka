@@ -344,6 +344,7 @@ export class Connection {
         this.#socket = socket;
         this.#connectionStatus = CONNECTION_STATUS.CONNECTED;
         this.#armIdleTimer();
+        socket.on('error', this.#onPostConnectSocketError);
         resolve(true);
       };
 
@@ -508,7 +509,8 @@ export class Connection {
     this.requestQueue.destroy();
 
     if (this.#socket) {
-      this.#socket.end();
+      this.#socket.removeAllListeners();
+      this.#socket.destroy();
       this.#socket.unref();
     }
 
@@ -832,4 +834,25 @@ export class Connection {
   #rejectRequests(error: unknown): void {
     this.requestQueue.rejectAll(error);
   }
+
+  /**
+   * Permanent post-handshake socket error handler. The setup-phase `onError` only reacts while
+   * `!isConnected()` (so a losing Happy Eyeballs candidate can't tear down an already-established
+   * connection); once connected, an error on the active socket would otherwise have no listener
+   * reacting to it at all.
+   */
+  #onPostConnectSocketError = (e: Error & { code?: string }): void => {
+    if (!this.isConnected()) return;
+
+    void (async () => {
+      const error = new KafkaConnectionError(`Connection error: ${e.message}`, {
+        broker: `${this.host}:${this.port}`,
+        code: e.code,
+      });
+
+      this.#logError(error.message, { stack: e.stack });
+      this.#rejectRequests(error);
+      await this.disconnect();
+    })();
+  };
 }

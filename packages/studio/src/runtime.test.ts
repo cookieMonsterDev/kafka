@@ -11,6 +11,7 @@ function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): Runtime
     platform: 'linux',
     stdout: { write: vi.fn(() => true) },
     stderr: { write: vi.fn(() => true) },
+    cwd: () => '/repo',
     on(event, listener) {
       const list = listeners.get(event) ?? [];
       list.push(listener);
@@ -30,6 +31,7 @@ describe('createRuntime', () => {
     const runtime = createRuntime(proc);
 
     expect(runtime.argv).toEqual(['--port', '5757']);
+    expect(runtime.cwd).toBe('/repo');
     expect(runtime.env).toEqual({ FOO: 'bar' });
     expect(runtime.platform).toBe('linux');
     expect(runtime.stdout).toBe(proc.stdout);

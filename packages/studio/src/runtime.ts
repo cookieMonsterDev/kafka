@@ -10,6 +10,7 @@ export interface RuntimeWriter {
  */
 export interface Runtime {
   readonly argv: readonly string[];
+  readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly platform: NodeJS.Platform;
   readonly stdout: RuntimeWriter;
@@ -40,6 +41,7 @@ export interface RuntimeProcessLike {
   readonly platform: NodeJS.Platform;
   readonly stdout: RuntimeWriter;
   readonly stderr: RuntimeWriter;
+  cwd(): string;
   on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
 }
 
@@ -50,6 +52,7 @@ export function createRuntime(proc: RuntimeProcessLike): Runtime {
 
   return {
     argv: proc.argv.slice(2),
+    cwd: proc.cwd(),
     env: proc.env,
     platform: proc.platform,
     stdout: proc.stdout,

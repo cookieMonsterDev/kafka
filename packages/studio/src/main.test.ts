@@ -11,6 +11,7 @@ function fakeRuntime(overrides: Partial<Runtime> = {}): {
   const stderr = vi.fn(() => true);
   const runtime: Runtime = {
     argv: [],
+    cwd: '/nonexistent-test-cwd',
     env: {},
     platform: 'linux',
     stdout: { write: stdout },

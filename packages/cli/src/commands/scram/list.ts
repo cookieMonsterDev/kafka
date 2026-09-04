@@ -1,11 +1,11 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { describeCode, formatCode, SCRAM_MECHANISMS } from '../../output/codes';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
-import { mapWithConcurrency } from '../topic/concurrency';
+import { mapWithConcurrency } from '../../concurrency';
 
 const CONCURRENCY = 8;
 
@@ -89,10 +89,7 @@ export const scramListCommand: CommandSpec = {
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) return EXIT_CODES.ok;
-      if (okCount === 0) return EXIT_CODES.operationFailed;
-      return EXIT_CODES.partialBatch;
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

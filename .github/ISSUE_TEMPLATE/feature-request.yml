@@ -29,6 +29,8 @@ body:
       label: Package
       options:
         - '@cookiemonsterdev/kafka-core'
+        - '@cookiemonsterdev/kafka-config'
+        - '@cookiemonsterdev/kafka-cli'
         - '@cookiemonsterdev/kafka-docs'
         - workspace / tooling
         - unsure

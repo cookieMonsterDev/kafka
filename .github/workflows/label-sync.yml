@@ -8,6 +8,10 @@ on:
       - '.github/workflows/label-sync.yml'
   workflow_dispatch:
 
+concurrency:
+  group: label-sync
+  cancel-in-progress: true
+
 permissions:
   issues: write
 

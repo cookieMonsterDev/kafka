@@ -1,6 +1,13 @@
 /** A minimal column-aligned table for human output — no box-drawing glyphs, so it degrades cleanly. */
 export function renderTable(headers: readonly string[], rows: readonly (readonly string[])[]): string {
-  const widths = headers.map((header, i) => Math.max(header.length, ...rows.map((row) => (row[i] ?? '').length)));
+  const widths = headers.map((header, i) => {
+    let width = header.length;
+    for (const row of rows) {
+      const length = (row[i] ?? '').length;
+      if (length > width) width = length;
+    }
+    return width;
+  });
 
   const renderRow = (cells: readonly string[]): string =>
     cells

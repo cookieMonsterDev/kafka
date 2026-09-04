@@ -20,6 +20,17 @@ export interface RouteMatch {
   readonly params: RouteParams;
 }
 
+/**
+ * Reads a route param the pattern guarantees is present (e.g. `:name` in `/api/topics/:name`) —
+ * `RouteParams` is indexed, so `noUncheckedIndexedAccess` would otherwise widen every access to
+ * `string | undefined` even though the router can't call the handler without it.
+ */
+export function requireParam(params: RouteParams, name: string): string {
+  const value = params[name];
+  if (value === undefined) throw new Error(`missing required route param "${name}"`);
+  return value;
+}
+
 function splitPath(pathname: string): string[] {
   return pathname.split('/').filter((segment) => segment.length > 0);
 }

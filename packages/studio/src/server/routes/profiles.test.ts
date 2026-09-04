@@ -3,11 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { createStudioServer } from '../create-server';
 import { AdminPool } from '../kafka/admin-pool';
 import type { StudioConnectionConfig } from '../kafka/connection';
+import { createFakeAdmin } from '../kafka/create-fake-admin';
 import { Router } from '../router';
 import { registerProfileRoutes, type ProfilesRouteContext } from './profiles';
 
 function fakePool(): AdminPool {
-  return new AdminPool(() => ({ admin: () => ({ connect: async () => {}, disconnect: async () => {} }) }));
+  return new AdminPool(() => ({
+    admin: () => createFakeAdmin({ connect: async () => {}, disconnect: async () => {} }),
+  }));
 }
 
 function buildContext(overrides: Partial<ProfilesRouteContext> = {}): ProfilesRouteContext {

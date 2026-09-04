@@ -1,5 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { UnknownProfileError } from './kafka/connection';
+import { hasErrorName } from './kafka/has-error-name';
+import { isTopicAlreadyExistsError, isUnknownTopicOrPartitionError } from './kafka/protocol-error';
 
 /** `JSON.stringify` that renders a `bigint` (every Kafka offset, in every route) as its decimal string instead of throwing. */
 export function stringifyJson(value: unknown): string {
@@ -68,16 +70,6 @@ export interface MappedApiError {
   readonly details?: unknown;
 }
 
-/**
- * Matched by `.name`, not `instanceof`: both are thrown by `@cookiemonsterdev/kafka-config`, a
- * separate package — if this workspace ever ends up with two installed copies of it, the classes
- * are distinct objects even though the errors behave identically. Errors this package defines
- * itself (below) are matched with `instanceof` instead, since that risk doesn't apply to them.
- */
-function hasName(error: unknown, name: string): boolean {
-  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === name;
-}
-
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
@@ -102,8 +94,15 @@ export function mapErrorToApiError(error: unknown): MappedApiError {
     };
   }
 
-  if (hasName(error, 'KafkaConfigError') || hasName(error, 'KafkaConfigRequiresAsyncError')) {
+  if (hasErrorName(error, 'KafkaConfigError') || hasErrorName(error, 'KafkaConfigRequiresAsyncError')) {
     return { status: 500, code: 'config_error', message: messageOf(error, 'invalid kafka config') };
+  }
+
+  if (isUnknownTopicOrPartitionError(error)) {
+    return { status: 404, code: 'unknown_topic', message: messageOf(error, 'topic not found') };
+  }
+  if (isTopicAlreadyExistsError(error)) {
+    return { status: 409, code: 'topic_already_exists', message: messageOf(error, 'topic already exists') };
   }
 
   return { status: 500, code: 'internal_error', message: messageOf(error, 'unexpected error') };

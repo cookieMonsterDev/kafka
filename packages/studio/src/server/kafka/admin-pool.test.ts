@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AdminPool, type KafkaClientFactory } from './admin-pool';
+import { createFakeAdmin } from './create-fake-admin';
 
 function fakeFactory(): {
   factory: KafkaClientFactory;
@@ -9,7 +10,7 @@ function fakeFactory(): {
   const connects = vi.fn(async () => {});
   const disconnects = vi.fn(async () => {});
   const factory: KafkaClientFactory = () => ({
-    admin: () => ({ connect: connects, disconnect: disconnects }),
+    admin: () => createFakeAdmin({ connect: connects, disconnect: disconnects }),
   });
   return { factory, connects, disconnects };
 }
@@ -27,7 +28,7 @@ describe('AdminPool', () => {
     const created = vi.fn();
     const factory: KafkaClientFactory = (profileName) => {
       created(profileName);
-      return { admin: () => ({ connect: async () => {}, disconnect: async () => {} }) };
+      return { admin: () => createFakeAdmin({ connect: async () => {}, disconnect: async () => {} }) };
     };
     const pool = new AdminPool(factory);
 
@@ -40,7 +41,7 @@ describe('AdminPool', () => {
     const created = vi.fn();
     const factory: KafkaClientFactory = (profileName) => {
       created(profileName);
-      return { admin: () => ({ connect: async () => {}, disconnect: async () => {} }) };
+      return { admin: () => createFakeAdmin({ connect: async () => {}, disconnect: async () => {} }) };
     };
     const pool = new AdminPool(factory);
 
@@ -54,13 +55,14 @@ describe('AdminPool', () => {
   it('forgets a profile whose connect() rejected, so the next get() retries', async () => {
     let attempt = 0;
     const factory: KafkaClientFactory = () => ({
-      admin: () => ({
-        connect: async () => {
-          attempt += 1;
-          if (attempt === 1) throw new Error('connect failed');
-        },
-        disconnect: async () => {},
-      }),
+      admin: () =>
+        createFakeAdmin({
+          connect: async () => {
+            attempt += 1;
+            if (attempt === 1) throw new Error('connect failed');
+          },
+          disconnect: async () => {},
+        }),
     });
     const pool = new AdminPool(factory);
 

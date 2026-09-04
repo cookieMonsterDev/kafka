@@ -1,6 +1,20 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 
-type PooledAdmin = Pick<Admin, 'connect' | 'disconnect'>;
+export type PooledAdmin = Pick<
+  Admin,
+  | 'connect'
+  | 'disconnect'
+  | 'listTopics'
+  | 'fetchTopicMetadata'
+  | 'describeTopicPartitions'
+  | 'fetchTopicOffsets'
+  | 'describeConfigs'
+  | 'describeLogDirs'
+  | 'createTopics'
+  | 'deleteTopics'
+  | 'createPartitions'
+  | 'incrementalAlterConfigs'
+>;
 
 /** Everything `AdminPool` needs to build a fresh, unconnected client for one profile. */
 export type KafkaClientFactory = (profileName: string | null) => { admin(): PooledAdmin };

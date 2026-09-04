@@ -8,6 +8,7 @@ import { resolvePort } from './server/port';
 import { registerClusterRoutes } from './server/routes/cluster';
 import { registerHealthRoutes } from './server/routes/health';
 import { registerProfileRoutes } from './server/routes/profiles';
+import { registerTopicRoutes } from './server/routes/topics';
 import { Router } from './server/router';
 import { createStaticHandler } from './server/static';
 import { readStudioSection } from './server/studio-config';
@@ -65,6 +66,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
       activeProfile = profile;
     },
   });
+  registerTopicRoutes(router, { pool, getActiveProfile: () => activeProfile });
 
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
   const fallback =

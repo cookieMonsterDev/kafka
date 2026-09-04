@@ -29,7 +29,8 @@ export function extractDefaultExport(moduleExports: unknown, path: string): unkn
   return moduleExports;
 }
 
-function describeType(value: unknown): string {
+/** Human-readable description of a value's type, for an error message naming what was actually given. */
+export function describeType(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'an array';
   return typeof value;
@@ -62,9 +63,10 @@ export function assertResolvedFileConfig<T>(
   try {
     assertValid(value);
   } catch (cause) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
     throw new KafkaConfigError(
       'ConfigFileInvalid',
-      `kafka config file "${path}" must export an object (got ${typeof value}). Use "export default defineConfig({...})"`,
+      `kafka config file "${path}" is invalid: ${causeMessage}. Use "export default defineConfig({...})"`,
       { path, cause },
     );
   }

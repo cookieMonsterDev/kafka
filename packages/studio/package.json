@@ -1,0 +1,78 @@
+{
+  "name": "@cookiemonsterdev/kafka-studio",
+  "version": "0.0.1",
+  "description": "A local web UI for inspecting and interacting with an Apache Kafka cluster, built on @cookiemonsterdev/kafka-core.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Mykhailo Toporkov",
+  "homepage": "https://cookiemonsterdev.github.io/kafka/",
+  "bugs": {
+    "url": "https://github.com/cookieMonsterDev/kafka/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cookieMonsterDev/kafka.git",
+    "directory": "packages/studio"
+  },
+  "keywords": [
+    "kafka",
+    "apache-kafka",
+    "studio",
+    "ui",
+    "admin",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "kafka-studio": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "pnpm run build:js && pnpm run build:types && pnpm run build:web",
+    "build:js": "vite build",
+    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
+    "build:web": "vite build --config vite.web.config.ts",
+    "dev": "vite build --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "catalog:",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "catalog:",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "dependencies": {
+    "@cookiemonsterdev/kafka-config": "^1.1.0",
+    "@cookiemonsterdev/kafka-core": "^2.4.0"
+  }
+}

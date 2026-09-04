@@ -13,7 +13,7 @@ on:
         # RELEASE_PACKAGES — keep it in sync by hand (scripts/resolve-release-package.mjs is the
         # source of truth for order).
         type: choice
-        options: [auto, config, core, cli, docs, all]
+        options: [auto, config, core, cli, studio, docs, all]
         default: auto
       dry_run:
         description: Analyze the next version without publishing, tagging, or opening a sync PR

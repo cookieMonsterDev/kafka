@@ -1,4 +1,5 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import { mapErrorToApiError, stringifyJson } from './json';
 import type { Handler } from './router';
 import { Router } from './router';
 
@@ -8,9 +9,9 @@ export interface ApiError {
   readonly details?: unknown;
 }
 
-/** Sends a JSON body with the given status. Not bigint-safe yet — no route needs that in this increment. */
+/** Sends a JSON body with the given status. Bigint-safe — Kafka offsets are `bigint` everywhere. */
 export function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
+  const payload = stringifyJson(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(payload);
 }
@@ -53,7 +54,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, options:
       res.end();
       return;
     }
-    sendError(res, 500, 'internal_error', error instanceof Error ? error.message : 'unexpected error');
+    const mapped = mapErrorToApiError(error);
+    sendError(res, mapped.status, mapped.code, mapped.message, mapped.details);
   }
 }
 

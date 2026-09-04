@@ -14,8 +14,9 @@ spirit of Prisma Studio. Built on top of
 [`@cookiemonsterdev/kafka-config`](../config/README.md), and lives in the
 [kafka monorepo](https://github.com/cookieMonsterDev/kafka).
 
-**Status:** scaffolding only — no functionality yet, and not published to npm. Install and usage
-instructions will be added once there's something to run.
+**Status:** early — the CLI, HTTP server, and web shell run end to end, but there is no Kafka
+connection yet (the cluster page just reports "not connected"). Not published to npm; install and
+usage instructions will be added once there's a real feature to point at.
 
 ## Contents
 
@@ -30,11 +31,15 @@ From the workspace root:
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-studio build
-pnpm --filter @cookiemonsterdev/kafka-studio dev
+node packages/studio/dist/bin.js
 ```
 
-`build` produces the server bundle (`dist/`) and the browser SPA (`dist/web/`). `dev` currently
-watches only the server bundle.
+`build` produces the server bundle (`dist/`) and the browser SPA (`dist/web/`). Run
+`node packages/studio/dist/bin.js --help` for the flag list (port, host, browser, read-only mode).
+
+`pnpm --filter @cookiemonsterdev/kafka-studio dev` watches and rebuilds the server bundle only. To
+serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`
+before starting the server from source.
 
 ## Tests
 

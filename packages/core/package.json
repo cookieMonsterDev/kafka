@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-core",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "description": "TypeScript Apache Kafka client for Node.js. Speaks the Kafka wire protocol directly.",
   "type": "module",
   "license": "MIT",

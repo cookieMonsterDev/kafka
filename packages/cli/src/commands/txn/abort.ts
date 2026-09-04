@@ -1,16 +1,9 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError } from '../../args/coerce';
+import { CliUsageError, coerceBigInt } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
-
-function parseBigIntFlag(raw: string, flagName: string): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
-  }
-}
+import { stringifyJsonSafe } from '../../output/json';
 
 export const txnAbortCommand: CommandSpec = {
   path: ['txn', 'abort'],
@@ -47,7 +40,7 @@ export const txnAbortCommand: CommandSpec = {
     if (producerIdFlag === undefined) {
       throw new CliUsageError('txn abort requires --producer-id');
     }
-    const producerId = parseBigIntFlag(producerIdFlag, 'producer-id');
+    const producerId = coerceBigInt(producerIdFlag, 'producer-id');
 
     if (flags['producer-epoch'] === undefined) {
       throw new CliUsageError('txn abort requires --producer-epoch');
@@ -75,7 +68,7 @@ export const txnAbortCommand: CommandSpec = {
         coordinatorEpoch,
         transactionVersion,
       });
-      output.write({ human: () => 'aborted', json: () => JSON.stringify({ ok: true }) });
+      output.write({ human: () => 'aborted', json: () => stringifyJsonSafe({ ok: true }) });
       return EXIT_CODES.ok;
     } finally {
       await admin.disconnect();

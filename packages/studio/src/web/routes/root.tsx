@@ -1,8 +1,11 @@
-import { Outlet, createRootRoute } from '@tanstack/react-router';
+import { Link, Outlet, createRootRoute } from '@tanstack/react-router';
 import { ProfileSwitcher } from '../components/layout/profile-switcher';
 import { ThemeToggle } from '../components/layout/theme-toggle';
 
 export const rootRoute = createRootRoute({ component: RootLayout });
+
+const navLinkClassName =
+  'rounded-lg px-2.5 py-1.5 text-sm text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 [&.active]:bg-muted [&.active]:text-foreground [&.active]:font-medium';
 
 function RootLayout() {
   return (
@@ -14,7 +17,22 @@ function RootLayout() {
         Skip to content
       </a>
       <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <span className="text-sm font-medium">Kafka Studio</span>
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-medium">Kafka Studio</span>
+          <nav aria-label="Primary" className="flex items-center gap-1">
+            <Link
+              to="/"
+              className={navLinkClassName}
+              activeOptions={{ exact: true }}
+              activeProps={{ className: 'active' }}
+            >
+              Cluster
+            </Link>
+            <Link to="/topics" className={navLinkClassName} activeProps={{ className: 'active' }}>
+              Topics
+            </Link>
+          </nav>
+        </div>
         <div className="flex items-center gap-3">
           <ProfileSwitcher />
           <ThemeToggle />

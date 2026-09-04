@@ -1,12 +1,12 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "src/web",
+    "rootDir": "src",
     "noEmit": true,
     "jsx": "react-jsx",
     "jsxImportSource": "react",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["vite/client"]
   },
-  "include": ["src/web/**/*.ts", "src/web/**/*.tsx"]
+  "include": ["src/web/**/*.ts", "src/web/**/*.tsx", "src/shared/**/*.ts"]
 }

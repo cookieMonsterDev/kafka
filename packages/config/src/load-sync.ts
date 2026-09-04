@@ -186,7 +186,13 @@ export function loadConfigFileSync<T = Record<string, unknown>>(
   const allowTransformFallback = options.allowTransformFallback ?? true;
   const key = cacheKey(path, allowTransformFallback);
   const cached = cache.get(key);
-  if (cached !== undefined) return cached as T;
+  if (cached !== undefined) {
+    // The cache key doesn't (and can't cheaply) capture `assertValid`'s identity, so a second
+    // caller with a different validator must still have it run against the cached value here —
+    // otherwise it would silently skip validation on a cache hit.
+    assertResolvedFileConfig<T>(cached, path, options.assertValid);
+    return cached;
+  }
 
   const onDiagnostic = options.onDiagnostic ?? defaultOnConfigDiagnostic;
 

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { Decoder } from '../protocol/decoder';
@@ -9,6 +10,7 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import { Connection } from './connection';
 import type { ConnectionOptions, CreateSaslAuthenticator } from './connection';
 import { createDefaultSocketFactory } from './socket-factory';
+import type { SocketFactory } from './socket-factory';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -76,6 +78,45 @@ const metadataRequest = () => ({
   apiName: 'Metadata',
   encode: () => Promise.resolve(new Encoder()),
 });
+
+/**
+ * A fake `net.Socket`: an `EventEmitter` with the write/end/destroy/unref/removeAllListeners
+ * surface `Connection` touches. The teardown methods are also returned as plain spy references
+ * (rather than read back off the typed `net.Socket`) so assertions don't trip
+ * `@typescript-eslint/unbound-method` on its class methods.
+ */
+function createFakeSocket(): { socket: net.Socket; destroy: Mock; end: Mock; removeAllListeners: Mock } {
+  const socket = new EventEmitter() as unknown as net.Socket;
+  const end = vi.fn().mockReturnThis();
+  const destroy = vi.fn().mockReturnThis();
+  const removeAllListenersImpl = EventEmitter.prototype.removeAllListeners.bind(socket);
+  const removeAllListeners = vi.fn((event?: string | symbol) => {
+    removeAllListenersImpl(event);
+    return socket;
+  });
+  socket.end = end;
+  socket.unref = vi.fn().mockReturnThis();
+  socket.write = vi.fn().mockReturnValue(true);
+  socket.destroy = destroy;
+  socket.removeAllListeners = removeAllListeners;
+  return { socket, destroy, end, removeAllListeners };
+}
+
+/** Connects using a fake socket that never emits data, so requests stay in flight indefinitely. */
+async function connectWithFakeSocket(
+  createConnection: (port: number, overrides?: Partial<ConnectionOptions>) => Connection,
+  overrides: Partial<ConnectionOptions> = {},
+): Promise<{ connection: Connection; socket: net.Socket; destroy: Mock; end: Mock; removeAllListeners: Mock }> {
+  const { socket, destroy, end, removeAllListeners } = createFakeSocket();
+  const socketFactory: SocketFactory = ({ onConnect }) => {
+    queueMicrotask(onConnect);
+    return socket;
+  };
+
+  const connection = createConnection(9999, { socketFactory, ...overrides });
+  await connection.connect();
+  return { connection, socket, destroy, end, removeAllListeners };
+}
 
 const alterPartitionReassignmentsRequest = () => ({
   apiKey: API_KEYS.AlterPartitionReassignments,
@@ -165,6 +206,37 @@ describe('network/Connection', () => {
       await connection.connect();
       await expect(connection.disconnect()).resolves.toBe(true);
       expect(connection.isConnected()).toBe(false);
+    });
+
+    it('destroys and removes all listeners from the socket instead of ending it gracefully', async () => {
+      const { connection, destroy, end, removeAllListeners } = await connectWithFakeSocket(createConnection);
+
+      await connection.disconnect();
+
+      expect(destroy).toHaveBeenCalled();
+      expect(removeAllListeners).toHaveBeenCalled();
+      expect(end).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('post-connect socket errors', () => {
+    it('rejects in-flight requests and disconnects when the socket errors after the handshake completes', async () => {
+      const { connection, socket, destroy } = await connectWithFakeSocket(createConnection);
+      expect(connection.isConnected()).toBe(true);
+
+      const response = {
+        decode: async (rawData: Buffer) => new Decoder(rawData),
+        parse: async (data: Decoder) => data,
+      };
+
+      const sendPromise = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      socket.emit('error', Object.assign(new Error('boom'), { code: 'ECONNRESET' }));
+
+      await expect(sendPromise).rejects.toThrow(KafkaConnectionError);
+      await vi.waitFor(() => expect(connection.isConnected()).toBe(false));
+      expect(destroy).toHaveBeenCalled();
     });
   });
 

@@ -14,6 +14,14 @@ export function coerceNumber(raw: string, flagName: string): number {
   return value;
 }
 
+export function coerceBigInt(raw: string, flagName: string): bigint {
+  try {
+    return BigInt(raw);
+  } catch {
+    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
+  }
+}
+
 export function coerceEnum<T extends string>(raw: string, flagName: string, values: readonly T[]): T {
   if ((values as readonly string[]).includes(raw)) return raw as T;
   throw new CliUsageError(`--${flagName} must be one of: ${values.join(', ')} (got "${raw}")`);

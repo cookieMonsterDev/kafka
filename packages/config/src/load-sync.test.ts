@@ -134,6 +134,28 @@ describe('loadConfigFileSync', () => {
       expect(strict2).toBe(strict1);
     });
 
+    it("re-runs a second caller's assertValid against a cache hit instead of reusing the first caller's validation", () => {
+      const path = join(FIXTURES, 'cache-validation', 'kafka.config.ts');
+
+      const first = loadConfigFileSync(path, { assertValid: () => {} });
+      expect(first).toEqual({ client: { brokers: ['cache-validation:9092'] } });
+
+      // Same path, already cached from the call above — a second, stricter validator must still
+      // run against the cached value and its rejection must surface, not be silently skipped.
+      expect(() =>
+        loadConfigFileSync(path, {
+          assertValid: () => {
+            throw new Error('second caller always rejects');
+          },
+        }),
+      ).toThrow(
+        expect.objectContaining({
+          tag: 'ConfigFileInvalid',
+          message: expect.stringContaining('second caller always rejects'),
+        }),
+      );
+    });
+
     it('known limitation: once the transform fallback is installed anywhere in the process, a later strict call for a rescuable file no longer throws', () => {
       // `module.registerHooks` (D8) has no `deregister` on this Node version (see
       // transform-hooks.ts) — once any earlier lenient load anywhere in the process installs the

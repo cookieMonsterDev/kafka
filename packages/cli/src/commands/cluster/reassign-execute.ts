@@ -2,7 +2,8 @@ import { readJsonFile } from '../../admin/read-json-file';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
+import { isKafkaAggregateError } from '../../errors/is-kafka-aggregate-error';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
@@ -23,24 +24,6 @@ interface AlterPartitionReassignmentsFailure {
 
 const LOG_DIRS_IGNORED_NOTE =
   'note: this file\'s "log_dirs" entries are not applied — moving a replica between log dirs on the same broker needs a separate command';
-
-/**
- * Matched by `.name`, never `instanceof` — mirrors `cluster/update-features.ts`'s
- * `isKafkaAggregateError`: `alterPartitionReassignments` either resolves on full success or
- * throws one `KafkaAggregateError` wrapping a `KafkaAlterPartitionReassignmentsError` per failed
- * partition — verified against
- * `packages/core/src/protocol/requests/alter-partition-reassignments/v0/response.ts`.
- */
-function isKafkaAggregateError(
-  error: unknown,
-): error is { readonly name: string; readonly errors: readonly unknown[] } {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { name?: unknown }).name === 'KafkaAggregateError' &&
-    Array.isArray((error as { errors?: unknown }).errors)
-  );
-}
 
 function isAlterPartitionReassignmentsError(item: unknown): item is AlterPartitionReassignmentsFailure {
   return (
@@ -154,10 +137,7 @@ export const clusterReassignExecuteCommand: CommandSpec = {
         json: () => stringifyJsonSafe({ results, logDirsIgnored: hasLogDirs }),
       });
 
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) return EXIT_CODES.ok;
-      if (okCount === 0) return EXIT_CODES.operationFailed;
-      return EXIT_CODES.partialBatch;
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

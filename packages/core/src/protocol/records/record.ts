@@ -124,10 +124,10 @@ export interface DecodedRecord {
   isControlRecord: boolean;
   batchContext: RecordBatchContext;
   /**
-   * This record's on-wire size (post-decompression): length-prefix framing, attributes,
-   * timestamp/offset deltas, key, value, and headers, all together. Cheap — it's just the
-   * length already read off the wire to isolate this record's bytes — and available without
-   * decoding `value`/`headers`, so byte-usage accounting (e.g. the consumer's adaptive
+   * This record's on-wire size (post-decompression): attributes, timestamp/offset deltas, key,
+   * value, and headers, all together - excluding the record's own length-prefix varint. Cheap —
+   * it's just the length already read off the wire to isolate this record's bytes — and available
+   * without decoding `value`/`headers`, so byte-usage accounting (e.g. the consumer's adaptive
    * fetch-size controller) doesn't have to force that decode just to estimate how much was used.
    */
   byteSize: number;

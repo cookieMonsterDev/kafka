@@ -191,11 +191,12 @@ export function createSendMessages({
 
           let response;
           const producedAt = Date.now();
+          const producerEpoch = eosManager.getProducerEpoch();
           try {
             response = await broker.produce({
               transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
               producerId: eosManager.getProducerId(),
-              producerEpoch: eosManager.getProducerEpoch(),
+              producerEpoch,
               acks,
               timeout,
               compression,
@@ -203,9 +204,16 @@ export function createSendMessages({
               topicData,
             });
           } catch (e) {
-            for (const { topic, partitions } of topicData) {
-              for (const entry of partitions) {
-                eosManager.updateSequence(topic, entry.partition, -entry.messages.length);
+            // A concurrent InitProducerId (e.g. from another partition's UNKNOWN_PRODUCER_ID
+            // recovery) may already have bumped the epoch and reset sequence tracking to zero
+            // while this request was in flight. Rolling back against that fresh state would
+            // drive it negative instead of leaving it alone, since the increment being undone
+            // belongs to a generation that no longer exists.
+            if (eosManager.getProducerEpoch() === producerEpoch) {
+              for (const { topic, partitions } of topicData) {
+                for (const entry of partitions) {
+                  eosManager.updateSequence(topic, entry.partition, -entry.messages.length);
+                }
               }
             }
             throw e;

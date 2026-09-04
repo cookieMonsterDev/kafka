@@ -1,17 +1,9 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError } from '../../args/coerce';
+import { coerceBigInt } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { stringifyJsonSafe } from '../../output/json';
 import { resolveHmacFlag } from './hmac';
-
-function parseBigIntFlag(raw: string, flagName: string): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
-  }
-}
 
 export const tokenRenewCommand: CommandSpec = {
   path: ['token', 'renew'],
@@ -33,7 +25,7 @@ export const tokenRenewCommand: CommandSpec = {
 
     const renewTimePeriodMsFlag = flags['renew-time-period-ms'] as string | undefined;
     const renewTimePeriodMs =
-      renewTimePeriodMsFlag !== undefined ? parseBigIntFlag(renewTimePeriodMsFlag, 'renew-time-period-ms') : undefined;
+      renewTimePeriodMsFlag !== undefined ? coerceBigInt(renewTimePeriodMsFlag, 'renew-time-period-ms') : undefined;
 
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });

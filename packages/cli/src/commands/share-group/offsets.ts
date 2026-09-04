@@ -2,11 +2,11 @@ import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError, coerceNumber } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
-import { mapWithConcurrency } from '../topic/concurrency';
+import { mapWithConcurrency } from '../../concurrency';
 
 const CONCURRENCY = 8;
 
@@ -112,13 +112,6 @@ function renderReadResults(results: readonly ReadResult[]): string {
   return rows.length === 0 ? '(no offsets)' : renderTable(['TOPIC', 'PARTITION', 'START OFFSET', 'LAG'], rows);
 }
 
-function exitForResults(results: readonly TopicResult[]): number {
-  const okCount = results.filter((r) => r.ok).length;
-  if (okCount === results.length) return EXIT_CODES.ok;
-  if (okCount === 0) return EXIT_CODES.operationFailed;
-  return EXIT_CODES.partialBatch;
-}
-
 export const shareGroupOffsetsCommand: CommandSpec = {
   path: ['share-group', 'offsets'],
   summary: 'Read, set, or delete a share group’s committed start offsets',
@@ -196,7 +189,7 @@ export const shareGroupOffsetsCommand: CommandSpec = {
           });
         }
         output.write({ human: () => renderResults(results), json: () => stringifyJsonSafe({ results }) });
-        return exitForResults(results);
+        return exitForBatchResults(results, (r) => r.ok);
       } finally {
         await admin.disconnect();
       }
@@ -225,7 +218,7 @@ export const shareGroupOffsetsCommand: CommandSpec = {
           });
         }
         output.write({ human: () => renderResults(results), json: () => stringifyJsonSafe({ results }) });
-        return exitForResults(results);
+        return exitForBatchResults(results, (r) => r.ok);
       } finally {
         await admin.disconnect();
       }
@@ -257,7 +250,7 @@ export const shareGroupOffsetsCommand: CommandSpec = {
         human: () => renderReadResults(results),
         json: () => stringifyJsonSafe({ results }),
       });
-      return exitForResults(results);
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

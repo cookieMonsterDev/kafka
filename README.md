@@ -117,6 +117,8 @@ pnpm typecheck     # tsc --noEmit + astro check
 pnpm test          # unit tests only (never starts Docker)
 ```
 
+CI runs `typecheck` for every package except `@cookiemonsterdev/kafka-docs` (its `astro check` fails under the current TypeScript catalog pin); run `pnpm typecheck` locally to cover docs too.
+
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-core test
 KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration

@@ -1,7 +1,8 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError, coerceNumber } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
+import { isKafkaAggregateError } from '../../errors/is-kafka-aggregate-error';
 import { confirmDestructive, requireForce } from '../../interaction/confirm';
 import { FEATURE_UPDATE_UPGRADE_TYPES } from '../../output/codes';
 import { stringifyJsonSafe } from '../../output/json';
@@ -17,24 +18,6 @@ interface FeatureResult {
 interface UpdateFeatureFailure {
   readonly feature: string;
   readonly message: string;
-}
-
-/**
- * Matched by `.name`, never `instanceof` — a config file's core might not be the same installed
- * copy as the CLI's own, so a class identity check could silently miss it. Mirrors
- * `group/delete.ts`'s `isKafkaDeleteGroupsError`: `updateFeatures` either resolves on full success
- * or throws one `KafkaAggregateError` wrapping a `KafkaUpdateFeaturesError` per failed feature —
- * verified against `packages/core/src/protocol/requests/update-features/v0/response.ts`.
- */
-function isKafkaAggregateError(
-  error: unknown,
-): error is { readonly name: string; readonly errors: readonly unknown[] } {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { name?: unknown }).name === 'KafkaAggregateError' &&
-    Array.isArray((error as { errors?: unknown }).errors)
-  );
 }
 
 function isUpdateFeatureError(item: unknown): item is UpdateFeatureFailure {
@@ -141,10 +124,7 @@ export const clusterUpdateFeaturesCommand: CommandSpec = {
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) return EXIT_CODES.ok;
-      if (okCount === 0) return EXIT_CODES.operationFailed;
-      return EXIT_CODES.partialBatch;
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

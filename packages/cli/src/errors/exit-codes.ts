@@ -16,3 +16,14 @@ export const EXIT_CODES = Object.freeze({
 });
 
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
+
+/**
+ * The exit code for a batch command's per-item results: `ok` when every item succeeded,
+ * `operationFailed` when none did, `partialBatch` otherwise.
+ */
+export function exitForBatchResults<T>(results: readonly T[], isOk: (item: T) => boolean): ExitCode {
+  const okCount = results.filter(isOk).length;
+  if (okCount === results.length) return EXIT_CODES.ok;
+  if (okCount === 0) return EXIT_CODES.operationFailed;
+  return EXIT_CODES.partialBatch;
+}

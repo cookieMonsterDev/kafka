@@ -251,6 +251,63 @@ describe('producer/sendMessages', () => {
     expect(eosManager.releasePartitionGates).toHaveBeenCalled();
   });
 
+  it('rolls back sequence tracking when a produce fails under a stable epoch', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce.mockImplementationOnce(() => Promise.reject(new Error('boom')));
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager({ getProducerEpoch: vi.fn().mockReturnValue(0) });
+
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] }),
+    ).rejects.toThrow('boom');
+
+    expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 1);
+    expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, -1);
+  });
+
+  it('does not roll back sequence tracking across a concurrent producer epoch reset', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    let epoch = 0;
+    brokers[1].produce.mockImplementationOnce(() => {
+      // Simulate a concurrent InitProducerId (e.g. another partition's UNKNOWN_PRODUCER_ID
+      // recovery) completing while this request is in flight: it bumps the epoch and resets
+      // sequence tracking to zero before this request's own failure is handled.
+      epoch = 1;
+      return Promise.reject(new Error('stale epoch'));
+    });
+
+    const cluster = fakeCluster(brokers);
+    const eosManager = fakeEosManager({ getProducerEpoch: vi.fn(() => epoch) });
+
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: cluster as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] }),
+    ).rejects.toThrow('stale epoch');
+
+    expect(brokers[1].produce).toHaveBeenCalledWith(expect.objectContaining({ producerEpoch: 0 }));
+    // The optimistic increment happened under epoch 0, but by the time the failure is handled
+    // the epoch (and the sequence map behind it) already belongs to generation 1 — rolling back
+    // here would drive the freshly-reset sequence negative instead of leaving it alone.
+    expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 1);
+    expect(eosManager.updateSequence).not.toHaveBeenCalledWith(topic, 0, -1);
+  });
+
   it('adds partitions to the transaction when transactional', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const cluster = fakeCluster(brokers);

@@ -851,6 +851,8 @@ function unknownErrorCode(errorCode: number): ErrorCodeEntry {
 const SUCCESS_CODE = 0;
 const UNSUPPORTED_VERSION_CODE = 35;
 
+const ERROR_CODES_BY_CODE = new Map(ERROR_CODES.map((entry) => [entry.code, entry]));
+
 export function failure(code: number): boolean {
   return code !== SUCCESS_CODE;
 }
@@ -859,7 +861,7 @@ export function createErrorFromCode(
   code: number,
   extras: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> = {},
 ): KafkaProtocolError {
-  const entry = ERROR_CODES.find((e) => e.code === code) ?? unknownErrorCode(code);
+  const entry = ERROR_CODES_BY_CODE.get(code) ?? unknownErrorCode(code);
   return new KafkaProtocolError(entry, extras);
 }
 

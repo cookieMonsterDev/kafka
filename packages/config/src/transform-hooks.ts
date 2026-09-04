@@ -10,9 +10,9 @@ interface StripTypeScriptTypesOptions {
 }
 
 /**
- * `@types/node` 26.2.0 only declares `mode: 'strip'`, lagging this repo's minimum Node (24.18.1),
- * which supports `mode: 'transform'` at runtime — required to rescue a TS `enum`. Re-typed
- * narrowly here; safe to drop once `@types/node` catches up.
+ * `@types/node` 26.2.0 only declares `mode: 'strip'`, lagging this repo's minimum Node
+ * (`engines.node`: `>=24.0.0`), which supports `mode: 'transform'` at runtime — required to
+ * rescue a TS `enum`. Re-typed narrowly here; safe to drop once `@types/node` catches up.
  */
 const stripTypeScriptTypes = stripTypeScriptTypesStripOnly as unknown as (
   code: string,

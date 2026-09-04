@@ -1,5 +1,13 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { ServerResponse } from 'node:http';
-import { describe, expect, it, vi } from 'vitest';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// A real top-level import (not the dynamic `await import('./index')` the last test needs for
+// `vi.resetModules()`), so parsing this module's dependency graph — which now reaches into
+// `@cookiemonsterdev/kafka-core` and `@cookiemonsterdev/kafka-config` — happens during this file's
+// import phase, not inside the first test's own timeout window.
+import { startStudio } from './index';
 import type { Runtime } from './runtime';
 
 function fakeRuntime(overrides: Partial<Runtime> = {}): { runtime: Runtime; stdout: (chunk: string) => boolean } {
@@ -23,7 +31,6 @@ function fakeRuntime(overrides: Partial<Runtime> = {}): { runtime: Runtime; stdo
 
 describe('startStudio', () => {
   it('binds to a free port, serves the built shell, and exposes health/cluster routes', async () => {
-    const { startStudio } = await import('./index');
     const { runtime, stdout } = fakeRuntime();
 
     const studio = await startStudio({ host: '127.0.0.1', port: 59_101, browser: 'none' }, runtime);
@@ -37,6 +44,9 @@ describe('startStudio', () => {
       const cluster = await fetch(new URL('/api/cluster', studio.url));
       await expect(cluster.json()).resolves.toEqual({ connected: false });
 
+      const profiles = await fetch(new URL('/api/profiles', studio.url));
+      await expect(profiles.json()).resolves.toEqual({ active: null, profiles: {} });
+
       const shell = await fetch(new URL('/', studio.url));
       expect(shell.status).toBe(200);
       expect(shell.headers.get('content-type')).toContain('text/html');
@@ -46,7 +56,6 @@ describe('startStudio', () => {
   });
 
   it('does not attempt to open a browser when browser is "none"', async () => {
-    const { startStudio } = await import('./index');
     const { runtime } = fakeRuntime();
 
     const studio = await startStudio({ port: 59_102, browser: 'none' }, runtime);
@@ -60,7 +69,6 @@ describe('startStudio', () => {
   });
 
   it('requires an explicit port to be free, rather than silently picking another one', async () => {
-    const { startStudio } = await import('./index');
     const first = await startStudio({ host: '127.0.0.1', port: 59_103, browser: 'none' }, fakeRuntime().runtime);
     try {
       await expect(
@@ -92,5 +100,47 @@ describe('startStudio', () => {
       vi.doUnmock('vite');
       vi.resetModules();
     }
+  });
+
+  describe('the "studio" config-file section', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'studio-index-'));
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('falls back to port/host/readOnly from the config file when no flag was given', async () => {
+      writeFileSync(
+        join(dir, 'kafka.config.json'),
+        JSON.stringify({ studio: { port: 59_110, host: '127.0.0.1', readOnly: true, openBrowser: false } }),
+      );
+      const { runtime } = fakeRuntime({ cwd: dir });
+
+      const studio = await startStudio({}, runtime);
+      try {
+        expect(studio.port).toBe(59_110);
+        expect(studio.host).toBe('127.0.0.1');
+        const health = await fetch(new URL('/api/health', studio.url));
+        await expect(health.json()).resolves.toMatchObject({ readOnly: true });
+      } finally {
+        await studio.stop();
+      }
+    });
+
+    it('an explicit option always wins over the config file', async () => {
+      writeFileSync(join(dir, 'kafka.config.json'), JSON.stringify({ studio: { port: 59_111 } }));
+      const { runtime } = fakeRuntime({ cwd: dir });
+
+      const studio = await startStudio({ port: 59_112, host: '127.0.0.1', browser: 'none' }, runtime);
+      try {
+        expect(studio.port).toBe(59_112);
+      } finally {
+        await studio.stop();
+      }
+    });
   });
 });

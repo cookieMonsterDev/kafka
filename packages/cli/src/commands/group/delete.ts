@@ -1,7 +1,8 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
+import { isKafkaDeleteGroupsError } from '../../errors/is-kafka-delete-groups-error';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
@@ -10,27 +11,6 @@ interface GroupResult {
   readonly groupId: string;
   readonly ok: boolean;
   readonly detail?: string;
-}
-
-interface DeleteGroupFailure {
-  readonly groupId: string;
-  readonly errorCode: number;
-  readonly error?: { readonly message?: string };
-}
-
-/**
- * Matched by `.name`, never `instanceof` — a config file's core might not be the same installed
- * copy as the CLI's own, so a class identity check could silently miss it.
- */
-function isKafkaDeleteGroupsError(
-  error: unknown,
-): error is { readonly name: string; readonly groups: readonly DeleteGroupFailure[] } {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { name?: unknown }).name === 'KafkaDeleteGroupsError' &&
-    Array.isArray((error as { groups?: unknown }).groups)
-  );
 }
 
 export const groupDeleteCommand: CommandSpec = {
@@ -94,10 +74,7 @@ export const groupDeleteCommand: CommandSpec = {
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) return EXIT_CODES.ok;
-      if (okCount === 0) return EXIT_CODES.operationFailed;
-      return EXIT_CODES.partialBatch;
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

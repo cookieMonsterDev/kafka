@@ -1,17 +1,9 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError } from '../../args/coerce';
+import { coerceBigInt } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
-
-function parseBigIntFlag(raw: string, flagName: string): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
-  }
-}
 
 export const txnListCommand: CommandSpec = {
   path: ['txn', 'list'],
@@ -39,10 +31,10 @@ export const txnListCommand: CommandSpec = {
     const brokers = parseBrokersFlag(flags.brokers);
     const stateFilters = flags['state-filter'] as string[] | undefined;
     const producerIdFilterFlags = flags['producer-id-filter'] as string[] | undefined;
-    const producerIdFilters = producerIdFilterFlags?.map((raw) => parseBigIntFlag(raw, 'producer-id-filter'));
+    const producerIdFilters = producerIdFilterFlags?.map((raw) => coerceBigInt(raw, 'producer-id-filter'));
     const durationFilterFlag = flags['duration-filter'] as string | undefined;
     const durationFilter =
-      durationFilterFlag !== undefined ? parseBigIntFlag(durationFilterFlag, 'duration-filter') : undefined;
+      durationFilterFlag !== undefined ? coerceBigInt(durationFilterFlag, 'duration-filter') : undefined;
     const transactionalIdPattern = flags['transactional-id-pattern'] as string | undefined;
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });

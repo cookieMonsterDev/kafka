@@ -133,16 +133,6 @@ function messageBytes(message: Message): number {
   return fieldBytes(message.key) + fieldBytes(message.value);
 }
 
-function topicMessagesBytes(topicMessages: readonly TopicMessages[]): number {
-  let total = 0;
-  for (const { messages } of topicMessages) {
-    for (const message of messages) {
-      total += messageBytes(message);
-    }
-  }
-  return total;
-}
-
 function mergeTopicMessages(entries: readonly PendingSend[]): TopicMessages[] {
   const mergedByTopic = new Map<string, Message[]>();
   for (const { topicMessages } of entries) {
@@ -228,7 +218,7 @@ export function createMessageProducer({
     topicMessages: readonly TopicMessages[],
     acks: number,
     compression: CompressionType | undefined,
-  ): void {
+  ): number {
     if (topicMessages.some(({ topic }) => !topic)) {
       throw new KafkaNonRetriableError('Invalid topic');
     }
@@ -239,6 +229,7 @@ export function createMessageProducer({
       );
     }
 
+    let totalBytes = 0;
     for (const { topic, messages } of topicMessages) {
       if (!messages) {
         throw new KafkaNonRetriableError(`Invalid messages array [${String(messages)}] for topic "${topic}"`);
@@ -258,6 +249,7 @@ export function createMessageProducer({
         if (size > maxRequestSize) {
           throw new KafkaMessageTooLargeError({ size, maxRequestSize, topic });
         }
+        totalBytes += size;
       }
     }
 
@@ -265,7 +257,6 @@ export function createMessageProducer({
     // Produce request. This client doesn't split a single send/sendBatch call's records across
     // multiple requests, so - same as an over-bufferMemory call below - it rejects rather than
     // silently forwarding a request the broker would answer with MESSAGE_TOO_LARGE.
-    const totalBytes = topicMessagesBytes(topicMessages);
     if (totalBytes > maxRequestSize) {
       throw new KafkaMessageTooLargeError({ size: totalBytes, maxRequestSize });
     }
@@ -285,6 +276,8 @@ export function createMessageProducer({
         throw new KafkaNonRetriableError('ZSTD compression requires Produce API version 7 or higher (Kafka 2.1+)');
       }
     }
+
+    return totalBytes;
   }
 
   function mergeCallTopicMessages(topicMessages: readonly TopicMessages[]): TopicMessages[] {
@@ -500,8 +493,8 @@ export function createMessageProducer({
     timeout: number,
     compression: CompressionType | undefined,
     compressionLevel: number | undefined,
+    bytes: number,
   ): Promise<RecordMetadata[]> {
-    const bytes = topicMessagesBytes(topicMessages);
     await reserveBuffer(bytes, timeout);
 
     let resolve!: (metadata: RecordMetadata[]) => void;
@@ -546,7 +539,7 @@ export function createMessageProducer({
     const resolvedCompression = compression ?? defaultCompression;
     const resolvedCompressionLevel = compressionLevel ?? defaultCompressionLevel;
 
-    validateBatch(topicMessages, resolvedAcks, resolvedCompression);
+    const totalBytes = validateBatch(topicMessages, resolvedAcks, resolvedCompression);
     const mergedTopicMessages = mergeCallTopicMessages(topicMessages);
 
     // `runHooks` is async, so awaiting it always costs a microtask tick even when there is
@@ -565,7 +558,14 @@ export function createMessageProducer({
     const produce =
       lingerMs <= 0
         ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression, resolvedCompressionLevel)
-        : enqueue(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression, resolvedCompressionLevel);
+        : enqueue(
+            mergedTopicMessages,
+            resolvedAcks,
+            resolvedTimeout,
+            resolvedCompression,
+            resolvedCompressionLevel,
+            totalBytes,
+          );
 
     const settled = rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
     if (!hooks?.onAck?.length) return settled;

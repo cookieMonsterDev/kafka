@@ -3,11 +3,11 @@ import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { readJsonFile } from '../../admin/read-json-file';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
-import { EXIT_CODES } from '../../errors/exit-codes';
+import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
-import { mapWithConcurrency } from './concurrency';
+import { mapWithConcurrency } from '../../concurrency';
 
 const CONCURRENCY = 8;
 const FROM_FILE_FLAG = 'from-file';
@@ -130,10 +130,7 @@ export const topicDeleteRecordsCommand: CommandSpec = {
         json: () => stringifyJsonSafe({ results }),
       });
 
-      const okCount = results.filter((r) => r.ok).length;
-      if (okCount === results.length) return EXIT_CODES.ok;
-      if (okCount === 0) return EXIT_CODES.operationFailed;
-      return EXIT_CODES.partialBatch;
+      return exitForBatchResults(results, (r) => r.ok);
     } finally {
       await admin.disconnect();
     }

@@ -8,7 +8,7 @@ import { DocsMobileNav } from '@/components/docs-mobile-nav'
 import { DocsSearch } from '@/components/docs-search'
 import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
-import { docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
+import { DOCS_PACKAGE_META, docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
 import { getSearchIndex } from '@/lib/search-index'
 import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, THEME_STORAGE_KEY } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -20,7 +20,6 @@ interface Props {
 }
 
 const { title, description, docs = false } = Astro.props
-const documentTitle = title ? `Kafka | Core | ${title}` : 'Kafka | Core'
 const canonicalUrl = Astro.url.href
 const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
 const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
@@ -28,6 +27,8 @@ const searchIndex = await getSearchIndex()
 const pathname = Astro.url.pathname
 const navPackages = docsNavPackages(await getCollection('docs'))
 const currentPackage = docsPackageFromPathname(pathname)
+const currentPackageLabel = DOCS_PACKAGE_META[currentPackage].label
+const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kafka | ${currentPackageLabel}`
 ---
 
 <!doctype html>

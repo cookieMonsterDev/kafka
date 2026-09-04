@@ -192,7 +192,10 @@ export function createEosManager({
           producerId = result.producerId;
           producerEpoch = result.producerEpoch;
           producerSequence.clear();
-          partitionGates.clear();
+          // Partition gates are left in place (not cleared): a gate is just a per-partition mutex,
+          // and dropping it here would let a currently in-flight Produce - still holding the old
+          // Lock object - get silently replaced by a fresh, already-unlocked one on its next
+          // acquire/release, breaking the exclusivity guarantee across this epoch bump.
 
           logger.debug('Initialized producer id & epoch', { producerId: producerId.toString(), producerEpoch });
         } catch (e) {

@@ -1,19 +1,11 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { redactSecrets } from '../../admin/redact';
-import { CliUsageError } from '../../args/coerce';
+import { coerceBigInt } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { bigintAwareReplacer } from '../../output/bigint-replacer';
 import { stringifyJsonSafe } from '../../output/json';
 import { parsePrincipalFlag, parsePrincipalFlags } from './principal';
-
-function parseBigIntFlag(raw: string, flagName: string): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
-  }
-}
 
 export const tokenCreateCommand: CommandSpec = {
   path: ['token', 'create'],
@@ -46,7 +38,7 @@ export const tokenCreateCommand: CommandSpec = {
     const renewers = parsePrincipalFlags(flags.renewer as string[] | undefined, 'renewer');
     const maxLifeTimeMsFlag = flags['max-life-time-ms'] as string | undefined;
     const maxLifeTimeMs =
-      maxLifeTimeMsFlag !== undefined ? parseBigIntFlag(maxLifeTimeMsFlag, 'max-life-time-ms') : undefined;
+      maxLifeTimeMsFlag !== undefined ? coerceBigInt(maxLifeTimeMsFlag, 'max-life-time-ms') : undefined;
 
     const brokers = parseBrokersFlag(flags.brokers);
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });

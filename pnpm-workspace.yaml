@@ -25,5 +25,9 @@ engineStrict: true
 # instead of falling back to a too-new release.
 minimumReleaseAge: 1440
 # esbuild ships a platform-specific binary and needs its install script to run.
+# kerberos is an optional peer of @cookiemonsterdev/kafka-core (SASL/GSSAPI) — pnpm resolves it
+# as an optional peer dependency, but its native build script does not need to run for the
+# monorepo itself, which never imports it.
 allowBuilds:
   esbuild: true
+  kerberos: false

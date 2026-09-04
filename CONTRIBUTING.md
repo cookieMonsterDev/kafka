@@ -35,6 +35,8 @@ pnpm test          # unit tests only (never starts Docker)
 pnpm clean         # build output and node_modules (re-run pnpm install after)
 ```
 
+CI's `typecheck` step excludes `@cookiemonsterdev/kafka-docs` — its `astro check` fails under the current TypeScript catalog pin (a known, pre-existing issue). `pnpm typecheck` from the repo root still runs it, so check docs locally before relying on CI for it.
+
 `pnpm -r` walks the workspace graph, so `@cookiemonsterdev/kafka-core` compiles before `@cookiemonsterdev/kafka-docs` imports it.
 
 ### One package

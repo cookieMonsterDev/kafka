@@ -934,6 +934,64 @@ describe('consumer/consumer-group', () => {
     expect(setDefaultOffset).toHaveBeenCalledWith({ topic: 'topic1', partition: 0 });
   });
 
+  describe('recoverFromOffsetOutOfRange', () => {
+    it('retries from the leader without resetting offsets when the partition has a tracked preferred replica', async () => {
+      const consumerGroup = createGroup();
+      consumerGroup.preferredReadReplicasPerTopicPartition = {
+        topic1: { 0: { nodeId: 5, expireAt: Date.now() + 60_000 } },
+      };
+      const setDefaultOffset = vi.fn(async () => undefined);
+      consumerGroup.offsetManager = { setDefaultOffset } as unknown as OffsetManager;
+
+      const error = Object.assign(new Error('offset out of range'), { topic: 'topic1', partition: 0 });
+      await consumerGroup.recoverFromOffsetOutOfRange(error);
+
+      expect(setDefaultOffset).not.toHaveBeenCalled();
+      expect(consumerGroup.preferredReadReplicasPerTopicPartition.topic1?.[0]).toBeUndefined();
+    });
+
+    it('resets to the default offset when the partition has no tracked preferred replica', async () => {
+      const consumerGroup = createGroup();
+      const setDefaultOffset = vi.fn(async () => undefined);
+      consumerGroup.offsetManager = { setDefaultOffset } as unknown as OffsetManager;
+
+      const error = Object.assign(new Error('offset out of range'), { topic: 'topic1', partition: 0 });
+      await consumerGroup.recoverFromOffsetOutOfRange(error);
+
+      expect(setDefaultOffset).toHaveBeenCalledWith({ topic: 'topic1', partition: 0 });
+    });
+  });
+
+  describe('findReadReplicaForPartitions', () => {
+    it('falls back to the leader when the tracked preferred replica is in offlineReplicas', () => {
+      const consumerGroup = createGroup();
+      consumerGroup.cluster = {
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, offlineReplicas: [5] }]),
+      } as unknown as Cluster;
+      consumerGroup.preferredReadReplicasPerTopicPartition = {
+        topic1: { 0: { nodeId: 5, expireAt: Date.now() + 60_000 } },
+      };
+
+      const result = consumerGroup.findReadReplicaForPartitions('topic1', [0]);
+
+      expect(result).toEqual({ '1': [0] });
+    });
+
+    it('keeps using the preferred replica when only the leader is in offlineReplicas', () => {
+      const consumerGroup = createGroup();
+      consumerGroup.cluster = {
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1, offlineReplicas: [1] }]),
+      } as unknown as Cluster;
+      consumerGroup.preferredReadReplicasPerTopicPartition = {
+        topic1: { 0: { nodeId: 5, expireAt: Date.now() + 60_000 } },
+      };
+
+      const result = consumerGroup.findReadReplicaForPartitions('topic1', [0]);
+
+      expect(result).toEqual({ '5': [0] });
+    });
+  });
+
   it('caches getActiveTopicPartitions until pause, resume, or assign', () => {
     const consumerGroup = createGroup();
     consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);

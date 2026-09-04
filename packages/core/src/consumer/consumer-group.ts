@@ -1358,9 +1358,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   async recoverFromOffsetOutOfRange(e: Error & { topic?: string; partition?: number }): Promise<void> {
     const preferredReadReplicas = e.topic ? this.preferredReadReplicasPerTopicPartition[e.topic] : undefined;
-    // The stored value is `{ nodeId, expireAt }`, so `typeof ... === 'number'` is never true and
-    // this always resets to the default offset. Preserved from the original implementation.
-    if (preferredReadReplicas && e.partition != null && typeof preferredReadReplicas[e.partition] === 'number') {
+    if (preferredReadReplicas && e.partition != null && preferredReadReplicas[e.partition] != null) {
       this.logger.info('Offset out of range while fetching from follower, retrying with leader', {
         topic: e.topic,
         partition: e.partition,
@@ -1547,8 +1545,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           delete preferredReadReplicas[partitionId];
         } else if (preferredReadReplica != null) {
           const offlineReplicas = metadata.offlineReplicas;
-          // Checks the leader (`nodeId`), not the preferred replica. Preserved from the original.
-          if (Array.isArray(offlineReplicas) && offlineReplicas.includes(nodeId)) {
+          if (Array.isArray(offlineReplicas) && offlineReplicas.includes(preferredReadReplica)) {
             this.logger.debug('Preferred read replica is offline, using leader', {
               topic,
               partitionId,

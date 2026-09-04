@@ -163,8 +163,18 @@ export class ShareRunner {
     }
 
     this.running = true;
-    void this.#heartbeatLoop();
-    void this.#loop();
+    void this.#heartbeatLoop().catch((error: unknown) => {
+      this.running = false;
+      this.#logger.error(`Unhandled error in heartbeat loop: ${(error as Error).message}`, {
+        stack: (error as Error).stack,
+      });
+    });
+    void this.#loop().catch((error: unknown) => {
+      this.running = false;
+      this.#logger.error(`Unhandled error in fetch loop: ${(error as Error).message}`, {
+        stack: (error as Error).stack,
+      });
+    });
   }
 
   async stop(): Promise<void> {

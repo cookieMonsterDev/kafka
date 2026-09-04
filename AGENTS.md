@@ -10,7 +10,7 @@ agent-specific constraints on top.
 
 ## What this is
 
-`@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for Node.js that speaks the Kafka wire protocol directly (no native/JVM dependency): it negotiates API versions with the broker via `ApiVersions`, uses `bigint` for offsets, and supports brokers from Kafka 0.10 onward. `@cookiemonsterdev/kafka-docs` is the Astro documentation site. This is a pnpm workspace (`packages/core`, `packages/docs`); the workspace itself is not published to npm.
+`@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for Node.js that speaks the Kafka wire protocol directly (no native/JVM dependency): it negotiates API versions with the broker via `ApiVersions`, uses `bigint` for offsets, and supports brokers from Kafka 0.10 onward. `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client built on core, and `@cookiemonsterdev/kafka-docs` is the Astro documentation site. This is a pnpm workspace (`packages/core`, `packages/config`, `packages/cli`, `packages/docs`); the workspace root itself is not published to npm.
 
 ## Follow CONTRIBUTING.md
 
@@ -40,7 +40,7 @@ or **N/A** with a one-line reason. Do not skip silently.
    - New or changed broker behavior: integration tests in `packages/core/test/suites/**`, version-gated with helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …). Do not parse `KAFKA_VERSION` in the test file.
    - Unit tests never start Docker. Integration tests need Docker unless `KAFKA_EXTERNAL=1`.
 4. **Docs**
-   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/core/` (sections: **start**, **guides**, **reference**, **migration**). How to add a page: `packages/docs/README.md`.
+   - Public API, defaults, or compatibility: pages under `packages/docs/src/content/docs/<package>/` (`core`, `config`, or `cli`; sections: **start**, **guides**, **reference**, **integrations**, **migration**). How to add a page: `packages/docs/README.md`.
    - Workflow, commands, or package usage: the relevant package README and/or [CONTRIBUTING.md](CONTRIBUTING.md).
    - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
    - UI change in `packages/docs` (layout, component, or CSS): follow **Documentation site → Accessibility** in [CONTRIBUTING.md](CONTRIBUTING.md). Keyboard, names, focus, contrast, and `prefers-reduced-motion` are in scope for the PR, not a follow-up.
@@ -119,7 +119,7 @@ TypeScript is strict (`noUncheckedIndexedAccess`, `noImplicitOverride`), `verbat
 
 ## Documentation
 
-Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page (`/docs/core/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
+Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page (`/docs/core/start/introduction/`, and so on). Sections: **start**, **guides**, **reference**, **integrations**, **migration**. Nested folders become URL segments. After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`. Update docs or READMEs when the public API or workflow changes. How to add a page: `packages/docs/README.md`.
 
 When the change touches docs **UI** (`packages/docs/src/{layouts,components,pages,styles}`), accessibility is part of the change, not optional polish. Match [CONTRIBUTING.md](CONTRIBUTING.md) **Documentation site → Accessibility**. In particular:
 

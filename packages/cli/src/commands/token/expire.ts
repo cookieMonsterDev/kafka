@@ -1,5 +1,5 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError } from '../../args/coerce';
+import { coerceBigInt } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
@@ -8,14 +8,6 @@ import { resolveHmacFlag } from './hmac';
 
 /** `kafka-delegation-tokens.sh --expiry-time-period -1`'s sentinel for "expire immediately". */
 const EXPIRE_IMMEDIATELY = -1n;
-
-function parseBigIntFlag(raw: string, flagName: string): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
-  }
-}
 
 export const tokenExpireCommand: CommandSpec = {
   path: ['token', 'expire'],
@@ -39,7 +31,7 @@ export const tokenExpireCommand: CommandSpec = {
     const expiryTimePeriodMsFlag = flags['expiry-time-period-ms'] as string | undefined;
     const expiryTimePeriodMs =
       expiryTimePeriodMsFlag !== undefined
-        ? parseBigIntFlag(expiryTimePeriodMsFlag, 'expiry-time-period-ms')
+        ? coerceBigInt(expiryTimePeriodMsFlag, 'expiry-time-period-ms')
         : EXPIRE_IMMEDIATELY;
 
     await confirmDestructive({

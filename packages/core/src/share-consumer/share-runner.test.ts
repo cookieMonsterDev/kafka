@@ -448,6 +448,83 @@ describe('share-consumer/share-runner', () => {
     });
   });
 
+  it('observes a heartbeat-loop rejection instead of leaving it unhandled, and invokes onCrash', async () => {
+    const heartbeatError = new Error('heartbeat boom');
+    const { shareGroup } = createShareGroup({
+      heartbeat: vi.fn().mockRejectedValue(heartbeatError),
+      getNodeIds: vi.fn().mockReturnValue([]),
+    });
+    const onCrash = vi.fn().mockImplementation((error: Error) => {
+      throw error;
+    });
+
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 10,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(onCrash).toHaveBeenCalledWith(heartbeatError));
+      await vi.waitFor(() => expect(runner.running).toBe(false));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandledRejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
+  it('observes a fetch-loop rejection instead of leaving it unhandled, and invokes onCrash', async () => {
+    const fetchError = new Error('fetch boom');
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockRejectedValue(fetchError),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker: vi.fn(),
+      },
+    });
+    const onCrash = vi.fn().mockImplementation((error: Error) => {
+      throw error;
+    });
+
+    const unhandledRejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      unhandledRejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(onCrash).toHaveBeenCalledWith(fetchError));
+      await vi.waitFor(() => expect(runner.running).toBe(false));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandledRejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
   it('emits ACKNOWLEDGE for the explicit ShareAcknowledge sent when a share session closes', async () => {
     // Mirrors the "fetches acquired records..." scenario: `eachMessage` shuts the runner down
     // synchronously as it handles the record, so the ACCEPT ack is queued but the runner never

@@ -2,7 +2,25 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      Sets the theme before first paint, so there's no flash of the wrong theme. The storage key
+      and colors here are literals, not imports — Vite doesn't process this file's inline scripts
+      through the module graph — and must be kept in sync by hand with src/web/lib/theme.ts.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('kafka-studio-theme:v1');
+          var dark = stored ? stored === 'dark' : true;
+          document.documentElement.classList.toggle('dark', dark);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#1c1d1a' : '#ffffff');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1c1d1a" />
+    <meta name="color-scheme" content="dark light" />
     <title>Kafka Studio</title>
   </head>
   <body>

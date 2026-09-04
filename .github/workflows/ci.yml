@@ -58,6 +58,7 @@ jobs:
       - run: pnpm test
       - run: node scripts/check-publishable-deps.mjs
       - run: pnpm docs:generate:cli:check
+      - run: pnpm theme:check
 
   integration-matrix:
     name: Integration matrix

@@ -22,6 +22,7 @@
     "prepare": "husky",
     "docs:generate:cli": "node scripts/generate-cli-docs.mjs",
     "docs:generate:cli:check": "node scripts/generate-cli-docs.mjs --check",
+    "theme:check": "node scripts/check-theme-drift.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
   },

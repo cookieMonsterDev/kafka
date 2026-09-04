@@ -57,6 +57,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: pnpm test
       - run: node scripts/check-publishable-deps.mjs
+      - run: pnpm docs:generate:cli:check
 
   integration-matrix:
     name: Integration matrix

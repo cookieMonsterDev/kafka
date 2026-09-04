@@ -1,9 +1,8 @@
-import { createRoute, createRouter } from '@tanstack/react-router';
+import { createRouter } from '@tanstack/react-router';
+import { clusterRoute } from './routes/cluster';
 import { rootRoute } from './routes/root';
 
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => null });
-
-const routeTree = rootRoute.addChildren([indexRoute]);
+const routeTree = rootRoute.addChildren([clusterRoute]);
 
 export const router = createRouter({ routeTree });
 

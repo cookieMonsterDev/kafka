@@ -25,7 +25,7 @@ function getPageInfo(pathname: string): { readonly title: string; readonly crumb
   return { title: 'Kafka Studio', crumbs: [] };
 }
 
-/** Breadcrumb + page title, a topic-jump search box, and a refresh action — see plan §1.5. */
+/** Breadcrumb + page title, a topic-jump search box, and a refresh action. */
 export function Topbar() {
   const { isMobile, openMobileNav } = useAppShell();
   const pathname = useLocation({ select: (location) => location.pathname });

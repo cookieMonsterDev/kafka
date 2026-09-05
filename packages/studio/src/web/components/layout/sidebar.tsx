@@ -15,7 +15,7 @@ export interface SidebarContentProps {
 /**
  * The workspace nav, profile switcher, and connection pill — shared verbatim between the fixed
  * sidebar and the mobile drawer (`MobileNavSheet`) so the two chrome states can never drift apart
- * or leave a control missing on one of them (D9).
+ * or leave a control missing on one of them.
  */
 export function SidebarContent({ collapsed, onNavigate }: SidebarContentProps) {
   return (

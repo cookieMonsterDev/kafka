@@ -19,10 +19,10 @@ export interface ConnectionStatusProps {
 }
 
 /**
- * Sidebar-footer reachability pill — the mock's full "cluster health / uptime" card would just
- * duplicate the cluster-overview page (§1.5), so this only answers one question: is the studio
- * server itself still there. `role="status"` carries the text so it announces on change without a
- * separate live region, and the label is never conveyed by color alone.
+ * Sidebar-footer reachability pill — a full "cluster health / uptime" card would just duplicate
+ * the cluster-overview page, so this only answers one question: is the studio server itself still
+ * there. `role="status"` carries the text so it announces on change without a separate live
+ * region, and the label is never conveyed by color alone.
  */
 export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
   const { data, isError } = useQuery({

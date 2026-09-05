@@ -63,11 +63,11 @@ export interface AppShellProps {
 }
 
 /**
- * Owns the one "is the sidebar visible, and how" state machine described in the plan: a single
- * `md` breakpoint switches between an off-canvas drawer and fixed chrome, and a persisted choice
- * (desktop defaults expanded, narrower fixed widths default collapsed on first visit) controls the
- * fixed chrome's icon-only state. Descendants read it through `useAppShell` rather than each
- * re-deriving viewport state.
+ * Owns the one "is the sidebar visible, and how" state machine: a single `md` breakpoint switches
+ * between an off-canvas drawer and fixed chrome, and a persisted choice (desktop defaults
+ * expanded, narrower fixed widths default collapsed on first visit) controls the fixed chrome's
+ * icon-only state. Descendants read it through `useAppShell` rather than each re-deriving viewport
+ * state.
  */
 export function AppShell({ children }: AppShellProps) {
   const isMobile = !useMediaQuery(NOT_MOBILE_QUERY);

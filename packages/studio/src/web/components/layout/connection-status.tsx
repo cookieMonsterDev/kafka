@@ -1,66 +1,80 @@
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { fetchHealth, healthQueryKey } from '../../lib/api';
 import { cn } from '../../lib/utils';
-
-interface HealthResponse {
-  readonly status: string;
-}
 
 const HEALTH_POLL_INTERVAL_MS = 15_000;
 
-async function fetchHealth(): Promise<HealthResponse> {
-  const res = await fetch('/api/health');
-  if (!res.ok) throw new Error(`GET /api/health failed with ${String(res.status)}`);
-  return (await res.json()) as HealthResponse;
-}
+type ConnectionState = 'connecting' | 'connected' | 'unreachable';
+
+const STATE_LABEL: Record<ConnectionState, string> = {
+  connecting: 'Connecting…',
+  connected: 'Connected',
+  unreachable: 'Unreachable',
+};
+
+const STATE_DOT: Record<ConnectionState, string> = {
+  connecting: 'bg-muted-foreground',
+  connected: 'bg-primary',
+  unreachable: 'bg-destructive',
+};
 
 export interface ConnectionStatusProps {
   readonly collapsed: boolean;
 }
 
 /**
- * Sidebar-footer reachability pill — a full "cluster health / uptime" card would just duplicate
+ * Sidebar-footer reachability card — a full "cluster health / uptime" card would just duplicate
  * the cluster-overview page, so this only answers one question: is the studio server itself still
  * there. `role="status"` carries the text so it announces on change without a separate live
- * region, and the label is never conveyed by color alone.
+ * region, and the state is never conveyed by color alone.
  */
 export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
-  const { data, isError } = useQuery({
-    queryKey: ['health'],
+  const { data, isPending, isError } = useQuery({
+    queryKey: healthQueryKey,
     queryFn: fetchHealth,
     refetchInterval: HEALTH_POLL_INTERVAL_MS,
     retry: false,
   });
 
-  const connected = data !== undefined && !isError;
-  const label = connected ? 'Connected' : 'Unreachable';
+  const state: ConnectionState = isPending ? 'connecting' : isError ? 'unreachable' : 'connected';
+  const label = STATE_LABEL[state];
 
-  const pill = (
-    <div
-      // Focusable only in the collapsed state, where it's the Tooltip's trigger — a keyboard user
-      // needs a stop to focus before the tooltip can show; in the expanded state the text is
-      // already visible, so adding a tab stop here would just be a dead end.
-      tabIndex={collapsed ? 0 : undefined}
-      className={cn(
-        'flex items-center gap-2 rounded-md px-1 py-1 text-xs text-muted-foreground outline-none',
-        collapsed && 'focus-visible:ring-3 focus-visible:ring-ring/50',
-      )}
-      role="status"
-    >
-      <span
-        aria-hidden="true"
-        className={cn('size-2 shrink-0 rounded-full', connected ? 'bg-emerald-500' : 'bg-destructive')}
-      />
-      <span className={collapsed ? 'sr-only' : 'truncate'}>{label}</span>
-    </div>
-  );
-
-  if (!collapsed) return pill;
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/*
+            Focusable only in the collapsed state, where it's the Tooltip's trigger — a keyboard
+            user needs a stop to focus before the tooltip can show; expanded, the text is already
+            visible, so a tab stop there would just be a dead end.
+          */}
+          <div
+            tabIndex={0}
+            role="status"
+            className="flex h-10 items-center justify-center rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', STATE_DOT[state])} />
+            <span className="sr-only">{label}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{pill}</TooltipTrigger>
-      <TooltipContent side="right">{label}</TooltipContent>
-    </Tooltip>
+    <div role="status" className="rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[0.6875rem] font-medium tracking-[0.1em] text-muted-foreground uppercase">
+          Connection
+        </span>
+        <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', STATE_DOT[state])} />
+      </div>
+      <p className="mt-1.5 truncate text-sm font-medium">{label}</p>
+      <p className="truncate text-xs text-muted-foreground">
+        {data?.readOnly === true ? 'Studio server · read-only' : 'Studio server'}
+      </p>
+    </div>
   );
 }

@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
 import { ConnectionStatus } from './connection-status';
+import { ProfileSwitcher } from './profile-switcher';
 import { SidebarNav } from './sidebar-nav';
 
 /** Fixed desktop/tablet chrome. Renders nothing on mobile — the drawer takes over there instead. */
@@ -23,6 +24,9 @@ export function Sidebar() {
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         <SidebarNav collapsed={collapsed} />
+      </div>
+      <div className="border-t border-border p-2">
+        <ProfileSwitcher collapsed={collapsed} />
       </div>
       <div className="border-t border-border p-2">
         <ConnectionStatus collapsed={collapsed} />

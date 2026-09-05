@@ -1,5 +1,4 @@
 import { Link, Outlet, createRootRoute } from '@tanstack/react-router';
-import { ProfileSwitcher } from '../components/layout/profile-switcher';
 import { ThemeToggle } from '../components/layout/theme-toggle';
 
 export const rootRoute = createRootRoute({ component: RootLayout });
@@ -34,7 +33,6 @@ function RootLayout() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <ProfileSwitcher />
           <ThemeToggle />
         </div>
       </header>

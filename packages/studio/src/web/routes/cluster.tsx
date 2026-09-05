@@ -38,7 +38,7 @@ function Stat({
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-3">
-      <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-muted-foreground uppercase">{label}</p>
+      <p className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">{label}</p>
       {pending ? (
         <Skeleton className="mt-1.5 h-6 w-20" />
       ) : (

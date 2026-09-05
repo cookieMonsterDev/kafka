@@ -76,7 +76,7 @@ export function Toaster() {
               {message.title}
             </ToastPrimitive.Title>
             {message.description !== undefined && (
-              <ToastPrimitive.Description className="mt-0.5 text-sm break-words text-muted-foreground">
+              <ToastPrimitive.Description className="mt-0.5 text-sm wrap-break-word text-muted-foreground">
                 {message.description}
               </ToastPrimitive.Description>
             )}

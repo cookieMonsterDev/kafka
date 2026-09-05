@@ -160,7 +160,7 @@ function TopicsPage() {
               aria-label="Topics table, scroll horizontally for more columns"
               className="overflow-x-auto"
             >
-              <div className="min-w-[32rem]">
+              <div className="min-w-lg">
                 <table className="w-full table-fixed text-sm">
                   <thead>
                     {table.getHeaderGroups().map((headerGroup) => (

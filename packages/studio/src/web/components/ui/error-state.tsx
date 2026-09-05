@@ -37,7 +37,7 @@ function ErrorState({ className, title, error, onRetry, retryLabel = 'Try again'
         <TriangleAlert className="size-5 text-destructive" aria-hidden="true" />
       </span>
       <p className="text-sm font-medium">{title}</p>
-      {message !== undefined && <p className="max-w-sm text-sm break-words text-muted-foreground">{message}</p>}
+      {message !== undefined && <p className="max-w-sm text-sm wrap-break-word text-muted-foreground">{message}</p>}
       {onRetry !== undefined && (
         <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>
           {retryLabel}

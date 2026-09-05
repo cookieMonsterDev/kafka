@@ -23,7 +23,7 @@ export function BrandMark({ className }: { readonly className?: string }) {
         className,
       )}
     >
-      <img src="/logo-mark.svg" alt="" width="22" height="22" className="size-[22px]" />
+      <img src="/logo-mark.svg" alt="" width="22" height="22" className="size-5.5" />
     </span>
   );
 }
@@ -41,7 +41,7 @@ function DocumentationLink({ collapsed, onNavigate }: SidebarContentProps) {
         collapsed && 'justify-center px-0',
       )}
     >
-      <BookOpen className="size-[18px] shrink-0" aria-hidden="true" />
+      <BookOpen className="size-4.5 shrink-0" aria-hidden="true" />
       <span className={collapsed ? 'sr-only' : 'truncate'}>Documentation</span>
     </a>
   );

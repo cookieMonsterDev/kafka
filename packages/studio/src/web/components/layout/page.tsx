@@ -23,18 +23,19 @@ export function PageLayout({ toolbar, rail, railLabel, children }: PageLayoutPro
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {toolbar !== undefined && (
         // `min-h`, not `h` — a toolbar dense enough to wrap must grow the row, not overflow it.
-        <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-2 lg:px-6">
+        // `pb-0`: the content area below supplies the one gap after the toolbar, so every page gets
+        // the same amount of breathing room whether or not it has a toolbar.
+        <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 pt-2 pb-0 lg:px-6">
           {toolbar}
         </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-1 xl:overflow-hidden">
         <div
           className={cn(
-            'min-w-0 flex-1 overflow-y-auto p-4 lg:p-6',
-            // The toolbar row already leaves breathing room under its controls; a full top pad
-            // on top of that reads as a hole between the two.
-            toolbar !== undefined && 'pt-0 lg:pt-0',
-            rail !== undefined && 'xl:pr-6',
+            'min-w-0 flex-1 overflow-y-auto p-4 [scrollbar-gutter:stable] lg:p-6',
+            // The rail supplies its own left padding as the gap to the content beside it — matching
+            // content's own padding on top of that would make the right gap wider than the left one.
+            rail !== undefined && 'xl:pr-0',
           )}
         >
           <div className="mx-auto w-full max-w-[110rem]">{children}</div>
@@ -48,7 +49,7 @@ export function PageLayout({ toolbar, rail, railLabel, children }: PageLayoutPro
         {rail !== undefined && (
           <aside
             aria-label={railLabel ?? 'Details'}
-            className="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border bg-sidebar p-4 xl:flex"
+            className="hidden w-80 shrink-0 flex-col gap-4 overflow-y-auto bg-sidebar p-4 [scrollbar-gutter:stable] xl:flex"
           >
             {rail}
           </aside>

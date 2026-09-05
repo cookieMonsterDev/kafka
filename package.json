@@ -13,6 +13,7 @@
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "dev": "pnpm -r --parallel --if-present run dev",
+    "studio:dev": "pnpm --filter @cookiemonsterdev/kafka-studio... run build && pnpm --filter @cookiemonsterdev/kafka-studio run dev:server",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "eslint .",
@@ -22,6 +23,7 @@
     "prepare": "husky",
     "docs:generate:cli": "node scripts/generate-cli-docs.mjs",
     "docs:generate:cli:check": "node scripts/generate-cli-docs.mjs --check",
+    "theme:check": "node scripts/check-theme-drift.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
   },

@@ -156,6 +156,7 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 - New broker behavior should use the version helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …) instead of parsing `KAFKA_VERSION` in the test file.
 - Docs UI changes must keep [accessibility](#accessibility) (keyboard, names, focus, contrast, reduced motion).
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
+- Before opening a PR that touches `packages/studio/src/web` (or `packages/docs`'s React islands), run `npx react-doctor@latest` against the package and fix what it flags — it catches hook-dependency and render-performance mistakes the type checker and ESLint don't.
 
 ### Labels
 
@@ -240,12 +241,12 @@ Required for UI changes:
   be scrolled from the keyboard.
 - **Motion and zoom** — Honor `prefers-reduced-motion`. Do not set `user-scalable=no` or
   `maximum-scale=1` on the viewport.
-- **Status** — Copy, search results, and theme changes announce through `aria-live="polite"`.
-  Do not use color as the only indicator (current page, warning callouts, copied state).
+- **Status** — Copy and search results announce through `aria-live="polite"`. Do not use color
+  as the only indicator (current page, warning callouts, copied state).
 - **Contrast and targets** — Text meets 4.5:1 (AA); UI focus indicators meet 3:1. Prefer at
-  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). Light
-  `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not lighten them
-  for aesthetics.
+  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). The
+  dark-only `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not dim
+  them for aesthetics.
 
 Markdown-only edits: every page keeps a meaningful `title` and `description`. Images need
 `alt`. Tables need header cells. Do not convey meaning with color or emoji alone.
@@ -265,8 +266,8 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 | `@cookiemonsterdev/kafka-docs`   | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)               |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
-2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
-3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then docs, so a package that comes later always builds against the freshly-released version of the ones before it.
+2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `studio` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
+3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then studio, then docs, so a package that comes later always builds against the freshly-released version of the ones before it. A package registered here before it has its own `release.config.js` (e.g. `studio`, mid-development) is skipped with a warning rather than crashing the chain.
 4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
 5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
 6. **Recovering a half-failed release:** if one package fails mid-chain (say cli), `release-chain.mjs` stops there without running the packages after it — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.

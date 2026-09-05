@@ -48,7 +48,7 @@ const { prev, next } = neighbors(entries, entry.id)
   prev={prev ? { href: hrefFor(prev), label: navLabel(prev) } : undefined}
   next={next ? { href: hrefFor(next), label: navLabel(next) } : undefined}
 >
-  <article class="prose prose-neutral dark:prose-invert min-w-0 max-w-none">
+  <article class="prose prose-neutral prose-invert min-w-0 max-w-none">
     <h1>{entry.data.title}</h1>
     <Content />
   </article>

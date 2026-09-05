@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      The studio is dark-only, so there is no theme to resolve before first paint. This hex is the
+      sRGB mirror of `--background` in src/web/styles/theme.css — Vite doesn't process this file
+      through the module graph, so keep the two in sync by hand.
+    -->
+    <meta name="theme-color" content="#070b09" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Kafka | Studio</title>
+    <!--
+      The splash is inline, ahead of the module script, so it paints on the very first frame
+      instead of waiting for the bundle. Colors are literals for the same reason as the ones
+      above. `src/web/lib/splash.ts` removes it once the app has actually mounted.
+    -->
+    <style>
+      #studio-splash {
+        position: fixed;
+        z-index: 200;
+        inset: 0;
+        display: flex;
+        overflow: hidden;
+        align-items: center;
+        justify-content: center;
+        background-color: #070b09;
+        transition: opacity 320ms ease-out;
+      }
+
+      #studio-splash[data-leaving] {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* One element, one box-shadow: a static field of accent points, radially faded so it
+         reads as signal density rather than a starfield. */
+      .studio-splash-field {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        height: 2px;
+        width: 2px;
+        border-radius: 50%;
+        background-color: transparent;
+        box-shadow:
+          24vw 9vh 0 0 #00c387,
+          12vw -24vh 0 0 #00c387,
+          -45vw -22vh 0 0 #00c387,
+          -37vw -40vh 0 0 #00c387,
+          29vw 19vh 0 0 #00c387,
+          4vw -8vh 0 0 #00c387,
+          -5vw 21vh 0 0 #00c387,
+          -27vw 26vh 0 0 #00c387,
+          -47vw -3vh 0 0 #00c387,
+          -28vw -30vh 0 0 #00c387,
+          -43vw -27vh 0 0 #00c387,
+          4vw 22vh 0 0 #00c387,
+          36vw 23vh 0 0 #00c387,
+          -21vw 24vh 0 0 #00c387,
+          -16vw 2vh 0 0 #00c387,
+          5vw 26vh 0 0 #00c387,
+          -34vw 41vh 0 0 #00c387,
+          1vw 42vh 0 0 #00c387,
+          11vw -13vh 0 0 #00c387,
+          48vw -8vh 0 0 #00c387,
+          22vw -15vh 0 0 #00c387,
+          43vw -27vh 0 0 #00c387,
+          20vw -2vh 0 0 #00c387,
+          8vw 22vh 0 0 #00c387,
+          -21vw -11vh 0 0 #00c387,
+          -40vw 45vh 0 0 #00c387,
+          11vw -30vh 0 0 #00c387,
+          26vw 30vh 0 0 #00c387,
+          45vw -29vh 0 0 #00c387,
+          -2vw 18vh 0 0 #00c387,
+          -29vw -45vh 0 0 #00c387,
+          -7vw -27vh 0 0 #00c387,
+          42vw 24vh 0 0 #00c387,
+          -36vw -18vh 0 0 #00c387,
+          -44vw 13vh 0 0 #00c387,
+          36vw 16vh 0 0 #00c387,
+          18vw 11vh 0 0 #00c387,
+          -15vw -23vh 0 0 #00c387,
+          27vw -45vh 0 0 #00c387,
+          -2vw -24vh 0 0 #00c387,
+          -43vw 13vh 0 0 #00c387,
+          7vw 27vh 0 0 #00c387,
+          47vw 5vh 0 0 #00c387,
+          -5vw -28vh 0 0 #00c387,
+          38vw 25vh 0 0 #00c387,
+          -39vw -1vh 0 0 #00c387,
+          49vw 13vh 0 0 #00c387,
+          19vw -28vh 0 0 #00c387,
+          21vw 21vh 0 0 #00c387,
+          -15vw -15vh 0 0 #00c387,
+          -6vw -42vh 0 0 #00c387,
+          -23vw 25vh 0 0 #00c387,
+          -31vw -19vh 0 0 #00c387,
+          4vw 37vh 0 0 #00c387,
+          3vw -25vh 0 0 #00c387,
+          -39vw 14vh 0 0 #00c387,
+          35vw -36vh 0 0 #00c387,
+          6vw 39vh 0 0 #00c387,
+          3vw -35vh 0 0 #00c387,
+          -44vw -2vh 0 0 #00c387,
+          -6vw 21vh 0 0 #00c387,
+          29vw -12vh 0 0 #00c387,
+          -42vw 32vh 0 0 #00c387,
+          34vw 15vh 0 0 #00c387,
+          28vw 2vh 0 0 #00c387;
+        opacity: 0.28;
+        animation: studio-splash-drift 18s ease-in-out infinite alternate;
+        mask-image: radial-gradient(ellipse 60% 55% at 50% 50%, transparent 12%, #000 55%, transparent 88%);
+      }
+
+      .studio-splash-mark {
+        position: relative;
+        display: flex;
+        height: 88px;
+        width: 88px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(0, 195, 135, 0.25);
+        border-radius: 22px;
+        background-color: rgba(0, 195, 135, 0.1);
+        animation: studio-splash-pulse 2s ease-in-out infinite;
+      }
+
+      .studio-splash-mark img {
+        height: 52px;
+        width: 52px;
+      }
+
+      @keyframes studio-splash-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.08);
+          opacity: 0.88;
+        }
+      }
+
+      @keyframes studio-splash-drift {
+        from {
+          transform: translate(-50%, -50%) scale(1);
+        }
+        to {
+          transform: translate(-50%, -50%) scale(1.35);
+        }
+      }
+
+      /* Motion is decoration here; the mark alone already says "starting". */
+      @media (prefers-reduced-motion: reduce) {
+        #studio-splash {
+          transition: none;
+        }
+        .studio-splash-field {
+          display: none;
+        }
+        .studio-splash-mark {
+          animation: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="studio-splash" aria-hidden="true">
+      <div class="studio-splash-field"></div>
+      <div class="studio-splash-mark">
+        <img src="/logo-mark.svg" alt="" width="52" height="52" />
+      </div>
+    </div>
+    <div id="root"></div>
+    <script>
+      // Shown once per tab. A reload, a bfcache restore, or a back/forward navigation is not a
+      // cold start, and replaying the intro on each of those is just a delay.
+      (function () {
+        try {
+          var seen = sessionStorage.getItem('kafka-studio-splash:v1') === '1';
+          var nav = performance.getEntriesByType('navigation')[0];
+          if (seen || (nav && nav.type === 'back_forward')) {
+            var el = document.getElementById('studio-splash');
+            if (el) el.remove();
+            return;
+          }
+          sessionStorage.setItem('kafka-studio-splash:v1', '1');
+        } catch (e) {
+          /* Private mode or blocked storage: show the splash, it just won't be suppressed later. */
+        }
+        window.addEventListener('pageshow', function (event) {
+          if (!event.persisted) return;
+          var el = document.getElementById('studio-splash');
+          if (el) el.remove();
+        });
+      })();
+    </script>
+    <script>
+      // Marks whichever element is actively scrolling with `data-scrolling` so
+      // `styles/theme.css` can show a scrollbar thumb only while it's in use, then fade it back
+      // out — matches the docs site (`packages/docs/src/layouts/BaseLayout.astro`).
+      (function () {
+        var timers = new WeakMap();
+        function mark(el) {
+          el.setAttribute('data-scrolling', '');
+          var prev = timers.get(el);
+          if (prev) window.clearTimeout(prev);
+          timers.set(
+            el,
+            window.setTimeout(function () {
+              el.removeAttribute('data-scrolling');
+              timers.delete(el);
+            }, 200),
+          );
+        }
+        document.addEventListener(
+          'scroll',
+          function (event) {
+            var target = event.target;
+            if (target === document || target === document.documentElement || target === document.body) {
+              mark(document.documentElement);
+              return;
+            }
+            if (target instanceof Element) mark(target);
+          },
+          { capture: true, passive: true },
+        );
+      })();
+    </script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

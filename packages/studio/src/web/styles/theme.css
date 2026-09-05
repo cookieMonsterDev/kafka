@@ -1,0 +1,142 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/geist';
+
+@property --scrollbar-alpha {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Dark-only. There is no `.dark` class and no light palette — see the READMEs. Keep this block
+   byte-identical to the one in packages/docs (scripts/check-theme-drift.mjs enforces it). */
+:root {
+  --background: oklch(0.145 0.008 160);
+  --foreground: oklch(0.965 0.004 160);
+  --card: oklch(0.2 0.009 160);
+  --card-foreground: oklch(0.965 0.004 160);
+  --popover: oklch(0.22 0.01 160);
+  --popover-foreground: oklch(0.965 0.004 160);
+  --primary: oklch(0.72 0.16 163);
+  --primary-foreground: oklch(0.18 0.03 165);
+  --secondary: oklch(0.24 0.009 160);
+  --secondary-foreground: oklch(0.965 0.004 160);
+  --muted: oklch(0.24 0.009 160);
+  --muted-foreground: oklch(0.68 0.016 160);
+  --accent: oklch(0.268 0.012 162);
+  --accent-foreground: oklch(0.98 0.004 160);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.72 0.16 163);
+  --chart-1: oklch(0.76 0.15 163);
+  --chart-2: oklch(0.79 0.15 75);
+  --chart-3: oklch(0.7 0.15 265);
+  --chart-4: oklch(0.72 0.18 350);
+  --chart-5: oklch(0.76 0.12 210);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.168 0.008 160);
+  --sidebar-foreground: oklch(0.965 0.004 160);
+  --sidebar-primary: oklch(0.72 0.16 163);
+  --sidebar-primary-foreground: oklch(0.18 0.03 165);
+  --sidebar-accent: oklch(0.268 0.012 162);
+  --sidebar-accent-foreground: oklch(0.98 0.004 160);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.72 0.16 163);
+}
+
+@layer base {
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  :where(a, button, summary, [role='button']):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Same thin, fade-on-scroll scrollbar as the docs site (`packages/docs/src/styles/global.css`) —
+     transparent track, a visible thumb only while `[data-scrolling]` is set (see `web/index.html`'s
+     inline script), so idle chrome doesn't sit there as a permanent gray bar next to rounded cards. */
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto) {
+    --scrollbar-alpha: 0;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent)
+      transparent;
+    transition-property: --scrollbar-alpha;
+    transition-duration: 0.35s;
+    transition-timing-function: ease;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)[data-scrolling] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0.15s;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-track,
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
+  }
+}

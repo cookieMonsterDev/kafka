@@ -1,6 +1,6 @@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { useAppShell } from './app-shell';
-import { SidebarContent } from './sidebar';
+import { BrandMark, SidebarContent } from './sidebar';
 
 /**
  * The off-canvas counterpart to `Sidebar`, sharing `SidebarContent` so the two chrome states can
@@ -15,8 +15,9 @@ export function MobileNavSheet() {
   return (
     <Sheet open={mobileNavOpen} onOpenChange={(open) => !open && closeMobileNav()}>
       <SheetContent side="left" className="flex h-full flex-col gap-0 p-0">
-        <SheetHeader className="border-b border-border px-4 py-3">
-          <SheetTitle className="text-sm">Kafka Studio</SheetTitle>
+        <SheetHeader className="h-16 flex-row items-center gap-2.5 px-3 py-0">
+          <BrandMark />
+          <SheetTitle className="text-sm leading-tight font-semibold">Kafka Studio</SheetTitle>
         </SheetHeader>
         <nav aria-label="Primary" className="flex flex-1 flex-col overflow-hidden">
           <SidebarContent collapsed={false} onNavigate={closeMobileNav} />

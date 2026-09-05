@@ -90,7 +90,7 @@ function TopicDetailPage() {
 
   return (
     <section aria-labelledby="topic-detail-heading" className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 id="topic-detail-heading" className="text-lg font-semibold break-all">
           {name}
         </h1>
@@ -129,7 +129,12 @@ function TopicDetailPage() {
         <>
           <div className="rounded-xl border border-border bg-card p-4 text-card-foreground">
             <h2 className="text-sm font-semibold">Partitions</h2>
-            <div className="mt-3 overflow-x-auto">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Partitions table, scroll horizontally for more columns"
+              className="mt-3 overflow-x-auto"
+            >
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-muted-foreground">

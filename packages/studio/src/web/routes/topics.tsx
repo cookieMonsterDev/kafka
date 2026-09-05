@@ -30,7 +30,8 @@ const columns = columnHelper.columns([
       <Link
         to="/topics/$name"
         params={{ name: info.row.original.name }}
-        className="rounded-sm font-medium outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+        title={info.getValue()}
+        className="block truncate rounded-sm font-medium outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
         onClick={(event) => event.stopPropagation()}
       >
         {info.getValue()}
@@ -133,59 +134,72 @@ function TopicsPage() {
 
       {data && (
         <div className="overflow-hidden rounded-xl border border-border">
-          <table className="w-full table-fixed text-sm">
-            <thead>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id} className="border-b border-border bg-muted/40 text-left">
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} scope="col" className="px-3 py-2 text-xs font-medium text-muted-foreground">
-                      {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-          </table>
-          <div ref={scrollRef} className="max-h-[60vh] overflow-y-auto">
-            {rows.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                {search.trim() === '' ? 'No topics yet.' : `No topics match "${search}".`}
-              </p>
-            ) : (
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Topics table, scroll horizontally for more columns"
+            className="overflow-x-auto"
+          >
+            <div className="min-w-[32rem]">
               <table className="w-full table-fixed text-sm">
-                <tbody
-                  style={{ height: `${String(virtualizer.getTotalSize())}px`, position: 'relative', display: 'block' }}
-                >
-                  {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    if (row === undefined) return null;
-                    return (
-                      <tr
-                        key={row.id}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          minHeight: `${String(ROW_HEIGHT_PX)}px`,
-                          transform: `translateY(${String(virtualRow.start)}px)`,
-                        }}
-                        className="flex cursor-pointer items-center border-b border-border last:border-0 hover:bg-muted/40"
-                        onClick={() => void navigate({ to: '/topics/$name', params: { name: row.original.name } })}
-                      >
-                        {row.getAllCells().map((cell) => (
-                          <td key={cell.id} className="flex-1 px-3 py-2">
-                            <table.FlexRender cell={cell} />
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
+                <thead>
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <tr key={headerGroup.id} className="border-b border-border bg-muted/40 text-left">
+                      {headerGroup.headers.map((header) => (
+                        <th key={header.id} scope="col" className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                          {header.isPlaceholder ? null : <table.FlexRender header={header} />}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
               </table>
-            )}
+              <div ref={scrollRef} className="max-h-[60vh] overflow-y-auto">
+                {rows.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                    {search.trim() === '' ? 'No topics yet.' : `No topics match "${search}".`}
+                  </p>
+                ) : (
+                  <table className="w-full table-fixed text-sm">
+                    <tbody
+                      style={{
+                        height: `${String(virtualizer.getTotalSize())}px`,
+                        position: 'relative',
+                        display: 'block',
+                      }}
+                    >
+                      {virtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = rows[virtualRow.index];
+                        if (row === undefined) return null;
+                        return (
+                          <tr
+                            key={row.id}
+                            data-index={virtualRow.index}
+                            ref={virtualizer.measureElement}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              minHeight: `${String(ROW_HEIGHT_PX)}px`,
+                              transform: `translateY(${String(virtualRow.start)}px)`,
+                            }}
+                            className="flex cursor-pointer items-center border-b border-border last:border-0 hover:bg-muted/40"
+                            onClick={() => void navigate({ to: '/topics/$name', params: { name: row.original.name } })}
+                          >
+                            {row.getAllCells().map((cell) => (
+                              <td key={cell.id} className="min-w-0 flex-1 px-3 py-2">
+                                <table.FlexRender cell={cell} />
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

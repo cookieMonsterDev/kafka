@@ -1,37 +1,48 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Menu, RefreshCw } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { Menu, PanelLeft, RefreshCw } from 'lucide-react';
+import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation } from '@tanstack/react-router';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { ThemeToggle } from './theme-toggle';
+import { Separator } from '../ui/separator';
+import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
 
 interface Crumb {
   readonly label: string;
   readonly to?: '/topics';
+  /**
+   * What the label *is*, when the label alone is just a name. A bare `orders.created` as the page
+   * heading says nothing about what you are looking at; `Topic orders.created` does.
+   */
+  readonly kind?: string;
 }
 
 function getPageInfo(pathname: string): { readonly title: string; readonly crumbs: readonly Crumb[] } {
-  if (pathname === '/') return { title: 'Cluster overview', crumbs: [{ label: 'Cluster' }] };
+  if (pathname === '/') return { title: 'Overview', crumbs: [{ label: 'Cluster' }, { label: 'Overview' }] };
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
     return {
       title: name,
-      crumbs: [{ label: 'Topics', to: '/topics' }, { label: name }],
+      crumbs: [
+        { label: 'Topics', to: '/topics' },
+        { label: name, kind: 'Topic' },
+      ],
     };
   }
   return { title: 'Kafka Studio', crumbs: [] };
 }
 
-/** Breadcrumb + page title, a topic-jump search box, and a refresh action. */
+/**
+ * Sidebar toggle, the breadcrumb trail (which doubles as the page heading), and refresh. There is
+ * deliberately no global search box: each list filters itself in its own toolbar, and a second
+ * search field in the chrome would just be a jump-by-exact-name shortcut with nowhere to go.
+ */
 export function Topbar() {
-  const { isMobile, openMobileNav } = useAppShell();
+  const { isMobile, collapsed, toggleCollapsed, openMobileNav } = useAppShell();
   const pathname = useLocation({ select: (location) => location.pathname });
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
+  const fetching = useIsFetching();
   const { title, crumbs } = getPageInfo(pathname);
   const lastCrumbIndex = crumbs.length - 1;
 
@@ -39,38 +50,56 @@ export function Topbar() {
     document.title = title === 'Kafka Studio' ? title : `${title} · Kafka Studio`;
   }, [title]);
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const name = search.trim();
-    if (name === '') return;
-    setSearch('');
-    void navigate({ to: '/topics/$name', params: { name } });
-  }
-
   return (
-    <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
-        {isMobile && (
-          <Button type="button" variant="ghost" size="icon" onClick={openMobileNav} aria-label="Open navigation menu">
+        {isMobile ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            onClick={openMobileNav}
+            aria-label="Open navigation menu"
+          >
             <Menu className="size-5" aria-hidden="true" />
           </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-lg"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-pressed={collapsed}
+          >
+            <PanelLeft className="size-5" aria-hidden="true" />
+          </Button>
         )}
-        <nav aria-label="Breadcrumb" className="min-w-0">
-          <ol className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+        <Separator orientation="vertical" className="h-6" />
+        {/*
+          The trail is the page heading — the last crumb *is* the `h1`, so the title, the
+          breadcrumb and `document.title` all come from one place and nothing is repeated.
+        */}
+        <nav aria-label="Breadcrumb" className="ml-1 min-w-0">
+          <ol className="flex min-w-0 items-center gap-2 text-lg">
             {crumbs.map((crumb, index) => (
-              <li key={crumb.label} className="flex min-w-0 items-center gap-1.5">
-                {index > 0 && <span aria-hidden="true">/</span>}
-                {crumb.to === undefined || index === lastCrumbIndex ? (
-                  <span
-                    className={index === lastCrumbIndex ? 'truncate font-medium text-foreground' : 'truncate'}
-                    aria-current={index === lastCrumbIndex ? 'page' : undefined}
-                  >
-                    {crumb.label}
+              <li key={crumb.label} className="flex min-w-0 items-center gap-2">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-muted-foreground/60">
+                    /
                   </span>
+                )}
+                {index === lastCrumbIndex ? (
+                  <h1 className="flex min-w-0 items-baseline gap-2" aria-current="page">
+                    {crumb.kind !== undefined && <span className="shrink-0 text-muted-foreground">{crumb.kind}</span>}
+                    <span className="truncate font-semibold">{crumb.label}</span>
+                  </h1>
+                ) : crumb.to === undefined ? (
+                  <span className="truncate text-muted-foreground">{crumb.label}</span>
                 ) : (
                   <Link
                     to={crumb.to}
-                    className="truncate rounded-sm outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
+                    className="truncate rounded-sm text-muted-foreground outline-none hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
                     {crumb.label}
                   </Link>
@@ -80,30 +109,17 @@ export function Topbar() {
           </ol>
         </nav>
       </div>
-      <div className="flex items-center gap-2">
-        <form onSubmit={handleSearch}>
-          <label className="sr-only" htmlFor="topbar-search">
-            Jump to topic
-          </label>
-          <Input
-            id="topbar-search"
-            type="search"
-            placeholder="Jump to topic…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="h-8 w-24 sm:w-44"
-          />
-        </form>
+      <div className="flex shrink-0 items-center gap-2">
         <Button
           type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Refresh data"
+          variant="outline"
+          size="lg"
           onClick={() => void queryClient.invalidateQueries()}
+          aria-label="Refresh data"
         >
-          <RefreshCw className="size-4" aria-hidden="true" />
+          <RefreshCw className={cn('size-4', fetching > 0 && 'animate-spin')} aria-hidden="true" />
+          <span className="max-sm:sr-only">Refresh</span>
         </Button>
-        <ThemeToggle />
       </div>
     </header>
   );

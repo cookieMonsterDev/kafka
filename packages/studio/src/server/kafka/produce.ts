@@ -216,15 +216,42 @@ async function runBurstJob(
 /** How long a finished job's final state stays queryable before it is forgotten — long enough for a client's SSE reconnect to still see it. */
 const JOB_RETENTION_MS = 60_000;
 
+export interface BurstSentInfo {
+  readonly topic: string;
+  /** Records sent since the previous notification, not the running total. */
+  readonly count: number;
+  /** `count` times the template's own byte length — `{{seq}}` substitution barely moves it, so this is a close estimate, not a per-record measurement. */
+  readonly bytes: number;
+}
+
+export type BurstSentListener = (info: BurstSentInfo) => void;
+
+function templateByteLength(template: Pick<ProduceMessage, 'key' | 'value'>): number {
+  return (template.key?.length ?? 0) + (template.value?.length ?? 0);
+}
+
 /** Tracks in-flight and recently-finished burst jobs. One instance for the whole server process. */
 export class BurstJobManager {
   private readonly jobs = new Map<string, BurstJob>();
+  private readonly onSent: BurstSentListener | undefined;
+
+  constructor(onSent?: BurstSentListener) {
+    this.onSent = onSent;
+  }
 
   start(producer: PooledProducer, request: BurstRequest): BurstJob {
     const job = new BurstJob(request.count);
     this.jobs.set(job.id, job);
+    const bytesPerRecord = templateByteLength(request.template);
 
+    let lastSent = 0;
     const unsubscribe = job.onProgress((progress) => {
+      const delta = progress.sent - lastSent;
+      if (delta > 0) {
+        lastSent = progress.sent;
+        this.onSent?.({ topic: request.topic, count: delta, bytes: delta * bytesPerRecord });
+      }
+
       if (progress.status === 'running') return;
       unsubscribe();
       setTimeout(() => this.jobs.delete(job.id), JOB_RETENTION_MS).unref();

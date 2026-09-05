@@ -22,6 +22,10 @@ export function openSseStream(req: IncomingMessage, res: ServerResponse, onClose
     'cache-control': 'no-store',
     connection: 'keep-alive',
   });
+  // Without this, Node batches the header block with the first body write — a stream that stays
+  // quiet until its first event (like the board firehose) would leave the client's `EventSource`
+  // stuck in "connecting" instead of firing `open`.
+  res.flushHeaders();
 
   const heartbeat = setInterval(() => {
     res.write(':heartbeat\n\n');

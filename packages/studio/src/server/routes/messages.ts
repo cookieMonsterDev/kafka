@@ -1,3 +1,4 @@
+import type { MessageRecord } from '../../shared/contracts/message';
 import {
   deleteRecordsRequestSchema,
   messagesQuerySchema,
@@ -7,19 +8,25 @@ import {
 } from '../../shared/contracts/message';
 import { sendError, sendJson } from '../create-server';
 import type { AdminPool } from '../kafka/admin-pool';
+import type { StudioEventBus } from '../kafka/events';
 import type { MessageConsumerFactory } from '../kafka/messages';
 import { readMessagesPage } from '../kafka/messages';
 import { runTail } from '../kafka/tail';
 import { readJsonBody } from '../json';
 import { requireParam, type Router } from '../router';
-import { openSseStream } from '../sse';
+import { openSseStream, type SseStream } from '../sse';
 
 export interface MessagesRouteContext {
   readonly pool: AdminPool;
   readonly consumerFactory: MessageConsumerFactory;
   /** Caps how many undelivered tail messages one SSE connection buffers — see `kafka/tail.ts`. */
   readonly maxTail: number;
+  readonly events: StudioEventBus;
   getActiveProfile(): string | null;
+}
+
+function messageBytes(message: MessageRecord): number {
+  return (message.key?.length ?? 0) + (message.value?.length ?? 0);
 }
 
 function queryParams(url: URL): Record<string, string> {
@@ -56,12 +63,29 @@ export function registerMessageRoutes(router: Router, context: MessagesRouteCont
     const consumer = context.consumerFactory(context.getActiveProfile()).consumer();
     const controller = new AbortController();
     const stream = openSseStream(req, res, () => controller.abort());
+    // Forwards every delivered frame to the activity firehose too — the board's particle layer is
+    // this studio's own tailing, not a separate signal.
+    const observedStream: Pick<SseStream, 'send'> = {
+      send(event, data) {
+        stream.send(event, data);
+        if (event === 'message') {
+          const message = data as MessageRecord;
+          context.events.publish({
+            kind: 'consume',
+            topic: name,
+            partition: message.partition,
+            count: 1,
+            bytes: messageBytes(message),
+          });
+        }
+      },
+    };
 
     try {
       await runTail(
         admin,
         consumer,
-        stream,
+        observedStream,
         { topic: name, partition: parsed.data.partition, maxBuffered: context.maxTail },
         controller.signal,
       );

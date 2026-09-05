@@ -1,5 +1,7 @@
+import type { ProduceMessage } from '../../shared/contracts/produce';
 import { burstRequestSchema, produceRequestSchema } from '../../shared/contracts/produce';
 import { sendError, sendJson } from '../create-server';
+import type { StudioEventBus } from '../kafka/events';
 import { BurstJobManager, ProducerPool, sendMessages } from '../kafka/produce';
 import { readJsonBody } from '../json';
 import { requireParam, type Router } from '../router';
@@ -8,7 +10,12 @@ import { openSseStream } from '../sse';
 export interface ProduceRouteContext {
   readonly producers: ProducerPool;
   readonly jobs: BurstJobManager;
+  readonly events: StudioEventBus;
   getActiveProfile(): string | null;
+}
+
+function messageBytes(message: ProduceMessage): number {
+  return (message.key?.length ?? 0) + (message.value?.length ?? 0);
 }
 
 /**
@@ -31,6 +38,15 @@ export function registerProduceRoutes(router: Router, context: ProduceRouteConte
     const producer = await context.producers.get(context.getActiveProfile());
     const response = await sendMessages(producer, parsed.data);
     sendJson(res, 200, response);
+
+    const partitions = [...new Set(response.results.map((entry) => entry.partition))];
+    context.events.publish({
+      kind: 'produce',
+      topic: parsed.data.topic,
+      partition: partitions.length === 1 ? (partitions[0] ?? null) : null,
+      count: parsed.data.messages.length,
+      bytes: parsed.data.messages.reduce((total, message) => total + messageBytes(message), 0),
+    });
   });
 
   router.post('/api/produce/burst', async (req, res) => {

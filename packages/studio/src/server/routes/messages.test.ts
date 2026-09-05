@@ -8,6 +8,7 @@ import {
   createFakeKafkaMessage,
   createFakeMessageConsumer,
 } from '../kafka/create-fake-message-consumer';
+import { StudioEventBus } from '../kafka/events';
 import type { MessageConsumerFactory } from '../kafka/messages';
 import { Router } from '../router';
 import { registerMessageRoutes, type MessagesRouteContext } from './messages';
@@ -34,6 +35,7 @@ function buildContext(
           }),
       })),
     maxTail: 100,
+    events: new StudioEventBus(),
     getActiveProfile: () => null,
   };
 }
@@ -125,6 +127,38 @@ describe('registerMessageRoutes', () => {
       expect(body).toContain('event: message');
       expect(body).toContain(Buffer.from('hi').toString('base64'));
     });
+  });
+
+  it('GET /api/topics/:name/tail publishes a consume activity event per delivered message', async () => {
+    const context = buildContext(
+      { fetchTopicOffsets: async () => [{ partition: 0, offset: 0n, high: 0n, low: 0n }] },
+      () => ({
+        consumer: () =>
+          createFakeMessageConsumer({
+            connect: async () => {},
+            disconnect: async () => {},
+            assign: async () => {},
+            seek: () => {},
+            stream: async function* () {
+              yield createFakeBatch({
+                topic: 'orders',
+                partition: 0,
+                highWatermark: 1n,
+                fetchedOffset: 0n,
+                messages: [createFakeKafkaMessage({ offset: 0n, value: Buffer.from('hi') })],
+              });
+            },
+          }),
+      }),
+    );
+    const received: unknown[] = [];
+    context.events.subscribe((event) => received.push(event));
+
+    await withServer(context, async (baseUrl) => {
+      await fetch(`${baseUrl}/api/topics/orders/tail`);
+    });
+
+    expect(received).toEqual([expect.objectContaining({ kind: 'consume', topic: 'orders', partition: 0, count: 1 })]);
   });
 
   it('GET /api/topics/:name/tail sends an "error" event and closes when the tail fails', async () => {

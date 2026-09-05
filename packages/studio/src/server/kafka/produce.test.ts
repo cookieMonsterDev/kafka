@@ -232,4 +232,22 @@ describe('BurstJobManager', () => {
     const manager = new BurstJobManager();
     expect(manager.cancel('missing')).toBe(false);
   });
+
+  it('notifies onSent with the topic and an estimated byte count as records go out', async () => {
+    const producer = createFakeProducer({ send: async () => [metadata()] });
+    const onSent = vi.fn();
+    const manager = new BurstJobManager(onSent);
+
+    const job = manager.start(producer, { topic: 'orders', template: { value: 'msg' }, count: 3, ratePerSecond: 1000 });
+    await new Promise((resolve) => {
+      const unsubscribe = job.onProgress((progress) => {
+        if (progress.status !== 'running') {
+          unsubscribe();
+          resolve(undefined);
+        }
+      });
+    });
+
+    expect(onSent).toHaveBeenCalledWith({ topic: 'orders', count: 3, bytes: 9 });
+  });
 });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RecordMetadata } from '@cookiemonsterdev/kafka-core';
 import { createStudioServer } from '../create-server';
 import { createFakeProducer, type FakeProducerOverrides } from '../kafka/create-fake-producer';
+import { StudioEventBus } from '../kafka/events';
 import { BurstJobManager, ProducerPool } from '../kafka/produce';
 import { Router } from '../router';
 import { registerProduceRoutes, type ProduceRouteContext } from './produce';
@@ -23,7 +24,7 @@ function buildContext(overrides: FakeProducerOverrides = {}): ProduceRouteContex
   const producers = new ProducerPool(() => ({
     producer: () => createFakeProducer({ connect: async () => {}, disconnect: async () => {}, ...overrides }),
   }));
-  return { producers, jobs: new BurstJobManager(), getActiveProfile: () => null };
+  return { producers, jobs: new BurstJobManager(), events: new StudioEventBus(), getActiveProfile: () => null };
 }
 
 async function withServer<T>(context: ProduceRouteContext, run: (baseUrl: string) => Promise<T>): Promise<T> {
@@ -56,6 +57,24 @@ describe('registerProduceRoutes', () => {
     });
 
     expect(send).toHaveBeenCalledWith({ topic: 'orders', messages: [{ value: 'hello' }] });
+  });
+
+  it('POST /api/produce publishes a produce activity event', async () => {
+    const context = buildContext({ send: async () => [metadata({ partition: 1, baseOffset: 7n })] });
+    const received: unknown[] = [];
+    context.events.subscribe((event) => received.push(event));
+
+    await withServer(context, async (baseUrl) => {
+      await fetch(`${baseUrl}/api/produce`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ topic: 'orders', messages: [{ value: 'hello' }] }),
+      });
+    });
+
+    expect(received).toEqual([
+      expect.objectContaining({ kind: 'produce', topic: 'orders', partition: 1, count: 1, bytes: 5 }),
+    ]);
   });
 
   it('POST /api/produce rejects an invalid body with 400', async () => {

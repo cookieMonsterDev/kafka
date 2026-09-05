@@ -17,7 +17,8 @@ interface Crumb {
   readonly kind?: string;
 }
 
-function getPageInfo(pathname: string): { readonly title: string; readonly crumbs: readonly Crumb[] } {
+/** `title: null` means no specific page — falls back to the bare app title, no third segment. */
+function getPageInfo(pathname: string): { readonly title: string | null; readonly crumbs: readonly Crumb[] } {
   if (pathname === '/') return { title: 'Overview', crumbs: [{ label: 'Cluster' }, { label: 'Overview' }] };
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
@@ -32,7 +33,7 @@ function getPageInfo(pathname: string): { readonly title: string; readonly crumb
       ],
     };
   }
-  return { title: 'Kafka Studio', crumbs: [] };
+  return { title: null, crumbs: [] };
 }
 
 /**
@@ -49,7 +50,8 @@ export function Topbar() {
   const lastCrumbIndex = crumbs.length - 1;
 
   useEffect(() => {
-    document.title = title === 'Kafka Studio' ? title : `${title} · Kafka Studio`;
+    // Mirrors the docs site's `Kafka | <package> | <title>` convention (`BaseLayout.astro`).
+    document.title = title === null ? 'Kafka | Studio' : `Kafka | Studio | ${title}`;
   }, [title]);
 
   return (

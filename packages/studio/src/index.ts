@@ -3,10 +3,12 @@ import { createStudioServer } from './server/create-server';
 import { createDevMiddleware } from './server/dev';
 import { AdminPool } from './server/kafka/admin-pool';
 import { createKafkaClient, resolveStudioConnectionConfig } from './server/kafka/connection';
+import { BurstJobManager, ProducerPool } from './server/kafka/produce';
 import { openBrowser, formatBanner } from './server/open-browser';
 import { resolvePort } from './server/port';
 import { registerClusterRoutes } from './server/routes/cluster';
 import { registerHealthRoutes } from './server/routes/health';
+import { registerProduceRoutes } from './server/routes/produce';
 import { registerProfileRoutes } from './server/routes/profiles';
 import { registerTopicRoutes } from './server/routes/topics';
 import { Router } from './server/router';
@@ -53,6 +55,8 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   const version = readOwnVersion(import.meta.url);
 
   const pool = new AdminPool((profileName) => createKafkaClient(connection, profileName));
+  const producers = new ProducerPool((profileName) => createKafkaClient(connection, profileName));
+  const jobs = new BurstJobManager();
   let activeProfile: string | null = null;
 
   const router = new Router();
@@ -67,6 +71,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
     },
   });
   registerTopicRoutes(router, { pool, getActiveProfile: () => activeProfile });
+  registerProduceRoutes(router, { producers, jobs, getActiveProfile: () => activeProfile });
 
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
   const fallback =
@@ -86,6 +91,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   async function stop(): Promise<void> {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     await pool.disposeAll();
+    await producers.disposeAll();
   }
 
   return { url, host, port, stop };

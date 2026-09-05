@@ -2,7 +2,6 @@ import { BookOpen } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
-import { ConnectionStatus } from './connection-status';
 import { ProfileSwitcher } from './profile-switcher';
 import { SidebarNav } from './sidebar-nav';
 
@@ -56,9 +55,9 @@ function DocumentationLink({ collapsed, onNavigate }: SidebarContentProps) {
 }
 
 /**
- * The workspace nav, environment switcher, and connection card — shared verbatim between the
- * fixed sidebar and the mobile drawer (`MobileNavSheet`) so the two chrome states can never drift
- * apart or leave a control missing on one of them.
+ * The workspace nav and environment switcher — shared verbatim between the fixed sidebar and the
+ * mobile drawer (`MobileNavSheet`) so the two chrome states can never drift apart or leave a
+ * control missing on one of them.
  */
 export function SidebarContent({ collapsed, onNavigate }: SidebarContentProps) {
   return (
@@ -68,9 +67,6 @@ export function SidebarContent({ collapsed, onNavigate }: SidebarContentProps) {
         {/* Renders nothing at all when no profiles are configured — a section heading with no
             control under it reads as something failing to load. */}
         <ProfileSwitcher collapsed={collapsed} className="mt-6" />
-      </div>
-      <div className="p-2">
-        <ConnectionStatus collapsed={collapsed} />
       </div>
       <div className="p-2 pt-0">
         <DocumentationLink collapsed={collapsed} onNavigate={onNavigate} />

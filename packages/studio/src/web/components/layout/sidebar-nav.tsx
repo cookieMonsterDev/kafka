@@ -11,7 +11,7 @@ interface NavItem {
   readonly label: string;
   readonly icon: LucideIcon;
   /** Omitted for workspace areas that don't have a route yet — rendered disabled, never a dead link. */
-  readonly to?: '/' | '/topics' | '/producer' | '/messages';
+  readonly to?: '/' | '/topics' | '/producer' | '/messages' | '/board' | '/groups';
   readonly exact?: boolean;
   /** Shows a live count in the trailing badge slot. Only Topics has a count to show today. */
   readonly counted?: boolean;
@@ -22,8 +22,8 @@ const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Topics', icon: Layers, to: '/topics', counted: true },
   { label: 'Producer', icon: Send, to: '/producer' },
   { label: 'Messages', icon: MessageSquare, to: '/messages' },
-  { label: 'Board', icon: Workflow },
-  { label: 'Consumer groups', icon: Users },
+  { label: 'Board', icon: Workflow, to: '/board' },
+  { label: 'Consumer groups', icon: Users, to: '/groups' },
   { label: 'Settings', icon: Settings },
 ];
 

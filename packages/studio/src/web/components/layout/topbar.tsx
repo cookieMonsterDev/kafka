@@ -9,12 +9,7 @@ import { useAppShell } from './app-shell';
 
 interface Crumb {
   readonly label: string;
-  readonly to?: '/topics' | '/messages';
-  /**
-   * What the label *is*, when the label alone is just a name. A bare `orders.created` as the page
-   * heading says nothing about what you are looking at; `Topic orders.created` does.
-   */
-  readonly kind?: string;
+  readonly to?: '/topics' | '/messages' | '/groups';
 }
 
 /** `title: null` means no specific page — falls back to the bare app title, no third segment. */
@@ -23,14 +18,20 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
   if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
+  if (pathname === '/board') return { title: 'Board', crumbs: [{ label: 'Board' }] };
+  if (pathname === '/groups') return { title: 'Consumer groups', crumbs: [{ label: 'Consumer groups' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
     return {
       title: name,
-      crumbs: [
-        { label: 'Topics', to: '/topics' },
-        { label: name, kind: 'Topic' },
-      ],
+      crumbs: [{ label: 'Topics', to: '/topics' }, { label: name }],
+    };
+  }
+  if (pathname.startsWith('/groups/')) {
+    const groupId = decodeURIComponent(pathname.slice('/groups/'.length));
+    return {
+      title: groupId,
+      crumbs: [{ label: 'Consumer groups', to: '/groups' }, { label: groupId }],
     };
   }
   return { title: null, crumbs: [] };
@@ -55,7 +56,7 @@ export function Topbar() {
   }, [title]);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/80 px-4 backdrop-blur lg:px-6">
+    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/80 px-4 shadow-[0_8px_16px_-12px_rgba(0,0,0,0.6)] backdrop-blur lg:px-6">
       <div className="flex min-w-0 items-center gap-2">
         {isMobile ? (
           <Button
@@ -94,9 +95,8 @@ export function Topbar() {
                   </span>
                 )}
                 {index === lastCrumbIndex ? (
-                  <h1 className="flex min-w-0 items-baseline gap-2" aria-current="page">
-                    {crumb.kind !== undefined && <span className="shrink-0 text-muted-foreground">{crumb.kind}</span>}
-                    <span className="truncate font-semibold">{crumb.label}</span>
+                  <h1 className="min-w-0 truncate font-semibold" aria-current="page">
+                    {crumb.label}
                   </h1>
                 ) : crumb.to === undefined ? (
                   <span className="truncate text-muted-foreground">{crumb.label}</span>

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const DOCS_CSS = 'packages/docs/src/styles/global.css';
 const STUDIO_CSS = 'packages/studio/src/web/styles/theme.css';
-const BLOCKS = ['@theme inline', ':root', '.dark'];
+// Both apps are dark-only, so the whole palette lives in `:root` and there is no `.dark` block.
+const BLOCKS = ['@theme inline', ':root'];
 
 // The studio's theme tokens are copied by hand from docs (see packages/studio/README.md); this
 // only guards against the copy silently drifting, it never syncs the files itself.

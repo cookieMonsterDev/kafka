@@ -1,11 +1,9 @@
-import { Lock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
 
 interface HealthResponse {
   readonly status: string;
-  readonly readOnly: boolean;
 }
 
 const HEALTH_POLL_INTERVAL_MS = 15_000;
@@ -35,19 +33,25 @@ export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
   });
 
   const connected = data !== undefined && !isError;
-  const readOnly = data?.readOnly === true;
   const label = connected ? 'Connected' : 'Unreachable';
-  const fullLabel = readOnly ? `${label} · Read-only mode` : label;
 
   const pill = (
-    <div className="flex items-center gap-2 px-1 py-1 text-xs text-muted-foreground" role="status">
+    <div
+      // Focusable only in the collapsed state, where it's the Tooltip's trigger — a keyboard user
+      // needs a stop to focus before the tooltip can show; in the expanded state the text is
+      // already visible, so adding a tab stop here would just be a dead end.
+      tabIndex={collapsed ? 0 : undefined}
+      className={cn(
+        'flex items-center gap-2 rounded-md px-1 py-1 text-xs text-muted-foreground outline-none',
+        collapsed && 'focus-visible:ring-3 focus-visible:ring-ring/50',
+      )}
+      role="status"
+    >
       <span
         aria-hidden="true"
         className={cn('size-2 shrink-0 rounded-full', connected ? 'bg-emerald-500' : 'bg-destructive')}
       />
       <span className={collapsed ? 'sr-only' : 'truncate'}>{label}</span>
-      {readOnly && <Lock className={cn('size-3.5 shrink-0', !collapsed && 'ml-auto')} aria-hidden="true" />}
-      {readOnly && <span className="sr-only">Read-only mode</span>}
     </div>
   );
 
@@ -56,7 +60,7 @@ export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{pill}</TooltipTrigger>
-      <TooltipContent side="right">{fullLabel}</TooltipContent>
+      <TooltipContent side="right">{label}</TooltipContent>
     </Tooltip>
   );
 }

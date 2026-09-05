@@ -81,7 +81,7 @@ export function Topbar() {
         </nav>
       </div>
       <div className="flex items-center gap-2">
-        <form onSubmit={handleSearch} className="hidden sm:block">
+        <form onSubmit={handleSearch}>
           <label className="sr-only" htmlFor="topbar-search">
             Jump to topic
           </label>
@@ -91,7 +91,7 @@ export function Topbar() {
             placeholder="Jump to topic…"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-8 w-44"
+            className="h-8 w-24 sm:w-44"
           />
         </form>
         <Button

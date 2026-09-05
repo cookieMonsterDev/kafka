@@ -56,7 +56,10 @@ export function ProfileSwitcher({ collapsed = false }: ProfileSwitcherProps) {
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center justify-center py-1 text-muted-foreground">
+          <span
+            tabIndex={0}
+            className="flex items-center justify-center rounded-md py-1 text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
             <UserRound className="size-4" aria-hidden="true" />
             <span className="sr-only">Active profile: {activeLabel}. Expand the sidebar to switch.</span>
           </span>

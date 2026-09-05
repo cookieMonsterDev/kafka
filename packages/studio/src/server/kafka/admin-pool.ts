@@ -8,10 +8,12 @@ export type PooledAdmin = Pick<
   | 'fetchTopicMetadata'
   | 'describeTopicPartitions'
   | 'fetchTopicOffsets'
+  | 'fetchTopicOffsetsByTimestamp'
   | 'describeConfigs'
   | 'describeLogDirs'
   | 'createTopics'
   | 'deleteTopics'
+  | 'deleteTopicRecords'
   | 'createPartitions'
   | 'incrementalAlterConfigs'
 >;

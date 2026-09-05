@@ -22,7 +22,10 @@ export function PageLayout({ toolbar, rail, railLabel, children }: PageLayoutPro
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {toolbar !== undefined && (
-        <div className="flex h-14 shrink-0 items-center justify-between gap-3 px-4 lg:px-6">{toolbar}</div>
+        // `min-h`, not `h` — a toolbar dense enough to wrap must grow the row, not overflow it.
+        <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-2 lg:px-6">
+          {toolbar}
+        </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-1 xl:overflow-hidden">
         <div

@@ -156,6 +156,7 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 - New broker behavior should use the version helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …) instead of parsing `KAFKA_VERSION` in the test file.
 - Docs UI changes must keep [accessibility](#accessibility) (keyboard, names, focus, contrast, reduced motion).
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
+- Before opening a PR that touches `packages/studio/src/web` (or `packages/docs`'s React islands), run `npx react-doctor@latest` against the package and fix what it flags — it catches hook-dependency and render-performance mistakes the type checker and ESLint don't.
 
 ### Labels
 

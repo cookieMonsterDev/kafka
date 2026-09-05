@@ -13,6 +13,7 @@
   "scripts": {
     "build": "pnpm -r --if-present run build",
     "dev": "pnpm -r --parallel --if-present run dev",
+    "studio:dev": "pnpm --filter @cookiemonsterdev/kafka-studio... run build && pnpm --filter @cookiemonsterdev/kafka-studio run dev:server",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "eslint .",

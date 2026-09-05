@@ -51,6 +51,7 @@
     "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
     "build:web": "vite build --config vite.web.config.ts",
     "dev": "vite build --watch",
+    "dev:server": "KAFKA_STUDIO_DEV=1 node dist/bin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

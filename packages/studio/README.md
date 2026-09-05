@@ -14,10 +14,11 @@ spirit of Prisma Studio. Built on top of
 [`@cookiemonsterdev/kafka-config`](../config/README.md), and lives in the
 [kafka monorepo](https://github.com/cookieMonsterDev/kafka).
 
-**Status:** early — the CLI, HTTP server, and web shell run end to end, and the studio can browse,
-create and configure topics and produce messages (single sends and rate-limited bursts) against a
-real cluster. Not published to npm; install and usage instructions will be added once more of the
-plan lands.
+**Status:** early — the CLI, HTTP server, and web shell run end to end. The studio can browse,
+create and configure topics; produce messages (single sends and rate-limited bursts); browse and
+tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion)
+and share groups; and render a live topology board of cluster activity. Not published to npm;
+install and usage instructions will be added once more of the plan lands.
 
 ## Contents
 
@@ -41,7 +42,16 @@ node packages/studio/dist/bin.js
 
 `pnpm --filter @cookiemonsterdev/kafka-studio dev` watches and rebuilds the server bundle only. To
 serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`
-before starting the server from source.
+before starting the server from source — or run the one-liner below, which does both:
+
+```sh
+pnpm studio:dev
+```
+
+Builds `@cookiemonsterdev/kafka-config`, `@cookiemonsterdev/kafka-core`, and the studio itself, then
+starts the server with `KAFKA_STUDIO_DEV=1` set, so `src/web` is served through Vite's dev
+middleware (live reload) instead of the static `dist/web` build. Re-run it after a server-side
+source change; `src/web` changes hot-reload on their own.
 
 ## Local Kafka with Docker
 

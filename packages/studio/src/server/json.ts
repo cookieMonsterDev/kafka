@@ -1,7 +1,12 @@
 import type { IncomingMessage } from 'node:http';
 import { UnknownProfileError } from './kafka/connection';
 import { hasErrorName } from './kafka/has-error-name';
-import { isTopicAlreadyExistsError, isUnknownTopicOrPartitionError } from './kafka/protocol-error';
+import {
+  isGroupIdNotFoundError,
+  isNonEmptyGroupError,
+  isTopicAlreadyExistsError,
+  isUnknownTopicOrPartitionError,
+} from './kafka/protocol-error';
 
 /** `JSON.stringify` that renders a `bigint` (every Kafka offset, in every route) as its decimal string instead of throwing. */
 export function stringifyJson(value: unknown): string {
@@ -103,6 +108,12 @@ export function mapErrorToApiError(error: unknown): MappedApiError {
   }
   if (isTopicAlreadyExistsError(error)) {
     return { status: 409, code: 'topic_already_exists', message: messageOf(error, 'topic already exists') };
+  }
+  if (isGroupIdNotFoundError(error)) {
+    return { status: 404, code: 'unknown_group', message: messageOf(error, 'group not found') };
+  }
+  if (isNonEmptyGroupError(error)) {
+    return { status: 409, code: 'group_not_empty', message: messageOf(error, 'group still has active members') };
   }
 
   return { status: 500, code: 'internal_error', message: messageOf(error, 'unexpected error') };

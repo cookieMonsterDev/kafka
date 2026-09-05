@@ -20,3 +20,11 @@ export function isUnknownTopicOrPartitionError(error: unknown): boolean {
 export function isTopicAlreadyExistsError(error: unknown): boolean {
   return protocolErrorType(error) === 'TOPIC_ALREADY_EXISTS';
 }
+
+export function isGroupIdNotFoundError(error: unknown): boolean {
+  return protocolErrorType(error) === 'GROUP_ID_NOT_FOUND';
+}
+
+export function isNonEmptyGroupError(error: unknown): boolean {
+  return protocolErrorType(error) === 'NON_EMPTY_GROUP';
+}

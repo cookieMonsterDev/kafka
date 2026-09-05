@@ -16,6 +16,16 @@ export type PooledAdmin = Pick<
   | 'deleteTopicRecords'
   | 'createPartitions'
   | 'incrementalAlterConfigs'
+  | 'listGroups'
+  | 'describeGroups'
+  | 'fetchOffsets'
+  | 'setOffsets'
+  | 'resetOffsets'
+  | 'deleteGroups'
+  | 'deleteGroupOffsets'
+  | 'removeMembersFromConsumerGroup'
+  | 'describeShareGroups'
+  | 'listShareGroupOffsets'
 >;
 
 /** Everything `AdminPool` needs to build a fresh, unconnected client for one profile. */

@@ -102,7 +102,12 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <AppShellContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={200}>
-        <div className="flex min-h-dvh">
+        {/*
+          `h-dvh` + `overflow-hidden` so the nav rail and the detail rail scroll independently of
+          the work canvas, as in a desktop dashboard. Under `xl` the canvas takes the page scroll
+          back (see PageLayout) so mobile still behaves like a normal document.
+        */}
+        <div className="flex h-dvh overflow-hidden">
           <a
             href="#main-content"
             className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-lg focus-visible:bg-background focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm"
@@ -111,9 +116,9 @@ export function AppShell({ children }: AppShellProps) {
           </a>
           <Sidebar />
           <MobileNavSheet />
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <Topbar />
-            <main id="main-content" className="min-w-0 flex-1 p-4 lg:p-6">
+            <main id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
               {children}
             </main>
           </div>

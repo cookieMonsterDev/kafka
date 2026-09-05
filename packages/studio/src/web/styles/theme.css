@@ -3,6 +3,12 @@
 @import 'shadcn/tailwind.css';
 @import '@fontsource-variable/geist';
 
+@property --scrollbar-alpha {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: 'Geist Variable', sans-serif;
@@ -97,5 +103,40 @@
   :where(a, button, summary, [role='button']):focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+
+  /* Same thin, fade-on-scroll scrollbar as the docs site (`packages/docs/src/styles/global.css`) —
+     transparent track, a visible thumb only while `[data-scrolling]` is set (see `web/index.html`'s
+     inline script), so idle chrome doesn't sit there as a permanent gray bar next to rounded cards. */
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto) {
+    --scrollbar-alpha: 0;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent)
+      transparent;
+    transition-property: --scrollbar-alpha;
+    transition-duration: 0.35s;
+    transition-timing-function: ease;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)[data-scrolling] {
+    --scrollbar-alpha: 1;
+    transition-duration: 0.15s;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-track,
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  :is(html, .overflow-auto, .overflow-x-auto, .overflow-y-auto)::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--muted-foreground) calc(var(--scrollbar-alpha) * 100%), transparent);
+    border: 2px solid transparent;
+    border-radius: 9999px;
+    background-clip: padding-box;
   }
 }

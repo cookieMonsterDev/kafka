@@ -66,9 +66,7 @@ export function ConnectionStatus({ collapsed }: ConnectionStatusProps) {
   return (
     <div role="status" className="rounded-xl border border-border bg-card p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[0.6875rem] font-medium tracking-[0.1em] text-muted-foreground uppercase">
-          Connection
-        </span>
+        <span className="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">Connection</span>
         <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', STATE_DOT[state])} />
       </div>
       <p className="mt-1.5 truncate text-sm font-medium">{label}</p>

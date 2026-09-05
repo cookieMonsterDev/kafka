@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, TriangleAlert } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CreateTopicForm, type CreateTopicFormValues } from '../topics/create-topic-form';
 import { Button } from '../ui/button';
@@ -39,9 +39,17 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
   return (
     <div className="flex flex-wrap items-center gap-2">
       {isError ? (
-        <div className="flex items-center gap-2 text-sm text-destructive">
-          <span>Could not load topics: {errorMessage(error) ?? 'unknown error'}</span>
-          <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
+        // Compact destructive chip — `ErrorState`'s own layout is a centered full-section block.
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-sm text-destructive"
+        >
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          {/* Fixed cap, not flex-shrink: this sits several toolbar ancestors deep, and truncation needs every one of them at `min-width: 0`. */}
+          <span className="max-w-[22rem] truncate sm:max-w-[32rem]">
+            Could not load topics: {errorMessage(error) ?? 'unknown error'}
+          </span>
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => void refetch()}>
             Retry
           </Button>
         </div>

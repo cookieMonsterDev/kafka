@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
+import { TooltipProvider } from '../ui/tooltip';
+import { Sidebar } from './sidebar';
 
 /** Versioned localStorage key for the desktop/tablet sidebar's expanded-vs-icon-only choice. */
 const SIDEBAR_STORAGE_KEY = 'kafka-studio-sidebar:v1';
@@ -97,19 +99,22 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <AppShellContext.Provider value={contextValue}>
-      <div className="flex min-h-dvh">
-        <a
-          href="#main-content"
-          className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-lg focus-visible:bg-background focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm"
-        >
-          Skip to content
-        </a>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main id="main-content" className="min-w-0 flex-1 p-4 lg:p-6">
-            {children}
-          </main>
+      <TooltipProvider delayDuration={200}>
+        <div className="flex min-h-dvh">
+          <a
+            href="#main-content"
+            className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-lg focus-visible:bg-background focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm"
+          >
+            Skip to content
+          </a>
+          <Sidebar />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main id="main-content" className="min-w-0 flex-1 p-4 lg:p-6">
+              {children}
+            </main>
+          </div>
         </div>
-      </div>
+      </TooltipProvider>
     </AppShellContext.Provider>
   );
 }

@@ -22,9 +22,17 @@ import { getTopic, topicQueryKeys } from '../lib/topics-api';
 import { formatTimestamp } from '../lib/utils';
 import { rootRoute } from './root';
 
+export interface MessagesSearch {
+  /** Prefills the topic picker — the board's "Tail this topic" action links in with this. */
+  readonly topic?: string;
+}
+
 export const messagesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/messages',
+  validateSearch: (search: Record<string, unknown>): MessagesSearch => ({
+    topic: typeof search.topic === 'string' ? search.topic : undefined,
+  }),
   component: MessagesPage,
 });
 
@@ -177,7 +185,8 @@ function MessageDetailRail({
 }
 
 function MessagesPage() {
-  const [topic, setTopic] = useState<string | null>(null);
+  const { topic: initialTopic } = messagesRoute.useSearch();
+  const [topic, setTopic] = useState<string | null>(initialTopic ?? null);
   const [mode, setMode] = useState<Mode>('history');
   const [filters, setFilters] = useState<MessageFiltersValue>({
     partition: null,
@@ -419,8 +428,8 @@ function MessagesPage() {
                               <td className="w-44 px-3 py-1.5 text-muted-foreground">
                                 {formatTimestamp(message.timestamp)}
                               </td>
-                              <td className="w-1/4 truncate px-3 py-1.5 font-mono text-xs">{decodedKey}</td>
-                              <td className="truncate px-3 py-1.5 font-mono text-xs">{decodedValue}</td>
+                              <td className="w-1/4 min-w-0 truncate px-3 py-1.5 font-mono text-xs">{decodedKey}</td>
+                              <td className="min-w-0 flex-1 truncate px-3 py-1.5 font-mono text-xs">{decodedValue}</td>
                             </tr>
                           );
                         })}

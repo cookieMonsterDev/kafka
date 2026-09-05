@@ -23,9 +23,17 @@ import {
 import { useEventSource } from '../lib/sse';
 import { rootRoute } from './root';
 
+export interface ProducerSearch {
+  /** Prefills the topic picker — the board's "Produce here" action links in with this. */
+  readonly topic?: string;
+}
+
 export const producerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/producer',
+  validateSearch: (search: Record<string, unknown>): ProducerSearch => ({
+    topic: typeof search.topic === 'string' ? search.topic : undefined,
+  }),
   component: ProducerPage,
 });
 
@@ -39,7 +47,8 @@ const BURST_STATUS_VARIANT: Record<BurstProgress['status'], 'default' | 'accent'
 };
 
 function ProducerPage() {
-  const [topic, setTopic] = useState<string | null>(null);
+  const { topic: initialTopic } = producerRoute.useSearch();
+  const [topic, setTopic] = useState<string | null>(initialTopic ?? null);
   const [payload, setPayload] = useState<PayloadEditorValue>(createEmptyPayloadValue());
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [history, setHistory] = useState<readonly ProduceHistoryEntry[]>([]);

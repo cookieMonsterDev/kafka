@@ -41,6 +41,27 @@ node packages/studio/dist/bin.js
 serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`
 before starting the server from source.
 
+## Design system
+
+The UI is **dark-only** — there is no light palette, no `.dark` class, and no theme toggle. Every
+token lives in the single `:root` block of `src/web/styles/theme.css`, and
+`scripts/check-theme-drift.mjs` keeps that block byte-identical to
+`packages/docs/src/styles/global.css`. Change one, change both, then run `pnpm theme:check` from
+the workspace root.
+
+The accent (`--primary`) is the brand mark's own green, and `--chart-1` … `--chart-5` are a
+categorical set — `src/web/lib/topic-accent.ts` hashes a topic name onto one of them so a topic
+keeps the same colour everywhere it appears.
+
+Two colour literals are duplicated by hand because Vite does not process them through the module
+graph: the `theme-color` meta and the splash screen in `src/web/index.html`. Both mirror
+`--background`; keep them in sync when that token changes.
+
+Loading and failure states go through the shared components in `src/web/components/ui/` —
+`skeleton`, `spinner`, `empty-state`, `error-state`, `query-boundary` and `toast`. A failed read
+gets a skeleton then an error panel with a working retry; a failed mutation always raises a toast
+via the `QueryClient`'s `MutationCache`, so it survives the dialog that started it closing.
+
 ## Tests
 
 ```sh

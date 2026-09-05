@@ -240,12 +240,12 @@ Required for UI changes:
   be scrolled from the keyboard.
 - **Motion and zoom** — Honor `prefers-reduced-motion`. Do not set `user-scalable=no` or
   `maximum-scale=1` on the viewport.
-- **Status** — Copy, search results, and theme changes announce through `aria-live="polite"`.
-  Do not use color as the only indicator (current page, warning callouts, copied state).
+- **Status** — Copy and search results announce through `aria-live="polite"`. Do not use color
+  as the only indicator (current page, warning callouts, copied state).
 - **Contrast and targets** — Text meets 4.5:1 (AA); UI focus indicators meet 3:1. Prefer at
-  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). Light
-  `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not lighten them
-  for aesthetics.
+  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). The
+  dark-only `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not dim
+  them for aesthetics.
 
 Markdown-only edits: every page keeps a meaningful `title` and `description`. Images need
 `alt`. Tables need header cells. Do not convey meaning with color or emoji alone.

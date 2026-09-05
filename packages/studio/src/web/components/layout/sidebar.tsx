@@ -6,6 +6,33 @@ import { ConnectionStatus } from './connection-status';
 import { ProfileSwitcher } from './profile-switcher';
 import { SidebarNav } from './sidebar-nav';
 
+export interface SidebarContentProps {
+  readonly collapsed: boolean;
+  /** Called after a real navigation — used by the mobile drawer to close itself. */
+  readonly onNavigate?: () => void;
+}
+
+/**
+ * The workspace nav, profile switcher, and connection pill — shared verbatim between the fixed
+ * sidebar and the mobile drawer (`MobileNavSheet`) so the two chrome states can never drift apart
+ * or leave a control missing on one of them (D9).
+ */
+export function SidebarContent({ collapsed, onNavigate }: SidebarContentProps) {
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-2">
+        <SidebarNav collapsed={collapsed} onNavigate={onNavigate} />
+      </div>
+      <div className="border-t border-border p-2">
+        <ProfileSwitcher collapsed={collapsed} />
+      </div>
+      <div className="border-t border-border p-2">
+        <ConnectionStatus collapsed={collapsed} />
+      </div>
+    </>
+  );
+}
+
 /** Fixed desktop/tablet chrome. Renders nothing on mobile — the drawer takes over there instead. */
 export function Sidebar() {
   const { isMobile, collapsed, toggleCollapsed } = useAppShell();
@@ -22,15 +49,7 @@ export function Sidebar() {
       <div className="flex h-14 items-center border-b border-border px-3">
         <span className={cn('truncate text-sm font-semibold', collapsed && 'sr-only')}>Kafka Studio</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-2">
-        <SidebarNav collapsed={collapsed} />
-      </div>
-      <div className="border-t border-border p-2">
-        <ProfileSwitcher collapsed={collapsed} />
-      </div>
-      <div className="border-t border-border p-2">
-        <ConnectionStatus collapsed={collapsed} />
-      </div>
+      <SidebarContent collapsed={collapsed} />
       <div className="border-t border-border p-2">
         <Button
           type="button"

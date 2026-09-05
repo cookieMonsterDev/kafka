@@ -28,3 +28,10 @@ export function formatBytes(value: string | null): string {
   const precision = unitIndex === 0 ? 0 : 1;
   return `${amount.toFixed(precision)} ${BYTE_UNITS[unitIndex]}`;
 }
+
+/** A decimal-string epoch-millisecond timestamp (as the server serializes every `bigint` timestamp) to a locale-formatted date-time, or `'—'` when unparseable. */
+export function formatTimestamp(value: string): string {
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return '—';
+  return new Date(ms).toLocaleString();
+}

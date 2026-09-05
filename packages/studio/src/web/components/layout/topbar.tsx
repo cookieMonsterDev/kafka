@@ -9,7 +9,7 @@ import { useAppShell } from './app-shell';
 
 interface Crumb {
   readonly label: string;
-  readonly to?: '/topics';
+  readonly to?: '/topics' | '/messages';
   /**
    * What the label *is*, when the label alone is just a name. A bare `orders.created` as the page
    * heading says nothing about what you are looking at; `Topic orders.created` does.
@@ -21,6 +21,7 @@ function getPageInfo(pathname: string): { readonly title: string; readonly crumb
   if (pathname === '/') return { title: 'Overview', crumbs: [{ label: 'Cluster' }, { label: 'Overview' }] };
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
+  if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
     return {

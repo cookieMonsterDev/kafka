@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes } from './utils';
+import { formatBytes, formatTimestamp } from './utils';
 
 describe('formatBytes', () => {
   it('formats null as an em dash', () => {
@@ -25,5 +25,19 @@ describe('formatBytes', () => {
 
   it('treats an unparseable value as unavailable', () => {
     expect(formatBytes('not-a-number')).toBe('—');
+  });
+});
+
+describe('formatTimestamp', () => {
+  it('formats a valid epoch-millisecond string as a locale date-time', () => {
+    expect(formatTimestamp('0')).toBe(new Date(0).toLocaleString());
+  });
+
+  it('treats a negative value as unavailable', () => {
+    expect(formatTimestamp('-1')).toBe('—');
+  });
+
+  it('treats an unparseable value as unavailable', () => {
+    expect(formatTimestamp('not-a-number')).toBe('—');
   });
 });

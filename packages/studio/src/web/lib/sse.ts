@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import type { StudioEvent } from '../../shared/contracts/event';
 import type { MessageRecord } from '../../shared/contracts/message';
+import type { RingBuffer } from './ring-buffer';
 
 /**
  * Subscribes to a named SSE event on `url` and keeps the most recently received payload. Pass
@@ -106,4 +108,38 @@ export function useMessageTail(url: string | null, options: UseMessageTailOption
   }, [url, maxMessages]);
 
   return { messages, droppedCount, error, clear: () => setMessages([]) };
+}
+
+/**
+ * Feeds `/api/events` straight into a {@link RingBuffer} — deliberately not `useState`: the board
+ * can receive many events per second, and re-rendering every subscriber on every single one is
+ * exactly what the ring buffer (read via `useSyncExternalStore`, or directly by the canvas particle
+ * loop) exists to avoid. Mounted once for the board route; the connection is dropped on unmount.
+ * The returned `connected` flag is the one piece of this that's small enough to be `useState` — it
+ * only flips on an actual open/close, not per event.
+ */
+export function useActivityFeed(buffer: RingBuffer<StudioEvent>): { readonly connected: boolean } {
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    setConnected(false);
+    const source = new EventSource('/api/events');
+    const handleActivity = (event: MessageEvent<string>): void => {
+      try {
+        buffer.push(JSON.parse(event.data) as StudioEvent);
+      } catch {
+        // malformed frame, skip it
+      }
+    };
+    source.addEventListener('activity', handleActivity);
+    source.addEventListener('open', () => setConnected(true));
+    source.addEventListener('error', () => setConnected(false));
+
+    return () => {
+      source.removeEventListener('activity', handleActivity);
+      source.close();
+    };
+  }, [buffer]);
+
+  return { connected };
 }

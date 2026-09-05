@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { TooltipProvider } from '../ui/tooltip';
 import { MobileNavSheet } from './mobile-nav-sheet';
 import { Sidebar } from './sidebar';
+import { Topbar } from './topbar';
 
 /** Versioned localStorage key for the desktop/tablet sidebar's expanded-vs-icon-only choice. */
 const SIDEBAR_STORAGE_KEY = 'kafka-studio-sidebar:v1';
@@ -111,6 +112,7 @@ export function AppShell({ children }: AppShellProps) {
           <Sidebar />
           <MobileNavSheet />
           <div className="flex min-w-0 flex-1 flex-col">
+            <Topbar />
             <main id="main-content" className="min-w-0 flex-1 p-4 lg:p-6">
               {children}
             </main>

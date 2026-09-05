@@ -159,11 +159,11 @@ function TopicDetailPage() {
                   </tbody>
                   {data.partitions.some((partition) => partition.sizeBytes !== null) && (
                     <tfoot>
-                      <tr className="text-xs text-muted-foreground">
-                        <td colSpan={5} className="px-3 py-2 text-right font-medium">
+                      <tr className="border-t border-border text-xs text-muted-foreground">
+                        <td colSpan={6} className="px-3 py-2 text-right font-medium">
                           Total
                         </td>
-                        <td className="px-3 py-2 font-medium">
+                        <td className="px-3 py-2 font-medium text-foreground">
                           {formatBytes(
                             String(
                               data.partitions.reduce(

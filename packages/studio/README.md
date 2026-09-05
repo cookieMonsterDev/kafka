@@ -14,13 +14,15 @@ spirit of Prisma Studio. Built on top of
 [`@cookiemonsterdev/kafka-config`](../config/README.md), and lives in the
 [kafka monorepo](https://github.com/cookieMonsterDev/kafka).
 
-**Status:** early — the CLI, HTTP server, and web shell run end to end, but there is no Kafka
-connection yet (the cluster page just reports "not connected"). Not published to npm; install and
-usage instructions will be added once there's a real feature to point at.
+**Status:** early — the CLI, HTTP server, and web shell run end to end, and the studio can browse,
+create and configure topics and produce messages (single sends and rate-limited bursts) against a
+real cluster. Not published to npm; install and usage instructions will be added once more of the
+plan lands.
 
 ## Contents
 
 - [Local development](#local-development)
+- [Local Kafka with Docker](#local-kafka-with-docker)
 - [Tests](#tests)
 - [Contributing](#contributing)
 - [License](#license)
@@ -40,6 +42,39 @@ node packages/studio/dist/bin.js
 `pnpm --filter @cookiemonsterdev/kafka-studio dev` watches and rebuilds the server bundle only. To
 serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`
 before starting the server from source.
+
+## Local Kafka with Docker
+
+The studio has no built-in cluster — it needs a real (or locally hosted) broker to point at.
+`docker-compose.dev.yml` in this package brings up a single-node KRaft broker on `localhost:9092`,
+PLAINTEXT only, for exactly this:
+
+```sh
+cd packages/studio
+docker compose -f docker-compose.dev.yml up -d
+```
+
+Wait for it to report healthy (`docker compose -f docker-compose.dev.yml ps`), then point the
+studio at it with `KAFKA_BROKERS` — the studio (via `@cookiemonsterdev/kafka-core`'s `fromEnv`)
+reads this the same way the CLI does, so no config file is required for a quick local check:
+
+```sh
+KAFKA_BROKERS=localhost:9092 node packages/studio/dist/bin.js
+```
+
+To use a named `cli.profiles` connection instead (SASL/SSL, a remote cluster, …), point
+`KAFKA_CONFIG` at a `kafka.config.*` file the same way `@cookiemonsterdev/kafka-cli` does — see
+[`@cookiemonsterdev/kafka-config`](../config/README.md).
+
+Tear the broker down (and drop its data) with:
+
+```sh
+docker compose -f docker-compose.dev.yml down -v
+```
+
+This compose file is for manual, local use only — it is not part of `pnpm test` or
+`pnpm test:integration` for this package. The broker-backed fixtures those eventually use live in
+[`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/`.
 
 ## Design system
 

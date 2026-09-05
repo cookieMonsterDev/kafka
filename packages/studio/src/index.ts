@@ -3,11 +3,14 @@ import { createStudioServer } from './server/create-server';
 import { createDevMiddleware } from './server/dev';
 import { AdminPool } from './server/kafka/admin-pool';
 import { createKafkaClient, resolveStudioConnectionConfig } from './server/kafka/connection';
+import { StudioEventBus } from './server/kafka/events';
 import type { MessageConsumerFactory } from './server/kafka/messages';
 import { BurstJobManager, ProducerPool } from './server/kafka/produce';
 import { openBrowser, formatBanner } from './server/open-browser';
 import { resolvePort } from './server/port';
 import { registerClusterRoutes } from './server/routes/cluster';
+import { registerEventRoutes } from './server/routes/events';
+import { registerGroupRoutes } from './server/routes/groups';
 import { registerHealthRoutes } from './server/routes/health';
 import { registerMessageRoutes } from './server/routes/messages';
 import { registerProduceRoutes } from './server/routes/produce';
@@ -58,9 +61,10 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   const startedAt = runtime.now();
   const version = readOwnVersion(import.meta.url);
 
+  const events = new StudioEventBus();
   const pool = new AdminPool((profileName) => createKafkaClient(connection, profileName));
   const producers = new ProducerPool((profileName) => createKafkaClient(connection, profileName));
-  const jobs = new BurstJobManager();
+  const jobs = new BurstJobManager((sent) => events.publish({ kind: 'produce', partition: null, ...sent }));
   const messageConsumers: MessageConsumerFactory = (profileName) => ({
     consumer: () => createKafkaClient(connection, profileName).consumer({}),
   });
@@ -78,13 +82,16 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
     },
   });
   registerTopicRoutes(router, { pool, getActiveProfile: () => activeProfile });
-  registerProduceRoutes(router, { producers, jobs, getActiveProfile: () => activeProfile });
+  registerProduceRoutes(router, { producers, jobs, events, getActiveProfile: () => activeProfile });
   registerMessageRoutes(router, {
     pool,
     consumerFactory: messageConsumers,
     maxTail: studioConfig.maxTail ?? DEFAULT_MAX_TAIL,
+    events,
     getActiveProfile: () => activeProfile,
   });
+  registerGroupRoutes(router, { pool, getActiveProfile: () => activeProfile });
+  registerEventRoutes(router, { events });
 
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
   const fallback =

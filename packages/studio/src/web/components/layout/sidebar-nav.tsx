@@ -11,7 +11,7 @@ interface NavItem {
   readonly label: string;
   readonly icon: LucideIcon;
   /** Omitted for workspace areas that don't have a route yet — rendered disabled, never a dead link. */
-  readonly to?: '/' | '/topics';
+  readonly to?: '/' | '/topics' | '/producer';
   readonly exact?: boolean;
   /** Shows a live count in the trailing badge slot. Only Topics has a count to show today. */
   readonly counted?: boolean;
@@ -20,7 +20,7 @@ interface NavItem {
 const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Cluster', icon: Server, to: '/', exact: true },
   { label: 'Topics', icon: Layers, to: '/topics', counted: true },
-  { label: 'Producer', icon: Send },
+  { label: 'Producer', icon: Send, to: '/producer' },
   { label: 'Messages', icon: MessageSquare },
   { label: 'Board', icon: Workflow },
   { label: 'Consumer groups', icon: Users },
@@ -63,7 +63,7 @@ function NavItemContent({ item, collapsed }: { readonly item: NavItem; readonly 
   const Icon = item.icon;
   return (
     <>
-      <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+      <Icon className="size-4.5 shrink-0" aria-hidden="true" />
       <span className={collapsed ? 'sr-only' : 'truncate'}>{item.label}</span>
       {!collapsed && item.to === undefined && (
         <Badge variant="outline" className="ml-auto">
@@ -108,7 +108,7 @@ export function SidebarNav({ collapsed, onNavigate }: SidebarNavProps) {
   return (
     <ul className="flex flex-col gap-0.5">
       {!collapsed && (
-        <li className="px-3 pt-1 pb-1.5 text-[0.6875rem] font-medium tracking-[0.1em] text-muted-foreground uppercase">
+        <li className="px-3 pt-1 pb-1.5 text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
           Workspace
         </li>
       )}

@@ -20,6 +20,7 @@ interface Crumb {
 function getPageInfo(pathname: string): { readonly title: string; readonly crumbs: readonly Crumb[] } {
   if (pathname === '/') return { title: 'Overview', crumbs: [{ label: 'Cluster' }, { label: 'Overview' }] };
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
+  if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
     return {

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="kafka">
+  <rect width="32" height="32" rx="8" fill="#070b09"/>
+  <g fill="none" stroke-linecap="round">
+    <g stroke="#00c387" stroke-width="2.75">
+      <path d="M11 7v18"/>
+      <path d="M11 16l10-6"/>
+      <path d="M11 16l10 6"/>
+    </g>
+    <g stroke="#f1f4f2" stroke-width="1.125">
+      <path d="M11 7v18"/>
+      <path d="M11 16l10-6"/>
+      <path d="M11 16l10 6"/>
+    </g>
+  </g>
+  <g fill="#131715" stroke="#00c387" stroke-width="1.75">
+    <circle cx="11" cy="7" r="2.25"/>
+    <circle cx="11" cy="25" r="2.25"/>
+    <circle cx="21" cy="10" r="2.25"/>
+    <circle cx="21" cy="22" r="2.25"/>
+  </g>
+  <circle cx="11" cy="16" r="2.25" fill="#00c387" stroke="#00c387" stroke-width="1.75"/>
+</svg>

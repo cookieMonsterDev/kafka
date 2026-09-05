@@ -77,7 +77,7 @@ export function BoardMetrics({ events, topicCount, groupCount, live }: BoardMetr
             {live ? 'Live' : 'Disconnected'}
           </Badge>
         </CardHeader>
-        <CardContent className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <CardContent className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-stable">
           {recent.length === 0 ? (
             <EmptyState
               icon={Activity}

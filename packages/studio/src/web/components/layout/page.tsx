@@ -27,14 +27,7 @@ export function PageLayout({ toolbar, rail, railLabel, children }: PageLayoutPro
         </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-1 xl:overflow-hidden">
-        <div
-          className={cn(
-            'min-w-0 flex-1 overflow-y-auto p-4 scrollbar-gutter-stable lg:p-6',
-            // The rail supplies its own left padding as the gap to the content beside it — matching
-            // content's own padding on top of that would make the right gap wider than the left one.
-            rail !== undefined && 'xl:pr-0',
-          )}
-        >
+        <div className={cn('min-w-0 flex-1 overflow-y-auto p-4 scrollbar-gutter-stable lg:p-6 lg:pr-2.5')}>
           <div className="mx-auto w-full max-w-[110rem]">{children}</div>
           {rail !== undefined && (
             <div className="mt-6 flex flex-col gap-4 xl:hidden">

@@ -27,9 +27,16 @@ function etagFor(size: number, mtimeMs: number): string {
     .digest('hex')}"`;
 }
 
-/** Has a file extension, i.e. looks like a real asset request rather than a client-side route. */
+/**
+ * Whether a miss should 404 instead of falling back to the SPA.
+ *
+ * Only extensions the web build actually emits count. Treating *any* dot as an extension breaks
+ * client-side routes that carry a dot in a path segment — and Kafka topic names conventionally do
+ * (`/topics/orders.created`), so that heuristic made every such topic un-deep-linkable.
+ */
 function looksLikeAssetPath(pathname: string): boolean {
-  return path.extname(pathname) !== '';
+  const extension = path.extname(pathname).toLowerCase();
+  return extension !== '' && extension in CONTENT_TYPES;
 }
 
 async function serveFile(filePath: string, res: ServerResponse, req: IncomingMessage): Promise<void> {

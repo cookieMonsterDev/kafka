@@ -57,7 +57,16 @@ describe('createStaticHandler', () => {
     });
   });
 
-  it('returns 404 for a missing asset with an extension, without falling back', async () => {
+  it('falls back to index.html for a route segment containing a dot', async () => {
+    await withServer(webRoot, async (baseUrl) => {
+      // Kafka topic names conventionally use dots, so `.created` must not read as a file extension.
+      const res = await fetch(`${baseUrl}/topics/orders.created`);
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('index');
+    });
+  });
+
+  it('returns 404 for a missing asset with a known extension, without falling back', async () => {
     await withServer(webRoot, async (baseUrl) => {
       const res = await fetch(`${baseUrl}/assets/missing.js`);
       expect(res.status).toBe(404);

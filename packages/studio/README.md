@@ -20,7 +20,10 @@ tail live messages; inspect consumer groups (members, per-partition lag, offset 
 and share groups; render a live topology board of cluster activity; and browse read-only ACL,
 client quota, and transaction state. A command palette (`⌘K`/`Ctrl+K`) jumps between pages. Every
 session is authenticated (see [Security](#security)), and `--read-only` is enforced by the server,
-not just hidden in the UI. Not published to npm; install and usage instructions will follow.
+not just hidden in the UI. Launchable standalone (`kafka-studio`, this package's own `bin`) or as
+`kafka studio` from [`@cookiemonsterdev/kafka-cli`](../cli/README.md), which resolves this package
+at runtime and prints an install hint if it isn't present. Not published to npm; install and usage
+instructions will follow.
 
 ## Contents
 
@@ -86,8 +89,9 @@ docker compose -f docker-compose.dev.yml down -v
 ```
 
 This compose file is for manual, local use only — it is not part of `pnpm test` or
-`pnpm test:integration` for this package. The broker-backed fixtures those eventually use live in
-[`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/`.
+`pnpm test:integration` for this package. `pnpm test:integration` instead brings up its own broker
+from [`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/` (see
+[Tests](#tests) below), reusing those compose files rather than shipping a second copy of them.
 
 ## Security
 
@@ -139,9 +143,15 @@ pnpm --filter @cookiemonsterdev/kafka-studio test
 pnpm --filter @cookiemonsterdev/kafka-studio test:integration
 ```
 
-Unit tests live beside source as `src/**/*.test.ts` and never start Docker. Integration tests will
-live under `test/suites/**`, version-gated the same way as
-[`@cookiemonsterdev/kafka-core`](../core/README.md#tests).
+Unit tests live beside source as `src/**/*.test.ts` and never start Docker; `test/suites/tarball.test.ts`
+and `test/suites/bundle-budget.test.ts` are also unit tests in this sense — both build and pack the
+package, neither needs a broker. `test/suites/studio-e2e.test.ts` is the one broker-backed
+integration suite, walking the studio's HTTP API (topic create/describe/configure, produce, a
+bounded message read, consumer group listing) against a real cluster brought up by
+`test/helpers/global-setup.ts` — the same compose files
+[`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s own integration suite uses, not a second
+copy of them. `KAFKA_EXTERNAL=1` (point `KAFKA_BROKERS` at an already-running broker) and
+`DO_NOT_STOP=1` work the same way here as they do for core and the CLI.
 
 ## Contributing
 

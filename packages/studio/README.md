@@ -17,13 +17,16 @@ spirit of Prisma Studio. Built on top of
 **Status:** early — the CLI, HTTP server, and web shell run end to end. The studio can browse,
 create and configure topics; produce messages (single sends and rate-limited bursts); browse and
 tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion)
-and share groups; and render a live topology board of cluster activity. Not published to npm;
-install and usage instructions will be added once more of the plan lands.
+and share groups; render a live topology board of cluster activity; and browse read-only ACL,
+client quota, and transaction state. A command palette (`⌘K`/`Ctrl+K`) jumps between pages. Every
+session is authenticated (see [Security](#security)), and `--read-only` is enforced by the server,
+not just hidden in the UI. Not published to npm; install and usage instructions will follow.
 
 ## Contents
 
 - [Local development](#local-development)
 - [Local Kafka with Docker](#local-kafka-with-docker)
+- [Security](#security)
 - [Tests](#tests)
 - [Contributing](#contributing)
 - [License](#license)
@@ -85,6 +88,26 @@ docker compose -f docker-compose.dev.yml down -v
 This compose file is for manual, local use only — it is not part of `pnpm test` or
 `pnpm test:integration` for this package. The broker-backed fixtures those eventually use live in
 [`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/`.
+
+## Security
+
+A local server that can speak to a possibly-production Kafka cluster is a real attack surface,
+so none of this is optional:
+
+- **Localhost by default.** The server binds `127.0.0.1` unless you pass an explicit `--host`.
+  Doing so prints a loud warning to stderr — it means this machine's network can now reach a
+  server that can read and mutate the connected cluster.
+- **A session token per process.** On startup the server generates a random token and opens the
+  browser to a URL carrying it in the hash (`#token=…`), never in a query string or header the
+  server itself would log. The page reads it once, stores it in `sessionStorage` for the tab's
+  lifetime, and strips it from the visible URL. Every `/api/*` request after that carries it as
+  `x-kafka-studio-token` (or, for the SSE streams `EventSource` can't attach headers to, a `token`
+  query param instead). A request with a missing or wrong token gets `401`.
+- **An Origin/Host allowlist.** The standard defense against DNS rebinding against a local dev
+  server: a request naming a `Host` (or, when present, `Origin`) other than the address the
+  server was actually told to bind is rejected with `403`, before the token is even checked.
+- **`--read-only` is enforced by the server**, not by hiding buttons in the UI — a mutating
+  request is rejected with `403` regardless of what the client sent.
 
 ## Design system
 

@@ -16,6 +16,7 @@ import { registerHealthRoutes } from './server/routes/health';
 import { registerMessageRoutes } from './server/routes/messages';
 import { registerProduceRoutes } from './server/routes/produce';
 import { registerProfileRoutes } from './server/routes/profiles';
+import { registerSettingsRoutes } from './server/routes/settings';
 import { registerTopicRoutes } from './server/routes/topics';
 import { Router } from './server/router';
 import { createStaticHandler } from './server/static';
@@ -99,6 +100,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   });
   registerGroupRoutes(router, { pool, getActiveProfile: () => activeProfile });
   registerEventRoutes(router, { events });
+  registerSettingsRoutes(router, { pool, getActiveProfile: () => activeProfile });
 
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
   const fallback =

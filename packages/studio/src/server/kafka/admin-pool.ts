@@ -26,6 +26,9 @@ export type PooledAdmin = Pick<
   | 'removeMembersFromConsumerGroup'
   | 'describeShareGroups'
   | 'listShareGroupOffsets'
+  | 'describeAcls'
+  | 'describeClientQuotas'
+  | 'listTransactions'
 >;
 
 /** Everything `AdminPool` needs to build a fresh, unconnected client for one profile. */

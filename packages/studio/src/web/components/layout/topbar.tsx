@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
+import { CommandPalette } from './command-palette';
 
 interface Crumb {
   readonly label: string;
@@ -20,6 +21,7 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
   if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
   if (pathname === '/board') return { title: 'Board', crumbs: [{ label: 'Board' }] };
   if (pathname === '/groups') return { title: 'Consumer groups', crumbs: [{ label: 'Consumer groups' }] };
+  if (pathname === '/settings') return { title: 'Settings', crumbs: [{ label: 'Settings' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
     return {
@@ -38,9 +40,11 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
 }
 
 /**
- * Sidebar toggle, the breadcrumb trail (which doubles as the page heading), and refresh. There is
- * deliberately no global search box: each list filters itself in its own toolbar, and a second
- * search field in the chrome would just be a jump-by-exact-name shortcut with nowhere to go.
+ * Sidebar toggle, the breadcrumb trail (which doubles as the page heading), the command palette,
+ * and refresh. There is deliberately no global search box: each list filters itself in its own
+ * toolbar, and a second search field in the chrome would just be a jump-by-exact-name shortcut
+ * with nowhere to go. The command palette is a different thing — keyboard navigation between
+ * pages, not a filter over any one list — which is why it's a `⌘K` dialog, not a text field.
  */
 export function Topbar() {
   const { isMobile, collapsed, toggleCollapsed, openMobileNav } = useAppShell();
@@ -114,6 +118,7 @@ export function Topbar() {
         </nav>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <CommandPalette />
         <Button
           type="button"
           variant="outline"

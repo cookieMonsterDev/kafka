@@ -1,4 +1,4 @@
-import { Layers, MessageSquare, Send, Server, Settings, Users, Workflow, type LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Badge } from '../ui/badge';
@@ -6,26 +6,25 @@ import { Skeleton } from '../ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { listTopics, topicQueryKeys } from '../../lib/topics-api';
 import { cn } from '../../lib/utils';
+import { WORKSPACE_PAGES, type PageRoute } from './workspace-pages';
 
 interface NavItem {
   readonly label: string;
   readonly icon: LucideIcon;
   /** Omitted for workspace areas that don't have a route yet — rendered disabled, never a dead link. */
-  readonly to?: '/' | '/topics' | '/producer' | '/messages' | '/board' | '/groups';
+  readonly to?: PageRoute;
   readonly exact?: boolean;
   /** Shows a live count in the trailing badge slot. Only Topics has a count to show today. */
   readonly counted?: boolean;
 }
 
-const NAV_ITEMS: readonly NavItem[] = [
-  { label: 'Cluster', icon: Server, to: '/', exact: true },
-  { label: 'Topics', icon: Layers, to: '/topics', counted: true },
-  { label: 'Producer', icon: Send, to: '/producer' },
-  { label: 'Messages', icon: MessageSquare, to: '/messages' },
-  { label: 'Board', icon: Workflow, to: '/board' },
-  { label: 'Consumer groups', icon: Users, to: '/groups' },
-  { label: 'Settings', icon: Settings },
-];
+/** Per-item sidebar decoration that the command palette has no equivalent of — kept local rather than folded into the shared page list. */
+const NAV_EXTRAS: Readonly<Partial<Record<PageRoute, Pick<NavItem, 'exact' | 'counted'>>>> = {
+  '/': { exact: true },
+  '/topics': { counted: true },
+};
+
+const NAV_ITEMS: readonly NavItem[] = WORKSPACE_PAGES.map((page) => ({ ...page, ...NAV_EXTRAS[page.to] }));
 
 /**
  * The active item carries three cues, not one: the accent rail, the raised surface, and the

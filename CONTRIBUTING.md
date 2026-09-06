@@ -221,9 +221,10 @@ How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](pack
 
 ### Accessibility
 
-The docs site should meet **WCAG 2.2 Level AA**. Treat that as in-scope whenever you change
-`packages/docs` UI (layouts, components, pages, CSS) or Markdown that introduces images,
-tables, or interactive examples. Do not land a visual change and “fix a11y later”.
+The docs site and the studio UI should both meet **WCAG 2.2 Level AA**. Treat that as in-scope
+whenever you change `packages/docs` or `packages/studio` UI (layouts, components, pages, CSS)
+or Markdown that introduces images, tables, or interactive examples. Do not land a visual
+change and “fix a11y later”.
 
 Required for UI changes:
 

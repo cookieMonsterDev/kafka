@@ -28,3 +28,8 @@ export function isGroupIdNotFoundError(error: unknown): boolean {
 export function isNonEmptyGroupError(error: unknown): boolean {
   return protocolErrorType(error) === 'NON_EMPTY_GROUP';
 }
+
+/** The broker has no `authorizer.class.name` configured — the default for most non-production clusters, this one's own `docker-compose.dev.yml` included. */
+export function isSecurityDisabledError(error: unknown): boolean {
+  return protocolErrorType(error) === 'SECURITY_DISABLED';
+}

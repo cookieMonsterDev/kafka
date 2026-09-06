@@ -1,9 +1,16 @@
+import { lazy, Suspense } from 'react';
 import { BookOpen } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
-import { ProfileSwitcher } from './profile-switcher';
 import { SidebarNav } from './sidebar-nav';
+
+// Lazy: pulls in the `Select` primitive, which most viewers never see this component render
+// (it's a no-op with no `cli.profiles` configured) — keeping it out of the initial bundle instead
+// of eagerly paying for a control that usually renders nothing.
+const ProfileSwitcher = lazy(() =>
+  import('./profile-switcher').then((module) => ({ default: module.ProfileSwitcher })),
+);
 
 const DOCS_URL = 'https://cookiemonsterdev.github.io/kafka/';
 
@@ -66,7 +73,9 @@ export function SidebarContent({ collapsed, onNavigate }: SidebarContentProps) {
         <SidebarNav collapsed={collapsed} onNavigate={onNavigate} />
         {/* Renders nothing at all when no profiles are configured — a section heading with no
             control under it reads as something failing to load. */}
-        <ProfileSwitcher collapsed={collapsed} className="mt-6" />
+        <Suspense fallback={null}>
+          <ProfileSwitcher collapsed={collapsed} className="mt-6" />
+        </Suspense>
       </div>
       <div className="p-2 pt-0">
         <DocumentationLink collapsed={collapsed} onNavigate={onNavigate} />

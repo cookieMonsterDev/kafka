@@ -99,4 +99,58 @@ describe('createStaticHandler', () => {
       expect(res.status).toBe(404);
     });
   });
+
+  describe('precompressed asset negotiation', () => {
+    beforeEach(async () => {
+      // Deliberately different bytes per encoding, not just a re-gzip of the same content — a test
+      // that served identity content while claiming `content-encoding: br` would still pass a
+      // byte-for-byte comparison against the original, undici transparently decompresses the body.
+      await writeFile(path.join(webRoot, 'assets', 'app.js.br'), 'console.log("br")');
+      await writeFile(path.join(webRoot, 'assets', 'app.js.gz'), 'console.log("gzip")');
+    });
+
+    it('prefers a brotli sibling when the request accepts it', async () => {
+      await withServer(webRoot, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/assets/app.js`, { headers: { 'accept-encoding': 'br, gzip' } });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-encoding')).toBe('br');
+        expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      });
+    });
+
+    it('falls back to gzip when the request does not accept brotli', async () => {
+      await withServer(webRoot, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/assets/app.js`, { headers: { 'accept-encoding': 'gzip' } });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-encoding')).toBe('gzip');
+      });
+    });
+
+    it('falls back to identity when the request accepts neither', async () => {
+      await withServer(webRoot, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/assets/app.js`, { headers: { 'accept-encoding': 'identity' } });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-encoding')).toBeNull();
+        expect(res.headers.get('vary')).toBe('Accept-Encoding');
+        await expect(res.text()).resolves.toBe('console.log(1)');
+      });
+    });
+
+    it('honours an explicit q=0 disabling an otherwise-accepted encoding', async () => {
+      await withServer(webRoot, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/assets/app.js`, { headers: { 'accept-encoding': 'br;q=0, gzip' } });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-encoding')).toBe('gzip');
+      });
+    });
+
+    it('falls back to identity for an asset with no precompressed sibling', async () => {
+      await withServer(webRoot, async (baseUrl) => {
+        await writeFile(path.join(webRoot, 'assets', 'plain.txt'), 'plain');
+        const res = await fetch(`${baseUrl}/assets/plain.txt`, { headers: { 'accept-encoding': 'br, gzip' } });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-encoding')).toBeNull();
+      });
+    });
+  });
 });

@@ -1,6 +1,8 @@
 import { Layers, MessageSquare, Send, Server, Settings, Users, Workflow, type LucideIcon } from 'lucide-react';
+import type { RegisteredRouter, RootRouteId, RouteIds } from '@tanstack/react-router';
 
-export type PageRoute = '/' | '/topics' | '/producer' | '/messages' | '/board' | '/groups' | '/settings';
+/** Derived from the router's own registered route tree rather than hand-listed, so a renamed or removed route fails typecheck here instead of silently drifting. `RouteIds` also includes the root itself, which is never a navigation target. */
+export type PageRoute = Exclude<RouteIds<RegisteredRouter['routeTree']>, RootRouteId>;
 
 export interface WorkspacePage {
   readonly label: string;

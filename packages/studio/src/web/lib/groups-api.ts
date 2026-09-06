@@ -10,6 +10,7 @@ import type {
   ShareGroupDetailResponse,
   ShareGroupListResponse,
 } from '../../shared/contracts/group';
+import { withAuthHeaders } from './auth';
 
 export const groupQueryKeys = {
   all: ['groups'] as const,
@@ -35,12 +36,12 @@ async function parseJsonOrThrow<T>(res: Response, what: string): Promise<T> {
 }
 
 export async function listGroups(): Promise<GroupListResponse> {
-  const res = await fetch('/api/groups');
+  const res = await fetch('/api/groups', { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/groups');
 }
 
 export async function getGroup(groupId: string): Promise<GroupDetailResponse> {
-  const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}`);
+  const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}`, { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/groups/:id');
 }
 
@@ -50,7 +51,7 @@ export async function resetGroupOffsets(
 ): Promise<ResetGroupOffsetsResponse> {
   const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/offsets/reset`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'POST /api/groups/:id/offsets/reset');
@@ -62,7 +63,7 @@ export async function deleteGroupOffsets(
 ): Promise<DeleteGroupOffsetsResponse> {
   const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/offsets`, {
     method: 'DELETE',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'DELETE /api/groups/:id/offsets');
@@ -74,23 +75,26 @@ export async function removeGroupMembers(
 ): Promise<RemoveGroupMembersResponse> {
   const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/members/remove`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'POST /api/groups/:id/members/remove');
 }
 
 export async function deleteGroup(groupId: string): Promise<void> {
-  const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}`, {
+    method: 'DELETE',
+    headers: withAuthHeaders(),
+  });
   await assertOk(res, 'DELETE /api/groups/:id');
 }
 
 export async function listShareGroups(): Promise<ShareGroupListResponse> {
-  const res = await fetch('/api/share-groups');
+  const res = await fetch('/api/share-groups', { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/share-groups');
 }
 
 export async function getShareGroup(groupId: string): Promise<ShareGroupDetailResponse> {
-  const res = await fetch(`/api/share-groups/${encodeURIComponent(groupId)}`);
+  const res = await fetch(`/api/share-groups/${encodeURIComponent(groupId)}`, { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/share-groups/:id');
 }

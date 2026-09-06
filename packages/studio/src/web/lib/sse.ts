@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StudioEvent } from '../../shared/contracts/event';
 import type { MessageRecord } from '../../shared/contracts/message';
+import { withAuthQuery } from './auth';
 import type { RingBuffer } from './ring-buffer';
 
 /**
@@ -16,7 +17,8 @@ export function useEventSource<T>(url: string | null, eventName = 'message'): { 
     setData(null);
     if (url === null) return;
 
-    const source = new EventSource(url);
+    // `EventSource` cannot set custom headers, so the session token rides along as a query param.
+    const source = new EventSource(withAuthQuery(url));
     const handleMessage = (event: MessageEvent<string>): void => {
       try {
         setData(JSON.parse(event.data) as T);
@@ -64,7 +66,7 @@ export function useMessageTail(url: string | null, options: UseMessageTailOption
     setError(null);
     if (url === null) return;
 
-    const source = new EventSource(url);
+    const source = new EventSource(withAuthQuery(url));
 
     const handleMessage = (event: MessageEvent<string>): void => {
       try {
@@ -123,7 +125,7 @@ export function useActivityFeed(buffer: RingBuffer<StudioEvent>): { readonly con
 
   useEffect(() => {
     setConnected(false);
-    const source = new EventSource('/api/events');
+    const source = new EventSource(withAuthQuery('/api/events'));
     const handleActivity = (event: MessageEvent<string>): void => {
       try {
         buffer.push(JSON.parse(event.data) as StudioEvent);

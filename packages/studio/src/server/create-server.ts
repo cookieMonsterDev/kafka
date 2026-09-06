@@ -1,4 +1,6 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import type { AuthPolicy } from './auth';
+import { checkRequestAuth } from './auth';
 import { mapErrorToApiError, stringifyJson } from './json';
 import type { Handler } from './router';
 import { Router } from './router';
@@ -29,14 +31,30 @@ export interface CreateServerOptions {
    * through Vite). Returning `false` means "I didn't handle this either", which becomes a 404.
    */
   readonly fallback?: (req: IncomingMessage, res: ServerResponse, url: URL) => boolean | Promise<boolean>;
+  /** Session-token + origin/host allowlist policy. Omitted entirely by route-level unit tests that talk to the router directly. */
+  readonly auth?: AuthPolicy;
+  /** Rejects a matched mutating route with `403`, unless the route itself opted out via `allowInReadOnly`. */
+  readonly readOnly?: boolean;
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse, options: CreateServerOptions): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://studio.internal');
 
   try {
+    if (options.auth) {
+      const failure = checkRequestAuth(req, url, options.auth);
+      if (failure) {
+        sendError(res, failure.status, failure.code, failure.message);
+        return;
+      }
+    }
+
     const match = options.router.match(req.method ?? 'GET', url.pathname);
     if (match) {
+      if (options.readOnly === true && match.mutating && !match.allowInReadOnly) {
+        sendError(res, 403, 'read_only', 'the server is running in read-only mode');
+        return;
+      }
       await match.handler(req, res, match.params, url);
       return;
     }

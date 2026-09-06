@@ -98,28 +98,34 @@ export function registerMessageRoutes(router: Router, context: MessagesRouteCont
     }
   });
 
-  router.post('/api/topics/:name/offsets/by-time', async (req, res, params) => {
-    const name = requireParam(params, 'name');
-    const body = await readJsonBody(req);
-    const parsed = seekByTimeRequestSchema.safeParse(body);
-    if (!parsed.success) {
-      sendError(res, 400, 'bad_request', 'invalid seek-by-time request', { issues: parsed.error.issues });
-      return;
-    }
+  // A `POST` only because the query needs a body (a timestamp, optionally a partition) — it reads
+  // the broker's offset index, it doesn't write anything, so it stays available in `--read-only`.
+  router.post(
+    '/api/topics/:name/offsets/by-time',
+    async (req, res, params) => {
+      const name = requireParam(params, 'name');
+      const body = await readJsonBody(req);
+      const parsed = seekByTimeRequestSchema.safeParse(body);
+      if (!parsed.success) {
+        sendError(res, 400, 'bad_request', 'invalid seek-by-time request', { issues: parsed.error.issues });
+        return;
+      }
 
-    const admin = await context.pool.get(context.getActiveProfile());
-    const entries = await admin.fetchTopicOffsetsByTimestamp(name, parsed.data.timestamp);
-    const wanted = parsed.data.partition;
-    const filtered = wanted === undefined ? entries : entries.filter((entry) => entry.partition === wanted);
+      const admin = await context.pool.get(context.getActiveProfile());
+      const entries = await admin.fetchTopicOffsetsByTimestamp(name, parsed.data.timestamp);
+      const wanted = parsed.data.partition;
+      const filtered = wanted === undefined ? entries : entries.filter((entry) => entry.partition === wanted);
 
-    const response: SeekByTimeResponse = {
-      offsets: filtered.map((entry) => ({
-        partition: entry.partition,
-        offset: entry.offset < 0n ? null : entry.offset.toString(),
-      })),
-    };
-    sendJson(res, 200, response);
-  });
+      const response: SeekByTimeResponse = {
+        offsets: filtered.map((entry) => ({
+          partition: entry.partition,
+          offset: entry.offset < 0n ? null : entry.offset.toString(),
+        })),
+      };
+      sendJson(res, 200, response);
+    },
+    { allowInReadOnly: true },
+  );
 
   router.post('/api/topics/:name/records/delete', async (req, res, params) => {
     const name = requireParam(params, 'name');

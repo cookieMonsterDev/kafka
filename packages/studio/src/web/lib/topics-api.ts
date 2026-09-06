@@ -5,6 +5,7 @@ import type {
   TopicDetailResponse,
   TopicListResponse,
 } from '../../shared/contracts/topic';
+import { withAuthHeaders } from './auth';
 
 export const topicQueryKeys = {
   all: ['topics'] as const,
@@ -24,26 +25,26 @@ async function parseJsonOrThrow<T>(res: Response, what: string): Promise<T> {
 }
 
 export async function listTopics(): Promise<TopicListResponse> {
-  const res = await fetch('/api/topics');
+  const res = await fetch('/api/topics', { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/topics');
 }
 
 export async function getTopic(name: string): Promise<TopicDetailResponse> {
-  const res = await fetch(`/api/topics/${encodeURIComponent(name)}`);
+  const res = await fetch(`/api/topics/${encodeURIComponent(name)}`, { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/topics/:name');
 }
 
 export async function createTopic(input: CreateTopicRequest): Promise<{ topic: string }> {
   const res = await fetch('/api/topics', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'POST /api/topics');
 }
 
 export async function deleteTopic(name: string): Promise<void> {
-  const res = await fetch(`/api/topics/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  const res = await fetch(`/api/topics/${encodeURIComponent(name)}`, { method: 'DELETE', headers: withAuthHeaders() });
   await assertOk(res, 'DELETE /api/topics/:name');
 }
 
@@ -53,7 +54,7 @@ export async function addPartitions(
 ): Promise<{ topic: string; count: number }> {
   const res = await fetch(`/api/topics/${encodeURIComponent(name)}/partitions`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'POST /api/topics/:name/partitions');
@@ -62,7 +63,7 @@ export async function addPartitions(
 export async function alterTopicConfigs(name: string, input: AlterTopicConfigsRequest): Promise<{ topic: string }> {
   const res = await fetch(`/api/topics/${encodeURIComponent(name)}/configs`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+    headers: withAuthHeaders({ 'content-type': 'application/json' }),
     body: JSON.stringify(input),
   });
   return parseJsonOrThrow(res, 'PATCH /api/topics/:name/configs');

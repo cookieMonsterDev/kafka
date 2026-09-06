@@ -36,31 +36,37 @@ export function registerProfileRoutes(router: Router, context: ProfilesRouteCont
     sendJson(res, 200, profilesPayload(context));
   });
 
-  router.post('/api/profiles/active', async (req, res) => {
-    const body = await readJsonBody(req);
-    const requested = isPlainObject(body) ? body.profile : undefined;
+  // Switches which configured profile the server talks to — a local session choice, not a write
+  // against the Kafka cluster, so it stays available even when `--read-only` is set.
+  router.post(
+    '/api/profiles/active',
+    async (req, res) => {
+      const body = await readJsonBody(req);
+      const requested = isPlainObject(body) ? body.profile : undefined;
 
-    if (requested !== null && typeof requested !== 'string') {
-      sendError(res, 400, 'bad_request', '"profile" must be a string or null');
-      return;
-    }
+      if (requested !== null && typeof requested !== 'string') {
+        sendError(res, 400, 'bad_request', '"profile" must be a string or null');
+        return;
+      }
 
-    if (requested !== null && !isKnownProfile(context.connection, requested)) {
-      sendError(res, 404, 'unknown_profile', `unknown profile "${requested}"`, {
-        available: listProfileNames(context.connection),
-      });
-      return;
-    }
+      if (requested !== null && !isKnownProfile(context.connection, requested)) {
+        sendError(res, 404, 'unknown_profile', `unknown profile "${requested}"`, {
+          available: listProfileNames(context.connection),
+        });
+        return;
+      }
 
-    const previous = context.getActiveProfile();
-    context.setActiveProfile(requested);
-    if (previous !== requested) {
-      await context.pool.invalidate(previous);
-      // Fire-and-forget: a failed warm-up doesn't fail the switch — the pool discards a failed
-      // entry itself, so whatever calls get() next for real just retries and surfaces the error.
-      void context.pool.get(requested).catch(() => {});
-    }
+      const previous = context.getActiveProfile();
+      context.setActiveProfile(requested);
+      if (previous !== requested) {
+        await context.pool.invalidate(previous);
+        // Fire-and-forget: a failed warm-up doesn't fail the switch — the pool discards a failed
+        // entry itself, so whatever calls get() next for real just retries and surfaces the error.
+        void context.pool.get(requested).catch(() => {});
+      }
 
-    sendJson(res, 200, profilesPayload(context));
-  });
+      sendJson(res, 200, profilesPayload(context));
+    },
+    { allowInReadOnly: true },
+  );
 }

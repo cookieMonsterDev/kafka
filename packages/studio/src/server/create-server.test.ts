@@ -109,6 +109,73 @@ describe('createStudioServer', () => {
       expect(body.error.code).toBe('internal_error');
     });
   });
+
+  it('rejects a matched mutating route with 403 when readOnly is set', async () => {
+    router.post('/api/topics', (_req, res) => sendJson(res, 200, { ok: true }));
+    const server = createStudioServer({ router, readOnly: true });
+
+    await withServer(server, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/topics`, { method: 'POST' });
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('read_only');
+    });
+  });
+
+  it('still allows a route explicitly marked allowInReadOnly', async () => {
+    router.post('/api/profiles/active', (_req, res) => sendJson(res, 200, { ok: true }), { allowInReadOnly: true });
+    const server = createStudioServer({ router, readOnly: true });
+
+    await withServer(server, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/profiles/active`, { method: 'POST' });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  it('leaves GET requests alone when readOnly is set', async () => {
+    router.get('/api/topics', (_req, res) => sendJson(res, 200, { ok: true }));
+    const server = createStudioServer({ router, readOnly: true });
+
+    await withServer(server, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/topics`);
+      expect(res.status).toBe(200);
+    });
+  });
+
+  it('applies the auth policy to /api/* before the router even matches', async () => {
+    router.get('/api/health', (_req, res) => sendJson(res, 200, { ok: true }));
+    // A fixed port, not `withServer`'s ephemeral 0 — the auth policy has to know the bound port
+    // before the request arrives, so it has to be chosen before `listen()` too.
+    const port = 58_201;
+    const server = createStudioServer({ router, auth: { host: '127.0.0.1', port, token: 'secret' } });
+
+    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+    try {
+      const unauthenticated = await fetch(`http://127.0.0.1:${String(port)}/api/health`);
+      expect(unauthenticated.status).toBe(401);
+
+      const authenticated = await fetch(`http://127.0.0.1:${String(port)}/api/health`, {
+        headers: { 'x-kafka-studio-token': 'secret' },
+      });
+      expect(authenticated.status).toBe(200);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('never applies the auth policy to non-API routes', async () => {
+    const fallback = vi.fn((_req, res: ServerResponse) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.end('<html></html>');
+      return true;
+    });
+    const server = createStudioServer({ router, fallback, auth: { host: '127.0.0.1', port: 0, token: 'secret' } });
+
+    await withServer(server, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/`);
+      expect(res.status).toBe(200);
+    });
+  });
 });
 
 describe('sendError', () => {

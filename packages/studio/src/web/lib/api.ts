@@ -4,6 +4,8 @@
  * the same failure surfaced with a different sentence depending on which screen you were on.
  */
 
+import { withAuthHeaders } from './auth';
+
 interface ErrorEnvelope {
   readonly error?: { readonly message?: string };
 }
@@ -15,16 +17,14 @@ export async function assertOk(res: Response, what: string): Promise<void> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path);
+  const res = await fetch(path, { headers: withAuthHeaders() });
   await assertOk(res, `GET ${path}`);
   return (await res.json()) as T;
 }
 
 export async function apiSend<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
-  });
+  const headers = withAuthHeaders(body === undefined ? undefined : { 'content-type': 'application/json' });
+  const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   await assertOk(res, `${method} ${path}`);
   return (await res.json()) as T;
 }

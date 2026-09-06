@@ -59,4 +59,20 @@ describe('Router', () => {
     expect(router.match('PATCH', '/api/topics/a')?.handler).toBe(patch);
     expect(router.match('DELETE', '/api/topics/a')?.handler).toBe(del);
   });
+
+  it('marks every non-GET/HEAD method as mutating, and GET as not', () => {
+    const router = new Router().get('/g', vi.fn()).post('/p', vi.fn()).patch('/pa', vi.fn()).delete('/d', vi.fn());
+
+    expect(router.match('GET', '/g')?.mutating).toBe(false);
+    expect(router.match('POST', '/p')?.mutating).toBe(true);
+    expect(router.match('PATCH', '/pa')?.mutating).toBe(true);
+    expect(router.match('DELETE', '/d')?.mutating).toBe(true);
+  });
+
+  it('defaults allowInReadOnly to false, honoring an explicit opt-in', () => {
+    const router = new Router().post('/p', vi.fn()).post('/exempt', vi.fn(), { allowInReadOnly: true });
+
+    expect(router.match('POST', '/p')?.allowInReadOnly).toBe(false);
+    expect(router.match('POST', '/exempt')?.allowInReadOnly).toBe(true);
+  });
 });

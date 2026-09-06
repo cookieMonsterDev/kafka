@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { generateSessionToken, hostSecurityWarning, withSessionTokenHash } from './server/auth';
 import { createStudioServer } from './server/create-server';
 import { createDevMiddleware } from './server/dev';
 import { AdminPool } from './server/kafka/admin-pool';
@@ -34,6 +35,8 @@ export interface StudioHandle {
   readonly url: string;
   readonly host: string;
   readonly port: number;
+  /** The per-process session token — exposed for callers embedding the studio as a library (and for tests); an interactive user gets it via the opened URL's hash instead of reading this. */
+  readonly token: string;
   stop(): Promise<void>;
 }
 
@@ -60,6 +63,10 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   const port = await resolvePort({ host, requestedPort: options.port ?? studioConfig.port });
   const startedAt = runtime.now();
   const version = readOwnVersion(import.meta.url);
+  const token = generateSessionToken();
+
+  const hostWarning = hostSecurityWarning(host);
+  if (hostWarning !== null) runtime.stderr.write(`kafka-studio: ${hostWarning}\n`);
 
   const events = new StudioEventBus();
   const pool = new AdminPool((profileName) => createKafkaClient(connection, profileName));
@@ -97,7 +104,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   const fallback =
     runtime.env.KAFKA_STUDIO_DEV === '1' ? await createDevMiddleware(webRoot) : createStaticHandler(webRoot);
 
-  const server = createStudioServer({ router, fallback });
+  const server = createStudioServer({ router, fallback, readOnly, auth: { host, port, token } });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -105,8 +112,9 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   });
 
   const url = `http://${host}:${String(port)}/`;
-  runtime.stdout.write(`${formatBanner({ url, readOnly })}\n`);
-  void openBrowser(url, browser, { env: runtime.env, platform: runtime.platform });
+  const urlWithToken = withSessionTokenHash(url, token);
+  runtime.stdout.write(`${formatBanner({ url: urlWithToken, readOnly })}\n`);
+  void openBrowser(urlWithToken, browser, { env: runtime.env, platform: runtime.platform });
 
   async function stop(): Promise<void> {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -114,5 +122,5 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
     await producers.disposeAll();
   }
 
-  return { url, host, port, stop };
+  return { url, host, port, token, stop };
 }

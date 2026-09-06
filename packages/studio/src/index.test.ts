@@ -10,15 +10,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startStudio } from './index';
 import type { Runtime } from './runtime';
 
-function fakeRuntime(overrides: Partial<Runtime> = {}): { runtime: Runtime; stdout: (chunk: string) => boolean } {
+function fakeRuntime(overrides: Partial<Runtime> = {}): {
+  runtime: Runtime;
+  stdout: (chunk: string) => boolean;
+  stderr: (chunk: string) => boolean;
+} {
   const stdout = vi.fn(() => true);
+  const stderr = vi.fn(() => true);
   const runtime: Runtime = {
     argv: [],
     cwd: '/nonexistent-test-cwd',
     env: {},
     platform: 'linux',
     stdout: { write: stdout },
-    stderr: { write: vi.fn(() => true) },
+    stderr: { write: stderr },
     now: () => new Date(),
     exit: () => {
       throw new Error('exit() should not be called by startStudio');
@@ -26,7 +31,7 @@ function fakeRuntime(overrides: Partial<Runtime> = {}): { runtime: Runtime; stdo
     signal: new AbortController().signal,
     ...overrides,
   };
-  return { runtime, stdout };
+  return { runtime, stdout, stderr };
 }
 
 describe('startStudio', () => {
@@ -37,19 +42,66 @@ describe('startStudio', () => {
     try {
       expect(studio.url).toBe(`http://127.0.0.1:${String(studio.port)}/`);
       expect(stdout).toHaveBeenCalledWith(expect.stringContaining(studio.url));
+      expect(stdout).toHaveBeenCalledWith(expect.stringContaining(`#token=${studio.token}`));
 
-      const health = await fetch(new URL('/api/health', studio.url));
+      const authHeaders = { 'x-kafka-studio-token': studio.token };
+
+      // No token at all — every protected route rejects it, not just some of them.
+      const unauthenticated = await fetch(new URL('/api/health', studio.url));
+      expect(unauthenticated.status).toBe(401);
+
+      const health = await fetch(new URL('/api/health', studio.url), { headers: authHeaders });
       expect(health.status).toBe(200);
 
-      const cluster = await fetch(new URL('/api/cluster', studio.url));
+      const cluster = await fetch(new URL('/api/cluster', studio.url), { headers: authHeaders });
       await expect(cluster.json()).resolves.toEqual({ connected: false });
 
-      const profiles = await fetch(new URL('/api/profiles', studio.url));
+      const profiles = await fetch(new URL('/api/profiles', studio.url), { headers: authHeaders });
       await expect(profiles.json()).resolves.toEqual({ active: null, profiles: {} });
 
+      // The shell itself needs no token — that would be circular, since it's what delivers the
+      // token (via the URL hash) to the browser in the first place.
       const shell = await fetch(new URL('/', studio.url));
       expect(shell.status).toBe(200);
       expect(shell.headers.get('content-type')).toContain('text/html');
+    } finally {
+      await studio.stop();
+    }
+  });
+
+  it('rejects mutating requests with 403 in --read-only mode, but still allows switching profiles', async () => {
+    const { runtime } = fakeRuntime();
+
+    const studio = await startStudio({ host: '127.0.0.1', port: 59_105, browser: 'none', readOnly: true }, runtime);
+    try {
+      const authHeaders = { 'x-kafka-studio-token': studio.token, 'content-type': 'application/json' };
+
+      const create = await fetch(new URL('/api/topics', studio.url), {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ topic: 'orders' }),
+      });
+      expect(create.status).toBe(403);
+      const body = (await create.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('read_only');
+
+      const switchProfile = await fetch(new URL('/api/profiles/active', studio.url), {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ profile: null }),
+      });
+      expect(switchProfile.status).toBe(200);
+    } finally {
+      await studio.stop();
+    }
+  });
+
+  it('warns loudly on stderr when bound to a non-loopback host', async () => {
+    const { runtime, stderr } = fakeRuntime();
+
+    const studio = await startStudio({ host: '0.0.0.0', port: 59_107, browser: 'none' }, runtime);
+    try {
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
     } finally {
       await studio.stop();
     }
@@ -124,7 +176,9 @@ describe('startStudio', () => {
       try {
         expect(studio.port).toBe(59_110);
         expect(studio.host).toBe('127.0.0.1');
-        const health = await fetch(new URL('/api/health', studio.url));
+        const health = await fetch(new URL('/api/health', studio.url), {
+          headers: { 'x-kafka-studio-token': studio.token },
+        });
         await expect(health.json()).resolves.toMatchObject({ readOnly: true });
       } finally {
         await studio.stop();

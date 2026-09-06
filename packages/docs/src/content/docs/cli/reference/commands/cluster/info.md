@@ -1,7 +1,7 @@
 ---
 title: 'cluster info'
 description: 'Describe the cluster: its brokers, controller, and cluster id'
-order: 22
+order: 23
 section: reference
 hidden: true
 ---

@@ -1,7 +1,7 @@
 ---
 title: 'cluster raft-voter add'
 description: 'Add a voter to the KRaft metadata quorum'
-order: 25
+order: 26
 section: reference
 hidden: true
 ---

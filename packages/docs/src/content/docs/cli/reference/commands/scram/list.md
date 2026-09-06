@@ -1,7 +1,7 @@
 ---
 title: 'scram list'
 description: 'List SCRAM credentials for one or more users, or every user'
-order: 45
+order: 46
 section: reference
 hidden: true
 ---

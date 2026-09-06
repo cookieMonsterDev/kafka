@@ -1,7 +1,7 @@
 ---
 title: 'config describe'
 description: 'Describe the configs of one or more resources'
-order: 31
+order: 32
 section: reference
 hidden: true
 ---

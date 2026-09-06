@@ -1,7 +1,7 @@
 ---
 title: 'topic add-partitions'
 description: 'Raise a topic to a new total partition count'
-order: 55
+order: 56
 section: reference
 hidden: true
 ---

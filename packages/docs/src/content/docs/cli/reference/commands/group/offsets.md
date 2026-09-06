@@ -1,7 +1,7 @@
 ---
 title: 'group offsets'
 description: "Show a consumer group's committed offsets"
-order: 39
+order: 40
 section: reference
 hidden: true
 ---

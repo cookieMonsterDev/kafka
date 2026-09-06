@@ -1,7 +1,7 @@
 ---
 title: 'quota alter'
 description: 'Set or remove client quota values for one entity'
-order: 42
+order: 43
 section: reference
 hidden: true
 ---

@@ -1,7 +1,7 @@
 ---
 title: 'topic delete-records'
 description: 'Delete records before a given offset, per partition'
-order: 58
+order: 59
 section: reference
 hidden: true
 ---

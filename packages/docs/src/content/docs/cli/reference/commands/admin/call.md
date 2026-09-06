@@ -1,7 +1,7 @@
 ---
 title: 'admin call'
 description: 'Call any Admin method by name — the escape hatch for everything without its own command'
-order: 18
+order: 19
 section: reference
 hidden: true
 ---

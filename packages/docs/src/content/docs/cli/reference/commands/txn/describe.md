@@ -1,7 +1,7 @@
 ---
 title: 'txn describe'
 description: 'Describe one or more transactional ids'
-order: 64
+order: 65
 section: reference
 hidden: true
 ---

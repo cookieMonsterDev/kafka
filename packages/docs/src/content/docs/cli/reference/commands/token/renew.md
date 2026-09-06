@@ -1,7 +1,7 @@
 ---
 title: 'token renew'
 description: 'Renew a delegation token, extending its expiry'
-order: 54
+order: 55
 section: reference
 hidden: true
 ---

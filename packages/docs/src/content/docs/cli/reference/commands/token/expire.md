@@ -1,7 +1,7 @@
 ---
 title: 'token expire'
 description: 'Expire a delegation token, immediately by default'
-order: 52
+order: 53
 section: reference
 hidden: true
 ---

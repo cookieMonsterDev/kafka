@@ -1,7 +1,7 @@
 ---
 title: 'cluster log-dirs'
 description: 'Describe log directories and their partition sizes, per broker'
-order: 23
+order: 24
 section: reference
 hidden: true
 ---

@@ -1,7 +1,7 @@
 ---
 title: 'topic producers'
 description: "Show a topic's active producer state, per partition"
-order: 62
+order: 63
 section: reference
 hidden: true
 ---

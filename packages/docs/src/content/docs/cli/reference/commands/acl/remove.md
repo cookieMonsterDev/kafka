@@ -1,7 +1,7 @@
 ---
 title: 'acl remove'
 description: 'Delete every ACL matching a filter, per principal'
-order: 17
+order: 18
 section: reference
 hidden: true
 ---

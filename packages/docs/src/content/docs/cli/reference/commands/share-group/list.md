@@ -1,7 +1,7 @@
 ---
 title: 'share-group list'
 description: 'List every share group the cluster knows about'
-order: 49
+order: 50
 section: reference
 hidden: true
 ---

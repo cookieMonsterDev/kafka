@@ -1,7 +1,7 @@
 ---
 title: 'group delete'
 description: 'Delete one or more consumer groups'
-order: 35
+order: 36
 section: reference
 hidden: true
 ---

@@ -1,7 +1,7 @@
 ---
 title: 'config set'
 description: 'Set one or more config entries on a resource'
-order: 33
+order: 34
 section: reference
 hidden: true
 ---

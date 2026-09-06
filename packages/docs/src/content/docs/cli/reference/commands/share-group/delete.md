@@ -1,7 +1,7 @@
 ---
 title: 'share-group delete'
 description: 'Delete one or more share groups'
-order: 47
+order: 48
 section: reference
 hidden: true
 ---

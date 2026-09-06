@@ -1,7 +1,7 @@
 ---
 title: 'txn list'
 description: 'List transactions known to the cluster, optionally filtered'
-order: 66
+order: 67
 section: reference
 hidden: true
 ---

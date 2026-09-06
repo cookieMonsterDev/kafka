@@ -96,6 +96,9 @@ importers:
         specifier: ^2.4.0
         version: link:../core
     devDependencies:
+      '@cookiemonsterdev/kafka-studio':
+        specifier: workspace:*
+        version: link:../studio
       '@types/node':
         specifier: 'catalog:'
         version: 26.4.0

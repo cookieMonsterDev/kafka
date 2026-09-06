@@ -1,7 +1,7 @@
 ---
 title: 'txn fence'
 description: "Fence out a transactional id's current producer, bumping its epoch"
-order: 65
+order: 66
 section: reference
 hidden: true
 ---

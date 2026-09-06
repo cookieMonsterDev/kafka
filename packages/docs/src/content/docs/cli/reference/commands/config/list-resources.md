@@ -1,7 +1,7 @@
 ---
 title: 'config list-resources'
 description: 'List every config resource the broker knows about'
-order: 32
+order: 33
 section: reference
 hidden: true
 ---

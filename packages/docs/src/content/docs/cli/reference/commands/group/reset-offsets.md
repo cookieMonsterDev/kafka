@@ -1,7 +1,7 @@
 ---
 title: 'group reset-offsets'
 description: "Reset a consumer group's committed offsets on one or more topics"
-order: 41
+order: 42
 section: reference
 hidden: true
 ---

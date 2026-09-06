@@ -1,7 +1,7 @@
 ---
 title: 'topic offsets'
 description: 'Show partition offsets for a topic'
-order: 61
+order: 62
 section: reference
 hidden: true
 ---

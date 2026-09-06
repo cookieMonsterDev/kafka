@@ -1,7 +1,7 @@
 ---
 title: 'cluster raft-voter remove'
 description: 'Remove a voter from the KRaft metadata quorum'
-order: 26
+order: 27
 section: reference
 hidden: true
 ---

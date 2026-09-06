@@ -1,7 +1,7 @@
 ---
 title: 'quota describe'
 description: 'Describe client quotas matching an entity filter'
-order: 43
+order: 44
 section: reference
 hidden: true
 ---

@@ -1,7 +1,7 @@
 ---
 title: 'share-group describe'
 description: 'Describe one or more share groups'
-order: 48
+order: 49
 section: reference
 hidden: true
 ---

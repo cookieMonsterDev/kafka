@@ -1,7 +1,7 @@
 ---
 title: 'group list'
 description: 'List every consumer group the cluster knows about'
-order: 38
+order: 39
 section: reference
 hidden: true
 ---

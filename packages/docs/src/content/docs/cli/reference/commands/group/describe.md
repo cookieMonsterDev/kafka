@@ -1,7 +1,7 @@
 ---
 title: 'group describe'
 description: 'Describe one or more consumer groups'
-order: 37
+order: 38
 section: reference
 hidden: true
 ---

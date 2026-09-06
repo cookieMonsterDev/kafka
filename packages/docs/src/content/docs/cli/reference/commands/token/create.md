@@ -1,7 +1,7 @@
 ---
 title: 'token create'
 description: 'Create a delegation token'
-order: 51
+order: 52
 section: reference
 hidden: true
 ---

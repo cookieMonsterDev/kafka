@@ -1,7 +1,7 @@
 ---
 title: 'scram delete'
 description: 'Delete a SCRAM credential for one or more users'
-order: 44
+order: 45
 section: reference
 hidden: true
 ---

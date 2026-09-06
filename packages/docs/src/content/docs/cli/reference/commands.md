@@ -15,6 +15,7 @@ edit by hand; run that script again after changing a command._
 - [`init`](./init/) — Scaffold a kafka.config file in the current directory
 - [`ping`](./ping/) — Check connectivity to the cluster
 - [`profiles`](./profiles/) — List the named connection profiles configured under cli.profiles
+- [`studio`](./studio/) — Launch the local web UI for browsing and driving the cluster
 
 ## acl
 

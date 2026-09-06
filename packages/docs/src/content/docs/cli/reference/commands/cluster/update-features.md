@@ -1,7 +1,7 @@
 ---
 title: 'cluster update-features'
 description: 'Upgrade, safe-downgrade, or unsafe-downgrade one or more finalized feature versions'
-order: 30
+order: 31
 section: reference
 hidden: true
 ---

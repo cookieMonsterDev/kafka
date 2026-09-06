@@ -1,7 +1,7 @@
 ---
 title: 'cluster features'
 description: 'Describe supported and finalized feature versions'
-order: 21
+order: 22
 section: reference
 hidden: true
 ---

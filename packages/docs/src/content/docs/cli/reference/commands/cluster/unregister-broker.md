@@ -1,7 +1,7 @@
 ---
 title: 'cluster unregister-broker'
 description: 'Unregister a broker from the cluster (KRaft broker decommissioning)'
-order: 29
+order: 30
 section: reference
 hidden: true
 ---

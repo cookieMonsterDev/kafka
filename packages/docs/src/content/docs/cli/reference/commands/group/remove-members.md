@@ -1,7 +1,7 @@
 ---
 title: 'group remove-members'
 description: "Remove one or more static members from a consumer group's session"
-order: 40
+order: 41
 section: reference
 hidden: true
 ---

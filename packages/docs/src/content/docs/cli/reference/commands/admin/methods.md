@@ -1,7 +1,7 @@
 ---
 title: 'admin methods'
 description: 'List every Admin method admin call can reach, and how each is classified'
-order: 19
+order: 20
 section: reference
 hidden: true
 ---

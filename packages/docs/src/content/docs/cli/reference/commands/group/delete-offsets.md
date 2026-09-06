@@ -1,7 +1,7 @@
 ---
 title: 'group delete-offsets'
 description: "Delete a consumer group's committed offsets on one or more topics"
-order: 36
+order: 37
 section: reference
 hidden: true
 ---

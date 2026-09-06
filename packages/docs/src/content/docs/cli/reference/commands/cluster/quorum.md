@@ -1,7 +1,7 @@
 ---
 title: 'cluster quorum'
 description: 'Describe the metadata quorum: leader, voters, and observers'
-order: 24
+order: 25
 section: reference
 hidden: true
 ---

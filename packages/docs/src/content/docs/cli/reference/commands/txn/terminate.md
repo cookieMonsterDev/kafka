@@ -1,7 +1,7 @@
 ---
 title: 'txn terminate'
 description: "Force-terminate a transactional id's current transaction"
-order: 67
+order: 68
 section: reference
 hidden: true
 ---

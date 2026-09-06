@@ -1,7 +1,7 @@
 ---
 title: 'cluster reassign execute'
 description: 'Execute a partition reassignment from a kafka-reassign-partitions.sh-shaped JSON file'
-order: 27
+order: 28
 section: reference
 hidden: true
 ---

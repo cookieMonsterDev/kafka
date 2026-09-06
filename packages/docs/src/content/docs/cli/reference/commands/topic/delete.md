@@ -1,7 +1,7 @@
 ---
 title: 'topic delete'
 description: 'Delete one or more topics'
-order: 57
+order: 58
 section: reference
 hidden: true
 ---

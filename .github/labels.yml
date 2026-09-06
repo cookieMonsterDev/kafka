@@ -21,17 +21,20 @@
 
 # Scope — which package a PR or issue touches
 - name: 'package: core'
-  color: 'c5def5'
+  color: '1d76db'
   description: '@cookiemonsterdev/kafka-core'
 - name: 'package: cli'
-  color: 'c5def5'
+  color: '0e8a16'
   description: '@cookiemonsterdev/kafka-cli'
 - name: 'package: config'
-  color: 'c5def5'
+  color: 'd4c5f9'
   description: '@cookiemonsterdev/kafka-config'
 - name: 'package: docs'
-  color: 'c5def5'
+  color: '006b75'
   description: '@cookiemonsterdev/kafka-docs'
+- name: 'package: studio'
+  color: 'fef2c0'
+  description: '@cookiemonsterdev/kafka-studio'
 
 # Status — where something stands in the review/triage flow
 - name: needs-triage

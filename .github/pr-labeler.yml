@@ -17,6 +17,10 @@
   - changed-files:
       - any-glob-to-any-file: 'packages/docs/**'
 
+'package: studio':
+  - changed-files:
+      - any-glob-to-any-file: 'packages/studio/**'
+
 documentation:
   - changed-files:
       - any-glob-to-any-file:

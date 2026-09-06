@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`ping`, the `topic` family, and an `admin call` passthrough for everything else on `Admin`), `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
+Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`ping`, the `topic` family, and an `admin call` passthrough for everything else on `Admin`), `@cookiemonsterdev/kafka-studio` is a local web UI for browsing and driving a cluster, `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
@@ -49,7 +49,7 @@ pnpm --filter @cookiemonsterdev/kafka-core add -D <pkg>
 pnpm --filter @cookiemonsterdev/kafka-docs... build   # "..." includes workspace dependencies
 ```
 
-Each package README has the rest of its workflow: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md).
+Each package README has the rest of its workflow: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-studio`](packages/studio/README.md) (including a one-command local Docker broker), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md).
 
 ### Shared versions
 
@@ -205,6 +205,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
+`@cookiemonsterdev/kafka-cli` and `@cookiemonsterdev/kafka-studio` each have their own `test:integration`, reusing core's own compose files rather than shipping a second copy of them — same `KAFKA_EXTERNAL`/`DO_NOT_STOP` flags apply. `@cookiemonsterdev/kafka-studio`'s `docker-compose.dev.yml` is separate from this — a one-command broker for trying the UI by hand, not part of any test run (see [`packages/studio/README.md`](packages/studio/README.md#local-kafka-with-docker)).
+
 ## Documentation site
 
 Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page
@@ -263,6 +265,7 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 | `@cookiemonsterdev/kafka-config` | npm publish (`@cookiemonsterdev/kafka-config`), GitHub release, tag `config-vX.Y.Z`, `packages/config/CHANGELOG.md` |
 | `@cookiemonsterdev/kafka-core`   | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md`       |
 | `@cookiemonsterdev/kafka-cli`    | npm publish (`@cookiemonsterdev/kafka-cli`), GitHub release, tag `cli-vX.Y.Z`, `packages/cli/CHANGELOG.md`          |
+| `@cookiemonsterdev/kafka-studio` | npm publish (`@cookiemonsterdev/kafka-studio`), GitHub release, tag `studio-vX.Y.Z`, `packages/studio/CHANGELOG.md` |
 | `@cookiemonsterdev/kafka-docs`   | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)               |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).

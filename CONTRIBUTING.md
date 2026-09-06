@@ -160,7 +160,7 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 ### Labels
 
 A [`package: <name>`](.github/pr-labeler.yml) label is applied automatically once a PR touches
-that package's directory (`core`, `cli`, `config`, or `docs`) — no need to set it by hand. The
+that package's directory (`core`, `cli`, `config`, `studio`, or `docs`) — no need to set it by hand. The
 `bug` / `enhancement` / `documentation` labels come from whichever issue template was used; add
 one yourself on a PR that has no linked issue. `good-first-issue` and `help-wanted` mark issues a
 maintainer is happy to see a community PR for. The full label set lives in

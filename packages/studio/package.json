@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-studio",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "A local web UI for inspecting and interacting with an Apache Kafka cluster, built on @cookiemonsterdev/kafka-core.",
   "type": "module",
   "license": "MIT",

@@ -4,6 +4,7 @@ export type PooledAdmin = Pick<
   Admin,
   | 'connect'
   | 'disconnect'
+  | 'describeCluster'
   | 'listTopics'
   | 'fetchTopicMetadata'
   | 'describeTopicPartitions'

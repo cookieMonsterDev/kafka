@@ -39,9 +39,9 @@ export interface HealthResponse {
   readonly uptimeSeconds: number;
 }
 
-export interface ClusterStatus {
-  readonly connected: boolean;
-}
+export type ClusterStatus =
+  | { readonly connected: true; readonly brokerCount: number; readonly clusterId: string | null }
+  | { readonly connected: false };
 
 export const healthQueryKey = ['health'] as const;
 export const clusterQueryKey = ['cluster'] as const;

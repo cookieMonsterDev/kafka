@@ -18,15 +18,19 @@ export default defineConfig({
     },
   },
   test: {
-    // Only the "integration" project is currently empty (no test/suites/** yet); this is a
-    // workspace-level, not per-project, vitest option. Remove once real integration tests exist
-    // so a genuinely empty run fails again, same as everywhere else.
-    passWithNoTests: true,
     projects: [
       {
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts', 'test/*.test.ts', 'test/suites/tarball.test.ts'],
+          // Neither the tarball nor the bundle-budget suite needs a broker (they build and pack
+          // the package, or measure what came out of that), so both stay in the unit project
+          // alongside everything else `pnpm test` runs.
+          include: [
+            'src/**/*.test.ts',
+            'test/*.test.ts',
+            'test/suites/tarball.test.ts',
+            'test/suites/bundle-budget.test.ts',
+          ],
           environment: 'node',
         },
       },
@@ -34,8 +38,11 @@ export default defineConfig({
         test: {
           name: 'integration',
           include: ['test/suites/**/*.test.ts'],
-          exclude: ['test/suites/tarball.test.ts'],
+          // Already covered by the unit project above — neither needs a broker, so neither belongs
+          // to this project's `globalSetup` — same pattern as core's own vite.config.ts.
+          exclude: ['test/suites/tarball.test.ts', 'test/suites/bundle-budget.test.ts'],
           environment: 'node',
+          globalSetup: ['./test/helpers/global-setup.ts'],
           testTimeout: 30_000,
           hookTimeout: 60_000,
           retry: Number(process.env.TEST_RETRIES ?? 0),

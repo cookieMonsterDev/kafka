@@ -1,4 +1,3 @@
-const TOKEN_STORAGE_KEY = 'kafka-studio-token:v1';
 const TOKEN_HEADER = 'x-kafka-studio-token';
 
 /** Pulls `token=…` out of a URL hash fragment (e.g. `#token=abc123`). Pure — no DOM access, so it's unit-testable without a browser. */
@@ -9,42 +8,27 @@ export function parseTokenFromHash(hash: string): string | null {
 
 /**
  * Runs once, at module load, in a real browser: the server delivers the session token in the
- * opened URL's hash (so it never reaches server logs or a `Referer` header), this reads it into
- * `sessionStorage` for the rest of the tab's lifetime, then removes it from the visible URL.
+ * opened URL's hash (so it never reaches server logs or a `Referer` header); this reads it into
+ * the in-memory `sessionToken` module variable below, then removes it from the visible URL.
  * Returns `null` under Vitest's node environment, where `window` doesn't exist — every caller
  * below degenerates to a no-op there rather than throwing.
  *
- * `sessionStorage`, not a cookie: this token is a fresh, single-process, single-tab credential —
- * there is no account it belongs to, no server-side session to attach a cookie to, and nothing
- * for it to still be valid for once the process that minted it exits. That makes it a local,
- * ephemeral secret rather than a long-lived credential, which is the case `sessionStorage` is a
- * poor fit for.
- *
- * (Reviewed against react-doctor's `auth-token-in-web-storage` finding: false positive for the
- * reason above — there is no persistent-credential storage risk to move off of here.)
+ * In memory only, never `sessionStorage`: a script that ran via XSS can read anything in Web
+ * Storage for as long as the tab stays open, whereas a value that lives only in this module's
+ * closure is reachable solely by code that already runs in this same scope. The cost is a hard
+ * reload loses the session — the studio's own terminal banner is how you get back in, printing
+ * the same URL (and the same token, valid for the whole life of that server process) again.
  */
 function bootstrapFromLocation(): string | null {
   if (typeof window === 'undefined') return null;
 
   const fromHash = parseTokenFromHash(window.location.hash);
-  if (fromHash !== null) {
-    try {
-      window.sessionStorage.setItem(TOKEN_STORAGE_KEY, fromHash);
-    } catch {
-      // Private mode or blocked storage: the token still works for this page load from memory,
-      // it just won't survive a reload.
-    }
-    const url = new URL(window.location.href);
-    url.hash = '';
-    window.history.replaceState(null, '', url.toString());
-    return fromHash;
-  }
+  if (fromHash === null) return null;
 
-  try {
-    return window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+  const url = new URL(window.location.href);
+  url.hash = '';
+  window.history.replaceState(null, '', url.toString());
+  return fromHash;
 }
 
 const sessionToken = bootstrapFromLocation();

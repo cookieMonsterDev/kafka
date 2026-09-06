@@ -99,10 +99,12 @@ so none of this is optional:
   server that can read and mutate the connected cluster.
 - **A session token per process.** On startup the server generates a random token and opens the
   browser to a URL carrying it in the hash (`#token=…`), never in a query string or header the
-  server itself would log. The page reads it once, stores it in `sessionStorage` for the tab's
-  lifetime, and strips it from the visible URL. Every `/api/*` request after that carries it as
-  `x-kafka-studio-token` (or, for the SSE streams `EventSource` can't attach headers to, a `token`
-  query param instead). A request with a missing or wrong token gets `401`.
+  server itself would log. The page reads it once, keeps it in memory only (not `sessionStorage`
+  or any other Web Storage, which stays readable by an XSS payload for as long as the tab is
+  open) for the tab's lifetime, and strips it from the visible URL. Every `/api/*` request after
+  that carries it as `x-kafka-studio-token` (or, for the SSE streams `EventSource` can't attach
+  headers to, a `token` query param instead). A request with a missing or wrong token gets `401`.
+  A hard reload starts a fresh session — reopen the studio from the terminal's own printed URL.
 - **An Origin/Host allowlist.** The standard defense against DNS rebinding against a local dev
   server: a request naming a `Host` (or, when present, `Origin`) other than the address the
   server was actually told to bind is rejected with `403`, before the token is even checked.

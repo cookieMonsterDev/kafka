@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Play, Send, Square } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createRoute } from '@tanstack/react-router';
 import type { BurstProgress } from '../../shared/contracts/produce';
 import { ProduceHistory, type ProduceHistoryEntry } from '../components/producer/history';
@@ -13,6 +13,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { errorMessage } from '../lib/error-message';
 import { burstProgressUrl, cancelBurst, produceMessages, startBurst } from '../lib/produce-api';
+import { messagesQueryKeys } from '../lib/messages-api';
 import {
   buildProduceMessage,
   createEmptyPayloadValue,
@@ -57,6 +58,7 @@ function ProducerPage() {
 
   const payloadError = payloadEditorValueError(payload);
   const { data: progress } = useEventSource<BurstProgress>(jobId !== null ? burstProgressUrl(jobId) : null, 'progress');
+  const queryClient = useQueryClient();
 
   function pushHistory(entry: Omit<ProduceHistoryEntry, 'id' | 'sentAt'>): void {
     nextHistoryId += 1;
@@ -78,6 +80,9 @@ function ProducerPage() {
         value: payload.value,
         outcome: { ok: true, detail: first ? `partition ${String(first.partition)}, offset ${first.offset}` : 'sent' },
       });
+      if (topic !== null) {
+        void queryClient.invalidateQueries({ queryKey: [...messagesQueryKeys.all, 'page', topic] });
+      }
     },
     onError: (error) => {
       pushHistory({
@@ -89,6 +94,13 @@ function ProducerPage() {
     },
   });
 
+  const [burstTopic, setBurstTopic] = useState<string | null>(null);
+
+  // Neither this mutation's onSuccess nor cancelMutation's below invalidates the messages cache
+  // directly: this one only marks the job as *started* (the messages it produces don't exist yet),
+  // and a cancellation's outcome — how many messages actually went out before it stopped — is only
+  // knowable from the same SSE progress stream. The progress-watching effect a few lines down is
+  // what invalidates the cache, for every terminal state (completed, cancelled, or failed) alike.
   const burstMutation = useMutation({
     mutationFn: async () => {
       if (topic === null) throw new Error('select a topic first');
@@ -101,7 +113,10 @@ function ProducerPage() {
         ...(parsedRate !== undefined ? { ratePerSecond: parsedRate } : {}),
       });
     },
-    onSuccess: (result) => setJobId(result.jobId),
+    onSuccess: (result) => {
+      setBurstTopic(topic);
+      setJobId(result.jobId);
+    },
   });
 
   const cancelMutation = useMutation({
@@ -110,6 +125,17 @@ function ProducerPage() {
       return cancelBurst(jobId);
     },
   });
+
+  // A burst only actually produces messages after this mutation resolves (it just starts the job);
+  // completion — successful, cancelled, or failed partway through — is reported later over SSE, so
+  // that transition, not the mutation's own onSuccess, is what invalidates the cache. `burstTopic`
+  // (captured when the job started) rather than the picker's current `topic`, since the viewer may
+  // have already switched topics by the time a long burst finishes.
+  useEffect(() => {
+    const status = progress?.status;
+    if (status === undefined || status === 'running' || burstTopic === null) return;
+    void queryClient.invalidateQueries({ queryKey: [...messagesQueryKeys.all, 'page', burstTopic] });
+  }, [progress?.status, burstTopic, queryClient]);
 
   const countValid = /^\d+$/.test(count.trim()) && Number(count) > 0;
   const rail = (

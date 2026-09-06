@@ -76,6 +76,17 @@ export function AppShell({ children }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(() => readStoredCollapsed() ?? !isDesktop);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
+  // A resize across the mobile breakpoint shouldn't leave the off-canvas drawer open underneath
+  // the now-visible fixed sidebar. Adjusted here, during render, rather than in an effect: storing
+  // the previous `isMobile` alongside the value it gates lets the closing happen in the same render
+  // the breakpoint crosses in, instead of a render, then a commit, then an effect, then a second
+  // render — see https://react.dev/reference/react/useState#storing-information-from-previous-renders.
+  const [prevIsMobile, setPrevIsMobile] = useState(isMobile);
+  if (isMobile !== prevIsMobile) {
+    setPrevIsMobile(isMobile);
+    if (!isMobile) setMobileNavOpen(false);
+  }
+
   useEffect(() => {
     try {
       localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
@@ -83,12 +94,6 @@ export function AppShell({ children }: AppShellProps) {
       // private mode, quota, or disabled storage
     }
   }, [collapsed]);
-
-  // A resize across the mobile breakpoint shouldn't leave the off-canvas drawer open underneath
-  // the now-visible fixed sidebar.
-  useEffect(() => {
-    if (!isMobile) setMobileNavOpen(false);
-  }, [isMobile]);
 
   const contextValue = useMemo<AppShellContextValue>(
     () => ({

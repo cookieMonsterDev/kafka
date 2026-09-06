@@ -182,8 +182,10 @@ export function Topology({ layout, viewportRef, activeNodeId, onNodeSelect }: To
 
   useEffect(() => {
     applyViewport(viewportRef.current);
-    // Only on mount — the transform is otherwise only ever changed imperatively.
-  }, []);
+    // Runs once in practice, not just in intent: `applyViewport` only ever changes identity if
+    // `viewportRef` does, and a ref object's identity is stable for the component's whole lifetime.
+    // The transform is otherwise only ever changed imperatively.
+  }, [applyViewport]);
 
   function handlePointerDown(event: React.PointerEvent<SVGSVGElement>): void {
     if (event.target instanceof Element && event.target.closest('[role="button"]')) return;

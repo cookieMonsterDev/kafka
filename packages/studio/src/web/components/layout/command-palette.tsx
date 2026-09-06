@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Command } from 'lucide-react';
 import { useNavigate } from '@tanstack/react-router';
 import { Button } from '../ui/button';
@@ -15,6 +15,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const filtered = useMemo(() => {
@@ -69,16 +70,24 @@ export function CommandPalette() {
         </kbd>
       </Button>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent showClose={false} className="top-[20%] max-w-lg translate-y-0 gap-0 p-0">
+        <DialogContent
+          showClose={false}
+          className="top-[20%] max-w-lg translate-y-0 gap-0 p-0"
+          // The WAI-ARIA dialog pattern moves focus onto the dialog's primary control when it opens
+          // (a modal the user just explicitly opened is supposed to be ready for input immediately),
+          // implemented through Radix's own focus-management hook rather than a plain `autoFocus`
+          // attribute, since Radix already owns where focus goes when this dialog opens.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
           <DialogTitle className="sr-only">Command palette</DialogTitle>
           <DialogDescription className="sr-only">Jump to any page in the studio.</DialogDescription>
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <Command className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            {/* Autofocus here is the WAI-ARIA dialog pattern, not an unexpected page-load autofocus:
-                a modal the user just explicitly opened is supposed to move focus onto its primary control.
-                (Reviewed against react-doctor's `no-autofocus` finding: false positive for that reason.) */}
             <input
-              autoFocus
+              ref={inputRef}
               aria-label="Jump to a page"
               value={query}
               onChange={(event) => {

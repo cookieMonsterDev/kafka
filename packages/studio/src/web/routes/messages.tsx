@@ -95,7 +95,7 @@ function MessagesPage() {
   const messages = mode === 'history' ? (historyQuery.data?.messages ?? []) : tail.messages;
   const filtered = useMemo(
     () => messages.filter((message) => matchesSearch(message, filters.search, filters.decoder)),
-    [messages, filters.search, filters.decoder],
+    [messages, filters.search, filters.decoder, matchesSearch],
   );
   const selected = filtered.find((message) => messageKey(message) === selectedKey) ?? null;
 

@@ -50,28 +50,38 @@ function BoardPage() {
   const [selectedNode, setSelectedNode] = useState<BoardNode | null>(null);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
+  /** The one place `paused` is pushed into the imperative particle layer — every source of a
+   * pause/resume (the toolbar button, reduced motion turning on) calls this directly instead of
+   * only setting React state and relying on an effect to notice, so there's no second effect
+   * reacting to the first. */
+  function setPausedAndSync(next: boolean): void {
+    setPaused(next);
+    particleLayerRef.current?.setPaused(next);
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
     const handle = attachParticleLayer(canvas, { layout, viewportRef, events: eventsBuffer, reducedMotion });
+    // Re-applies the current `paused` state right after attaching, rather than depending on it:
+    // `attachParticleLayer` only seeds its *initial* paused flag from `reducedMotion` (see
+    // particles.ts), which can be stale by the time a later layout change re-attaches this layer
+    // (the viewer may have pressed play since). `setPausedAndSync` is the live source of truth for
+    // every other change; this is just catching the freshly attached layer up to it.
+    handle.setPaused(paused);
     particleLayerRef.current = handle;
     return () => {
       handle.destroy();
       particleLayerRef.current = null;
     };
-    // Re-attached only when the topology itself changes shape. `reducedMotion` only seeds the
-    // layer's initial paused flag (see particles.ts); the `[paused]` effect below re-syncs it on
-    // the very same commit, so a stale capture here is never actually observable.
+    // Re-attached only when the topology itself changes shape — pushing a new `paused` value
+    // through `setPausedAndSync` deliberately does not re-run this effect.
   }, [layout, eventsBuffer]);
-
-  useEffect(() => {
-    particleLayerRef.current?.setPaused(paused);
-  }, [paused]);
 
   // Reduced motion turning on mid-session pauses the board; turning it back off never forces a
   // resume the viewer didn't ask for — a `paused` state that started `true` covers that already.
   useEffect(() => {
-    if (reducedMotion) setPaused(true);
+    if (reducedMotion) setPausedAndSync(true);
   }, [reducedMotion]);
 
   useEffect(() => {
@@ -86,7 +96,7 @@ function BoardPage() {
   const toolbar = (
     <BoardControls
       paused={paused}
-      onTogglePaused={() => setPaused((current) => !current)}
+      onTogglePaused={() => setPausedAndSync(!paused)}
       speed={speed}
       onSpeedChange={setSpeed}
       reducedMotion={reducedMotion}

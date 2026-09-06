@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { TooltipProvider } from '../ui/tooltip';
 import { MobileNavSheet } from './mobile-nav-sheet';
 import { Sidebar } from './sidebar';
@@ -90,14 +90,17 @@ export function AppShell({ children }: AppShellProps) {
     if (!isMobile) setMobileNavOpen(false);
   }, [isMobile]);
 
-  const contextValue: AppShellContextValue = {
-    isMobile,
-    collapsed,
-    toggleCollapsed: () => setCollapsed((current) => !current),
-    mobileNavOpen,
-    openMobileNav: () => setMobileNavOpen(true),
-    closeMobileNav: () => setMobileNavOpen(false),
-  };
+  const contextValue = useMemo<AppShellContextValue>(
+    () => ({
+      isMobile,
+      collapsed,
+      toggleCollapsed: () => setCollapsed((current) => !current),
+      mobileNavOpen,
+      openMobileNav: () => setMobileNavOpen(true),
+      closeMobileNav: () => setMobileNavOpen(false),
+    }),
+    [isMobile, collapsed, mobileNavOpen],
+  );
 
   return (
     <AppShellContext.Provider value={contextValue}>

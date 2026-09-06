@@ -27,6 +27,17 @@ export interface GroupsRouteContext {
 const CONSUMER_PROTOCOL_TYPE = 'consumer';
 const SHARE_PROTOCOL_TYPE = 'share';
 
+function listingsByProtocol(
+  groups: readonly { readonly groupId: string; readonly protocolType: string }[],
+  protocolType: string,
+): { readonly groupId: string; readonly protocolType: string }[] {
+  const matches: { groupId: string; protocolType: string }[] = [];
+  for (const group of groups) {
+    if (group.protocolType === protocolType) matches.push({ groupId: group.groupId, protocolType: group.protocolType });
+  }
+  return matches;
+}
+
 /**
  * The classic `DescribeGroups` API (what most consumers still join with — `kafka-consumer-groups.sh`
  * and this repo's own `kafka group describe` both use it) reports members as raw, assignor-specific
@@ -130,11 +141,7 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
   router.get('/api/groups', async (_req, res) => {
     const admin = await context.pool.get(context.getActiveProfile());
     const { groups } = await admin.listGroups();
-    const response: GroupListResponse = {
-      groups: groups
-        .filter((group) => group.protocolType === CONSUMER_PROTOCOL_TYPE)
-        .map((group) => ({ groupId: group.groupId, protocolType: group.protocolType })),
-    };
+    const response: GroupListResponse = { groups: listingsByProtocol(groups, CONSUMER_PROTOCOL_TYPE) };
     sendJson(res, 200, response);
   });
 
@@ -249,11 +256,7 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
   router.get('/api/share-groups', async (_req, res) => {
     const admin = await context.pool.get(context.getActiveProfile());
     const { groups } = await admin.listGroups();
-    const response: ShareGroupListResponse = {
-      groups: groups
-        .filter((group) => group.protocolType === SHARE_PROTOCOL_TYPE)
-        .map((group) => ({ groupId: group.groupId, protocolType: group.protocolType })),
-    };
+    const response: ShareGroupListResponse = { groups: listingsByProtocol(groups, SHARE_PROTOCOL_TYPE) };
     sendJson(res, 200, response);
   });
 

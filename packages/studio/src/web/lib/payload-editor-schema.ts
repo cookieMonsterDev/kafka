@@ -45,9 +45,11 @@ export function beautifyJsonValue(text: string): string {
 
 /** Builds the wire message for either a single send or a burst template — the caller decides which. */
 export function buildProduceMessage(value: PayloadEditorValue): ProduceMessage {
-  const headers = Object.fromEntries(
-    value.headers.filter((row) => row.key.trim().length > 0).map((row) => [row.key.trim(), row.value]),
-  );
+  const headers: Record<string, string> = {};
+  for (const row of value.headers) {
+    const key = row.key.trim();
+    if (key.length > 0) headers[key] = row.value;
+  }
   return {
     ...(value.key.trim() !== '' ? { key: value.key } : {}),
     value: value.value,

@@ -184,7 +184,8 @@ async function collectMessages(
   cursors: readonly PartitionCursor[],
 ): Promise<MessageRecord[]> {
   const highByPartition = new Map(cursors.map((cursor) => [cursor.partition, cursor.high]));
-  const pending = new Set(cursors.filter((cursor) => cursor.start < cursor.high).map((cursor) => cursor.partition));
+  const pending = new Set<number>();
+  for (const cursor of cursors) if (cursor.start < cursor.high) pending.add(cursor.partition);
   if (pending.size === 0) return [];
 
   const collected: MessageRecord[] = [];

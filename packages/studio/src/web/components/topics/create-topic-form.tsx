@@ -57,9 +57,11 @@ export function CreateTopicForm({ onSubmit, onCancel, pending = false }: CreateT
   const form = useForm({
     defaultValues: { topic: '', numPartitions: '', replicationFactor: '' },
     onSubmit: ({ value }) => {
-      const configEntries = Object.fromEntries(
-        configRows.filter((row) => row.key.trim().length > 0).map((row) => [row.key.trim(), row.value]),
-      );
+      const configEntries: Record<string, string> = {};
+      for (const row of configRows) {
+        const key = row.key.trim();
+        if (key.length > 0) configEntries[key] = row.value;
+      }
       onSubmit({
         topic: value.topic,
         ...(value.numPartitions.trim() !== '' ? { numPartitions: Number(value.numPartitions) } : {}),

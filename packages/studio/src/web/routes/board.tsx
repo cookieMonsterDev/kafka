@@ -59,7 +59,9 @@ function BoardPage() {
       handle.destroy();
       particleLayerRef.current = null;
     };
-    // Re-attached only when the topology itself changes shape — pause/speed are pushed imperatively below.
+    // Re-attached only when the topology itself changes shape. `reducedMotion` only seeds the
+    // layer's initial paused flag (see particles.ts); the `[paused]` effect below re-syncs it on
+    // the very same commit, so a stale capture here is never actually observable.
   }, [layout, eventsBuffer]);
 
   useEffect(() => {

@@ -145,7 +145,11 @@ function ClusterOverview() {
                 <Skeleton className="h-16 w-full" />
               </div>
             ) : cluster.data.connected ? (
-              <p className="text-sm text-muted-foreground">Connected to a Kafka cluster.</p>
+              <p className="text-sm text-muted-foreground">
+                Connected to a Kafka cluster — {cluster.data.brokerCount} broker
+                {cluster.data.brokerCount === 1 ? '' : 's'}
+                {cluster.data.clusterId !== null && <> · cluster ID {cluster.data.clusterId}</>}
+              </p>
             ) : (
               <EmptyState
                 className="py-6"

@@ -80,7 +80,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
 
   const router = new Router();
   registerHealthRoutes(router, { version, readOnly, host, port, startedAt });
-  registerClusterRoutes(router);
+  registerClusterRoutes(router, { pool, getActiveProfile: () => activeProfile });
   registerProfileRoutes(router, {
     connection,
     pool,

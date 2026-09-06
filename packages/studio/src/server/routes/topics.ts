@@ -108,8 +108,14 @@ async function sizeByPartition(
 export function registerTopicRoutes(router: Router, context: TopicsRouteContext): void {
   router.get('/api/topics', async (_req, res) => {
     const admin = await resolveAdmin(context);
-    const names = await admin.listTopics();
-    const { topics } = await admin.fetchTopicMetadata({ topics: names });
+    // Not `listTopics()` then `fetchTopicMetadata({ topics: names })`: that two-step form asks
+    // for metadata by the exact names just listed, and a topic deleted in the gap between the two
+    // calls (a concurrent delete, or another client) comes back from the broker carrying an error
+    // code that this specific-names path doesn't filter out — it throws, taking the whole request
+    // down with it. An unfiltered `fetchTopicMetadata()` requests metadata for every topic in one
+    // call and already tolerates exactly this race (kafka-core's broker.metadata() explicitly
+    // drops individual topics in that state on its "no topics = all topics" path).
+    const { topics } = await admin.fetchTopicMetadata();
     const response: TopicListResponse = {
       topics: topics.map((topic) => ({
         name: topic.name,

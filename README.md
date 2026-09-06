@@ -21,7 +21,8 @@ This repo is a small family of packages built around one Kafka client for Node.j
 
 - **[`kafka-core`](packages/core)** — the client itself: producer, consumer, and admin, talking directly to the Kafka wire protocol (no Java client, no native bindings).
 - **[`kafka-cli`](packages/cli)** — a `kafka` command you run from a terminal, built on top of `kafka-core`.
-- **[`kafka-config`](packages/config)** — the generic `kafka.config.*` file loader both of the above use to read settings from disk.
+- **[`kafka-studio`](packages/studio)** — a local web UI for browsing and driving a cluster, built on top of `kafka-core`, in the spirit of Prisma Studio.
+- **[`kafka-config`](packages/config)** — the generic `kafka.config.*` file loader `kafka-core`, `kafka-cli`, and `kafka-studio` all use to read settings from disk.
 - **[`kafka-docs`](packages/docs)** — the documentation site you're one click away from below.
 
 Under the hood, `kafka-core` negotiates API versions with the broker itself, uses `bigint` for offsets (Kafka offsets can exceed what JavaScript's `number` can represent exactly), and ships TypeScript types generated from source rather than hand-maintained.
@@ -93,6 +94,7 @@ Versions below are live badges pulled from the npm registry, so they always matc
 | [`@cookiemonsterdev/kafka-core`](packages/core/README.md)     | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-core.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core)     | TypeScript Kafka client (Kafka 0.10+)                                               |
 | [`@cookiemonsterdev/kafka-config`](packages/config/README.md) | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-config.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-config) | Generic `kafka.config.*` file loader                                                |
 | [`@cookiemonsterdev/kafka-cli`](packages/cli/README.md)       | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-cli.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-cli)       | Command-line admin client — topics, ping, and a passthrough for the rest of `Admin` |
+| [`@cookiemonsterdev/kafka-studio`](packages/studio/README.md) | [![npm](https://img.shields.io/npm/v/%40cookiemonsterdev%2Fkafka-studio.svg)](https://www.npmjs.com/package/@cookiemonsterdev/kafka-studio) | Local web UI for browsing and driving a cluster                                     |
 | [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md)     | `private`, not published                                                                                                                    | Astro documentation site (GitHub Pages)                                             |
 
 ## Requirements

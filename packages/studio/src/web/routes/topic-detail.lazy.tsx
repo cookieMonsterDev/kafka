@@ -163,9 +163,13 @@ function TopicDetailPage() {
                         <td className="px-3 py-2 font-medium text-foreground">
                           {formatBytes(
                             String(
+                              // `BigInt(0)`, not a `0n` literal: the React Compiler (`compiler: true` in
+                              // vite.web.config.ts) drops a bare BigInt literal used this way, minifying it
+                              // to `void 0` — the reduce then throws `Cannot mix BigInt and other types` on
+                              // its first call, taking down the whole page for any topic with size data.
                               data.partitions.reduce(
                                 (total, partition) => total + BigInt(partition.sizeBytes ?? '0'),
-                                0n,
+                                BigInt(0),
                               ),
                             ),
                           )}

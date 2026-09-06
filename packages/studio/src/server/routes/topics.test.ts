@@ -33,20 +33,18 @@ function unknownTopicError(): Error {
 
 describe('registerTopicRoutes', () => {
   it('GET /api/topics lists topics with partition count and replication factor', async () => {
-    const context = buildContext({
-      listTopics: async () => ['orders', 'empty-topic'],
-      fetchTopicMetadata: async () => ({
-        topics: [
-          {
-            name: 'orders',
-            partitions: [
-              { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1, 2], isr: [1, 2], offlineReplicas: [] },
-            ],
-          },
-          { name: 'empty-topic', partitions: [] },
-        ],
-      }),
-    });
+    const fetchTopicMetadata = vi.fn(async () => ({
+      topics: [
+        {
+          name: 'orders',
+          partitions: [
+            { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1, 2], isr: [1, 2], offlineReplicas: [] },
+          ],
+        },
+        { name: 'empty-topic', partitions: [] },
+      ],
+    }));
+    const context = buildContext({ fetchTopicMetadata });
 
     await withServer(context, async (baseUrl) => {
       const res = await fetch(`${baseUrl}/api/topics`);
@@ -58,6 +56,12 @@ describe('registerTopicRoutes', () => {
         ],
       });
     });
+
+    // Not `listTopics()` then `fetchTopicMetadata({ topics: names })`: that two-step form is
+    // racy against a topic deleted in the gap between the calls (see topics.ts for the full
+    // explanation) — asking for every topic's metadata in one unfiltered call sidesteps it.
+    expect(fetchTopicMetadata).toHaveBeenCalledTimes(1);
+    expect(fetchTopicMetadata).toHaveBeenCalledWith();
   });
 
   it('GET /api/topics/:name returns partitions with offsets and configs', async () => {

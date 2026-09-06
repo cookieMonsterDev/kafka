@@ -150,11 +150,11 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/card'
 <Card><CardHeader><CardTitle>Static</CardTitle></CardHeader></Card>
 ```
 
-**Interactive (hydrated island).** Add a `client:*` directive. `src/components/ThemeToggle.tsx`
+**Interactive (hydrated island).** Add a `client:*` directive. `src/components/copy-code.tsx`
 is the working example, mounted in `BaseLayout.astro`:
 
 ```astro
-<ThemeToggle client:load />
+<CopyCode client:load />
 ```
 
 Only that component's JavaScript is sent to the browser; the rest of the page stays static.
@@ -188,16 +188,22 @@ When you add or change UI:
 - Prefer semantic HTML and named landmarks over extra ARIA
 - Icon-only controls need `aria-label`; decorative icons `aria-hidden="true"`
 - Keep a visible `:focus-visible` style; honor `prefers-reduced-motion`
-- Announce copy / search / theme updates with `aria-live="polite"`
+- Announce copy and search updates with `aria-live="polite"`
 - Do not weaken `--muted-foreground` or `--ring` in `src/styles/global.css` below AA contrast
 - Markdown images need `alt`; tables need header cells
 
 ### Theming
 
-Design tokens live as CSS variables in `src/styles/global.css` (base color `olive`,
-`radix-nova` preset `b6TpS6SrnE`). Dark mode is driven by the `dark` class on `<html>`.
-`@tailwindcss/typography` is enabled there too — rendered Markdown uses `prose`, since
-Tailwind's preflight would otherwise reset it to unstyled HTML.
+The site is **dark-only**: there is no light palette, no `.dark` class and no theme toggle.
+Every token lives in the single `:root` block of `src/styles/global.css` (`radix-nova` preset,
+accent anchored on the brand mark's `#00c387`), and `scripts/check-theme-drift.mjs` keeps that
+block byte-identical to `packages/studio/src/web/styles/theme.css` — change one, change both,
+then run `pnpm theme:check`.
+
+Shiki is single-theme (`github-dark`, set in `astro.config.mjs`); switching it back to the
+dual-theme `themes: {}` form would render every code block light-on-dark.
+`@tailwindcss/typography` is enabled here too — rendered Markdown uses `prose`, since Tailwind's
+preflight would otherwise reset it to unstyled HTML.
 
 </details>
 
@@ -211,7 +217,7 @@ src/content.config.ts            collection schema + glob loader
 src/content/docs/<package>/<section>/*.md  the content, grouped by package then section
 src/pages/index.astro            landing hero (Get Started, Learn more, install)
 src/pages/docs/[...slug].astro   one page per Markdown file (`/docs/core/…`)
-src/layouts/BaseLayout.astro     HTML shell, header, docs search, GitHub link, theme toggle
+src/layouts/BaseLayout.astro     HTML shell, header, docs search, GitHub link
 src/components/docs-search.tsx   ⌘K documentation search dialog
 src/layouts/docs-layout.astro    sidebar + article + on-this-page TOC
 src/components/package-switcher.astro
@@ -223,7 +229,6 @@ src/components/callout.astro
 src/components/code-tabs.astro
 src/components/ui/*              shadcn components (yours to edit)
 src/components/copy-code.tsx     copy-icon buttons for the install chip and code blocks
-src/components/ThemeToggle.tsx   interactive React island
 src/lib/docs.ts                  sidebar grouping, prev/next, hrefs
 src/lib/utils.ts                 cn() class-merge helper
 src/styles/global.css            Tailwind entry + design tokens

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { ResolvedCliConfig } from '../../config/resolve';
 import { createFakeCommandContext, EMPTY_RESOLVED_CLI_CONFIG } from '../../testing/create-command-context';
 import { doctorCommand } from './doctor';
@@ -6,6 +6,13 @@ import { doctorCommand } from './doctor';
 function config(overrides: Partial<ResolvedCliConfig>): ResolvedCliConfig {
   return { ...EMPTY_RESOLVED_CLI_CONFIG, ...overrides };
 }
+
+// doctorCommand lazily imports core on every run() (real work, deliberately not paid by commands
+// that never connect). Warmed up here, once, so the first test below doesn't risk tripping its
+// own timeout paying for that import under load — every later run() hits the module cache.
+beforeAll(async () => {
+  await import('@cookiemonsterdev/kafka-core');
+});
 
 describe('doctorCommand', () => {
   it('reports brokers resolved and per-key provenance when --brokers is given', async () => {

@@ -68,6 +68,7 @@ kafka group list --brokers localhost:9092
 kafka init
 kafka doctor
 kafka profiles
+kafka studio
 kafka ping --brokers localhost:9092
 kafka topic list --brokers localhost:9092
 kafka topic describe orders --brokers localhost:9092

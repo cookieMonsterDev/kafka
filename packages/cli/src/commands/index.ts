@@ -41,6 +41,7 @@ import { shareGroupDeleteCommand } from './share-group/delete';
 import { shareGroupDescribeCommand } from './share-group/describe';
 import { shareGroupListCommand } from './share-group/list';
 import { shareGroupOffsetsCommand } from './share-group/offsets';
+import { studioCommand } from './studio/studio';
 import { tokenCreateCommand } from './token/create';
 import { tokenExpireCommand } from './token/expire';
 import { tokenListCommand } from './token/list';
@@ -68,6 +69,7 @@ export const ALL_COMMANDS: CommandSpec[] = [
   initCommand,
   doctorCommand,
   profilesCommand,
+  studioCommand,
   createCompleteCommand(() => ALL_COMMANDS),
   completionCommand,
   topicListCommand,

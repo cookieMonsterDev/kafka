@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`ping`, the `topic` family, and an `admin call` passthrough for everything else on `Admin`), `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
+Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core` is the TypeScript Kafka client, `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client (`ping`, the `topic` family, and an `admin call` passthrough for everything else on `Admin`), `@cookiemonsterdev/kafka-studio` is a local web UI for browsing and driving a cluster, `@cookiemonsterdev/kafka-docs` is the Astro documentation site.
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
@@ -49,7 +49,7 @@ pnpm --filter @cookiemonsterdev/kafka-core add -D <pkg>
 pnpm --filter @cookiemonsterdev/kafka-docs... build   # "..." includes workspace dependencies
 ```
 
-Each package README has the rest of its workflow: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md).
+Each package README has the rest of its workflow: [`@cookiemonsterdev/kafka-core`](packages/core/README.md), [`@cookiemonsterdev/kafka-studio`](packages/studio/README.md) (including a one-command local Docker broker), [`@cookiemonsterdev/kafka-docs`](packages/docs/README.md).
 
 ### Shared versions
 
@@ -205,6 +205,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
+`@cookiemonsterdev/kafka-cli` and `@cookiemonsterdev/kafka-studio` each have their own `test:integration`, reusing core's own compose files rather than shipping a second copy of them — same `KAFKA_EXTERNAL`/`DO_NOT_STOP` flags apply. `@cookiemonsterdev/kafka-studio`'s `docker-compose.dev.yml` is separate from this — a one-command broker for trying the UI by hand, not part of any test run (see [`packages/studio/README.md`](packages/studio/README.md#local-kafka-with-docker)).
+
 ## Documentation site
 
 Markdown under `packages/docs/src/content/docs/<package>/<section>/` becomes a page
@@ -220,9 +222,10 @@ How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](pack
 
 ### Accessibility
 
-The docs site should meet **WCAG 2.2 Level AA**. Treat that as in-scope whenever you change
-`packages/docs` UI (layouts, components, pages, CSS) or Markdown that introduces images,
-tables, or interactive examples. Do not land a visual change and “fix a11y later”.
+The docs site and the studio UI should both meet **WCAG 2.2 Level AA**. Treat that as in-scope
+whenever you change `packages/docs` or `packages/studio` UI (layouts, components, pages, CSS)
+or Markdown that introduces images, tables, or interactive examples. Do not land a visual
+change and “fix a11y later”.
 
 Required for UI changes:
 
@@ -240,12 +243,12 @@ Required for UI changes:
   be scrolled from the keyboard.
 - **Motion and zoom** — Honor `prefers-reduced-motion`. Do not set `user-scalable=no` or
   `maximum-scale=1` on the viewport.
-- **Status** — Copy, search results, and theme changes announce through `aria-live="polite"`.
-  Do not use color as the only indicator (current page, warning callouts, copied state).
+- **Status** — Copy and search results announce through `aria-live="polite"`. Do not use color
+  as the only indicator (current page, warning callouts, copied state).
 - **Contrast and targets** — Text meets 4.5:1 (AA); UI focus indicators meet 3:1. Prefer at
-  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). Light
-  `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not lighten them
-  for aesthetics.
+  least 24×24 CSS pixels for hit targets (44×44 where it does not break the layout). The
+  dark-only `--muted-foreground` and `--ring` in `global.css` are tuned for this; do not dim
+  them for aesthetics.
 
 Markdown-only edits: every page keeps a meaningful `title` and `description`. Images need
 `alt`. Tables need header cells. Do not convey meaning with color or emoji alone.
@@ -262,11 +265,12 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 | `@cookiemonsterdev/kafka-config` | npm publish (`@cookiemonsterdev/kafka-config`), GitHub release, tag `config-vX.Y.Z`, `packages/config/CHANGELOG.md` |
 | `@cookiemonsterdev/kafka-core`   | npm publish (`@cookiemonsterdev/kafka-core`), GitHub release, tag `core-vX.Y.Z`, `packages/core/CHANGELOG.md`       |
 | `@cookiemonsterdev/kafka-cli`    | npm publish (`@cookiemonsterdev/kafka-cli`), GitHub release, tag `cli-vX.Y.Z`, `packages/cli/CHANGELOG.md`          |
+| `@cookiemonsterdev/kafka-studio` | npm publish (`@cookiemonsterdev/kafka-studio`), GitHub release, tag `studio-vX.Y.Z`, `packages/studio/CHANGELOG.md` |
 | `@cookiemonsterdev/kafka-docs`   | GitHub Pages + GitHub release, tag `docs-vX.Y.Z`, `packages/docs/CHANGELOG.md` (not published to npm)               |
 
 1. Merge the release PR **`develop` → `master`** with a **merge commit** (do not squash: semantic-release reads every Conventional Commit since the last tag).
-2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
-3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then docs, so a package that comes later always builds against the freshly-released version of the ones before it.
+2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `studio` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
+3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then studio, then docs, so a package that comes later always builds against the freshly-released version of the ones before it. A package registered here before it has its own `release.config.js` (e.g. `studio`, mid-development) is skipped with a warning rather than crashing the chain.
 4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
 5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
 6. **Recovering a half-failed release:** if one package fails mid-chain (say cli), `release-chain.mjs` stops there without running the packages after it — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.

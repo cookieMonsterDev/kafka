@@ -10,15 +10,20 @@ const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependen
 const CORE_NAME = '@cookiemonsterdev/kafka-core';
 const CONFIG_NAME = '@cookiemonsterdev/kafka-config';
 const CLI_NAME = '@cookiemonsterdev/kafka-cli';
+const STUDIO_NAME = '@cookiemonsterdev/kafka-studio';
 
 // core depends on kafka-config to resolve `kafka.config.*` files, plus its two third-party codecs;
-// kafka-config itself stays dependency-free; cli depends on both core and config — a runtime
-// dependency in any of them must be a deliberate decision, not a drive-by `pnpm add`.
+// kafka-config itself stays dependency-free; cli and studio both depend on core and config only —
+// a runtime dependency in any of them must be a deliberate decision, not a drive-by `pnpm add`.
+// Studio's entire browser-facing SPA is built into `dist/web` at build time (see
+// vite.web.config.ts), so none of its UI packages (react, @tanstack/*, radix-ui, …) belong here —
+// they stay `devDependencies`, same as `vite` itself.
 function expectedDependencies() {
   return {
     [CORE_NAME]: ['lz4-lite', 'snappyjs', CONFIG_NAME],
     [CONFIG_NAME]: [],
     [CLI_NAME]: [CORE_NAME, CONFIG_NAME],
+    [STUDIO_NAME]: [CORE_NAME, CONFIG_NAME],
   };
 }
 

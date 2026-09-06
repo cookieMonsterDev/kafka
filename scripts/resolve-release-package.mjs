@@ -1,4 +1,4 @@
-// Ordered by publish dependency: config -> core -> cli -> docs (D19). A later package always
+// Ordered by publish dependency: config -> core -> cli -> studio -> docs. A later package always
 // builds against the freshly-released version of the ones before it, so this order is the
 // contract release-chain.mjs walks — not just a listing.
 export const RELEASE_PACKAGES = [
@@ -16,6 +16,11 @@ export const RELEASE_PACKAGES = [
     name: 'cli',
     publishesToNpm: true,
     npmName: '@cookiemonsterdev/kafka-cli',
+  },
+  {
+    name: 'studio',
+    publishesToNpm: true,
+    npmName: '@cookiemonsterdev/kafka-studio',
   },
   {
     name: 'docs',

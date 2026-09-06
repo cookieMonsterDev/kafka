@@ -44,7 +44,7 @@ export function PackageSwitcherSelect({ packages, value, className, onPackageCha
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger
           aria-labelledby={labelId}
-          className="border-border dark:hover:bg-sidebar-accent h-auto min-h-11 w-full items-center gap-3 rounded-lg bg-transparent px-3.5 py-3 whitespace-normal dark:bg-transparent data-[size=default]:h-auto [&[data-state=open]_svg]:rotate-180 [&_svg]:shrink-0 [&_svg]:transition-transform"
+          className="border-border hover:bg-sidebar-accent h-auto min-h-11 w-full items-center gap-3 rounded-lg bg-transparent px-3.5 py-3 whitespace-normal data-[size=default]:h-auto [&[data-state=open]_svg]:rotate-180 [&_svg]:shrink-0 [&_svg]:transition-transform"
         >
           <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
             <span className="text-foreground text-sm leading-snug font-medium" translate="no">

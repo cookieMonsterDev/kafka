@@ -2,7 +2,6 @@
 import '@/styles/global.css'
 import { getCollection } from 'astro:content'
 import { Beer, Hamburger } from 'lucide-react'
-import { ThemeToggle } from '@/components/ThemeToggle'
 import { CopyCode } from '@/components/copy-code'
 import { DocsMobileNav } from '@/components/docs-mobile-nav'
 import { DocsSearch } from '@/components/docs-search'
@@ -10,7 +9,6 @@ import { buttonVariants } from '@/components/ui/button'
 import { withBase } from '@/lib/base'
 import { DOCS_PACKAGE_META, docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
 import { getSearchIndex } from '@/lib/search-index'
-import { THEME_COLOR_DARK, THEME_COLOR_LIGHT, THEME_STORAGE_KEY } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -32,23 +30,14 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
 ---
 
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <script is:inline define:vars={{ THEME_STORAGE_KEY, THEME_COLOR_DARK, THEME_COLOR_LIGHT }}>
-      ;(function () {
-        try {
-          var stored = localStorage.getItem(THEME_STORAGE_KEY)
-          var dark = stored ? stored === 'dark' : true
-          document.documentElement.classList.toggle('dark', dark)
-          var meta = document.querySelector('meta[name="theme-color"]')
-          if (meta) meta.setAttribute('content', dark ? THEME_COLOR_DARK : THEME_COLOR_LIGHT)
-        } catch (e) {}
-      })()
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content={THEME_COLOR_DARK} />
-    <meta name="color-scheme" content="dark light" />
+    <!-- The site is dark-only, so there is no theme to resolve before first paint. This hex is the
+         sRGB mirror of `--background` in src/styles/global.css; keep the two in sync by hand. -->
+    <meta name="theme-color" content="#070b09" />
+    <meta name="color-scheme" content="dark" />
     <title>{documentTitle}</title>
     <meta name="description" content={description ?? fallbackDescription} />
     <link rel="canonical" href={canonicalUrl} />
@@ -99,9 +88,14 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
           </label>
 
           <div id="docs-brand" class="hidden min-w-0 items-center gap-3 lg:flex">
-            <a href={withBase('/')} class="flex min-w-0 items-center gap-3 no-underline">
-              <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9 shrink-0" />
-              <span class="text-foreground text-2xl font-semibold tracking-tight" translate="no">Kafka</span>
+            <a href={withBase('/')} class="flex min-w-0 items-center gap-2.5 no-underline">
+              {/* Same accent tile as the studio sidebar, so the two surfaces share one brand. */}
+              <span
+                class="border-primary/25 bg-primary/12 flex size-9 shrink-0 items-center justify-center rounded-lg border"
+              >
+                <img src={withBase('/logo-mark.svg')} alt="" width="22" height="22" class="size-5.5" />
+              </span>
+              <span class="text-foreground text-xl font-semibold tracking-tight" translate="no">Kafka</span>
             </a>
           </div>
         </div>
@@ -133,8 +127,6 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
                 ></path>
               </svg>
             </a>
-            {/* client:load hydrates these islands; the rest of the page stays static HTML */}
-            <ThemeToggle client:load />
           </div>
         </div>
       </nav>

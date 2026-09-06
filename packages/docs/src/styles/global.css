@@ -7,8 +7,6 @@
    which Tailwind's preflight would otherwise strip back to unstyled HTML. */
 @plugin "@tailwindcss/typography";
 
-@custom-variant dark (&:is(.dark *));
-
 @property --scrollbar-alpha {
   syntax: '<number>';
   inherits: true;
@@ -58,83 +56,48 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Dark-only. There is no `.dark` class and no light palette — see the READMEs. Keep this block
+   byte-identical to the one in packages/studio (scripts/check-theme-drift.mjs enforces it). */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.153 0.006 107.1);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.153 0.006 107.1);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.153 0.006 107.1);
-  --primary: oklch(0.508 0.118 165.612);
-  --primary-foreground: oklch(0.979 0.021 166.113);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.966 0.005 106.5);
-  --muted-foreground: oklch(0.45 0.031 107.3);
-  --accent: oklch(0.966 0.005 106.5);
-  --accent-foreground: oklch(0.228 0.013 107.4);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.93 0.007 106.5);
-  --input: oklch(0.93 0.007 106.5);
-  --ring: oklch(0.45 0.02 107);
-  --chart-1: oklch(0.845 0.143 164.978);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.596 0.145 163.225);
-  --chart-4: oklch(0.508 0.118 165.612);
-  --chart-5: oklch(0.432 0.095 166.913);
-  --radius: 0.625rem;
-  --sidebar: var(--background);
-  --sidebar-foreground: oklch(0.153 0.006 107.1);
-  --sidebar-primary: oklch(0.596 0.145 163.225);
-  --sidebar-primary-foreground: oklch(0.979 0.021 166.113);
-  --sidebar-accent: oklch(0.966 0.005 106.5);
-  --sidebar-accent-foreground: oklch(0.228 0.013 107.4);
-  --sidebar-border: oklch(0.93 0.007 106.5);
-  --sidebar-ring: oklch(0.45 0.02 107);
-}
-
-.dark {
-  --background: oklch(0.153 0.006 107.1);
-  --foreground: oklch(0.988 0.003 106.5);
-  --card: oklch(0.228 0.013 107.4);
-  --card-foreground: oklch(0.988 0.003 106.5);
-  --popover: oklch(0.228 0.013 107.4);
-  --popover-foreground: oklch(0.988 0.003 106.5);
-  --primary: oklch(0.432 0.095 166.913);
-  --primary-foreground: oklch(0.979 0.021 166.113);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.286 0.016 107.4);
-  --muted-foreground: oklch(0.737 0.021 106.9);
-  --accent: oklch(0.286 0.016 107.4);
-  --accent-foreground: oklch(0.988 0.003 106.5);
+  --background: oklch(0.145 0.008 160);
+  --foreground: oklch(0.965 0.004 160);
+  --card: oklch(0.2 0.009 160);
+  --card-foreground: oklch(0.965 0.004 160);
+  --popover: oklch(0.22 0.01 160);
+  --popover-foreground: oklch(0.965 0.004 160);
+  --primary: oklch(0.72 0.16 163);
+  --primary-foreground: oklch(0.18 0.03 165);
+  --secondary: oklch(0.24 0.009 160);
+  --secondary-foreground: oklch(0.965 0.004 160);
+  --muted: oklch(0.24 0.009 160);
+  --muted-foreground: oklch(0.68 0.016 160);
+  --accent: oklch(0.268 0.012 162);
+  --accent-foreground: oklch(0.98 0.004 160);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.58 0.031 107.3);
-  --chart-1: oklch(0.845 0.143 164.978);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.596 0.145 163.225);
-  --chart-4: oklch(0.508 0.118 165.612);
-  --chart-5: oklch(0.432 0.095 166.913);
-  --sidebar: var(--background);
-  --sidebar-foreground: oklch(0.988 0.003 106.5);
-  --sidebar-primary: oklch(0.696 0.17 162.48);
-  --sidebar-primary-foreground: oklch(0.262 0.051 172.552);
-  --sidebar-accent: oklch(0.286 0.016 107.4);
-  --sidebar-accent-foreground: oklch(0.988 0.003 106.5);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.58 0.031 107.3);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.72 0.16 163);
+  --chart-1: oklch(0.76 0.15 163);
+  --chart-2: oklch(0.79 0.15 75);
+  --chart-3: oklch(0.7 0.15 265);
+  --chart-4: oklch(0.72 0.18 350);
+  --chart-5: oklch(0.76 0.12 210);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.168 0.008 160);
+  --sidebar-foreground: oklch(0.965 0.004 160);
+  --sidebar-primary: oklch(0.72 0.16 163);
+  --sidebar-primary-foreground: oklch(0.18 0.03 165);
+  --sidebar-accent: oklch(0.268 0.012 162);
+  --sidebar-accent-foreground: oklch(0.98 0.004 160);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.72 0.16 163);
 }
 
 @layer base {
   html {
     @apply font-sans;
-    color-scheme: light;
-    --header-height: calc(4rem + 1px + env(safe-area-inset-top, 0px));
-  }
-  html.dark {
     color-scheme: dark;
+    --header-height: calc(4rem + 1px + env(safe-area-inset-top, 0px));
   }
   * {
     @apply border-border outline-ring/50;
@@ -220,14 +183,26 @@
   }
 }
 
-/* Dual-theme Shiki: github-light is inline; github-dark lives in --shiki-dark*. */
-html.dark .astro-code,
-html.dark .astro-code span {
-  color: var(--shiki-dark) !important;
-  background-color: var(--shiki-dark-bg) !important;
-  font-style: var(--shiki-dark-font-style) !important;
-  font-weight: var(--shiki-dark-font-weight) !important;
-  text-decoration: var(--shiki-dark-text-decoration) !important;
+/* Shiki is single-theme (see astro.config.mjs), so its colours are inline and need no override.
+   Only the sample's own surface is retaken, so code sits on --card like every other panel. */
+pre.astro-code {
+  background-color: var(--card) !important;
+}
+
+/* @tailwindcss/typography renders inline code wrapped in literal backticks (::before/::after) and
+   leaves it otherwise unstyled. A tinted chip says "code" on its own, and the stray characters
+   would be copied along with the text. Unlayered so it outranks `prose`, which is a utility. */
+.prose :where(code):not(:where(pre code)) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--card);
+  padding: 0.125rem 0.3125rem;
+  font-weight: 500;
+}
+
+.prose :where(code):not(:where(pre code))::before,
+.prose :where(code):not(:where(pre code))::after {
+  content: none;
 }
 
 /* Long lines must scroll inside the sample, not grow the article flex item. */
@@ -400,7 +375,8 @@ pre.astro-code,
 .code-tabs:has(.code-tabs-input[data-tab='npm']:checked) .code-tabs-label[data-tab='npm'],
 .code-tabs:has(.code-tabs-input[data-tab='ts']:checked) .code-tabs-label[data-tab='ts'],
 .code-tabs:has(.code-tabs-input[data-tab='js']:checked) .code-tabs-label[data-tab='js'] {
-  background: var(--background);
+  /* The active tab takes the panel's own surface so the two read as one shape. */
+  background: var(--card);
   color: var(--foreground);
 }
 
@@ -433,6 +409,21 @@ pre.astro-code,
       transparent calc(50% + 2.1rem + 1px)
     );
   mask-image: radial-gradient(ellipse 75% 50% at 50% 42%, black 18%, transparent 72%);
+}
+
+/* A single accent bloom behind the headline. `--border` is only 9% white, so on the near-black
+   canvas the lanes alone leave the hero flat. */
+.landing-hero::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: radial-gradient(
+    ellipse 55% 40% at 50% 38%,
+    color-mix(in oklch, var(--primary) 12%, transparent),
+    transparent 70%
+  );
 }
 
 .docs-nav-close {
@@ -547,10 +538,14 @@ pre.astro-code,
   border-radius: var(--radius-xl);
   background: var(--popover);
   color: var(--popover-foreground);
-  box-shadow: 0 24px 48px rgb(0 0 0 / 0.28);
+  /* A drop shadow is invisible against a near-black backdrop, so the dialog lifts off the page
+     with a light inner hairline plus a wide ambient ring instead. */
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 6%),
+    0 24px 64px oklch(0 0 0 / 60%);
 }
 
 .docs-search-dialog::backdrop {
-  background: color-mix(in oklch, var(--background) 45%, transparent);
+  background: color-mix(in oklch, var(--background) 72%, transparent);
   backdrop-filter: blur(4px);
 }

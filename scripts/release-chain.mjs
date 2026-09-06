@@ -1,20 +1,14 @@
 #!/usr/bin/env node
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
 
-// Walks RELEASE_PACKAGES in publish-dependency order (D19), releasing only the packages the
-// caller reports as changed. Each package after the first fast-forwards to the version commit
-// the previous package's release just pushed, so it builds against what actually shipped.
 const dryRun = process.argv.includes('--dry-run');
 const changes = JSON.parse(process.env.RELEASE_CHANGES ?? '{}');
 
 let released = false;
 
-// A mid-chain failure still leaves earlier packages' version-bump commits on master needing a
-// master -> develop sync, so report whether anything released, success or not — the caller
-// (release.yml's sync-develop job) reads this even when the step itself fails.
 function reportReleasedAndExit(code) {
   const githubOutput = process.env.GITHUB_OUTPUT;
   if (githubOutput) {
@@ -35,6 +29,15 @@ function run(command, args, extraEnv) {
 
 for (const pkg of RELEASE_PACKAGES) {
   if (!changes[pkg.name]) continue;
+
+  // A package can be registered here (so paths-filter and the manual `package` dropdown
+  // recognize it) before its own release.config.js lands, mid-development on a long-lived
+  // branch — skip it defensively instead of crashing the whole chain and blocking every
+  // package after it.
+  if (!existsSync(path.join('packages', pkg.name, 'release.config.js'))) {
+    console.log(`::warning::skipping ${pkg.name} — no packages/${pkg.name}/release.config.js yet`);
+    continue;
+  }
 
   console.log(`::group::release ${pkg.name}`);
 

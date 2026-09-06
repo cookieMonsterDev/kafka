@@ -21,9 +21,11 @@ export default defineConfig({
     '/docs/migration': '/docs/core/migration/breaking-changes',
   },
 
+  // Single-theme: the site is dark-only, so Shiki emits its colours inline and global.css needs
+  // no `--shiki-dark*` override block.
   markdown: {
     shikiConfig: {
-      themes: { light: 'github-light', dark: 'github-dark' },
+      theme: 'github-dark',
     },
   },
 

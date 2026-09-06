@@ -25,7 +25,7 @@ const group = `tabs-${crypto.randomUUID()}`
   available.length > 0 && (
     <div class={cn('code-tabs not-prose my-4 min-w-0 overflow-hidden rounded-lg border border-border', Astro.props.class)}>
       <div
-        class="bg-muted/50 flex gap-1 overflow-x-auto border-b border-border p-1"
+        class="bg-background flex gap-1 overflow-x-auto border-b border-border p-1"
         role="radiogroup"
         aria-label="Code sample"
       >
@@ -52,7 +52,7 @@ const group = `tabs-${crypto.randomUUID()}`
         <div
           id={`${group}-${tab.id}-panel`}
           data-panel={tab.id}
-          class="code-tabs-panel bg-background [&_pre]:m-0 [&_pre]:rounded-none [&_pre]:border-0"
+          class="code-tabs-panel bg-card [&_pre]:m-0 [&_pre]:rounded-none [&_pre]:border-0"
           role="region"
           aria-labelledby={`${group}-${tab.id}-tab`}
           translate="no"

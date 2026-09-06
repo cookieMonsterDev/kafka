@@ -1,0 +1,128 @@
+import { fileURLToPath } from 'node:url';
+import { generateSessionToken, hostSecurityWarning, withSessionTokenHash } from './server/auth';
+import { createStudioServer } from './server/create-server';
+import { createDevMiddleware } from './server/dev';
+import { AdminPool } from './server/kafka/admin-pool';
+import { createKafkaClient, resolveStudioConnectionConfig } from './server/kafka/connection';
+import { StudioEventBus } from './server/kafka/events';
+import type { MessageConsumerFactory } from './server/kafka/messages';
+import { BurstJobManager, ProducerPool } from './server/kafka/produce';
+import { openBrowser, formatBanner } from './server/open-browser';
+import { resolvePort } from './server/port';
+import { registerClusterRoutes } from './server/routes/cluster';
+import { registerEventRoutes } from './server/routes/events';
+import { registerGroupRoutes } from './server/routes/groups';
+import { registerHealthRoutes } from './server/routes/health';
+import { registerMessageRoutes } from './server/routes/messages';
+import { registerProduceRoutes } from './server/routes/produce';
+import { registerProfileRoutes } from './server/routes/profiles';
+import { registerSettingsRoutes } from './server/routes/settings';
+import { registerTopicRoutes } from './server/routes/topics';
+import { Router } from './server/router';
+import { createStaticHandler } from './server/static';
+import { readStudioSection } from './server/studio-config';
+import type { Runtime } from './runtime';
+import { readOwnVersion } from './version';
+
+export interface StudioOptions {
+  readonly port?: number;
+  readonly host?: string;
+  /** `undefined` defers to `BROWSER`/the platform default; `'none'` disables opening entirely. */
+  readonly browser?: string;
+  readonly readOnly?: boolean;
+}
+
+export interface StudioHandle {
+  readonly url: string;
+  readonly host: string;
+  readonly port: number;
+  /** The per-process session token — exposed for callers embedding the studio as a library (and for tests); an interactive user gets it via the opened URL's hash instead of reading this. */
+  readonly token: string;
+  stop(): Promise<void>;
+}
+
+const DEFAULT_HOST = '127.0.0.1';
+/** Applied when `studio.maxTail` is unset in the config file — see `server/kafka/tail.ts`. */
+const DEFAULT_MAX_TAIL = 1000;
+
+/**
+ * Starts the studio server: resolves the config file, a port, and the route table, wires up
+ * static (or, in dev mode, Vite middleware) serving, listens, opens a browser, and prints the
+ * startup banner. The returned handle's `stop()` is the one real shutdown path — there is no
+ * implicit cleanup on process exit, so a caller embedding this as a library is responsible for
+ * calling it.
+ */
+export async function startStudio(options: StudioOptions, runtime: Runtime): Promise<StudioHandle> {
+  const connection = await resolveStudioConnectionConfig({ cwd: runtime.cwd, env: runtime.env });
+  const studioConfig = readStudioSection(connection.fileConfig, (message) =>
+    runtime.stderr.write(`kafka-studio: ${message}\n`),
+  );
+
+  const host = options.host ?? studioConfig.host ?? DEFAULT_HOST;
+  const readOnly = options.readOnly ?? studioConfig.readOnly ?? false;
+  const browser = options.browser ?? (studioConfig.openBrowser === false ? 'none' : undefined);
+  const port = await resolvePort({ host, requestedPort: options.port ?? studioConfig.port });
+  const startedAt = runtime.now();
+  const version = readOwnVersion(import.meta.url);
+  const token = generateSessionToken();
+
+  const hostWarning = hostSecurityWarning(host);
+  if (hostWarning !== null) runtime.stderr.write(`kafka-studio: ${hostWarning}\n`);
+
+  const events = new StudioEventBus();
+  const pool = new AdminPool((profileName) => createKafkaClient(connection, profileName));
+  const producers = new ProducerPool((profileName) => createKafkaClient(connection, profileName));
+  const jobs = new BurstJobManager((sent) => events.publish({ kind: 'produce', partition: null, ...sent }));
+  const messageConsumers: MessageConsumerFactory = (profileName) => ({
+    consumer: () => createKafkaClient(connection, profileName).consumer({}),
+  });
+  let activeProfile: string | null = null;
+
+  const router = new Router();
+  registerHealthRoutes(router, { version, readOnly, host, port, startedAt });
+  registerClusterRoutes(router);
+  registerProfileRoutes(router, {
+    connection,
+    pool,
+    getActiveProfile: () => activeProfile,
+    setActiveProfile: (profile) => {
+      activeProfile = profile;
+    },
+  });
+  registerTopicRoutes(router, { pool, getActiveProfile: () => activeProfile });
+  registerProduceRoutes(router, { producers, jobs, events, getActiveProfile: () => activeProfile });
+  registerMessageRoutes(router, {
+    pool,
+    consumerFactory: messageConsumers,
+    maxTail: studioConfig.maxTail ?? DEFAULT_MAX_TAIL,
+    events,
+    getActiveProfile: () => activeProfile,
+  });
+  registerGroupRoutes(router, { pool, getActiveProfile: () => activeProfile });
+  registerEventRoutes(router, { events });
+  registerSettingsRoutes(router, { pool, getActiveProfile: () => activeProfile });
+
+  const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
+  const fallback =
+    runtime.env.KAFKA_STUDIO_DEV === '1' ? await createDevMiddleware(webRoot) : createStaticHandler(webRoot);
+
+  const server = createStudioServer({ router, fallback, readOnly, auth: { host, port, token } });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, host, () => resolve());
+  });
+
+  const url = `http://${host}:${String(port)}/`;
+  const urlWithToken = withSessionTokenHash(url, token);
+  runtime.stdout.write(`${formatBanner({ url: urlWithToken, readOnly })}\n`);
+  void openBrowser(urlWithToken, browser, { env: runtime.env, platform: runtime.platform });
+
+  async function stop(): Promise<void> {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await pool.disposeAll();
+    await producers.disposeAll();
+  }
+
+  return { url, host, port, token, stop };
+}

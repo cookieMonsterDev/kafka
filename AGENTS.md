@@ -127,8 +127,8 @@ When the change touches docs **UI** (`packages/docs/src/{layouts,components,page
 - Icon-only controls need `aria-label`; decorative images/icons use `alt=""` / `aria-hidden="true"`
 - Every control is keyboard-reachable with a visible `:focus-visible` ring; do not use `outline: none` without a replacement
 - Honor `prefers-reduced-motion`; do not disable zoom (`user-scalable=no` / `maximum-scale=1`)
-- Async status (copy, search, theme) uses `aria-live="polite"`; do not rely on color alone
-- Text and UI contrast meet WCAG 2.2 AA; light `--muted-foreground` and `--ring` are sized for that
+- Async status (copy, search) uses `aria-live="polite"`; do not rely on color alone
+- Text and UI contrast meet WCAG 2.2 AA; the dark-only `--muted-foreground` and `--ring` are sized for that
 
 Markdown-only page edits still need a real `title` / `description` and should not introduce inaccessible patterns (images without `alt`, tables without headers).
 

@@ -24,7 +24,12 @@ export default tseslint.config(
       'packages/core/{src,test}/**/*.ts',
       'packages/config/{src,test}/**/*.ts',
       'packages/cli/{src,test}/**/*.ts',
+      'packages/studio/{src,test}/**/*.ts',
     ],
+    // The web SPA has its own tsconfig (DOM lib, JSX) and is type-checked by the block below —
+    // projectService would otherwise open packages/studio/tsconfig.json for these files and find
+    // them excluded from it.
+    ignores: ['packages/studio/src/web/**'],
     extends: [...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
@@ -34,6 +39,20 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['packages/studio/src/web/**/*.{ts,tsx}'],
+    extends: [...tseslint.configs.recommendedTypeChecked],
+    languageOptions: {
+      parserOptions: {
+        project: ['./packages/studio/tsconfig.web.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
@@ -62,7 +81,27 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.test.ts', 'packages/core/test/**/*.ts', 'packages/config/test/**/*.ts', 'packages/cli/test/**/*.ts'],
+    // The studio server follows the same injected Runtime port pattern as the CLI.
+    files: ['packages/studio/src/**/*.ts'],
+    ignores: ['packages/studio/src/bin.ts', 'packages/studio/src/runtime.ts', 'packages/studio/src/web/**'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'process',
+          message: 'Route through the injected Runtime port instead of the global `process`.',
+        },
+      ],
+    },
+  },
+  {
+    files: [
+      '**/*.test.ts',
+      'packages/core/test/**/*.ts',
+      'packages/config/test/**/*.ts',
+      'packages/cli/test/**/*.ts',
+      'packages/studio/test/**/*.ts',
+    ],
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,

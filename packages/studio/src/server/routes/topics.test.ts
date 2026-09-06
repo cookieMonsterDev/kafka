@@ -204,8 +204,34 @@ describe('registerTopicRoutes', () => {
   });
 
   it('GET /api/topics/:name returns 404 for an unknown topic', async () => {
+    // `describeTopicPartitions` is the fast existence check the route actually gates on — see the
+    // comment above that call in topics.ts. `describeConfigs` is stubbed too so a bug that went
+    // back to depending on it would still be caught here rather than passing for the wrong reason.
     const context = buildContext({
+      describeTopicPartitions: async () => {
+        throw unknownTopicError();
+      },
       describeConfigs: async () => {
+        throw unknownTopicError();
+      },
+    });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/topics/missing`);
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('unknown_topic');
+    });
+  });
+
+  it('GET /api/topics/:name/ 404s from describeTopicPartitions alone, without ever calling describeConfigs', async () => {
+    // Regression guard: describeConfigs reports an unknown topic as a *retriable* protocol error
+    // that takes several seconds of backoff to exhaust on a real broker, where describeTopicPartitions
+    // reports the same thing in milliseconds. describeConfigs is deliberately left unstubbed here —
+    // createFakeAdmin throws by name for any unstubbed call, so this fails loudly if the route ever
+    // goes back to depending on describeConfigs to decide "not found".
+    const context = buildContext({
+      describeTopicPartitions: async () => {
         throw unknownTopicError();
       },
     });

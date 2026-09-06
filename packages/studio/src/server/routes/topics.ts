@@ -124,16 +124,16 @@ export function registerTopicRoutes(router: Router, context: TopicsRouteContext)
     const name = requireParam(params, 'name');
     const admin = await resolveAdmin(context);
 
-    // Issued first and awaited alone: on an unknown topic the broker reports
-    // `UNKNOWN_TOPIC_OR_PARTITION` for this resource and `describeConfigs` throws — the single
-    // source of truth this route uses to answer "does this topic exist?" with a real 404 instead
-    // of guessing from an empty partitions array.
-    const configsResult = await admin.describeConfigs({
-      resources: [{ type: ConfigResourceTypes.TOPIC, name }],
-    });
-
+    // Issued first and awaited alone: on an unknown topic this reports `UNKNOWN_TOPIC_OR_PARTITION`
+    // in milliseconds, the single source of truth this route uses to answer "does this topic
+    // exist?" with a real 404 instead of guessing from an empty partitions array. `describeConfigs`
+    // hits the same broker error, but as a *retriable* protocol error — on a real cluster it takes
+    // several seconds of backoff to exhaust its retries before reporting the same thing, so it must
+    // never be the call this route waits on to decide "not found".
     const partitions = await describeOnePartitions(admin, name);
-    const [offsets, sizes] = await Promise.all([
+
+    const [configsResult, offsets, sizes] = await Promise.all([
+      admin.describeConfigs({ resources: [{ type: ConfigResourceTypes.TOPIC, name }] }),
       admin.fetchTopicOffsets(name),
       sizeByPartition(
         admin,

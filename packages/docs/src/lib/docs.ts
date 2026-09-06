@@ -124,7 +124,7 @@ export function sortDocs(entries: DocsEntry[]): DocsEntry[] {
 }
 
 export function groupDocs(entries: DocsEntry[], pkg: string = DEFAULT_DOCS_PACKAGE) {
-  const sorted = sortDocs(entries.filter((entry) => inDocsPackage(entry, pkg)));
+  const sorted = sortDocs(entries.filter((entry) => inDocsPackage(entry, pkg) && entry.data.hidden !== true));
   return SECTION_ORDER.map((section) => ({
     section,
     label: SECTION_LABELS[section],

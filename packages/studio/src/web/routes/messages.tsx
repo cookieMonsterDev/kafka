@@ -12,10 +12,11 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { ConfirmDialog } from '../components/ui/confirm-dialog';
 import { EmptyState } from '../components/ui/empty-state';
-import { ErrorState, errorMessage } from '../components/ui/error-state';
+import { ErrorState } from '../components/ui/error-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { toast } from '../components/ui/toast';
 import { decodeMessageField } from '../lib/decode';
+import { errorMessage } from '../lib/error-message';
 import { deleteRecords, listMessages, messagesQueryKeys, tailUrl } from '../lib/messages-api';
 import { useMessageTail } from '../lib/sse';
 import { getTopic, topicQueryKeys } from '../lib/topics-api';
@@ -419,9 +420,15 @@ function MessagesPage() {
                                 minHeight: `${String(ROW_HEIGHT_PX)}px`,
                                 transform: `translateY(${String(virtualRow.start)}px)`,
                               }}
+                              tabIndex={0}
                               aria-selected={key === selectedKey}
-                              className="flex cursor-pointer items-center border-b border-border last:border-0 hover:bg-muted/40 aria-selected:bg-accent"
+                              className="flex cursor-pointer items-center border-b border-border last:border-0 outline-none hover:bg-muted/40 aria-selected:bg-accent focus-visible:bg-muted/40"
                               onClick={() => setSelectedKey(key === selectedKey ? null : key)}
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                setSelectedKey(key === selectedKey ? null : key);
+                              }}
                             >
                               <td className="w-20 px-3 py-1.5">{message.partition}</td>
                               <td className="w-24 px-3 py-1.5 tabular-nums">{message.offset}</td>

@@ -22,7 +22,7 @@ export function ConfigEditor({ configs, onSave, pending = false }: ConfigEditorP
   const [edits, setEdits] = useState<PendingEdits>({});
 
   const dirtyCount = Object.keys(edits).length;
-  const sorted = useMemo(() => [...configs].sort((a, b) => a.name.localeCompare(b.name)), [configs]);
+  const sorted = useMemo(() => configs.toSorted((a, b) => a.name.localeCompare(b.name)), [configs]);
 
   /** Only a queued `set` is validated — a queued `unset` reverts to the broker default, which needs no check. */
   function rowError(name: string): string | null {

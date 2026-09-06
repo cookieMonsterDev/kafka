@@ -3,7 +3,7 @@ import { createRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { StudioEvent } from '../../shared/contracts/event';
 import { ActionsDock } from '../components/board/actions-dock';
-import { BoardControls, usePrefersReducedMotion } from '../components/board/controls';
+import { BoardControls } from '../components/board/controls';
 import type { BoardNode } from '../components/board/layout';
 import { layoutBoard } from '../components/board/layout';
 import { BoardMetrics } from '../components/board/metrics';
@@ -15,6 +15,7 @@ import { groupQueryKeys, listGroups } from '../lib/groups-api';
 import { RingBuffer, useRingBuffer } from '../lib/ring-buffer';
 import { useActivityFeed } from '../lib/sse';
 import { listTopics, topicQueryKeys } from '../lib/topics-api';
+import { usePrefersReducedMotion } from '../lib/use-prefers-reduced-motion';
 import { rootRoute } from './root';
 
 export const boardRoute = createRoute({

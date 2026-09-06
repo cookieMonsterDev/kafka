@@ -2,6 +2,7 @@ import * as React from 'react';
 import { TriangleAlert } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
+import { errorMessage } from '../../lib/error-message';
 import { Button } from './button';
 
 interface ErrorStateProps extends React.ComponentProps<'div'> {
@@ -10,13 +11,6 @@ interface ErrorStateProps extends React.ComponentProps<'div'> {
   readonly error?: unknown;
   readonly onRetry?: () => void;
   readonly retryLabel?: string;
-}
-
-/** Reads a displayable message off whatever a query or mutation rejected with. */
-function errorMessage(error: unknown): string | undefined {
-  if (error instanceof Error && error.message !== '') return error.message;
-  if (typeof error === 'string' && error !== '') return error;
-  return undefined;
 }
 
 /**
@@ -47,4 +41,4 @@ function ErrorState({ className, title, error, onRetry, retryLabel = 'Try again'
   );
 }
 
-export { ErrorState, errorMessage };
+export { ErrorState };

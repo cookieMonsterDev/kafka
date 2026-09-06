@@ -1,19 +1,18 @@
 import { useMemo, useRef, useState } from 'react';
 import { Layers, Plus, SearchX } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, createRoute, useNavigate } from '@tanstack/react-router';
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { TopicListEntry } from '../../shared/contracts/topic';
 import { PageLayout } from '../components/layout/page';
-import { CreateTopicForm, type CreateTopicFormValues } from '../components/topics/create-topic-form';
+import { CreateTopicDialog } from '../components/topics/create-topic-dialog';
 import { Button } from '../components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { EmptyState } from '../components/ui/empty-state';
 import { ErrorState } from '../components/ui/error-state';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
-import { createTopic, listTopics, topicQueryKeys } from '../lib/topics-api';
+import { listTopics, topicQueryKeys } from '../lib/topics-api';
 import { topicAccentClass } from '../lib/topic-accent';
 import { rootRoute } from './root';
 
@@ -56,7 +55,6 @@ const columns = columnHelper.columns([
 
 function TopicsPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -64,14 +62,6 @@ function TopicsPage() {
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: topicQueryKeys.list(),
     queryFn: listTopics,
-  });
-  const createMutation = useMutation({
-    mutationFn: createTopic,
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: topicQueryKeys.list() });
-      setCreateOpen(false);
-      void navigate({ to: '/topics/$name', params: { name: result.topic } });
-    },
   });
 
   const filtered = useMemo(() => {
@@ -90,10 +80,6 @@ function TopicsPage() {
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: 12,
   });
-
-  function handleCreate(values: CreateTopicFormValues): void {
-    createMutation.mutate(values);
-  }
 
   const toolbar = (
     <>
@@ -116,23 +102,11 @@ function TopicsPage() {
   return (
     <PageLayout toolbar={toolbar}>
       <section aria-label="Topics" className="flex flex-col gap-4">
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create topic</DialogTitle>
-            </DialogHeader>
-            <CreateTopicForm
-              onSubmit={handleCreate}
-              onCancel={() => setCreateOpen(false)}
-              pending={createMutation.isPending}
-            />
-            {createMutation.isError && (
-              <p className="text-sm text-destructive" role="alert">
-                {createMutation.error.message}
-              </p>
-            )}
-          </DialogContent>
-        </Dialog>
+        <CreateTopicDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          onCreated={(topic) => void navigate({ to: '/topics/$name', params: { name: topic } })}
+        />
 
         {isPending && (
           <div
@@ -227,10 +201,16 @@ function TopicsPage() {
                                 minHeight: `${String(ROW_HEIGHT_PX)}px`,
                                 transform: `translateY(${String(virtualRow.start)}px)`,
                               }}
-                              className="flex cursor-pointer items-center border-b border-border last:border-0 hover:bg-muted/40"
+                              tabIndex={0}
+                              className="flex cursor-pointer items-center border-b border-border last:border-0 outline-none hover:bg-muted/40 focus-visible:bg-muted/40"
                               onClick={() =>
                                 void navigate({ to: '/topics/$name', params: { name: row.original.name } })
                               }
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Enter' && event.key !== ' ') return;
+                                event.preventDefault();
+                                void navigate({ to: '/topics/$name', params: { name: row.original.name } });
+                              }}
                             >
                               {row.getAllCells().map((cell) => (
                                 <td key={cell.id} className="min-w-0 flex-1 px-3 py-2">

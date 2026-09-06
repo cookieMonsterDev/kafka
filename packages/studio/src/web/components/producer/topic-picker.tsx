@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { Plus, TriangleAlert } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreateTopicForm, type CreateTopicFormValues } from '../topics/create-topic-form';
+import { useQuery } from '@tanstack/react-query';
+import { CreateTopicDialog } from '../topics/create-topic-dialog';
 import { Button } from '../ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { errorMessage } from '../ui/error-state';
+import { errorMessage } from '../../lib/error-message';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { createTopic, listTopics, topicQueryKeys } from '../../lib/topics-api';
+import { listTopics, topicQueryKeys } from '../../lib/topics-api';
 
 export interface TopicPickerProps {
   readonly value: string | null;
@@ -17,24 +16,10 @@ export interface TopicPickerProps {
 /** A topic select fed by the same topic list the Topics page uses, plus an inline "create topic" escape hatch. */
 export function TopicPicker({ value, onChange, disabled = false }: TopicPickerProps) {
   const [createOpen, setCreateOpen] = useState(false);
-  const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: topicQueryKeys.list(),
     queryFn: listTopics,
   });
-
-  const createMutation = useMutation({
-    mutationFn: createTopic,
-    onSuccess: async (result) => {
-      await queryClient.invalidateQueries({ queryKey: topicQueryKeys.list() });
-      onChange(result.topic);
-      setCreateOpen(false);
-    },
-  });
-
-  function handleCreate(values: CreateTopicFormValues): void {
-    createMutation.mutate(values);
-  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -72,23 +57,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
         New topic
       </Button>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create topic</DialogTitle>
-          </DialogHeader>
-          <CreateTopicForm
-            onSubmit={handleCreate}
-            onCancel={() => setCreateOpen(false)}
-            pending={createMutation.isPending}
-          />
-          {createMutation.isError && (
-            <p className="text-sm text-destructive" role="alert">
-              {createMutation.error.message}
-            </p>
-          )}
-        </DialogContent>
-      </Dialog>
+      <CreateTopicDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onChange} />
     </div>
   );
 }

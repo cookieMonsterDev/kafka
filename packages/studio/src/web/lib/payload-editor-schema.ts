@@ -38,6 +38,11 @@ export function payloadEditorValueError(value: PayloadEditorValue): string | nul
   return null;
 }
 
+/** Reformats a JSON value with two-space indentation. Throws if `text` isn't valid JSON — callers should only invoke this once `payloadEditorValueError` has reported no error. */
+export function beautifyJsonValue(text: string): string {
+  return JSON.stringify(JSON.parse(text), null, 2);
+}
+
 /** Builds the wire message for either a single send or a burst template — the caller decides which. */
 export function buildProduceMessage(value: PayloadEditorValue): ProduceMessage {
   const headers = Object.fromEntries(

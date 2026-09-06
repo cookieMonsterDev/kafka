@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
-import { X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 import {
+  beautifyJsonValue,
   payloadEditorValueError,
   type HeaderRow,
   type PayloadEditorValue,
@@ -43,6 +44,11 @@ export function PayloadEditor({ value, onChange, disabled = false }: PayloadEdit
   }
 
   const displayedError = touchedError ?? payloadEditorValueError(value);
+  const canBeautify = value.valueFormat === 'json' && value.value.trim() !== '' && displayedError === null;
+
+  function beautify(): void {
+    onChange({ ...value, value: beautifyJsonValue(value.value) });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -120,19 +126,32 @@ export function PayloadEditor({ value, onChange, disabled = false }: PayloadEdit
           <label htmlFor={valueId} className="text-sm font-medium">
             Value
           </label>
-          <Select
-            value={value.valueFormat}
-            onValueChange={(next: ValueFormat) => onChange({ ...value, valueFormat: next })}
-            disabled={disabled}
-          >
-            <SelectTrigger size="sm" aria-label="Value format">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="json">JSON</SelectItem>
-              <SelectItem value="text">Text</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={disabled || !canBeautify}
+              onClick={beautify}
+              aria-label="Beautify JSON value"
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              Beautify
+            </Button>
+            <Select
+              value={value.valueFormat}
+              onValueChange={(next: ValueFormat) => onChange({ ...value, valueFormat: next })}
+              disabled={disabled}
+            >
+              <SelectTrigger size="sm" aria-label="Value format">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="json">JSON</SelectItem>
+                <SelectItem value="text">Text</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <Textarea
           id={valueId}

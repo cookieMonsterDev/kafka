@@ -1,18 +1,17 @@
 import { useState } from 'react';
-import { Play, Send, Shuffle, Square } from 'lucide-react';
+import { Play, Send, Square } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { createRoute } from '@tanstack/react-router';
 import type { BurstProgress } from '../../shared/contracts/produce';
 import { ProduceHistory, type ProduceHistoryEntry } from '../components/producer/history';
 import { PayloadEditor } from '../components/producer/payload-editor';
-import { PAYLOAD_TEMPLATES } from '../components/producer/templates';
+import { PayloadTemplatePicker } from '../components/producer/payload-template-picker';
 import { TopicPicker } from '../components/producer/topic-picker';
 import { PageLayout } from '../components/layout/page';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { errorMessage } from '../components/ui/error-state';
+import { errorMessage } from '../lib/error-message';
 import { burstProgressUrl, cancelBurst, produceMessages, startBurst } from '../lib/produce-api';
 import {
   buildProduceMessage,
@@ -49,8 +48,7 @@ const BURST_STATUS_VARIANT: Record<BurstProgress['status'], 'default' | 'accent'
 function ProducerPage() {
   const { topic: initialTopic } = producerRoute.useSearch();
   const [topic, setTopic] = useState<string | null>(initialTopic ?? null);
-  const [payload, setPayload] = useState<PayloadEditorValue>(createEmptyPayloadValue());
-  const [templateId, setTemplateId] = useState<string | null>(null);
+  const [payload, setPayload] = useState<PayloadEditorValue>(() => createEmptyPayloadValue());
   const [history, setHistory] = useState<readonly ProduceHistoryEntry[]>([]);
 
   const [count, setCount] = useState('100');
@@ -113,18 +111,6 @@ function ProducerPage() {
     },
   });
 
-  function applyTemplate(id: string): void {
-    const template = PAYLOAD_TEMPLATES.find((entry) => entry.id === id);
-    if (template === undefined) return;
-    setTemplateId(id);
-    const built = template.build();
-    setPayload((current) => ({ ...current, key: built.key, value: built.value }));
-  }
-
-  function randomizeTemplate(): void {
-    if (templateId !== null) applyTemplate(templateId);
-  }
-
   const countValid = /^\d+$/.test(count.trim()) && Number(count) > 0;
   const rail = (
     <ProduceHistory
@@ -147,30 +133,11 @@ function ProducerPage() {
               onChange={setTopic}
               disabled={sendMutation.isPending || burstMutation.isPending}
             />
-            <div className="flex items-center gap-2">
-              <Select value={templateId ?? undefined} onValueChange={applyTemplate}>
-                <SelectTrigger size="sm" className="w-56" aria-label="Payload template">
-                  <SelectValue placeholder="Use a template…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYLOAD_TEMPLATES.map((template) => (
-                    <SelectItem key={template.id} value={template.id}>
-                      {template.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={templateId === null}
-                onClick={randomizeTemplate}
-                aria-label="Regenerate from the selected template"
-              >
-                <Shuffle className="size-4" aria-hidden="true" />
-              </Button>
-            </div>
+            <PayloadTemplatePicker
+              currentKey={payload.key}
+              currentValue={payload.value}
+              onApply={(key, value) => setPayload((current) => ({ ...current, key, value }))}
+            />
           </div>
 
           <div className="mt-4">

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildProduceMessage, createEmptyPayloadValue, payloadEditorValueError } from './payload-editor-schema';
+import {
+  beautifyJsonValue,
+  buildProduceMessage,
+  createEmptyPayloadValue,
+  payloadEditorValueError,
+} from './payload-editor-schema';
 
 describe('payloadEditorValueError', () => {
   it('accepts an empty value', () => {
@@ -29,6 +34,16 @@ describe('payloadEditorValueError', () => {
   it('accepts a numeric partition', () => {
     const value = { ...createEmptyPayloadValue(), partition: '3' };
     expect(payloadEditorValueError(value)).toBeNull();
+  });
+});
+
+describe('beautifyJsonValue', () => {
+  it('reformats compact JSON with two-space indentation', () => {
+    expect(beautifyJsonValue('{"a":1,"b":[1,2]}')).toBe('{\n  "a": 1,\n  "b": [\n    1,\n    2\n  ]\n}');
+  });
+
+  it('throws for invalid JSON', () => {
+    expect(() => beautifyJsonValue('{not json')).toThrow();
   });
 });
 

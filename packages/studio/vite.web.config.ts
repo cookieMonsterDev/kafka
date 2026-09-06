@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite';
 // core/config, while this one targets browsers and bundles everything it needs.
 export default defineConfig({
   root: 'src/web',
-  plugins: [react(), tailwindcss()],
+  plugins: [react({ compiler: true }), tailwindcss()],
   build: {
     outDir: '../../dist/web',
     emptyOutDir: true,

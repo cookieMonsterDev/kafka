@@ -59,7 +59,7 @@
     "@cookiemonsterdev/kafka-studio": "workspace:*",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "eslint": "^10.9.1",
+    "eslint": "^10.10.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

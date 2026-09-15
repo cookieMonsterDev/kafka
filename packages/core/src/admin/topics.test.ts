@@ -3,11 +3,12 @@ import type { Cluster } from '../cluster/index';
 import { KafkaAggregateError, KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { API_KEYS } from '../protocol/requests/api-keys';
+import type { RetryOptions } from '../retry/index';
 import { createTopicsApi } from './topics';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-function makeApi(cluster: Record<string, unknown>, retry?: { retries?: number }) {
+function makeApi(cluster: Record<string, unknown>, retry?: RetryOptions) {
   return createTopicsApi(
     {
       cluster: cluster as unknown as Cluster,
@@ -145,6 +146,34 @@ describe('admin/topics', () => {
       const topicPartitions = [{ topic: 'orders', count: 4 }];
       await makeApi(cluster).createPartitions({ topicPartitions, validateOnly: true, timeout: 1000 });
       expect(broker.createPartitions).toHaveBeenCalledWith({ topicPartitions, validateOnly: true, timeout: 1000 });
+    });
+
+    it('retries on stale metadata from a topic the controller has not caught up on yet', async () => {
+      const error = Object.assign(new Error('unknown topic'), { type: 'UNKNOWN_TOPIC_OR_PARTITION' });
+      const createPartitions = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
+      const cluster = {
+        refreshMetadata: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ createPartitions }),
+      };
+      await makeApi(cluster, { retries: 1, initialRetryTime: 1 }).createPartitions({
+        topicPartitions: [{ topic: 'orders', count: 2 }],
+      });
+      expect(createPartitions).toHaveBeenCalledTimes(2);
+    });
+
+    it('bails immediately on a non-retriable error', async () => {
+      const error = Object.assign(new Error('invalid partition count'), { type: 'INVALID_PARTITIONS' });
+      const createPartitions = vi.fn().mockRejectedValue(error);
+      const cluster = {
+        refreshMetadata: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ createPartitions }),
+      };
+      await expect(
+        makeApi(cluster, { retries: 5, initialRetryTime: 1 }).createPartitions({
+          topicPartitions: [{ topic: 'orders', count: 2 }],
+        }),
+      ).rejects.toThrow('invalid partition count');
+      expect(createPartitions).toHaveBeenCalledTimes(1);
     });
   });
 

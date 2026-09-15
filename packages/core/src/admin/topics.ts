@@ -181,8 +181,12 @@ export function createTopicsApi(
         const broker = await cluster.findControllerBroker();
         await broker.createPartitions({ topicPartitions, validateOnly, timeout });
       } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not create topics', {
+        const type = protocolType(error);
+        // A topic created moments earlier may not have reached this broker's metadata yet —
+        // staleMetadata() covers that whole class (UNKNOWN_TOPIC_OR_PARTITION and friends), the
+        // same set retryOnLeaderNotAvailable() retries on right after topic creation.
+        if (type === 'NOT_CONTROLLER' || staleMetadata({ type })) {
+          logger.warn('Could not create partitions', {
             error: error instanceof Error ? error.message : String(error),
             retryCount,
             retryTime,

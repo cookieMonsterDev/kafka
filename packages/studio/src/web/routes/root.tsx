@@ -13,7 +13,7 @@ export const rootRoute = createRootRoute({
   notFoundComponent: RouteNotFound,
 });
 
-function RouteError({ error, reset }: { readonly error: Error; readonly reset: () => void }) {
+function RouteError({ error, reset }: { readonly error: unknown; readonly reset: () => void }) {
   return (
     <ErrorState
       className="p-6"

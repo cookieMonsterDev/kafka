@@ -64,9 +64,9 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-form": "^1.33.5",
     "@tanstack/react-query": "^5.102.8",
-    "@tanstack/react-router": "^1.170.34",
+    "@tanstack/react-router": "^1.170.38",
     "@tanstack/react-table": "^9.2.4",
-    "@tanstack/react-virtual": "^3.14.11",
+    "@tanstack/react-virtual": "^3.14.13",
     "@types/node": "catalog:",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
@@ -75,7 +75,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.43.0",
-    "oxc-transform-react": "^0.148.0",
+    "oxc-transform-react": "^0.149.0",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
@@ -86,7 +86,7 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "zod": "^4.5.0"
+    "zod": "^4.6.4"
   },
   "dependencies": {
     "@cookiemonsterdev/kafka-config": "^1.1.0",

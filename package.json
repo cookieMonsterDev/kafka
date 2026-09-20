@@ -41,11 +41,11 @@
     "@vitest/eslint-plugin": "^1.6.27",
     "eslint": "^10.10.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.5.0",
-    "prettier": "^3.9.6",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.7",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.5",
-    "typescript-eslint": "^8.69.0"
+    "typescript-eslint": "^8.70.0"
   }
 }

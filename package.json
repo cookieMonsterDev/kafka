@@ -5,7 +5,7 @@
   "type": "module",
   "license": "MIT",
   "author": "Mykhailo Toporkov",
-  "packageManager": "pnpm@11.24.0+sha512.bd27e345e976dcb0be0b7a1228217b049a817e21b1f355c90dbe7dc46671895a8bc1e6d06c24554505ea93ea0b45f489a27ec1bfbc8de6a9659fca0f16fa0000",
+  "packageManager": "pnpm@12.5.1+sha512.e3f305bc784a2bc89f5ad3b6138889470fae8d2af5f36b61216ec91c2c3d64089775f9de38aac331044ea40f245cb0d5666392dfdf65824e1907ef6a2c62de5f",
   "engines": {
     "node": ">=24.0.0",
     "pnpm": ">=11"
@@ -39,13 +39,13 @@
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@vitest/eslint-plugin": "^1.6.27",
-    "eslint": "^10.9.1",
+    "eslint": "^10.10.0",
     "husky": "^9.1.7",
-    "lint-staged": "^17.3.0",
-    "prettier": "^3.9.6",
+    "lint-staged": "^17.5.1",
+    "prettier": "^3.9.7",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.5",
-    "typescript-eslint": "^8.68.0"
+    "typescript-eslint": "^8.70.0"
   }
 }

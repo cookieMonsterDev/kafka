@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaConfigRequiresAsyncError } from '../errors';
-import { resolveKafkaConfig, resolveKafkaConfigAsync, resolveKafkaConfigFrom } from './resolve';
+import type { KafkaConfig } from '../types/index';
+import {
+  resolveKafkaConfig,
+  resolveKafkaConfigAsync,
+  resolveKafkaConfigFrom,
+  type ResolveKafkaConfigOptions,
+  type ResolveKafkaConfigResult,
+} from './resolve';
 
 /** Bun's `require()` supports top-level `await`, so the sync path never needs to reject it there. */
 const isBun = typeof process.versions.bun === 'string';
@@ -16,6 +23,15 @@ afterEach(() => {
     dir = undefined;
   }
 });
+
+/**
+ * {@link resolveKafkaConfig} with a capturing `onDiagnostic`, so the `config.sync-load-deprecated`
+ * warning it is expected to emit for a JS/TS file stays off the test run's stderr. Tests asserting
+ * on diagnostics call {@link resolveKafkaConfig} with their own `onDiagnostic` instead.
+ */
+function resolveSync(explicit: KafkaConfig, options: ResolveKafkaConfigOptions = {}): ResolveKafkaConfigResult {
+  return resolveKafkaConfig(explicit, { onDiagnostic: vi.fn(), ...options });
+}
 
 function tempDir(): string {
   dir = mkdtempSync(join(tmpdir(), 'kafka-core-config-'));
@@ -59,7 +75,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     const path = writeConfig(cwd, ALL_KEYS_CONFIG);
 
-    const result = resolveKafkaConfig({}, { cwd });
+    const result = resolveSync({}, { cwd });
 
     expect(result.path).toBe(path);
     expect(result.config).toMatchObject({
@@ -91,7 +107,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, ALL_KEYS_CONFIG);
 
-    const result = resolveKafkaConfig({ config: true, clientId: 'explicit-client' }, { cwd });
+    const result = resolveSync({ config: true, clientId: 'explicit-client' }, { cwd });
 
     expect(result.config.clientId).toBe('explicit-client');
     expect(result.config.brokers).toEqual(['file:9092']);
@@ -103,7 +119,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { brokers: ['b:9092'], retry: { retries: 5, maxRetryTime: 1000 } } };`);
 
-    const result = resolveKafkaConfig({ config: true, retry: { retries: 9 } }, { cwd });
+    const result = resolveSync({ config: true, retry: { retries: 9 } }, { cwd });
 
     expect(result.config.retry).toEqual({ retries: 9, maxRetryTime: 1000 });
   });
@@ -115,7 +131,7 @@ describe('resolveKafkaConfig', () => {
       `export default { client: { brokers: ['b:9092'], sasl: { mechanism: 'plain', username: 'file-user', password: 'file-pass' } } };`,
     );
 
-    const result = resolveKafkaConfig(
+    const result = resolveSync(
       { config: true, sasl: { mechanism: 'scram-sha-256', username: 'explicit-user', password: 'explicit-pass' } },
       { cwd },
     );
@@ -131,7 +147,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { clientId: 'should-not-be-used' } };`);
 
-    const result = resolveKafkaConfig({ brokers: ['explicit:9092'] }, { cwd });
+    const result = resolveSync({ brokers: ['explicit:9092'] }, { cwd });
 
     expect(result.path).toBeNull();
     expect(result.fileConfig).toBeNull();
@@ -143,7 +159,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { clientId: 'from-file' } };`);
 
-    const result = resolveKafkaConfig({ brokers: ['explicit:9092'], config: true }, { cwd });
+    const result = resolveSync({ brokers: ['explicit:9092'], config: true }, { cwd });
 
     expect(result.path).not.toBeNull();
     expect(result.config.clientId).toBe('from-file');
@@ -153,7 +169,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { brokers: ['should-not-be-used:9092'] } };`);
 
-    expect(() => resolveKafkaConfig({ config: false }, { cwd })).toThrowError(
+    expect(() => resolveSync({ config: false }, { cwd })).toThrowError(
       expect.objectContaining({ name: 'KafkaConfigError', tag: 'MissingBrokers' }),
     );
   });
@@ -162,7 +178,7 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `export default { client: { brokers: ['explicit-path:9092'] } };`, 'my-config.mjs');
 
-    const result = resolveKafkaConfig({ config: 'my-config.mjs' }, { cwd });
+    const result = resolveSync({ config: 'my-config.mjs' }, { cwd });
 
     expect(result.path).toBe(join(cwd, 'my-config.mjs'));
     expect(result.config.brokers).toEqual(['explicit-path:9092']);
@@ -171,7 +187,7 @@ describe('resolveKafkaConfig', () => {
   it('throws ConfigFileNotFound for a missing explicit config path, never falling back silently', () => {
     const cwd = tempDir();
 
-    expect(() => resolveKafkaConfig({ config: 'does-not-exist.mjs' }, { cwd })).toThrowError(
+    expect(() => resolveSync({ config: 'does-not-exist.mjs' }, { cwd })).toThrowError(
       expect.objectContaining({ name: 'KafkaConfigError', tag: 'ConfigFileNotFound' }),
     );
   });
@@ -179,7 +195,7 @@ describe('resolveKafkaConfig', () => {
   it('throws MissingBrokers naming the searched directory when nothing resolves brokers', () => {
     const cwd = tempDir();
 
-    expect(() => resolveKafkaConfig({}, { cwd })).toThrowError(
+    expect(() => resolveSync({}, { cwd })).toThrowError(
       expect.objectContaining({
         name: 'KafkaConfigError',
         tag: 'MissingBrokers',
@@ -202,14 +218,14 @@ describe('resolveKafkaConfig', () => {
     const cwd = tempDir();
     writeConfig(cwd, `const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };`);
 
-    expect(() => resolveKafkaConfig({}, { cwd })).toThrowError(KafkaConfigRequiresAsyncError);
+    expect(() => resolveSync({}, { cwd })).toThrowError(KafkaConfigRequiresAsyncError);
   });
 
   it.runIf(isBun)('on Bun, resolves a config file requiring top-level await synchronously', () => {
     const cwd = tempDir();
     writeConfig(cwd, `const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };`);
 
-    expect(resolveKafkaConfig({}, { cwd }).config.brokers).toEqual(['tla:9092']);
+    expect(resolveSync({}, { cwd }).config.brokers).toEqual(['tla:9092']);
   });
 
   describe('sync TS/JS loading deprecation', () => {
@@ -266,7 +282,7 @@ describe('resolveKafkaConfigAsync', () => {
     const cwd = tempDir();
     writeConfig(cwd, ALL_KEYS_CONFIG.replace(/socketFactory:.*,\n/, '').replace(/logCreator:.*,\n/, ''));
 
-    const syncResult = resolveKafkaConfig({}, { cwd });
+    const syncResult = resolveSync({}, { cwd });
     return resolveKafkaConfigAsync({}, { cwd }).then((asyncResult) => {
       expect(asyncResult.config).toEqual(syncResult.config);
       expect(asyncResult.path).toBe(syncResult.path);

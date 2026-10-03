@@ -14,12 +14,36 @@ function compose(args: string[]): void {
   });
 }
 
+// A broker occasionally never turns healthy on a shared CI runner even though the same stack
+// starts fine on the next attempt. Dump what each container was doing (otherwise the failure is
+// just "application not healthy"), then retry once from a clean stack before giving up.
+function composeUpWithRetry(attempts = 2): void {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      compose(['up', '--wait', '--wait-timeout', '180']);
+      return;
+    } catch (error) {
+      try {
+        compose(['ps', '--all']);
+        compose(['logs', '--no-color', '--tail', '200']);
+      } catch {
+        // Diagnostics are best-effort; the original failure is what matters.
+      }
+      if (attempt >= attempts) {
+        throw error;
+      }
+      console.warn(`docker compose up failed (attempt ${attempt}/${attempts}); recreating the stack and retrying`);
+      compose(['down', '--remove-orphans', '--volumes']);
+    }
+  }
+}
+
 export async function setup(): Promise<void> {
   if (process.env.KAFKA_EXTERNAL === '1') {
     return;
   }
 
-  compose(['up', '--wait', '--wait-timeout', '180']);
+  composeUpWithRetry();
 
   if (isZooKeeperComposeFile(composeFile)) {
     execFileSync('bash', [path.join(coreRoot, 'scripts/create-scram-credentials.sh')], {

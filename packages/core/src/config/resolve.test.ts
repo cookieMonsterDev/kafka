@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaConfigRequiresAsyncError } from '../errors';
 import { resolveKafkaConfig, resolveKafkaConfigAsync, resolveKafkaConfigFrom } from './resolve';
 
+/** Bun's `require()` supports top-level `await`, so the sync path never needs to reject it there. */
+const isBun = typeof process.versions.bun === 'string';
+
 let dir: string | undefined;
 
 afterEach(() => {
@@ -195,11 +198,66 @@ describe('resolveKafkaConfig', () => {
     expect(onDiagnostic).toHaveBeenCalledWith(expect.objectContaining({ code: 'config.loaded', path }));
   });
 
-  it('rejects a config file requiring top-level await, naming Kafka.fromConfig as the remedy', () => {
+  it.skipIf(isBun)('rejects a config file requiring top-level await, naming Kafka.fromConfig as the remedy', () => {
     const cwd = tempDir();
     writeConfig(cwd, `const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };`);
 
     expect(() => resolveKafkaConfig({}, { cwd })).toThrowError(KafkaConfigRequiresAsyncError);
+  });
+
+  it.runIf(isBun)('on Bun, resolves a config file requiring top-level await synchronously', () => {
+    const cwd = tempDir();
+    writeConfig(cwd, `const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };`);
+
+    expect(resolveKafkaConfig({}, { cwd }).config.brokers).toEqual(['tla:9092']);
+  });
+
+  describe('sync TS/JS loading deprecation', () => {
+    it('warns once per path when it loads a JS/TS config file synchronously, naming Kafka.fromConfig()', () => {
+      const cwd = tempDir();
+      const path = writeConfig(cwd, `export default { client: { brokers: ['b:9092'] } };`);
+      const onDiagnostic = vi.fn();
+
+      resolveKafkaConfig({}, { cwd, onDiagnostic });
+      resolveKafkaConfig({}, { cwd, onDiagnostic });
+
+      const deprecations = onDiagnostic.mock.calls.filter(([d]) => d.code === 'config.sync-load-deprecated');
+      expect(deprecations).toHaveLength(1);
+      expect(deprecations[0]?.[0]).toMatchObject({
+        level: 'warn',
+        path,
+        message: expect.stringContaining('Kafka.fromConfig()'),
+      });
+    });
+
+    it('loads a kafka.config.json synchronously without a deprecation warning', () => {
+      const cwd = tempDir();
+      writeConfig(cwd, JSON.stringify({ client: { brokers: ['json:9092'] } }), 'kafka.config.json');
+      const onDiagnostic = vi.fn();
+
+      const result = resolveKafkaConfig({}, { cwd, onDiagnostic });
+
+      expect(result.config.brokers).toEqual(['json:9092']);
+      expect(onDiagnostic).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'config.sync-load-deprecated' }));
+    });
+
+    it('does not warn when no config file is loaded', () => {
+      const onDiagnostic = vi.fn();
+
+      resolveKafkaConfig({ brokers: ['explicit:9092'] }, { onDiagnostic });
+
+      expect(onDiagnostic).not.toHaveBeenCalled();
+    });
+
+    it('never warns on the async path', async () => {
+      const cwd = tempDir();
+      writeConfig(cwd, `export default { client: { brokers: ['b:9092'] } };`);
+      const onDiagnostic = vi.fn();
+
+      await resolveKafkaConfigAsync({}, { cwd, onDiagnostic });
+
+      expect(onDiagnostic).not.toHaveBeenCalledWith(expect.objectContaining({ code: 'config.sync-load-deprecated' }));
+    });
   });
 });
 

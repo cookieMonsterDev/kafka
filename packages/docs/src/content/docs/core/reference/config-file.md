@@ -5,8 +5,11 @@ order: 9
 section: reference
 ---
 
-`new Kafka()` can fill in whatever options a call omits from a `kafka.config.ts` (or `.mts`,
-`.cts`, `.js`, `.mjs`, `.cjs`, `.json`) file, discovered by walking up from the current directory.
+A client can fill in whatever options a call omits from a `kafka.config.ts` (or `.mts`, `.cts`,
+`.js`, `.mjs`, `.cjs`, `.json`) file, discovered by walking up from the current directory. The
+recommended entry point is `await Kafka.fromConfig()`, which loads the file asynchronously.
+`new Kafka()` discovers the same file but loads it synchronously — see
+[Synchronous loading in `new Kafka()`](#synchronous-loading-in-new-kafka).
 The loader itself lives in the standalone, zero-dependency
 [`@cookiemonsterdev/kafka-config`](https://www.npmjs.com/package/@cookiemonsterdev/kafka-config)
 package; this page covers the Kafka-typed facade `@cookiemonsterdev/kafka-core` builds on top of
@@ -96,23 +99,46 @@ factory function, are accepted too — `defineConfig` is documentation, not a re
 `consumer` and `shareConsumer` make `groupId` optional even where the runtime call requires it, so
 a file can supply shared consumer defaults without hardcoding one group.
 
-A config file that needs top-level `await`, or that exports an async factory, cannot be loaded by
-the synchronous constructor — use [`Kafka.fromConfig()`](#kafkafromconfig--kafkafrom) instead. An
-extensionless relative import in a `.ts` file is rescued through a one-time transform fallback,
-with a warning on stderr naming the file and the fix. A TypeScript `enum` is not rescued: the load
-fails with an error telling you to replace it with a frozen object or a plain union type.
+Write erasable TypeScript. With `Kafka.fromConfig()`, an extensionless relative import in a `.ts`
+file, or `export default` in a `.ts` file that resolves to CommonJS, fails with an error naming the
+file and the fix (add the `.ts` extension; rename to `.mts` or set `"type": "module"`). A TypeScript
+`enum` fails the same way on every path: replace it with a frozen object or a plain union type.
+
+## Synchronous loading in `new Kafka()`
+
+`new Kafka()` is synchronous, so it loads a discovered config file synchronously:
+
+- **`kafka.config.json`** loads with `JSON.parse`, silently. This is fully supported.
+- **A TS/JS config file** still loads through the synchronous `require()`-based loader, so nothing
+  breaks, but that path is **deprecated**. The first time each file loads this way, a
+  `config.sync-load-deprecated` warning on stderr names the file and the fix: use
+  `await Kafka.fromConfig()`, or switch to `kafka.config.json`. On this path, an extensionless
+  import is still rescued through a one-time transform fallback, with its own warning.
+
+On Node, a config file that needs top-level `await` cannot load synchronously and throws
+`KafkaConfigRequiresAsyncError`. An async factory export throws a `ConfigFileInvalid` error. Use
+[`Kafka.fromConfig()`](#kafkafromconfig--kafkafrom) for both.
+
+`loadKafkaConfig()` and its `LoadKafkaConfigOptions` are deprecated for the same reason. Use
+`loadKafkaConfigAsync()` instead.
+
+### Bun
+
+On Bun, `require()` loads TypeScript natively, so no transform fallback is needed, and a
+top-level-`await` config loads through `new Kafka()` too. The deprecation warning still applies:
+prefer `Kafka.fromConfig()`.
 
 ## `Kafka.fromConfig` / `Kafka.from`
 
 ```ts
-// async — the only path for top-level await or an async factory export
+// async — the recommended path; also handles top-level await and an async factory export
 const kafka = await Kafka.fromConfig({ clientId: 'my-app' }, { cwd: import.meta.dirname });
 
 // synchronous — for a caller that already loaded the file itself and wants to
 // construct several clients from it without discovering or reading it again
-import { loadKafkaConfig } from '@cookiemonsterdev/kafka-core';
+import { loadKafkaConfigAsync } from '@cookiemonsterdev/kafka-core';
 
-const fileConfig = loadKafkaConfig('./kafka.config.ts');
+const fileConfig = await loadKafkaConfigAsync('./kafka.config.ts');
 const kafka = Kafka.from(fileConfig, { clientId: 'my-app' });
 ```
 

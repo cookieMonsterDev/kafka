@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { KafkaConfigError, KafkaConfigRequiresAsyncError } from '../errors';
 import { loadKafkaConfig, loadKafkaConfigAsync } from './load';
 
+/** Bun's `require()` supports top-level `await`, so the sync loader never needs to reject it there. */
+const isBun = typeof process.versions.bun === 'string';
+
 let dir: string | undefined;
 
 afterEach(() => {
@@ -69,7 +72,7 @@ describe('loadKafkaConfig', () => {
     expect(() => loadKafkaConfig(path)).toThrow(KafkaConfigError);
   });
 
-  it("wraps a top-level-await config into this client's own KafkaConfigRequiresAsyncError", () => {
+  it.skipIf(isBun)("wraps a top-level-await config into this client's own KafkaConfigRequiresAsyncError", () => {
     const path = tempFile(
       "const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };",
       'kafka.config.mjs',
@@ -84,6 +87,15 @@ describe('loadKafkaConfig', () => {
 
     expect(caught).toBeInstanceOf(KafkaConfigRequiresAsyncError);
     expect((caught as KafkaConfigRequiresAsyncError).path).toBe(path);
+  });
+
+  it.runIf(isBun)('on Bun, loads a top-level-await config synchronously', () => {
+    const path = tempFile(
+      "const brokers = await Promise.resolve(['tla:9092']); export default { client: { brokers } };",
+      'kafka.config.mjs',
+    );
+
+    expect(loadKafkaConfig(path)).toEqual({ client: { brokers: ['tla:9092'] } });
   });
 });
 

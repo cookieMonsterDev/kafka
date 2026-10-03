@@ -9,7 +9,7 @@ Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file 
 ## Prerequisites
 
 - **Node.js 24 or newer** (tested on 24 and 26; `.nvmrc` pins 26 for development). `engines` is enforced at install time.
-- **pnpm 11**, pinned via `packageManager` in the root `package.json`.
+- **pnpm 12**, pinned via `packageManager` in the root `package.json`.
 - **Docker** only if you run integration tests.
 
 ```sh
@@ -325,7 +325,7 @@ in `scripts/check-publishable-deps.mjs`.
 
 ## Configuration notes
 
-pnpm 11 reads **only** auth and registry settings from `.npmrc`. Everything else (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in `pnpm-workspace.yaml`. Settings placed in `.npmrc` are silently ignored.
+pnpm 12 reads **only** auth and registry settings from `.npmrc`. Everything else (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in `pnpm-workspace.yaml`. Settings placed in `.npmrc` are silently ignored.
 
 ## License
 

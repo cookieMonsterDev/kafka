@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { registerHooks, stripTypeScriptTypes } from 'node:module';
+import * as nodeModule from 'node:module';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +9,15 @@ const RETRY_EXTENSIONS = ['.ts', '.mts'];
 const AMBIGUOUS_EXTENSIONS = new Set(['.ts', '.js']);
 /** Top-level `import`/`export` syntax — the same signal Node's own ambiguous-format auto-detection looks for. */
 const LOOKS_LIKE_ESM_SYNTAX = /^\s*(?:export|import)\b/m;
+
+/**
+ * Read off the namespace rather than imported by name: Bun's `node:module` has neither export, and
+ * a named import of a missing export is a link-time `SyntaxError` that would stop this whole
+ * package (and every consumer) from loading at all.
+ */
+const { registerHooks, stripTypeScriptTypes } = nodeModule as Partial<
+  Pick<typeof nodeModule, 'registerHooks' | 'stripTypeScriptTypes'>
+>;
 
 let installed = false;
 
@@ -55,9 +64,16 @@ function detectModuleFormat(path: string): 'module' | 'commonjs' {
  * The `resolve` hook always tries the default resolution first and only appends `.ts`/`.mts` on
  * failure, so successful resolutions for the host application's own modules are byte-identical to
  * having no hooks installed at all.
+ *
+ * A safe no-op on a runtime whose `node:module` lacks `registerHooks` or `stripTypeScriptTypes`
+ * (Bun): such a runtime loads TypeScript natively, so there is nothing to rescue.
+ *
+ * @returns Whether the hooks are installed after this call (now, or by an earlier call). `false`
+ * means this runtime has no `require()` hooks and nothing was installed.
  */
-export function installConfigTransformHooks(): void {
-  if (installed) return;
+export function installConfigTransformHooks(): boolean {
+  if (installed) return true;
+  if (registerHooks === undefined || stripTypeScriptTypes === undefined) return false;
   installed = true;
 
   registerHooks({
@@ -105,8 +121,13 @@ export function installConfigTransformHooks(): void {
       return { format, source: transformed, shortCircuit: true };
     },
   });
+  return true;
 }
 
+/**
+ * Whether {@link installConfigTransformHooks} has installed the hooks in this process. Always
+ * `false` on a runtime without `require()` hooks (Bun).
+ */
 export function areConfigTransformHooksInstalled(): boolean {
   return installed;
 }

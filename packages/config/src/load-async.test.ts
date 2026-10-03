@@ -21,10 +21,9 @@ describe('loadConfigFileAsync', () => {
     expect(config).toEqual({ client: { brokers: [broker] } });
   });
 
-  it('loads a config that requires top-level await, which the sync loader rejects', async () => {
+  it('loads a config that requires top-level await (which the sync loader rejects on Node)', async () => {
     const path = join(FIXTURES, 'tla', 'kafka.config.ts');
 
-    expect(() => loadConfigFileSync(path)).toThrow();
     await expect(loadConfigFileAsync(path)).resolves.toEqual({ client: { brokers: ['tla:9092'] } });
   });
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { KafkaConfigRequiresAsyncError } from './errors';
 import { loadConfigFileSync } from './load-sync';
+import { isBun } from './runtime';
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../test/fixtures/load-sync');
 
@@ -40,7 +41,7 @@ describe('loadConfigFileSync', () => {
     expect(diagnostics).not.toContain('config.transform-fallback');
   });
 
-  it('rescues "export default" in a .ts file under "type": "commonjs" (D8 fallback)', () => {
+  it.skipIf(isBun())('rescues "export default" in a .ts file under "type": "commonjs" (D8 fallback)', () => {
     const diagnostics: { code: string; detail?: unknown }[] = [];
     const path = join(FIXTURES, 'esm-export-under-commonjs-typed', 'kafka.config.ts');
 
@@ -54,27 +55,49 @@ describe('loadConfigFileSync', () => {
     expect(fallback?.detail).toContain('ES module syntax');
   });
 
+  it.runIf(isBun())(
+    'on Bun, loads "export default" in a .ts file under "type": "commonjs" natively, with no fallback',
+    () => {
+      const diagnostics: string[] = [];
+      const path = join(FIXTURES, 'esm-export-under-commonjs-typed', 'kafka.config.ts');
+
+      const config = loadConfigFileSync(path, { onDiagnostic: (d) => diagnostics.push(d.code) });
+
+      expect(config).toEqual({ client: { brokers: ['esm-export-cjs-typed:9092'] } });
+      expect(diagnostics).toEqual([]);
+    },
+  );
+
   it('loads a path containing a space and a "#" via pathToFileURL, never string concatenation', () => {
     const config = loadConfigFileSync(join(FIXTURES, 'weird path #1', 'kafka.config.ts'));
 
     expect(config).toEqual({ client: { brokers: ['weird-path:9092'] } });
   });
 
-  it('throws KafkaConfigRequiresAsyncError, naming the file and Kafka.fromConfig(), for top-level await', () => {
-    const path = join(FIXTURES, 'tla', 'kafka.config.ts');
+  it.skipIf(isBun())(
+    'throws KafkaConfigRequiresAsyncError, naming the file and Kafka.fromConfig(), for top-level await',
+    () => {
+      const path = join(FIXTURES, 'tla', 'kafka.config.ts');
 
-    let thrown: unknown;
-    try {
-      loadConfigFileSync(path);
-    } catch (error) {
-      thrown = error;
-    }
+      let thrown: unknown;
+      try {
+        loadConfigFileSync(path);
+      } catch (error) {
+        thrown = error;
+      }
 
-    expect(thrown).toBeInstanceOf(KafkaConfigRequiresAsyncError);
-    const error = thrown as KafkaConfigRequiresAsyncError;
-    expect(error.path).toBe(path);
-    expect(error.message).toContain(path);
-    expect(error.message).toContain('Kafka.fromConfig()');
+      expect(thrown).toBeInstanceOf(KafkaConfigRequiresAsyncError);
+      const error = thrown as KafkaConfigRequiresAsyncError;
+      expect(error.path).toBe(path);
+      expect(error.message).toContain(path);
+      expect(error.message).toContain('Kafka.fromConfig()');
+    },
+  );
+
+  it.runIf(isBun())("on Bun, loads a top-level-await config synchronously (Bun's require() supports it)", () => {
+    const config = loadConfigFileSync(join(FIXTURES, 'tla', 'kafka.config.ts'));
+
+    expect(config).toEqual({ client: { brokers: ['tla:9092'] } });
   });
 
   it('wraps a JSON parse failure in a ConfigLoadError naming the file', () => {

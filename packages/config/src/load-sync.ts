@@ -133,7 +133,16 @@ function requireDefaultExport(
       );
     }
 
-    installConfigTransformHooks();
+    if (!installConfigTransformHooks()) {
+      // Only Bun lacks the hooks, and its `require()` already handles both rescuable constructs
+      // natively, so this is not expected to happen — but never claim a rescue that can't run.
+      throw new KafkaConfigError(
+        'ConfigLoadError',
+        `kafka config file "${path}" needs the TypeScript transform fallback (it uses ${rescue.detail}), which ` +
+          `this runtime does not support (no "registerHooks" in "node:module"). Fix: ${rescue.fix}.`,
+        { path, cause: error },
+      );
+    }
     onDiagnostic({
       code: 'config.transform-fallback',
       level: 'warn',
@@ -171,6 +180,8 @@ export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
    * guaranteed to throw — `require()` itself now silently rescues it. For an airtight CI
    * guarantee, set `allowTransformFallback: false` on every call from process start; don't mix it
    * with a lenient call against a potentially-rescuable file in the same process.
+   *
+   * Has no effect on Bun, whose `require()` loads both constructs natively.
    */
   allowTransformFallback?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
@@ -193,6 +204,9 @@ export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
  * {@link KafkaConfigRequiresAsyncError} for the former, `KafkaConfigError` tagged
  * `'ConfigFileInvalid'` for the latter. Use `Kafka.fromConfig()`, or the async loader directly, for
  * either case.
+ *
+ * On Bun, `require()` loads TypeScript natively — including top-level `await` — so the transform
+ * fallback is never needed there, and a top-level-`await` config loads instead of throwing.
  */
 export function loadConfigFileSync<T = Record<string, unknown>>(
   path: string,

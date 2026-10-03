@@ -3,11 +3,8 @@ import { resolve as resolvePath } from 'node:path';
 import {
   discoverConfigFile,
   loadConfigFileAsync,
-  loadConfigFileSync,
   loadEnvFiles,
-  type ConfigDiagnostic,
   type KafkaConfigError as GenericKafkaConfigError,
-  type KafkaConfigRequiresAsyncError as GenericKafkaConfigRequiresAsyncError,
   type OnConfigDiagnostic,
 } from '@cookiemonsterdev/kafka-config';
 import { CliConfigError } from '../errors/cli-config-error';
@@ -21,7 +18,7 @@ export interface ResolveCliConfigOptions {
   readonly configFlag?: string;
   /** From `--profile`. An unknown name is a hard error listing what's actually configured. */
   readonly profileFlag?: string;
-  /** Every diagnostic the generic loader reports — `config.loaded`, `config.multiple-candidates`, `config.transform-fallback`. */
+  /** Every diagnostic the generic loader reports — `config.loaded`, `config.multiple-candidates`. */
   readonly onDiagnostic?: OnConfigDiagnostic;
   /** A CLI-owned warning that doesn't fit the generic loader's closed diagnostic-code union (e.g. an unknown `cli:` key). */
   readonly onWarn?: (message: string) => void;
@@ -43,7 +40,11 @@ export interface ResolvedCliConfig {
   readonly cli: CliFileConfig;
   /** The active profile name (`--profile` / `KAFKA_PROFILE`), or `null` if none was requested. */
   readonly profile: string | null;
-  /** Whether loading this file required the TypeScript-transform rescue (an extensionless import or ESM syntax under a CommonJS-resolved file, recovered through `require()`'s transform hooks). */
+  /**
+   * Whether loading this file required the TypeScript-transform rescue. Always `false` now: the
+   * file is loaded with the async loader, which has no rescue and instead fails with an error
+   * naming the fix. Kept so `doctor`'s output shape doesn't change.
+   */
   readonly transformFallbackUsed: boolean;
 }
 
@@ -101,10 +102,9 @@ function resolveActiveProfile(options: ResolveCliConfigOptions, cli: CliFileConf
 
 /**
  * Loads a `kafka.config.*` file once for this invocation: load `.env` files (so `process.env`
- * reads inside the config module see them) → discover (or resolve `--config-file`) → load, with
- * the TypeScript-transform rescue tried synchronously first and the sync-only
- * {@link GenericKafkaConfigRequiresAsyncError} case retried through the async loader → read the
- * `cli:` section → resolve the active `--profile`.
+ * reads inside the config module see them) → discover (or resolve `--config-file`) → load through
+ * the async loader (dynamic `import()`, so top-level `await` and async factories just work) →
+ * read the `cli:` section → resolve the active `--profile`.
  *
  * Deliberately does **not** import `@cookiemonsterdev/kafka-core` — every command pays for this
  * (it runs before any command's own logic), so it stays on the 26 KB, zero-dependency generic
@@ -115,11 +115,7 @@ function resolveActiveProfile(options: ResolveCliConfigOptions, cli: CliFileConf
 export async function resolveCliConfig(options: ResolveCliConfigOptions): Promise<ResolvedCliConfig> {
   loadEnvFiles({ cwd: options.cwd });
 
-  let transformFallbackUsed = false;
-  const onDiagnostic: OnConfigDiagnostic = (diagnostic: ConfigDiagnostic) => {
-    if (diagnostic.code === 'config.transform-fallback') transformFallbackUsed = true;
-    options.onDiagnostic?.(diagnostic);
-  };
+  const onDiagnostic: OnConfigDiagnostic = options.onDiagnostic ?? (() => {});
   const onWarn = options.onWarn ?? (() => {});
 
   const path = findConfigPath(options, onDiagnostic);
@@ -127,15 +123,10 @@ export async function resolveCliConfig(options: ResolveCliConfigOptions): Promis
 
   if (path !== null) {
     try {
-      fileConfig = loadConfigFileSync<Record<string, unknown>>(path, { onDiagnostic });
+      fileConfig = await loadConfigFileAsync<Record<string, unknown>>(path);
     } catch (error) {
-      if (hasName<GenericKafkaConfigRequiresAsyncError>(error, 'KafkaConfigRequiresAsyncError')) {
-        fileConfig = await loadConfigFileAsync<Record<string, unknown>>(path);
-      } else if (hasName<GenericKafkaConfigError>(error, 'KafkaConfigError')) {
-        throw new CliConfigError(error.message);
-      } else {
-        throw error;
-      }
+      if (hasName<GenericKafkaConfigError>(error, 'KafkaConfigError')) throw new CliConfigError(error.message);
+      throw error;
     }
     onDiagnostic({ code: 'config.loaded', level: 'info', message: `Loaded kafka config from "${path}"`, path });
     assertKnownSectionsArePlainObjects(fileConfig, path);
@@ -144,5 +135,5 @@ export async function resolveCliConfig(options: ResolveCliConfigOptions): Promis
   const cli = readCliSection(fileConfig, onWarn);
   const profile = resolveActiveProfile(options, cli);
 
-  return { path, fileConfig, cli, profile, transformFallbackUsed };
+  return { path, fileConfig, cli, profile, transformFallbackUsed: false };
 }

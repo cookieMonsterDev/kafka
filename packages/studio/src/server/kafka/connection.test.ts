@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as KafkaConfigModule from '@cookiemonsterdev/kafka-config';
 import {
   createKafkaClient,
   isKnownProfile,
@@ -9,6 +10,12 @@ import {
   resolveStudioConnectionConfig,
   UnknownProfileError,
 } from './connection';
+
+const { loadConfigFileSyncSpy } = vi.hoisted(() => ({ loadConfigFileSyncSpy: vi.fn() }));
+vi.mock('@cookiemonsterdev/kafka-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof KafkaConfigModule>();
+  return { ...actual, loadConfigFileSync: loadConfigFileSyncSpy.mockImplementation(actual.loadConfigFileSync) };
+});
 
 describe('resolveStudioConnectionConfig', () => {
   it('returns no profiles when no config file is found', async () => {
@@ -22,6 +29,42 @@ describe('resolveStudioConnectionConfig', () => {
     await expect(
       resolveStudioConnectionConfig({ cwd: '/nonexistent-test-cwd', env: { KAFKA_CONFIG: 'nope.json' } }),
     ).rejects.toThrow('does not exist');
+  });
+
+  describe('async loading', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'studio-connection-async-'));
+      loadConfigFileSyncSpy.mockClear();
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('loads a config that uses top-level await, never through the deprecated sync loader', async () => {
+      writeFileSync(
+        join(dir, 'kafka.config.mjs'),
+        'export default { client: { brokers: [await Promise.resolve("tla:9092")] } };\n',
+      );
+
+      const config = await resolveStudioConnectionConfig({ cwd: dir, env: {} });
+
+      expect(config.fileConfig).toEqual({ client: { brokers: ['tla:9092'] } });
+      expect(loadConfigFileSyncSpy).not.toHaveBeenCalled();
+    });
+
+    it('awaits an async factory export', async () => {
+      writeFileSync(
+        join(dir, 'kafka.config.mjs'),
+        'export default async () => ({ client: { brokers: ["async-factory:9092"] } });\n',
+      );
+
+      const config = await resolveStudioConnectionConfig({ cwd: dir, env: {} });
+
+      expect(config.fileConfig).toEqual({ client: { brokers: ['async-factory:9092'] } });
+    });
   });
 
   describe('with a real config file', () => {

@@ -466,6 +466,10 @@ looking for `kafka.config.{ts,mts,cts,js,mjs,cjs,json}` (or `.config/kafka.*`), 
 first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` — override that with
 `--config-file <path>` or `KAFKA_CONFIG`.
 
+The file is loaded asynchronously, so a config that uses top-level `await` or exports an async
+factory works. There is no TypeScript transform rescue: an extensionless relative import, or
+`export default` in a `.ts` file that resolves to CommonJS, fails with an error naming the fix.
+
 Named alternates — e.g. one entry per cluster — go under a `cli.profiles` section and are selected
 with `--profile <name>` or `KAFKA_PROFILE`:
 

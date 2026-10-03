@@ -3,7 +3,6 @@ import { resolve as resolvePath } from 'node:path';
 import {
   discoverConfigFile,
   loadConfigFileAsync,
-  loadConfigFileSync,
   mergeConfigLayers,
   type OnConfigDiagnostic,
 } from '@cookiemonsterdev/kafka-config';
@@ -39,17 +38,6 @@ export class UnknownProfileError extends Error {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Matched by `.name`, not `instanceof`: `KafkaConfigRequiresAsyncError` is thrown by
- * `@cookiemonsterdev/kafka-config`, a separate package — if this workspace ever ends up with two
- * installed copies of it, the classes are distinct objects even though the errors behave
- * identically. (Errors this module defines itself are matched with `instanceof` instead — that
- * risk doesn't apply to them.)
- */
-function hasName(error: unknown, name: string): boolean {
-  return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === name;
 }
 
 function readProfiles(
@@ -99,7 +87,8 @@ export interface ResolveStudioConnectionOptions {
 /**
  * Loads the same `kafka.config.*` file `@cookiemonsterdev/kafka-cli` reads, so a project only has
  * to configure its cluster and named profiles once — the studio takes its multi-cluster model
- * straight from the file's `cli.profiles` section rather than inventing a second one.
+ * straight from the file's `cli.profiles` section rather than inventing a second one. Loaded with
+ * the async loader (dynamic `import()`), so top-level `await` and async factories just work.
  */
 export async function resolveStudioConnectionConfig(
   options: ResolveStudioConnectionOptions,
@@ -109,18 +98,7 @@ export async function resolveStudioConnectionConfig(
   const onWarn = options.onWarn ?? (() => {});
   const path = resolveConfigPath(cwd, env, onDiagnostic);
 
-  let fileConfig: Record<string, unknown> | null = null;
-  if (path !== null) {
-    try {
-      fileConfig = loadConfigFileSync<Record<string, unknown>>(path, { onDiagnostic });
-    } catch (error) {
-      if (hasName(error, 'KafkaConfigRequiresAsyncError')) {
-        fileConfig = await loadConfigFileAsync<Record<string, unknown>>(path);
-      } else {
-        throw error;
-      }
-    }
-  }
+  const fileConfig = path === null ? null : await loadConfigFileAsync<Record<string, unknown>>(path);
 
   return { path, fileConfig, env, profiles: readProfiles(fileConfig, onWarn) };
 }

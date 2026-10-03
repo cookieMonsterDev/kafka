@@ -7,8 +7,8 @@ section: guides
 
 Passing `brokers` (and everything else) to every `new Kafka({...})` call works, but a monorepo
 with several entry points — a web server, a worker, a CLI script — usually wants one shared
-source of truth instead. `new Kafka()` fills in whatever a call omits from a `kafka.config.ts`
-file:
+source of truth instead. `Kafka.fromConfig()` fills in whatever a call omits from a
+`kafka.config.ts` file:
 
 ```ts
 // kafka.config.ts, at the repo root or a workspace root
@@ -25,8 +25,12 @@ export default defineConfig({
 // anywhere under that directory
 import { Kafka } from '@cookiemonsterdev/kafka-core';
 
-const kafka = new Kafka(); // brokers comes from the file
+const kafka = await Kafka.fromConfig(); // brokers comes from the file
 ```
+
+`new Kafka()` discovers the same file, but it loads a TS/JS config file through a deprecated
+synchronous path and warns once per file. A `kafka.config.json` file loads synchronously with no
+warning.
 
 Discovery walks upward from the current directory and stops at the nearest `.git`,
 `pnpm-workspace.yaml`, or workspace `package.json` — so `pnpm --filter ./apps/worker start` still
@@ -81,5 +85,5 @@ unexpected parent directory.
 
 ## Top-level `await`, or an async factory
 
-The synchronous constructor cannot load a config file that needs async work. Use
-`Kafka.fromConfig()` instead — see [Config file](../../reference/config-file/#kafkafromconfig--kafkafrom).
+`Kafka.fromConfig()` loads a config file that needs async work. On Node, the synchronous
+constructor cannot load one — see [Config file](../../reference/config-file/#kafkafromconfig--kafkafrom).

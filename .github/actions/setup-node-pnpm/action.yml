@@ -1,12 +1,18 @@
 name: Setup Node.js and pnpm
-description: Install Node 24, pnpm from packageManager, and workspace dependencies
+description: Install Node (26 unless overridden), pnpm from packageManager, and workspace dependencies
+
+inputs:
+  node-version:
+    description: Node.js major version to install
+    required: false
+    default: '26'
 
 runs:
   using: composite
   steps:
     - uses: pnpm/setup@v2
       with:
-        runtime: node@24
+        runtime: node@${{ inputs.node-version }}
         cache: true
         install: false
     - run: pnpm install --frozen-lockfile

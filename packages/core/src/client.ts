@@ -72,7 +72,9 @@ export class Kafka {
   /**
    * @param explicit Options passed directly to this call. Anything left unset is filled from a
    * `kafka.config.*` file, per {@link KafkaConfig.config} — see {@link Kafka.configSource} for
-   * what won and from where.
+   * what won and from where. A discovered TS/JS config file loads through the deprecated
+   * synchronous loader, with a one-time `config.sync-load-deprecated` warning; prefer
+   * {@link Kafka.fromConfig}. A `kafka.config.json` file loads synchronously without a warning.
    * @param resolved Internal — a pre-resolved config, used by {@link Kafka.fromConfig} and
    * {@link Kafka.from} to avoid resolving (and re-discovering) what they already resolved. Never
    * pass this yourself; call one of those instead of `new Kafka()` if you already have a loaded
@@ -364,9 +366,11 @@ export class Kafka {
   }
 
   /**
-   * Async sibling of `new Kafka()`, for the cases the synchronous constructor structurally
-   * cannot handle: a config file that uses top-level `await`, or exports an async factory. Shares
-   * discovery and the merge function with the constructor, so the two paths cannot drift.
+   * Async sibling of `new Kafka()`, and the recommended way to build a client from a
+   * `kafka.config.*` file: it loads the file with dynamic `import()`, so it also handles a config
+   * that uses top-level `await` or exports an async factory, and it never uses the deprecated
+   * synchronous loader. Shares discovery and the merge function with the constructor, so the two
+   * paths cannot drift.
    */
   static async fromConfig(overrides: KafkaConfig = {}, options: { cwd?: string } = {}): Promise<Kafka> {
     const resolved = await resolveKafkaConfigAsync(overrides, { cwd: options.cwd });

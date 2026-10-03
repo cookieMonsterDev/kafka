@@ -213,6 +213,10 @@ export interface KafkaConfig {
    * touches the filesystem. `true`: always discover and merge the file under whatever options
    * this call passes. `false`: never discover. A string: an explicit path, resolved against
    * `cwd` — a path that does not exist is a hard error, never a silent fallback.
+   *
+   * `new Kafka()` loads the file synchronously: a `kafka.config.json` silently, a TS/JS file with a
+   * one-time `config.sync-load-deprecated` warning, since that sync path is deprecated. Prefer
+   * `await Kafka.fromConfig()`, which loads any config file asynchronously.
    */
   config?: boolean | string;
 }

@@ -14,7 +14,7 @@
   <a href="https://www.npmjs.com/package/@cookiemonsterdev/kafka-core"><img src="https://img.shields.io/npm/v/@cookiemonsterdev/kafka-core.svg" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
   <a href=".nvmrc"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg" alt="Node.js 24+" /></a>
-  <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 11" /></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/pnpm-11-F69220.svg" alt="pnpm 12" /></a>
 </p>
 
 This repo is a small family of packages built around one Kafka client for Node.js:
@@ -99,8 +99,8 @@ Versions below are live badges pulled from the npm registry, so they always matc
 
 ## Requirements
 
-- **Node.js 24** (Krypton LTS), pinned in `.nvmrc`. A wrong version fails `pnpm install`.
-- **pnpm 11**, pinned via `packageManager`.
+- **Node.js 24 or newer** (tested on 24 and 26); `.nvmrc` pins 26 for development. A wrong version fails `pnpm install`.
+- **pnpm 12**, pinned via `packageManager`.
 
 ```sh
 nvm use

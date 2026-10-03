@@ -58,6 +58,9 @@ function flushQueue(): void {
 
 function failAll(error: Error): void {
   workerFailed = true;
+  for (const worker of workers) {
+    worker.unref();
+  }
   for (const job of pending.values()) {
     job.reject(error);
   }
@@ -88,7 +91,6 @@ function onWorkerError(error: Error): void {
 
 function spawnWorker(): Worker {
   const worker = new Worker(workerFilename());
-  worker.unref();
   worker.on('message', (msg: CodecWorkerResponse) => {
     onWorkerMessage(worker, msg);
   });
@@ -98,6 +100,9 @@ function spawnWorker(): Worker {
       failAll(new Error(`codec worker exited with code ${code}`));
     }
   });
+  // Adding a 'message' listener re-refs the worker's port (Node and Bun), so unref only after
+  // every listener is attached; otherwise an idle worker keeps the process alive.
+  worker.unref();
   return worker;
 }
 

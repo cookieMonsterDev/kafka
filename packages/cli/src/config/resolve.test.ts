@@ -9,10 +9,18 @@ import { resolveCliConfig } from './resolve';
 // `loadEnvFiles()` calls `process.loadEnvFile()`, which mutates the real global `process.env`
 // with no undo — mocked here (everything else from the real module passes through) so the "calls
 // it, with this cwd, before anything else" test below never actually touches real global state.
-const { loadEnvFilesMock } = vi.hoisted(() => ({ loadEnvFilesMock: vi.fn() }));
+// `loadConfigFileSync` is wrapped in a pass-through spy only so a test can prove it's never used.
+const { loadEnvFilesMock, loadConfigFileSyncSpy } = vi.hoisted(() => ({
+  loadEnvFilesMock: vi.fn(),
+  loadConfigFileSyncSpy: vi.fn(),
+}));
 vi.mock('@cookiemonsterdev/kafka-config', async (importOriginal) => {
   const actual = await importOriginal<typeof KafkaConfigModule>();
-  return { ...actual, loadEnvFiles: loadEnvFilesMock };
+  return {
+    ...actual,
+    loadEnvFiles: loadEnvFilesMock,
+    loadConfigFileSync: loadConfigFileSyncSpy.mockImplementation(actual.loadConfigFileSync),
+  };
 });
 
 let dir: string;
@@ -141,13 +149,34 @@ describe('resolveCliConfig', () => {
     await expect(resolveCliConfig({ cwd, env: {}, profileFlag: 'bogus' })).rejects.toThrow(/none configured/);
   });
 
-  it('retries through the async loader for a config that requires top-level await', async () => {
+  it('loads a config that requires top-level await, never through the deprecated sync loader', async () => {
     const cwd = makeDir();
     const configPath = join(cwd, 'kafka.config.mjs');
     writeFileSync(configPath, 'export default { client: { brokers: [await Promise.resolve("a:1")] } };\n');
+    loadConfigFileSyncSpy.mockClear();
 
     const resolved = await resolveCliConfig({ cwd, env: {} });
     expect(resolved.fileConfig).toEqual({ client: { brokers: ['a:1'] } });
+    expect(resolved.transformFallbackUsed).toBe(false);
+    expect(loadConfigFileSyncSpy).not.toHaveBeenCalled();
+  });
+
+  it('awaits an async factory export', async () => {
+    const cwd = makeDir();
+    writeFileSync(join(cwd, 'kafka.config.mjs'), 'export default async () => ({ client: { brokers: ["a:1"] } });\n');
+
+    const resolved = await resolveCliConfig({ cwd, env: {} });
+    expect(resolved.fileConfig).toEqual({ client: { brokers: ['a:1'] } });
+  });
+
+  it('wraps a failure inside the config module into a CliConfigError naming the file', async () => {
+    const cwd = makeDir();
+    const configPath = join(cwd, 'kafka.config.mjs');
+    writeFileSync(configPath, 'throw new Error("boom");\n');
+
+    await expect(resolveCliConfig({ cwd, env: {} })).rejects.toThrow(
+      expect.objectContaining({ name: 'CliConfigError', message: expect.stringContaining(configPath) }),
+    );
   });
 
   it('wraps a generic loader failure (e.g. invalid JSON) into a CliConfigError', async () => {

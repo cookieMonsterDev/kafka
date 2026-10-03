@@ -57,7 +57,7 @@ function quietOptions() {
 /** Resolves a config against an explicit temp `cwd` and builds a `Kafka` from it, bypassing the constructor's own `process.cwd()`-based default so tests stay hermetic (no `process.chdir`). */
 function kafkaFromCwd(explicit: ConstructorParameters<typeof Kafka>[0] = {}, cwd: string): Kafka {
   const merged = { ...quietOptions(), ...explicit };
-  return new Kafka(merged, resolveKafkaConfig(merged, { cwd }));
+  return new Kafka(merged, resolveKafkaConfig(merged, { cwd, onDiagnostic: () => {} }));
 }
 
 describe('Kafka — constructor config resolution', () => {
@@ -77,6 +77,49 @@ describe('Kafka — constructor config resolution', () => {
 
     expect(kafka.configSource().path).toBeNull();
     expect(kafka.configSource().keys.brokers).toBe('explicit');
+  });
+
+  describe('a config file passed by path', () => {
+    function stderrWrites(): { lines: () => string[]; restore: () => void } {
+      const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      return {
+        lines: () => spy.mock.calls.map(([chunk]) => String(chunk)),
+        restore: () => spy.mockRestore(),
+      };
+    }
+
+    it('loads a kafka.config.json synchronously and silently', () => {
+      const cwd = tempDir();
+      writeConfig(cwd, JSON.stringify({ client: { brokers: ['json:9092'] } }), 'kafka.config.json');
+      const stderr = stderrWrites();
+
+      try {
+        const kafka = new Kafka({ ...quietOptions(), config: join(cwd, 'kafka.config.json') });
+
+        expect(kafka.configSource().keys.brokers).toBe('file');
+        expect(stderr.lines()).toEqual([]);
+      } finally {
+        stderr.restore();
+      }
+    });
+
+    it('still loads a JS/TS config file synchronously, warning once that the sync path is deprecated', () => {
+      const cwd = tempDir();
+      writeConfig(cwd, `export default { client: { brokers: ['js:9092'] } };`);
+      const path = join(cwd, 'kafka.config.mjs');
+      const stderr = stderrWrites();
+
+      try {
+        const first = new Kafka({ ...quietOptions(), config: path });
+        new Kafka({ ...quietOptions(), config: path });
+
+        expect(first.configSource().keys.brokers).toBe('file');
+        expect(stderr.lines()).toEqual([expect.stringContaining('Kafka.fromConfig()')]);
+        expect(stderr.lines()[0]).toContain(path);
+      } finally {
+        stderr.restore();
+      }
+    });
   });
 
   it('throws KafkaConfigError tagged MissingBrokers when nothing resolves brokers', () => {

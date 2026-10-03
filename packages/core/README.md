@@ -39,6 +39,8 @@ workspace, published to npm as
 | Security     | SSL/TLS, SASL PLAIN / SCRAM / OAUTHBEARER / GSSAPI, AWS IAM helper                   |
 | DX           | `AbortSignal`, `await using` (`Symbol.asyncDispose`), generated `.d.ts`              |
 
+Runs on Node.js 24 or newer and on Bun 1.4 or newer ([Bun notes](../docs/src/content/docs/core/reference/bun.md)).
+
 Not in scope: Kafka Streams, Kafka Connect, Java-client 4.x parity. Implemented vs missing APIs: [compatibility](../docs/src/content/docs/core/reference/compatibility.md).
 
 ## Usage

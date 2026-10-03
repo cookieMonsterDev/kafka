@@ -5,15 +5,15 @@
  * never leak into the shared vitest worker.
  *
  * Usage: `node run-duplicate-instances.mjs <copyAIndexPath> <copyBIndexPath> <ladderFixturePath>
- * <invalidJsonFixturePath> <enumFixturePath>`. Prints one JSON line to stdout.
+ * <invalidJsonFixturePath> <rescuableFixturePath>`. Prints one JSON line to stdout.
  */
 import { pathToFileURL } from 'node:url';
 
-const [, , copyAPath, copyBPath, ladderFixturePath, invalidJsonFixturePath, enumFixturePath] = process.argv;
-if (enumFixturePath == null) {
+const [, , copyAPath, copyBPath, ladderFixturePath, invalidJsonFixturePath, rescuableFixturePath] = process.argv;
+if (rescuableFixturePath == null) {
   throw new Error(
     'Usage: run-duplicate-instances.mjs <copyAIndexPath> <copyBIndexPath> <ladderFixturePath> ' +
-      '<invalidJsonFixturePath> <enumFixturePath>',
+      '<invalidJsonFixturePath> <rescuableFixturePath>',
   );
 }
 
@@ -47,7 +47,7 @@ result.copyBOwnErrorHasSameName = errorFromA?.name === new copyB.KafkaConfigErro
 // process-global Node API, so a rescuable fixture loads through either copy once installed.
 copyA.installConfigTransformHooks();
 try {
-  result.rescuedConfig = copyB.loadConfigFileSync(enumFixturePath);
+  result.rescuedConfig = copyB.loadConfigFileSync(rescuableFixturePath);
   result.copyBLoadsRescuableFixtureAfterCopyAInstalledHooks = true;
 } catch (error) {
   result.copyBLoadsRescuableFixtureAfterCopyAInstalledHooks = false;

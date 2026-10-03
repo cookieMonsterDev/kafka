@@ -58,7 +58,9 @@ describe('main', () => {
   it('starts the server, then shuts down cleanly on abort', async () => {
     const controller = new AbortController();
     const { runtime, stdout } = fakeRuntime({
-      argv: ['--port', '59105', '--browser', 'none'],
+      // Must not reuse a port from src/index.test.ts: vitest runs test files in parallel
+      // processes, and an explicit --port is "this port or nothing" (see server/port.ts).
+      argv: ['--port', '59106', '--browser', 'none'],
       signal: controller.signal,
     });
 

@@ -12,8 +12,8 @@ describe('package.json', () => {
     expect(packageJson.type).toBe('module');
   });
 
-  it('requires Node >=24.0.0', () => {
-    expect(packageJson.engines).toEqual({ node: '>=24.0.0' });
+  it('requires Node >=24.0.0 or Bun >=1.4.0', () => {
+    expect(packageJson.engines).toEqual({ node: '>=24.0.0', bun: '>=1.4.0' });
   });
 
   // If the loader ever needs a runtime dependency, that's a real design decision, not a drive-by

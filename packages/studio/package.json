@@ -23,7 +23,8 @@
     "typescript"
   ],
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0",
+    "bun": ">=1.4.0"
   },
   "publishConfig": {
     "access": "public",
@@ -55,6 +56,7 @@
     "dev:server": "KAFKA_STUDIO_DEV=1 node dist/bin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p test/tsconfig.json --noEmit",
     "test": "vitest run --project unit",
+    "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run --project unit",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest",
     "clean": "rm -rf dist"

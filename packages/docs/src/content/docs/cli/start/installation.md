@@ -46,7 +46,7 @@ bun "$(command -v kafka)" --version
 ```
 
 In a project that has the CLI as a dev dependency, `bunx --bun kafka` and `bun --bun kafka` both
-run the local binary on Bun.
+run the local binary on Bun. See [Bun](../../../core/reference/bun/) for what else differs on Bun.
 
 ## Shell completion
 

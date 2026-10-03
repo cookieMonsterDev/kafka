@@ -53,6 +53,8 @@ bunx --bun @cookiemonsterdev/kafka-cli ping --brokers localhost:9092
 bunx --bun kafka --version
 ```
 
+See [Bun](../docs/src/content/docs/core/reference/bun.md) for what else differs on Bun.
+
 ## Try it
 
 Every command that connects takes `--brokers` directly — a single `localhost:9092`, or a

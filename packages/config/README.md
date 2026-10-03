@@ -12,12 +12,12 @@ dependency** loader that handles discovery, sync/async loading, a TypeScript tra
 layer merging, and diagnostics. It has no knowledge of Kafka, or of any other specific consumer —
 that knowledge is injected via four extension points (below).
 
-`@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
-options directly. This package is what [`@cookiemonsterdev/kafka-cli`](../cli/README.md) uses to
-load `kafka.config.ts`, published on its own so anything else (a studio UI, another CLI) can build
-the same kind of config-file layer without depending on the rest of this workspace. See
-[the docs](https://cookiemonsterdev.github.io/kafka/config/reference/api/) for the full API
-reference.
+This package is what [`@cookiemonsterdev/kafka-core`](../core/README.md) uses to load
+`kafka.config.ts` (through `Kafka.fromConfig()` and `new Kafka()`), and what
+[`@cookiemonsterdev/kafka-cli`](../cli/README.md) and the studio build on. It's published on its
+own so anything else can build the same kind of config-file layer without depending on the rest of
+this workspace. See [the docs](https://cookiemonsterdev.github.io/kafka/docs/config/reference/api/)
+for the full API reference.
 
 ## Install
 
@@ -25,7 +25,8 @@ reference.
 npm install @cookiemonsterdev/kafka-config
 ```
 
-Runs on Node.js 24 or newer and on Bun 1.4 or newer.
+Runs on Node.js 24 or newer and on Bun 1.4 or newer. See
+[Bun](../docs/src/content/docs/core/reference/bun.md) for what differs on Bun.
 
 ## Quick example
 

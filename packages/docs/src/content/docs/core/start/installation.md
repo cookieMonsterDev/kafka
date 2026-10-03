@@ -6,7 +6,7 @@ section: start
 ---
 
 Node.js **24 or newer** is required (tested on 24 and 26); `zlib.zstd*` is used for ZSTD. It also
-runs on Bun **1.4 or newer**.
+runs on Bun **1.4 or newer**; see [Bun](../../reference/bun/) for what differs there.
 
 ```sh
 npm install @cookiemonsterdev/kafka-core

@@ -44,7 +44,8 @@ bunx --bun @cookiemonsterdev/kafka-studio
 
 After `bun add -g @cookiemonsterdev/kafka-studio`, run `bunx --bun kafka-studio`. Running
 `kafka-studio` directly still uses Node.js. `kafka studio` runs the studio in the CLI's own process,
-so it uses whichever runtime the CLI was started with.
+so it uses whichever runtime the CLI was started with. See [Bun](../../../core/reference/bun/) for
+what else differs on Bun.
 
 ## From this monorepo
 

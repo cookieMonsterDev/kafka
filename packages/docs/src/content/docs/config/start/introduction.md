@@ -9,9 +9,10 @@ section: start
 TypeScript transform rescue, layer merging, and diagnostics. It has **zero runtime dependencies**
 and no knowledge of Kafka, or of any other specific consumer.
 
-`@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
-options directly. This package exists so that when it does (and so any other consumer that wants
-to), the discovery/loading/merging machinery doesn't need to be written twice.
+[`@cookiemonsterdev/kafka-core`](../../../core/reference/config-file/) uses it to load
+`kafka.config.ts` through `Kafka.fromConfig()` and `new Kafka()`, and the CLI and studio build on
+it too. Any other consumer can use the same discovery/loading/merging machinery instead of writing
+it again.
 
 ## Install
 
@@ -19,7 +20,8 @@ to), the discovery/loading/merging machinery doesn't need to be written twice.
 npm install @cookiemonsterdev/kafka-config
 ```
 
-It runs on Node.js 24 or newer and on Bun 1.4 or newer.
+It runs on Node.js 24 or newer and on Bun 1.4 or newer. See
+[Bun](../../../core/reference/bun/#config-loading) for how config loading differs there.
 
 ## Why a separate package
 

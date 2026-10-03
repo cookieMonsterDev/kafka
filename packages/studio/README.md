@@ -48,7 +48,8 @@ node packages/studio/dist/bin.js
 
 The studio needs Node.js 24 or newer, or Bun 1.4 or newer. To run the build on Bun, use
 `bun packages/studio/dist/bin.js`. An installed `kafka-studio` has a `node` shebang, so run it
-with `bunx --bun kafka-studio` to use Bun.
+with `bunx --bun kafka-studio` to use Bun. See [Bun](../docs/src/content/docs/core/reference/bun.md)
+for what else differs on Bun.
 
 `pnpm --filter @cookiemonsterdev/kafka-studio dev` watches and rebuilds the server bundle only. To
 serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`

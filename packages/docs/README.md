@@ -34,7 +34,7 @@ and `/docs/<package>/…` prefix. Sections:
 
 - **Start** — introduction, installation, getting started
 - **Guides** — producer, consumer, admin, errors, security, testing
-- **Reference** — Kafka client, producer/consumer/admin APIs, configuration, error catalog, public API, compatibility
+- **Reference** — Kafka client, producer/consumer/admin APIs, configuration, error catalog, public API, compatibility, Bun
 - **Migration** — breaking changes
 
 Nested folders become URL segments (`/docs/core/start/introduction/`). Older

@@ -8,7 +8,7 @@ Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file 
 
 ## Prerequisites
 
-- **Node.js 24** (pinned in `.nvmrc`). `engines` is enforced at install time.
+- **Node.js 24 or newer** (tested on 24 and 26; `.nvmrc` pins 26 for development). `engines` is enforced at install time.
 - **pnpm 11**, pinned via `packageManager` in the root `package.json`.
 - **Docker** only if you run integration tests.
 

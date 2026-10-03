@@ -5,7 +5,7 @@ order: 2
 section: start
 ---
 
-Node.js **24** is required. No install is needed to try it once:
+Node.js **24 or newer** is required (tested on 24 and 26). No install is needed to try it once:
 
 ```sh
 npx @cookiemonsterdev/kafka-cli ping --brokers localhost:9092

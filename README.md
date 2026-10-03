@@ -99,7 +99,7 @@ Versions below are live badges pulled from the npm registry, so they always matc
 
 ## Requirements
 
-- **Node.js 24** (Krypton LTS), pinned in `.nvmrc`. A wrong version fails `pnpm install`.
+- **Node.js 24 or newer** (tested on 24 and 26); `.nvmrc` pins 26 for development. A wrong version fails `pnpm install`.
 - **pnpm 11**, pinned via `packageManager`.
 
 ```sh

@@ -5,7 +5,7 @@ order: 2
 section: start
 ---
 
-Node.js **24** is required.
+Node.js **24 or newer** is required (tested on 24 and 26).
 
 ## Alongside the CLI
 

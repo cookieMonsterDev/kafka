@@ -33,7 +33,7 @@ Kafka 0.11+ negotiates RecordBatch (magic 2).
 ## ZSTD is built in
 
 `CompressionTypes.ZSTD` uses Node’s `zlib.zstd*` APIs. There is no extra
-native addon. That is why the runtime floor is **Node.js 24**.
+native addon. That is why the runtime floor is **Node.js 24** (tested on 24 and 26).
 
 ZSTD on the wire needs Produce v7+ / Fetch v10+ (Kafka 2.1+). An older broker
 throws. GZIP, Snappy, LZ4, and ZSTD are built in; codecs remain overridable via

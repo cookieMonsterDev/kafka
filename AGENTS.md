@@ -64,7 +64,7 @@ or **N/A** with a one-line reason. Do not skip silently.
 Run from the repo root unless noted. `pnpm -r` walks the workspace dependency graph, so `@cookiemonsterdev/kafka-core` builds before `@cookiemonsterdev/kafka-docs` imports it.
 
 ```sh
-nvm use && corepack enable && pnpm install   # Node 24 + pnpm 11 pinned, engineStrict enforced
+nvm use && corepack enable && pnpm install   # Node 26 (.nvmrc; 24+ supported) + pnpm 11 pinned, engineStrict enforced
 
 pnpm build         # all packages, dependency order
 pnpm lint          # ESLint (root)

@@ -66,14 +66,26 @@ interface Rescue {
 
 const ESM_SYNTAX_UNDER_COMMONJS_PATTERN = /Unexpected token ['"](?:export|import)['"]/;
 
+/**
+ * Non-erasable TypeScript (e.g. an `enum`) needs a real transform, which Node no longer offers
+ * (`stripTypeScriptTypes`'s `mode: 'transform'` was removed in Node 26), so it is never rescued —
+ * it always surfaces as this error, whatever `allowTransformFallback` says.
+ */
+function rethrowIfUnsupportedTypeScriptSyntax(error: unknown, path: string): void {
+  if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
+    return;
+  }
+  throw new KafkaConfigError(
+    'ConfigLoadError',
+    `kafka config file "${path}" (or a module it imports) uses TypeScript syntax that Node's type stripping ` +
+      'cannot run (e.g. an enum). Fix: replace the enum with a frozen object or a plain union type, so no ' +
+      'transform is required.',
+    { path, cause: error },
+  );
+}
+
 /** Only the constructs the transform-hook fallback (D8) can actually rescue. */
 function describeRescue(error: Error & { code?: string; url?: string }): Rescue | null {
-  if (error.code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
-    return {
-      detail: 'a TypeScript construct the default strip-only loader cannot handle (e.g. an enum)',
-      fix: 'replace the enum with a frozen object or a plain union type, so no transform is required',
-    };
-  }
   if (error.code === 'ERR_MODULE_NOT_FOUND' && hasTypeScriptSibling(error.url)) {
     return {
       detail: 'a relative import missing its file extension',
@@ -102,6 +114,7 @@ function requireDefaultExport(
     if (!(error instanceof Error)) {
       throw error;
     }
+    rethrowIfUnsupportedTypeScriptSyntax(error, path);
 
     const rescue = describeRescue(error);
     if (rescue == null) {
@@ -133,6 +146,7 @@ function requireDefaultExport(
     try {
       return extractDefaultExport(requireModuleExportsRaw(path), path);
     } catch (retryError) {
+      rethrowIfUnsupportedTypeScriptSyntax(retryError, path);
       throw new KafkaConfigError(
         'ConfigLoadError',
         `Failed to load kafka config file "${path}" even after the transform fallback`,
@@ -144,8 +158,9 @@ function requireDefaultExport(
 
 export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
   /**
-   * Rescue a TS `enum`, an extensionless relative import, or `export default` under a
-   * CommonJS-resolved `.ts`/`.js` file behind a one-time process-wide transform-hook retry (D8).
+   * Rescue an extensionless relative import, or `export default` under a CommonJS-resolved
+   * `.ts`/`.js` file, behind a one-time process-wide transform-hook retry (D8). Non-erasable
+   * TypeScript such as an `enum` is never rescued — it always fails with a fix-naming error.
    * Default `true`. Set `false` for CI: the original error surfaces, with a diagnostic naming the
    * construct and the fix, and hooks are never installed.
    *

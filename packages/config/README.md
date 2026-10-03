@@ -56,7 +56,7 @@ const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertV
 - `defaultOnConfigDiagnostic`, `ConfigDiagnostic`, `OnConfigDiagnostic` — the diagnostics channel
   every discovery/load function accepts.
 - `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — the TypeScript transform
-  rescue (enums, extensionless imports, `export default` under a CommonJS-resolved file).
+  rescue (extensionless imports, `export default` under a CommonJS-resolved file; never enums).
 
 Despite the package name, none of this is Kafka-specific — the name reflects where it was
 extracted from, not a Kafka dependency.

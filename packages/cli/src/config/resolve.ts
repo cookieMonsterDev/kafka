@@ -43,7 +43,7 @@ export interface ResolvedCliConfig {
   readonly cli: CliFileConfig;
   /** The active profile name (`--profile` / `KAFKA_PROFILE`), or `null` if none was requested. */
   readonly profile: string | null;
-  /** Whether loading this file required the TypeScript-transform rescue (a non-erasable construct like an `enum` or an extensionless import, recovered through `require()`'s transform hooks). */
+  /** Whether loading this file required the TypeScript-transform rescue (an extensionless import or ESM syntax under a CommonJS-resolved file, recovered through `require()`'s transform hooks). */
   readonly transformFallbackUsed: boolean;
 }
 

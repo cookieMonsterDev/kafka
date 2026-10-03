@@ -30,20 +30,38 @@ function runLoadSync(configPath: string, allowTransformFallback = true): DriverR
 }
 
 describe('transform-hook fallback (subprocess)', () => {
-  it('rescues a TS enum, installs hooks, and warns naming the construct and the fix', () => {
-    const path = join(FIXTURES, 'transform-hooks/enum/kafka.config.ts');
+  it.each([true, false])(
+    'never rescues a TS enum (allowTransformFallback: %s): fails naming the fix, installs no hooks',
+    (allowTransformFallback) => {
+      const path = join(FIXTURES, 'transform-hooks/enum/kafka.config.ts');
+
+      const result = runLoadSync(path, allowTransformFallback);
+
+      expect(result.ok).toBe(false);
+      expect(result.name).toBe('KafkaConfigError');
+      expect(result.tag).toBe('ConfigLoadError');
+      expect(result.message).toContain('enum');
+      expect(result.message).toContain('frozen object');
+      expect(result.message).not.toContain('allowTransformFallback');
+      expect(result.hooksInstalled).toBe(false);
+      expect(result.diagnostics).toEqual([]);
+    },
+  );
+
+  it('surfaces the same enum error when the enum is only reached through a rescued extensionless import', () => {
+    const path = join(FIXTURES, 'transform-hooks/extensionless-enum/kafka.config.ts');
 
     const result = runLoadSync(path);
 
-    expect(result.ok).toBe(true);
-    expect(result.config).toEqual({ client: { brokers: ['enum:info'] } });
+    expect(result.ok).toBe(false);
+    expect(result.name).toBe('KafkaConfigError');
+    expect(result.tag).toBe('ConfigLoadError');
+    expect(result.message).toContain('frozen object');
     expect(result.hooksInstalled).toBe(true);
     expect(result.diagnostics).toHaveLength(1);
     expect(result.diagnostics[0]).toMatchObject({
       code: 'config.transform-fallback',
-      level: 'warn',
-      detail: expect.stringContaining('enum'),
-      fix: expect.stringContaining('frozen object'),
+      detail: expect.stringContaining('extension'),
     });
   });
 
@@ -74,10 +92,7 @@ describe('transform-hook fallback (subprocess)', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
-  it.each([
-    ['a TS enum', 'transform-hooks/enum/kafka.config.ts', 'enum'],
-    ['an extensionless import', 'transform-hooks/extensionless/kafka.config.ts', '.ts'],
-  ])(
+  it.each([['an extensionless import', 'transform-hooks/extensionless/kafka.config.ts', '.ts']])(
     'allowTransformFallback: false surfaces a rewritten error for %s and never installs hooks',
     (_label, rel, fixNeedle) => {
       const path = join(FIXTURES, rel);

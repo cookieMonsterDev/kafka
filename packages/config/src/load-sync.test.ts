@@ -167,10 +167,10 @@ describe('loadConfigFileSync', () => {
       // tested contract instead of a silent surprise. A process that needs the CI guarantee to be
       // airtight must set `allowTransformFallback: false` for every call from process start, never
       // mixing it with a lenient call for a potentially-rescuable file in the same process.
-      const path = join(FIXTURES, 'cache-key-enum', 'kafka.config.ts');
+      const path = join(FIXTURES, 'cache-key-extensionless', 'kafka.config.ts');
 
       const lenient = loadConfigFileSync(path);
-      expect(lenient).toEqual({ client: { brokers: ['cache-key-enum:info'] } });
+      expect(lenient).toEqual({ client: { brokers: ['cache-key-extensionless:9092'] } });
 
       // Would ideally throw; documented here as a known limitation, not asserted as a bug.
       const strict = loadConfigFileSync(path, { allowTransformFallback: false });

@@ -129,20 +129,24 @@ mergeConfigLayers(
 
 ## The erasable-TypeScript constraint
 
-Node's built-in `.ts` support only **strips** types by default; it does not transform constructs
-that need real codegen. A config file (or anything it imports) using a TypeScript `enum`, a
-relative import missing its file extension, or `export default` in a `.ts` file whose nearest
-`package.json` doesn't declare `"type": "module"`, fails on that default path.
+Node's built-in `.ts` support only **strips** types; it does not transform constructs that need
+real codegen. A config file (or anything it imports) using a TypeScript `enum`, a relative import
+missing its file extension, or `export default` in a `.ts` file whose nearest `package.json`
+doesn't declare `"type": "module"`, fails on that default path.
 
-By default, **the synchronous loader** (`loadConfigFileSync`) rescues all three cases: it installs
-synchronous `require()` hooks (`module.registerHooks` + `stripTypeScriptTypes({ mode:
-'transform' })`) and retries — once per process, and only when the rescue is actually needed,
-never on the happy path. The rescue is never silent: a warning names the file and the exact fix
-(replace the `enum` with a frozen object; add the `.ts` extension).
+**A TypeScript `enum` (or other non-erasable syntax) is never rescued.** Node 26 has no transform
+mode, so the load fails with a `ConfigLoadError` naming the file and the fix: replace the `enum`
+with a frozen object or a plain union type. `allowTransformFallback` does not change this.
+
+By default, **the synchronous loader** (`loadConfigFileSync`) rescues the other two cases: it
+installs synchronous `require()` hooks (`module.registerHooks` + `stripTypeScriptTypes`) and
+retries — once per process, and only when the rescue is actually needed, never on the happy path.
+The rescue is never silent: a warning names the file and the exact fix (add the `.ts` extension;
+rename to `.mts` or set `"type": "module"`).
 
 **`loadConfigFileAsync` does not get this rescue.** `registerHooks` only intercepts CommonJS
 `require()`, so it has no effect on `import()`. A config that needs both async loading (top-level
-`await`, or an async factory) _and_ one of the three rescuable constructs has no working path
+`await`, or an async factory) _and_ one of the two rescuable constructs has no working path
 today — restructure it to avoid needing both at once.
 
 Pass `allowTransformFallback: false` to `loadConfigFileSync` for CI: the original failure surfaces
@@ -156,10 +160,11 @@ from the start of the process; don't mix it with a lenient call against a potent
 file earlier in the same run.
 
 Prefer avoiding the fallback where you can — a rescued config loads through this loader but not
-under `node app.config.ts` or `tsx` directly, so this keeps your config file portable:
+under `node app.config.ts` directly, so this keeps your config file portable. Write `enum`-free,
+erasable TypeScript:
 
 ```ts
-// Avoid — needs the transform fallback
+// Fails — an enum needs a transform Node does not provide
 enum Level {
   Info = 'info',
 }

@@ -45,10 +45,9 @@ describe('loadConfigFileAsync', () => {
   // literal "#" in a file URL even when percent-encoded by pathToFileURL, which is a test-runner
   // limitation, not a bug in this loader.
 
-  // Deliberately excludes the `transform-hooks/enum` and `transform-hooks/extensionless`
-  // fixtures: the D8 rescue is `registerHooks`-based (CommonJS `require()` only) and has no
-  // effect on `import()`, so the two loaders are known and documented to diverge on those two
-  // constructs specifically (see the JSDoc on `loadConfigFileAsync`). This block only asserts
+  // Deliberately excludes the `transform-hooks/*` fixtures: the D8 rescue is `registerHooks`-based
+  // (CommonJS `require()` only) and has no effect on `import()`, so the two loaders are known and
+  // documented to diverge on those constructs specifically (see the JSDoc on `loadConfigFileAsync`). This block only asserts
   // parity for everything else.
   describe('anti-drift: agrees with the sync loader for every non-TLA, non-rescue fixture', () => {
     it.each([

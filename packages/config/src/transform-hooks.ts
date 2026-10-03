@@ -1,23 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { registerHooks, stripTypeScriptTypes as stripTypeScriptTypesStripOnly } from 'node:module';
+import { registerHooks, stripTypeScriptTypes } from 'node:module';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-interface StripTypeScriptTypesOptions {
-  mode?: 'strip' | 'transform';
-  sourceUrl?: string;
-  sourceMap?: boolean;
-}
-
-/**
- * `@types/node` 26.2.0 only declares `mode: 'strip'`, lagging this repo's minimum Node
- * (`engines.node`: `>=24.0.0`), which supports `mode: 'transform'` at runtime — required to
- * rescue a TS `enum`. Re-typed narrowly here; safe to drop once `@types/node` catches up.
- */
-const stripTypeScriptTypes = stripTypeScriptTypesStripOnly as unknown as (
-  code: string,
-  options?: StripTypeScriptTypesOptions,
-) => string;
 
 const TS_URL_PATTERN = /\.[cm]?ts$/;
 const RETRY_EXTENSIONS = ['.ts', '.mts'];
@@ -57,9 +41,12 @@ function detectModuleFormat(path: string): 'module' | 'commonjs' {
 
 /**
  * Installs synchronous `require()` hooks (Node's `module.registerHooks`) that rescue cases the
- * default strip-only TypeScript loader cannot handle: a construct that requires an actual
- * transform (a TS `enum`), a relative import missing its file extension, and `export default` in
- * a `.ts`/`.js` file whose module format resolves to CommonJS despite unambiguously ESM content.
+ * default TypeScript loader cannot handle: a relative import missing its file extension, and
+ * `export default` in a `.ts`/`.js` file whose module format resolves to CommonJS despite
+ * unambiguously ESM content.
+ *
+ * Sources are only type-stripped, never transformed: Node 26 removed `stripTypeScriptTypes`'s
+ * `mode: 'transform'`, so non-erasable syntax (e.g. a TS `enum`) still fails through these hooks.
  *
  * Installs **once per process** — `registerHooks` has no `deregister` on this Node version, so
  * this is irreversible for the process's lifetime. Call only from the retry path (see
@@ -100,7 +87,7 @@ export function installConfigTransformHooks(): void {
 
       const path = fileURLToPath(url);
       const source = readFileSync(path, 'utf8');
-      const transformed = stripTypeScriptTypes(source, { mode: 'transform', sourceUrl: url });
+      const transformed = stripTypeScriptTypes(source, { sourceUrl: url });
 
       const declaredFormat = detectModuleFormat(path);
       // A `.ts`/`.js` file's format normally follows `package.json#type`, same as Node's own

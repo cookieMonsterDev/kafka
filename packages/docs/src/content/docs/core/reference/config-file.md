@@ -97,10 +97,10 @@ factory function, are accepted too — `defineConfig` is documentation, not a re
 a file can supply shared consumer defaults without hardcoding one group.
 
 A config file that needs top-level `await`, or that exports an async factory, cannot be loaded by
-the synchronous constructor — use [`Kafka.fromConfig()`](#kafkafromconfig--kafkafrom) instead. A
-`.ts` file relying on a construct the default strip-only loader cannot handle (a TypeScript
-`enum`, an extensionless relative import) is rescued through a one-time transform fallback, with a
-warning on stderr naming the file and the fix.
+the synchronous constructor — use [`Kafka.fromConfig()`](#kafkafromconfig--kafkafrom) instead. An
+extensionless relative import in a `.ts` file is rescued through a one-time transform fallback,
+with a warning on stderr naming the file and the fix. A TypeScript `enum` is not rescued: the load
+fails with an error telling you to replace it with a frozen object or a plain union type.
 
 ## `Kafka.fromConfig` / `Kafka.from`
 

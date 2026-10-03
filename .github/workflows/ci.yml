@@ -24,20 +24,32 @@ env:
 
 jobs:
   unit:
-    name: Lint and unit
+    name: Lint and unit (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Every supported Node major runs the build and unit tests. Runtime-independent checks
+    # (formatting, commit messages, typecheck, generated files) run once, on the `primary` leg.
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['24', '26']
+        include:
+          - node: '26'
+            primary: true
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-node-pnpm
-      - run: pnpm format:check
+        with:
+          node-version: ${{ matrix.node }}
+      - if: matrix.primary
+        run: pnpm format:check
       - name: Lint commit messages
-        if: github.event_name == 'pull_request'
+        if: matrix.primary && github.event_name == 'pull_request'
         run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.sha }} --verbose
       - name: Lint last commit message
-        if: github.event_name != 'pull_request'
+        if: matrix.primary && github.event_name != 'pull_request'
         run: pnpm exec commitlint --last --verbose
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist), and
       # cli resolves `@cookiemonsterdev/kafka-core` the same way, so both tsc and vitest's module
@@ -51,16 +63,20 @@ jobs:
       # TypeScript 7.0.2 catalog pin — it dropped the programmatic API astro-language-server
       # needs (https://github.com/withastro/roadmap/discussions/1321). Pre-existing, tracked
       # as a follow-up; `pnpm typecheck` from the repo root still runs it for local dev.
-      - run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
+      - if: matrix.primary
+        run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
       # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. The CLI's shell-completion
       # suite spawns both to verify what it actually generates, not just its syntax — see
       # packages/cli/src/completion/scripts.test.ts.
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
       - run: pnpm test
-      - run: node scripts/check-publishable-deps.mjs
-      - run: pnpm docs:generate:cli:check
-      - run: pnpm theme:check
+      - if: matrix.primary
+        run: node scripts/check-publishable-deps.mjs
+      - if: matrix.primary
+        run: pnpm docs:generate:cli:check
+      - if: matrix.primary
+        run: pnpm theme:check
 
   integration-matrix:
     name: Integration matrix

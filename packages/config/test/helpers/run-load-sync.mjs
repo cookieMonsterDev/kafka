@@ -7,37 +7,13 @@
  * (native type-stripping) requires for a relative import but `tsc` (`bundler` resolution,
  * extensionless imports) rejects without `allowImportingTsExtensions`.
  *
- * `packages/config/src/**` itself uses extensionless relative imports (this repo's convention, for
- * bundler/tsc `moduleResolution: "bundler"`), which plain `node` cannot resolve on its own. A
- * throwaway bootstrap resolve hook — separate from, and unrelated to, `installConfigTransformHooks`
- * under test — appends `.ts` purely so this harness can import the loader's own module graph. It
- * is scoped to `parentURL`s under `packages/config/src/` so it never touches resolution *inside* a
- * fixture config file (that must be rescued by the loader's own hooks, or not at all — the thing
- * under test) and never installs a `load` hook, so it does not affect how anything is compiled.
+ * The loader's own extensionless `../../src` imports are made resolvable by
+ * `register-src-resolve.mjs`, imported first.
  *
  * Usage: `node run-load-sync.mjs <configPath> [allowTransformFallback=true|false]`. Prints one
  * JSON line to stdout: `{ ok, config | (name, tag, message), diagnostics, hooksInstalled }`.
  */
-import { registerHooks } from 'node:module';
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const fromLoaderSource = context.parentURL != null && context.parentURL.includes('/packages/config/src/');
-    try {
-      return nextResolve(specifier, context);
-    } catch (error) {
-      if (!fromLoaderSource || error?.code !== 'ERR_MODULE_NOT_FOUND') throw error;
-      for (const ext of ['.ts', '.mts']) {
-        try {
-          return nextResolve(`${specifier}${ext}`, context);
-        } catch {
-          // try the next candidate extension
-        }
-      }
-      throw error;
-    }
-  },
-});
+import './register-src-resolve.mjs';
 
 const { loadConfigFileSync } = await import('../../src/load-sync.ts');
 const { areConfigTransformHooksInstalled } = await import('../../src/transform-hooks.ts');

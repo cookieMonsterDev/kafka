@@ -70,6 +70,9 @@ function detectModuleFormat(path: string): 'module' | 'commonjs' {
  *
  * @returns Whether the hooks are installed after this call (now, or by an earlier call). `false`
  * means this runtime has no `require()` hooks and nothing was installed.
+ * @deprecated The rescue only exists for the deprecated synchronous loader. Load config files with
+ * `loadConfigFileAsync` instead; a construct that needs the rescue fails there with an error naming
+ * the fix.
  */
 export function installConfigTransformHooks(): boolean {
   if (installed) return true;
@@ -127,6 +130,9 @@ export function installConfigTransformHooks(): boolean {
 /**
  * Whether {@link installConfigTransformHooks} has installed the hooks in this process. Always
  * `false` on a runtime without `require()` hooks (Bun).
+ *
+ * @deprecated Only meaningful for the deprecated synchronous loader. Use `loadConfigFileAsync`,
+ * which never installs hooks.
  */
 export function areConfigTransformHooksInstalled(): boolean {
   return installed;

@@ -1,6 +1,6 @@
 ---
 title: API reference
-description: discoverConfigFile, loadConfigFileSync/Async, mergeConfigLayers, createDefineConfig
+description: discoverConfigFile, loadConfigFileAsync (and the deprecated loadConfigFileSync), mergeConfigLayers, createDefineConfig
 order: 1
 section: reference
 ---
@@ -37,21 +37,16 @@ in the same directory.
 
 ## Loading
 
-`loadConfigFileSync<T>(path, options?)` loads a resolved path — `require()` for
-`.ts`/`.mts`/`.cts`/`.js`/`.mjs`/`.cjs`, `JSON.parse` for `.json` — and resolves a sync factory
-export. Results are memoised per resolved absolute path, so N callers pay the load cost once per
-process.
+`loadConfigFileAsync<T>(path, options?)` is the recommended loader. It loads a resolved path with
+dynamic `import()` (`JSON.parse` for `.json`), awaits a sync or async factory export, and handles a
+config module that uses top-level `await`.
 
 `T` defaults to `Record<string, unknown>`. Pass `options.assertValid` — an
 `(value: unknown) => asserts value is T` function — to validate the resolved value against your
 own shape; without one, any plain object is accepted.
 
-`loadConfigFileAsync<T>(path, options?)` is the `import()`-based sibling: it awaits a sync or async
-factory export and additionally handles a config module that uses top-level `await`, which the
-synchronous path cannot.
-
 ```ts
-import { discoverConfigFile, loadConfigFileSync } from '@cookiemonsterdev/kafka-config';
+import { discoverConfigFile, loadConfigFileAsync } from '@cookiemonsterdev/kafka-config';
 
 interface AppConfig {
   port?: number;
@@ -64,8 +59,25 @@ function assertValid(value: unknown): asserts value is AppConfig {
 }
 
 const path = discoverConfigFile({ cwd: process.cwd(), name: 'app' });
-const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertValid });
+const config = path == null ? {} : await loadConfigFileAsync<AppConfig>(path, { assertValid });
 ```
+
+### Deprecated: `loadConfigFileSync`
+
+`loadConfigFileSync<T>(path, options?)` is **deprecated** in favour of `loadConfigFileAsync`, but
+keeps working. It loads a path with `require()` (`JSON.parse` for `.json`) and resolves a sync
+factory export. Results are memoised per resolved absolute path, so N callers pay the load cost
+once per process. A config that needs async work fails: top-level `await` throws
+`KafkaConfigRequiresAsyncError`, and an async factory throws a `ConfigFileInvalid` error.
+`allowTransformFallback`, `installConfigTransformHooks`, and `areConfigTransformHooksInstalled` are
+deprecated with it (see below).
+
+### Bun
+
+On Bun, `require()` and `import()` both load TypeScript natively, so no transform fallback is
+needed or installed. `installConfigTransformHooks()` is a no-op that returns `false`. A config that
+uses top-level `await` also loads through `loadConfigFileSync` there. Either way, prefer
+`loadConfigFileAsync`.
 
 ## Defining a config file
 
@@ -101,7 +113,7 @@ export default defineConfig(async () => ({
 ```
 
 `assertValid` is the same validator `defineConfig` uses internally, exported separately so you can
-validate an already-resolved value — for example, inject it into `loadConfigFileSync`'s
+validate an already-resolved value — for example, inject it into `loadConfigFileAsync`'s
 `assertValid` option.
 
 ## Merging layers
@@ -138,30 +150,28 @@ doesn't declare `"type": "module"`, fails on that default path.
 mode, so the load fails with a `ConfigLoadError` naming the file and the fix: replace the `enum`
 with a frozen object or a plain union type. `allowTransformFallback` does not change this.
 
-By default, **the synchronous loader** (`loadConfigFileSync`) rescues the other two cases: it
-installs synchronous `require()` hooks (`module.registerHooks` + `stripTypeScriptTypes`) and
-retries — once per process, and only when the rescue is actually needed, never on the happy path.
-The rescue is never silent: a warning names the file and the exact fix (add the `.ts` extension;
-rename to `.mts` or set `"type": "module"`).
+**`loadConfigFileAsync` has no rescue for the other two cases.** It fails with a `ConfigLoadError`
+naming the file, the construct, and the fix: add the `.ts` extension to the import, or rename the
+file to `.mts` (or set `"type": "module"`).
 
-**`loadConfigFileAsync` does not get this rescue.** `registerHooks` only intercepts CommonJS
-`require()`, so it has no effect on `import()`. A config that needs both async loading (top-level
-`await`, or an async factory) _and_ one of the two rescuable constructs has no working path
-today — restructure it to avoid needing both at once.
+The deprecated **synchronous loader** (`loadConfigFileSync`) rescues them by default. It installs
+synchronous `require()` hooks (`module.registerHooks` + `stripTypeScriptTypes`) and retries — once
+per process, and only when the rescue is actually needed, never on the happy path. The rescue is
+never silent: a `config.transform-fallback` warning names the file and the same fix.
 
-Pass `allowTransformFallback: false` to `loadConfigFileSync` for CI: the original failure surfaces
-as an error instead, with the same rewritten, fix-naming message, and the hooks are never
-installed — **as long as no earlier call in the same process already installed them.**
+Pass `allowTransformFallback: false` (deprecated) to `loadConfigFileSync` for CI: the original
+failure surfaces as an error instead, with the same rewritten, fix-naming message, and the hooks
+are never installed — **as long as no earlier call in the same process already installed them.**
 `module.registerHooks` has no `deregister`, so once any earlier lenient call (the default) rescues
 a file, every later call in that process — even one passing `allowTransformFallback: false` — can
 silently succeed against a rescuable file too, because `require()` itself now transparently
 rescues it. For the guarantee to be airtight, set `allowTransformFallback: false` on every call
 from the start of the process; don't mix it with a lenient call against a potentially-rescuable
-file earlier in the same run.
+file earlier in the same run. Or switch to `loadConfigFileAsync`, which never installs hooks.
 
-Prefer avoiding the fallback where you can — a rescued config loads through this loader but not
-under `node app.config.ts` directly, so this keeps your config file portable. Write `enum`-free,
-erasable TypeScript:
+Fix these constructs rather than relying on the fallback — a rescued config loads through the
+sync loader but not through `loadConfigFileAsync` or under `node app.config.ts` directly. Write
+`enum`-free, erasable TypeScript:
 
 ```ts
 // Fails — an enum needs a transform Node does not provide
@@ -180,7 +190,9 @@ Every discovery/load function accepts an `onDiagnostic` callback:
 (`defaultOnConfigDiagnostic`) writes only `'warn'`-level diagnostics to stderr, prefixed
 `[kafka-config]`; `'info'` diagnostics (`config.loaded`, and `config.multiple-candidates` when
 it's not also escalated) are silent unless you supply your own callback. Codes in use today:
-`config.loaded`, `config.multiple-candidates`, `config.transform-fallback`.
+`config.loaded`, `config.multiple-candidates`, `config.transform-fallback`, and
+`config.sync-load-deprecated` (raised by `@cookiemonsterdev/kafka-core` when `new Kafka()` loads a
+TS/JS config file synchronously).
 
 ## Errors
 
@@ -189,7 +201,8 @@ the specific failure (`'ConfigFileNotFound'`, `'ConfigLoadError'`, `'ConfigFileI
 `'UnsupportedExtension'`) so callers can branch without parsing `.message`.
 
 `KafkaConfigRequiresAsyncError` is raised when a config file (or something it imports) uses
-top-level `await`, which `loadConfigFileSync` cannot handle — use `loadConfigFileAsync` instead.
+top-level `await`, which the deprecated `loadConfigFileSync` cannot handle on Node — use
+`loadConfigFileAsync` instead. (On Bun, `require()` supports top-level `await`, so it isn't raised.)
 
 Match errors by `.name` (`'KafkaConfigError'` / `'KafkaConfigRequiresAsyncError'`), not
 `instanceof` — if your project ends up with two installed copies of this package (a mismatched

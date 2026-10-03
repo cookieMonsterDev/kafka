@@ -1,10 +1,36 @@
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadConfigFileAsync } from './load-async';
 import { loadConfigFileSync } from './load-sync';
+import { isBun } from './runtime';
 
-const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../test/fixtures/load-sync');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FIXTURES = join(HERE, '../test/fixtures/load-sync');
+const ALL_FIXTURES = join(HERE, '../test/fixtures');
+const DRIVER = join(HERE, '../test/helpers/run-load-async.mjs');
+
+interface DriverResult {
+  ok: boolean;
+  config?: unknown;
+  name?: string;
+  tag?: string;
+  message?: string;
+}
+
+/**
+ * Runs the async loader in a fresh process of the current runtime (`node` or `bun`): in-process,
+ * vitest's own `import()` transform strips enums and resolves extensionless imports, hiding what
+ * the runtime itself does.
+ */
+function runLoadAsync(configPath: string): DriverResult {
+  const output = execFileSync(process.execPath, [DRIVER, configPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  return JSON.parse(output) as DriverResult;
+}
 
 describe('loadConfigFileAsync', () => {
   it.each([
@@ -65,6 +91,47 @@ describe('loadConfigFileAsync', () => {
       const asyncResult = await loadConfigFileAsync(path);
 
       expect(asyncResult).toEqual(syncResult);
+    });
+  });
+
+  // No transform-hook rescue on the async path (it can't hook `import()`): on Node these fail with
+  // an error naming the construct and the fix; Bun's `import()` loads them natively.
+  describe('constructs the sync loader would rescue (subprocess)', () => {
+    const cases = [
+      {
+        label: 'an extensionless relative import',
+        rel: 'transform-hooks/extensionless/kafka.config.ts',
+        bunConfig: { client: { brokers: ['extensionless:9092'] } },
+        needles: ['missing its file extension', 'add the ".ts"'],
+      },
+      {
+        label: 'ES module syntax under "type": "commonjs"',
+        rel: 'load-sync/esm-export-under-commonjs-typed/kafka.config.ts',
+        bunConfig: { client: { brokers: ['esm-export-cjs-typed:9092'] } },
+        needles: ['resolves to CommonJS', 'rename the file to ".mts"'],
+      },
+      {
+        label: 'a TypeScript enum',
+        rel: 'transform-hooks/enum/kafka.config.ts',
+        bunConfig: { client: { brokers: ['enum:info'] } },
+        needles: ['enum', 'frozen object'],
+      },
+    ];
+
+    it.skipIf(isBun()).each(cases)('on Node, fails $label with an error naming the fix', ({ rel, needles }) => {
+      const path = join(ALL_FIXTURES, rel);
+
+      const result = runLoadAsync(path);
+
+      expect(result).toMatchObject({ ok: false, name: 'KafkaConfigError', tag: 'ConfigLoadError' });
+      expect(result.message).toContain(path);
+      for (const needle of needles) {
+        expect(result.message).toContain(needle);
+      }
+    });
+
+    it.runIf(isBun()).each(cases)('on Bun, loads $label natively', ({ rel, bunConfig }) => {
+      expect(runLoadAsync(join(ALL_FIXTURES, rel))).toEqual({ ok: true, config: bunConfig });
     });
   });
 });

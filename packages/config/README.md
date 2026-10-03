@@ -28,7 +28,7 @@ npm install @cookiemonsterdev/kafka-config
 ## Quick example
 
 ```ts
-import { createDefineConfig, discoverConfigFile, loadConfigFileSync } from '@cookiemonsterdev/kafka-config';
+import { createDefineConfig, discoverConfigFile, loadConfigFileAsync } from '@cookiemonsterdev/kafka-config';
 
 interface AppConfig {
   server?: { port?: number };
@@ -41,13 +41,15 @@ export default defineConfig({ server: { port: 4000 } } satisfies AppConfig);
 
 // elsewhere
 const path = discoverConfigFile({ cwd: process.cwd(), name: 'app' });
-const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertValid });
+const config = path == null ? {} : await loadConfigFileAsync<AppConfig>(path, { assertValid });
 ```
 
 ## What's exported
 
 - `discoverConfigFile`, `CANDIDATE_EXTENSIONS` — find a `<name>.config.*` / `.config/<name>.*` file.
-- `loadConfigFileSync`, `loadConfigFileAsync` — load and validate one, once resolved.
+- `loadConfigFileAsync` — load and validate one, once resolved, via dynamic `import()`.
+- `loadConfigFileSync` — **deprecated**; the synchronous, `require()`-based loader. It still works,
+  but use `loadConfigFileAsync`.
 - `createDefineConfig` — build a `defineConfig` + `assertValid` pair for your own config shape.
 - `mergeConfigLayers` — merge two config layers with `undefined`-is-absent semantics.
 - `KafkaConfigError`, `KafkaConfigRequiresAsyncError` — typed, `.name`-matchable errors. Match by
@@ -55,8 +57,14 @@ const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertV
   the classes are distinct objects even though the errors behave identically.
 - `defaultOnConfigDiagnostic`, `ConfigDiagnostic`, `OnConfigDiagnostic` — the diagnostics channel
   every discovery/load function accepts.
-- `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — the TypeScript transform
-  rescue (extensionless imports, `export default` under a CommonJS-resolved file; never enums).
+- `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — **deprecated**; the sync
+  loader's TypeScript transform rescue (extensionless imports, `export default` under a
+  CommonJS-resolved file; never enums). `loadConfigFileAsync` has no rescue: those constructs fail
+  with an error naming the fix.
+
+On Bun, `require()` and `import()` load TypeScript natively, so the transform rescue is never
+needed (`installConfigTransformHooks()` is a no-op returning `false`). A config that uses top-level
+`await` also loads through the sync loader there.
 
 Despite the package name, none of this is Kafka-specific — the name reflects where it was
 extracted from, not a Kafka dependency.

@@ -12,12 +12,12 @@ dependency** loader that handles discovery, sync/async loading, a TypeScript tra
 layer merging, and diagnostics. It has no knowledge of Kafka, or of any other specific consumer —
 that knowledge is injected via four extension points (below).
 
-`@cookiemonsterdev/kafka-core` doesn't read a config file yet — `new Kafka({...})` still takes its
-options directly. This package is what [`@cookiemonsterdev/kafka-cli`](../cli/README.md) uses to
-load `kafka.config.ts`, published on its own so anything else (a studio UI, another CLI) can build
-the same kind of config-file layer without depending on the rest of this workspace. See
-[the docs](https://cookiemonsterdev.github.io/kafka/config/reference/api/) for the full API
-reference.
+This package is what [`@cookiemonsterdev/kafka-core`](../core/README.md) uses to load
+`kafka.config.ts` (through `Kafka.fromConfig()` and `new Kafka()`), and what
+[`@cookiemonsterdev/kafka-cli`](../cli/README.md) and the studio build on. It's published on its
+own so anything else can build the same kind of config-file layer without depending on the rest of
+this workspace. See [the docs](https://cookiemonsterdev.github.io/kafka/docs/config/reference/api/)
+for the full API reference.
 
 ## Install
 
@@ -25,10 +25,13 @@ reference.
 npm install @cookiemonsterdev/kafka-config
 ```
 
+Runs on Node.js 24 or newer and on Bun 1.4 or newer. See
+[Bun](../docs/src/content/docs/core/reference/bun.md) for what differs on Bun.
+
 ## Quick example
 
 ```ts
-import { createDefineConfig, discoverConfigFile, loadConfigFileSync } from '@cookiemonsterdev/kafka-config';
+import { createDefineConfig, discoverConfigFile, loadConfigFileAsync } from '@cookiemonsterdev/kafka-config';
 
 interface AppConfig {
   server?: { port?: number };
@@ -41,13 +44,15 @@ export default defineConfig({ server: { port: 4000 } } satisfies AppConfig);
 
 // elsewhere
 const path = discoverConfigFile({ cwd: process.cwd(), name: 'app' });
-const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertValid });
+const config = path == null ? {} : await loadConfigFileAsync<AppConfig>(path, { assertValid });
 ```
 
 ## What's exported
 
 - `discoverConfigFile`, `CANDIDATE_EXTENSIONS` — find a `<name>.config.*` / `.config/<name>.*` file.
-- `loadConfigFileSync`, `loadConfigFileAsync` — load and validate one, once resolved.
+- `loadConfigFileAsync` — load and validate one, once resolved, via dynamic `import()`.
+- `loadConfigFileSync` — **deprecated**; the synchronous, `require()`-based loader. It still works,
+  but use `loadConfigFileAsync`.
 - `createDefineConfig` — build a `defineConfig` + `assertValid` pair for your own config shape.
 - `mergeConfigLayers` — merge two config layers with `undefined`-is-absent semantics.
 - `KafkaConfigError`, `KafkaConfigRequiresAsyncError` — typed, `.name`-matchable errors. Match by
@@ -55,8 +60,14 @@ const config = path == null ? {} : loadConfigFileSync<AppConfig>(path, { assertV
   the classes are distinct objects even though the errors behave identically.
 - `defaultOnConfigDiagnostic`, `ConfigDiagnostic`, `OnConfigDiagnostic` — the diagnostics channel
   every discovery/load function accepts.
-- `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — the TypeScript transform
-  rescue (enums, extensionless imports, `export default` under a CommonJS-resolved file).
+- `installConfigTransformHooks`, `areConfigTransformHooksInstalled` — **deprecated**; the sync
+  loader's TypeScript transform rescue (extensionless imports, `export default` under a
+  CommonJS-resolved file; never enums). `loadConfigFileAsync` has no rescue: those constructs fail
+  with an error naming the fix.
+
+On Bun, `require()` and `import()` load TypeScript natively, so the transform rescue is never
+needed (`installConfigTransformHooks()` is a no-op returning `false`). A config that uses top-level
+`await` also loads through the sync loader there.
 
 Despite the package name, none of this is Kafka-specific — the name reflects where it was
 extracted from, not a Kafka dependency.

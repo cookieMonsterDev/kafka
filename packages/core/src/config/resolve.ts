@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { resolve as resolvePath } from 'node:path';
+import { extname, resolve as resolvePath } from 'node:path';
 import {
   defaultOnConfigDiagnostic,
   discoverConfigFile,
@@ -104,10 +104,37 @@ function mergeWithExplicit(explicit: KafkaConfig, fileConfig: KafkaFileConfig | 
   });
 }
 
+const syncLoadDeprecationWarned = new Set<string>();
+
+/**
+ * `new Kafka()` keeps loading a TS/JS config file synchronously so nothing breaks, but that path
+ * depends on `require()` (and, on Node, its transform-hook rescue) and is deprecated in favour of
+ * `Kafka.fromConfig()`. JSON stays synchronous and silent: `JSON.parse` needs neither. Warns once
+ * per path per process, so N clients built from one config file don't repeat it.
+ */
+function warnSyncLoadDeprecated(path: string, onDiagnostic: OnConfigDiagnostic): void {
+  if (extname(path) === '.json' || syncLoadDeprecationWarned.has(path)) return;
+  syncLoadDeprecationWarned.add(path);
+  const fix = 'use "await Kafka.fromConfig()" instead, or switch to a kafka.config.json file';
+  onDiagnostic({
+    code: 'config.sync-load-deprecated',
+    level: 'warn',
+    message:
+      `kafka config file "${path}" was loaded synchronously by new Kafka(), which is deprecated for ` +
+      `TypeScript/JavaScript config files. Fix: ${fix}.`,
+    path,
+    fix,
+  });
+}
+
 /**
  * Resolves `new Kafka()`'s options: discover, load, merge. Resolution order, highest first:
  * explicit argument → config file → constructor default — a key defined nowhere is omitted from
  * the result, so the constructor's own destructuring default fires naturally.
+ *
+ * A `.json` config file loads synchronously and silently. A TS/JS one still loads through the
+ * deprecated synchronous loader, with a one-time `config.sync-load-deprecated` warning per path —
+ * prefer {@link resolveKafkaConfigAsync} (`Kafka.fromConfig()`).
  */
 export function resolveKafkaConfig(
   explicit: KafkaConfig,
@@ -120,6 +147,7 @@ export function resolveKafkaConfig(
   const fileConfig = path == null ? null : loadKafkaConfig(path, { onDiagnostic });
   if (path != null) {
     onDiagnostic({ code: 'config.loaded', level: 'info', message: `Loaded kafka config from "${path}"`, path });
+    warnSyncLoadDeprecated(path, onDiagnostic);
   }
 
   const merged = mergeWithExplicit(explicit, fileConfig);

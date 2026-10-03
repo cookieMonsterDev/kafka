@@ -44,6 +44,17 @@ npm install -g @cookiemonsterdev/kafka-cli
 kafka --version
 ```
 
+Needs Node.js 24 or newer, or Bun 1.4 or newer. The binary has a `node` shebang, so Bun's tools run
+it on Node.js unless you pass `--bun`:
+
+```sh
+bunx --bun @cookiemonsterdev/kafka-cli ping --brokers localhost:9092
+# or, after `bun add -g @cookiemonsterdev/kafka-cli`
+bunx --bun kafka --version
+```
+
+See [Bun](../docs/src/content/docs/core/reference/bun.md) for what else differs on Bun.
+
 ## Try it
 
 Every command that connects takes `--brokers` directly — a single `localhost:9092`, or a
@@ -465,6 +476,10 @@ built-in defaults**. The config file is discovered by walking upward from the cu
 looking for `kafka.config.{ts,mts,cts,js,mjs,cjs,json}` (or `.config/kafka.*`), stopping at the
 first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` — override that with
 `--config-file <path>` or `KAFKA_CONFIG`.
+
+The file is loaded asynchronously, so a config that uses top-level `await` or exports an async
+factory works. There is no TypeScript transform rescue: an extensionless relative import, or
+`export default` in a `.ts` file that resolves to CommonJS, fails with an error naming the fix.
 
 Named alternates — e.g. one entry per cluster — go under a `cli.profiles` section and are selected
 with `--profile <name>` or `KAFKA_PROFILE`:

@@ -5,7 +5,7 @@ order: 2
 section: start
 ---
 
-Node.js **24** is required.
+Node.js **24 or newer** (tested on 24 and 26) or Bun **1.4 or newer** is required.
 
 ## Alongside the CLI
 
@@ -32,6 +32,20 @@ kafka-studio
 Either path prints a `localhost` URL (with a per-session token in the hash) and opens it in a
 browser. Run `kafka-studio --help` (or `kafka studio --help`) for the flag list — port, host,
 browser, and read-only mode.
+
+## Bun
+
+`kafka-studio` starts with a `#!/usr/bin/env node` shebang, so Bun's tools run it on Node.js
+unless told otherwise. Pass `--bun` to `bunx` to run it on Bun instead:
+
+```sh
+bunx --bun @cookiemonsterdev/kafka-studio
+```
+
+After `bun add -g @cookiemonsterdev/kafka-studio`, run `bunx --bun kafka-studio`. Running
+`kafka-studio` directly still uses Node.js. `kafka studio` runs the studio in the CLI's own process,
+so it uses whichever runtime the CLI was started with. See [Bun](../../../core/reference/bun/) for
+what else differs on Bun.
 
 ## From this monorepo
 

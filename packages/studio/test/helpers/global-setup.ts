@@ -44,9 +44,30 @@ function compose(args: string[]): void {
   execFileSync('docker', ['compose', '-f', resolveComposeFile(), ...args], { cwd: STUDIO_ROOT, stdio: 'inherit' });
 }
 
+// Same retry as core's test/helpers/global-setup.ts: a broker occasionally never turns healthy on
+// a shared CI runner, so dump container state and logs, then retry once from a clean stack.
+function composeUpWithRetry(attempts = 2): void {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      compose(['up', '--wait', '--wait-timeout', '180']);
+      return;
+    } catch (error) {
+      try {
+        compose(['ps', '--all']);
+        compose(['logs', '--no-color', '--tail', '200']);
+      } catch {
+        // Diagnostics are best-effort; the original failure is what matters.
+      }
+      if (attempt >= attempts) throw error;
+      console.warn(`docker compose up failed (attempt ${attempt}/${attempts}); recreating the stack and retrying`);
+      compose(['down', '--remove-orphans', '--volumes']);
+    }
+  }
+}
+
 export async function setup(): Promise<void> {
   if (process.env.KAFKA_EXTERNAL === '1') return;
-  compose(['up', '--wait', '--wait-timeout', '180']);
+  composeUpWithRetry();
 }
 
 export async function teardown(): Promise<void> {

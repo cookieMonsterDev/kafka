@@ -17,7 +17,7 @@ agent-specific constraints on top.
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing code. Do not invent a
 parallel workflow. In particular:
 
-- Prerequisites, local commands, shared catalog versions, and pnpm 11 notes
+- Prerequisites, local commands, shared catalog versions, and pnpm 12 notes
 - Branch names: `<type>/<short-kebab-description>` from `develop`
 - Conventional Commits (commitlint on `commit-msg` and in CI)
 - One concern per branch and per PR; no mixed refactors or formatting-only noise
@@ -64,7 +64,7 @@ or **N/A** with a one-line reason. Do not skip silently.
 Run from the repo root unless noted. `pnpm -r` walks the workspace dependency graph, so `@cookiemonsterdev/kafka-core` builds before `@cookiemonsterdev/kafka-docs` imports it.
 
 ```sh
-nvm use && corepack enable && pnpm install   # Node 24 + pnpm 11 pinned, engineStrict enforced
+nvm use && corepack enable && pnpm install   # Node 26 (.nvmrc; 24+ supported) + pnpm 12 pinned, engineStrict enforced
 
 pnpm build         # all packages, dependency order
 pnpm lint          # ESLint (root)
@@ -90,7 +90,7 @@ Unit tests live beside source as `*.test.ts` (`src/**/*.test.ts`) and never touc
 
 Pre-commit runs ESLint + Prettier on staged files then `pnpm test`; commit-msg runs commitlint. Skip hooks for one command with `HUSKY=0` (avoid unless necessary).
 
-Shared dependency versions (TypeScript, Vite, Vitest, Astro) live in the `catalog:` in `pnpm-workspace.yaml`; reference them as `"typescript": "catalog:"` rather than pinning per-package. `pnpm-workspace.yaml`, not `.npmrc`, is the source of truth for pnpm settings (`engineStrict`, `catalog`, `allowBuilds`, etc.) — pnpm 11 only reads auth/registry config from `.npmrc`. Depend on another workspace package with the `workspace:` protocol.
+Shared dependency versions (TypeScript, Vite, Vitest, Astro) live in the `catalog:` in `pnpm-workspace.yaml`; reference them as `"typescript": "catalog:"` rather than pinning per-package. `pnpm-workspace.yaml`, not `.npmrc`, is the source of truth for pnpm settings (`engineStrict`, `catalog`, `allowBuilds`, etc.) — pnpm 12 only reads auth/registry config from `.npmrc`. Depend on another workspace package with the `workspace:` protocol.
 
 ## Architecture
 

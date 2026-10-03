@@ -4,7 +4,7 @@
  * silent unless a caller supplies its own {@link OnConfigDiagnostic}.
  */
 export interface ConfigDiagnostic {
-  code: 'config.loaded' | 'config.multiple-candidates' | 'config.transform-fallback';
+  code: 'config.loaded' | 'config.multiple-candidates' | 'config.transform-fallback' | 'config.sync-load-deprecated';
   level: 'info' | 'warn';
   message: string;
   path?: string;

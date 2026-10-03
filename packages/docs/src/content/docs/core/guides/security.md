@@ -62,7 +62,7 @@ const kafka = new Kafka({
 ```
 
 Without `gssProvider`, the client loads the optional [`kerberos`](https://www.npmjs.com/package/kerberos)
-package (`>=7`, Node 20+ prebuilds including Node 24) and runs GSS token
+package (`>=7`, Node 20+ prebuilds) and runs GSS token
 exchange plus RFC 4752 wrap. Install it next to the client:
 
 ```sh

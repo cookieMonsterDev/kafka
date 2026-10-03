@@ -28,9 +28,12 @@ function tempDir(): string {
   return dir;
 }
 
-/** Runs `loadEnvFiles` in a brand-new process — `process.loadEnvFile` mutates real process env with no undo. */
+/**
+ * Runs `loadEnvFiles` in a brand-new process — `process.loadEnvFile` mutates real process env with no
+ * undo. Spawns `process.execPath` so the runtime under test (Node or Bun) is the one exercised.
+ */
 function runLoadEnvFiles(cwd: string, files: string[], processEnv: Record<string, string> = {}): DriverResult {
-  const output = execFileSync('node', [DRIVER, cwd, ...files], {
+  const output = execFileSync(process.execPath, [DRIVER, cwd, ...files], {
     encoding: 'utf8',
     env: { ...process.env, ...processEnv },
   });

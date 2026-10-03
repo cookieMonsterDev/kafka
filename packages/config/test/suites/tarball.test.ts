@@ -99,8 +99,12 @@ describe('npm tarball', () => {
       pathToFileURL(join(installDir, INSTALLED_PACKAGE_DIR, 'dist/index.js')).href
     );
     const loadConfigFileSync = mod.loadConfigFileSync as (path: string) => unknown;
+    const loadConfigFileAsync = mod.loadConfigFileAsync as (path: string) => Promise<unknown>;
 
+    // Also the only test that runs the packed dist itself, so the only one that catches a
+    // link-time failure (e.g. a named import Bun's `node:module` lacks) that vitest's transform hides.
     const fixturePath = join(PACKAGE_ROOT, 'test/fixtures/load-sync/ladder/kafka.config.ts');
     expect(loadConfigFileSync(fixturePath)).toEqual({ client: { brokers: ['ts:9092'] } });
+    await expect(loadConfigFileAsync(fixturePath)).resolves.toEqual({ client: { brokers: ['ts:9092'] } });
   });
 });

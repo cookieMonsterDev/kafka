@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { extname } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
 import { KafkaConfigError, KafkaConfigRequiresAsyncError } from './errors';
+import { describeRescue, rethrowIfUnsupportedTypeScriptSyntax } from './load-errors';
 import {
   type AssertValidFileConfig,
   assertResolvedFileConfig,
@@ -49,46 +50,6 @@ function requireModuleExportsRaw(path: string): unknown {
   }
 }
 
-function hasTypeScriptSibling(url: string | undefined): boolean {
-  if (url == null) return false;
-  try {
-    const base = fileURLToPath(url);
-    return existsSync(`${base}.ts`) || existsSync(`${base}.mts`);
-  } catch {
-    return false;
-  }
-}
-
-interface Rescue {
-  detail: string;
-  fix: string;
-}
-
-const ESM_SYNTAX_UNDER_COMMONJS_PATTERN = /Unexpected token ['"](?:export|import)['"]/;
-
-/** Only the constructs the transform-hook fallback (D8) can actually rescue. */
-function describeRescue(error: Error & { code?: string; url?: string }): Rescue | null {
-  if (error.code === 'ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX') {
-    return {
-      detail: 'a TypeScript construct the default strip-only loader cannot handle (e.g. an enum)',
-      fix: 'replace the enum with a frozen object or a plain union type, so no transform is required',
-    };
-  }
-  if (error.code === 'ERR_MODULE_NOT_FOUND' && hasTypeScriptSibling(error.url)) {
-    return {
-      detail: 'a relative import missing its file extension',
-      fix: 'add the ".ts" (or ".mts") extension to the import',
-    };
-  }
-  if (error instanceof SyntaxError && ESM_SYNTAX_UNDER_COMMONJS_PATTERN.test(error.message)) {
-    return {
-      detail: 'ES module syntax (import/export) in a file whose module format resolves to CommonJS',
-      fix: 'rename the file to ".mts" so Node always treats it as ESM, or add "type": "module" to the nearest package.json',
-    };
-  }
-  return null;
-}
-
 function requireDefaultExport(
   path: string,
   { allowTransformFallback, onDiagnostic }: { allowTransformFallback: boolean; onDiagnostic: OnConfigDiagnostic },
@@ -102,6 +63,7 @@ function requireDefaultExport(
     if (!(error instanceof Error)) {
       throw error;
     }
+    rethrowIfUnsupportedTypeScriptSyntax(error, path);
 
     const rescue = describeRescue(error);
     if (rescue == null) {
@@ -120,7 +82,16 @@ function requireDefaultExport(
       );
     }
 
-    installConfigTransformHooks();
+    if (!installConfigTransformHooks()) {
+      // Only Bun lacks the hooks, and its `require()` already handles both rescuable constructs
+      // natively, so this is not expected to happen — but never claim a rescue that can't run.
+      throw new KafkaConfigError(
+        'ConfigLoadError',
+        `kafka config file "${path}" needs the TypeScript transform fallback (it uses ${rescue.detail}), which ` +
+          `this runtime does not support (no "registerHooks" in "node:module"). Fix: ${rescue.fix}.`,
+        { path, cause: error },
+      );
+    }
     onDiagnostic({
       code: 'config.transform-fallback',
       level: 'warn',
@@ -133,6 +104,7 @@ function requireDefaultExport(
     try {
       return extractDefaultExport(requireModuleExportsRaw(path), path);
     } catch (retryError) {
+      rethrowIfUnsupportedTypeScriptSyntax(retryError, path);
       throw new KafkaConfigError(
         'ConfigLoadError',
         `Failed to load kafka config file "${path}" even after the transform fallback`,
@@ -144,8 +116,9 @@ function requireDefaultExport(
 
 export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
   /**
-   * Rescue a TS `enum`, an extensionless relative import, or `export default` under a
-   * CommonJS-resolved `.ts`/`.js` file behind a one-time process-wide transform-hook retry (D8).
+   * Rescue an extensionless relative import, or `export default` under a CommonJS-resolved
+   * `.ts`/`.js` file, behind a one-time process-wide transform-hook retry (D8). Non-erasable
+   * TypeScript such as an `enum` is never rescued — it always fails with a fix-naming error.
    * Default `true`. Set `false` for CI: the original error surfaces, with a diagnostic naming the
    * construct and the fix, and hooks are never installed.
    *
@@ -156,6 +129,12 @@ export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
    * guaranteed to throw — `require()` itself now silently rescues it. For an airtight CI
    * guarantee, set `allowTransformFallback: false` on every call from process start; don't mix it
    * with a lenient call against a potentially-rescuable file in the same process.
+   *
+   * Has no effect on Bun, whose `require()` loads both constructs natively.
+   *
+   * @deprecated Only the deprecated synchronous loader has this rescue. Use
+   * {@link import('./load-async').loadConfigFileAsync}, which never rescues and instead fails with
+   * an error naming the fix.
    */
   allowTransformFallback?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
@@ -178,6 +157,12 @@ export interface LoadConfigFileSyncOptions<T = Record<string, unknown>> {
  * {@link KafkaConfigRequiresAsyncError} for the former, `KafkaConfigError` tagged
  * `'ConfigFileInvalid'` for the latter. Use `Kafka.fromConfig()`, or the async loader directly, for
  * either case.
+ *
+ * On Bun, `require()` loads TypeScript natively — including top-level `await` — so the transform
+ * fallback is never needed there, and a top-level-`await` config loads instead of throwing.
+ *
+ * @deprecated Use {@link import('./load-async').loadConfigFileAsync}. The synchronous loader keeps
+ * working, but it depends on `require()` hooks and cannot load a config that needs async work.
  */
 export function loadConfigFileSync<T = Record<string, unknown>>(
   path: string,

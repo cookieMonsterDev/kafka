@@ -40,6 +40,12 @@ function toKafkaConfigError(error: unknown, path: string): unknown {
   });
 }
 
+/**
+ * Options for the deprecated synchronous {@link loadKafkaConfig}.
+ *
+ * @deprecated Use {@link loadKafkaConfigAsync}, which takes no options: it never uses the
+ * transform-hook rescue, and a construct that needs it fails with an error naming the fix.
+ */
 export interface LoadKafkaConfigOptions {
   /** See `@cookiemonsterdev/kafka-config`'s `LoadConfigFileSyncOptions.allowTransformFallback`. */
   allowTransformFallback?: boolean;
@@ -52,6 +58,12 @@ export interface LoadKafkaConfigOptions {
  * async work (top-level `await`, or an async factory export) throws
  * {@link KafkaConfigRequiresAsyncError} — use {@link loadKafkaConfigAsync} or `Kafka.fromConfig()`
  * instead.
+ *
+ * On Bun, `require()` loads TypeScript natively — including top-level `await` — so no transform
+ * fallback is needed and a top-level-`await` config loads here too.
+ *
+ * @deprecated Use {@link loadKafkaConfigAsync} (or `Kafka.fromConfig()`). The synchronous loader keeps
+ * working, but it depends on `require()` hooks and cannot load a config that needs async work.
  */
 export function loadKafkaConfig(path: string, options: LoadKafkaConfigOptions = {}): KafkaFileConfig {
   try {
@@ -62,10 +74,11 @@ export function loadKafkaConfig(path: string, options: LoadKafkaConfigOptions = 
 }
 
 /**
- * Async sibling of {@link loadKafkaConfig} — the only path for a config file that uses top-level
- * `await` or exports an async factory. Not a superset of the sync loader: it cannot rescue the
- * constructs `allowTransformFallback` handles, since those rely on `require()` hooks that dynamic
- * `import()` never sees.
+ * Loads and validates a `kafka.config.*` file via dynamic `import()` — the recommended loader, and
+ * the only one for a config file that uses top-level `await` or exports an async factory. It has
+ * no transform-hook rescue (those rely on `require()` hooks that `import()` never sees): an
+ * extensionless relative import, or `export default` under a CommonJS-resolved file, fails with a
+ * {@link KafkaConfigError} naming the fix.
  */
 export async function loadKafkaConfigAsync(path: string): Promise<KafkaFileConfig> {
   try {

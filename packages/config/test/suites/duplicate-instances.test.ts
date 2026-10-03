@@ -63,7 +63,7 @@ describe('two copies of the loader are harmless', () => {
         join(copyBRoot, 'index.js'),
         join(FIXTURES, 'load-sync/ladder/kafka.config.ts'),
         join(FIXTURES, 'load-sync/invalid-json/kafka.config.json'),
-        join(FIXTURES, 'transform-hooks/enum/kafka.config.ts'),
+        join(FIXTURES, 'transform-hooks/extensionless/kafka.config.ts'),
       ],
       { encoding: 'utf8' },
     );
@@ -75,7 +75,7 @@ describe('two copies of the loader are harmless', () => {
     expect(result.errorFromAIsNotInstanceOfCopyBClass).toBe(true);
     expect(result.copyBOwnErrorHasSameName).toBe(true);
     expect(result.copyBLoadsRescuableFixtureAfterCopyAInstalledHooks).toBe(true);
-    expect(result.rescuedConfig).toEqual({ client: { brokers: ['enum:info'] } });
+    expect(result.rescuedConfig).toEqual({ client: { brokers: ['extensionless:9092'] } });
   });
 
   it('never brands its own errors with Symbol', () => {

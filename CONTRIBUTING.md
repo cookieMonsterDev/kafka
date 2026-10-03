@@ -8,8 +8,8 @@ Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file 
 
 ## Prerequisites
 
-- **Node.js 24** (pinned in `.nvmrc`). `engines` is enforced at install time.
-- **pnpm 11**, pinned via `packageManager` in the root `package.json`.
+- **Node.js 24 or newer** (tested on 24 and 26; `.nvmrc` pins 26 for development). `engines` is enforced at install time.
+- **pnpm 12**, pinned via `packageManager` in the root `package.json`.
 - **Docker** only if you run integration tests.
 
 ```sh
@@ -143,7 +143,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
 3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
@@ -193,6 +193,15 @@ Unit tests are protocol fixtures and never start Docker:
 ```sh
 pnpm test
 pnpm --filter @cookiemonsterdev/kafka-core test
+```
+
+CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
+locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, studio,
+and cli in that order, then run:
+
+```sh
+pnpm test:bun                # every package's unit suite under `bun --bun`
+bun scripts/bun-smoke.mjs    # also runs on Node: node scripts/bun-smoke.mjs
 ```
 
 Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):
@@ -316,7 +325,7 @@ in `scripts/check-publishable-deps.mjs`.
 
 ## Configuration notes
 
-pnpm 11 reads **only** auth and registry settings from `.npmrc`. Everything else (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in `pnpm-workspace.yaml`. Settings placed in `.npmrc` are silently ignored.
+pnpm 12 reads **only** auth and registry settings from `.npmrc`. Everything else (`engineStrict`, `linkWorkspacePackages`, `catalog`, `allowBuilds`, …) must live in `pnpm-workspace.yaml`. Settings placed in `.npmrc` are silently ignored.
 
 ## License
 

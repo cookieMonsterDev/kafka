@@ -143,7 +143,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
 3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
@@ -193,6 +193,15 @@ Unit tests are protocol fixtures and never start Docker:
 ```sh
 pnpm test
 pnpm --filter @cookiemonsterdev/kafka-core test
+```
+
+CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
+locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, studio,
+and cli in that order, then run:
+
+```sh
+pnpm test:bun                # every package's unit suite under `bun --bun`
+bun scripts/bun-smoke.mjs    # also runs on Node: node scripts/bun-smoke.mjs
 ```
 
 Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):

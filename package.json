@@ -15,6 +15,7 @@
     "dev": "pnpm -r --parallel --if-present run dev",
     "studio:dev": "pnpm --filter @cookiemonsterdev/kafka-studio... run build && pnpm --filter @cookiemonsterdev/kafka-studio run dev:server",
     "test": "pnpm -r --if-present run test",
+    "test:bun": "pnpm -r --if-present run test:bun",
     "typecheck": "pnpm -r --if-present run typecheck",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -98,7 +98,10 @@ need no setup on either runtime.
 
 ## How we test
 
-The unit test suites run on Node.js 24 and 26, and also under Bun. Integration tests against real
-brokers run on Node.js.
+CI runs every package's unit test suite on Node.js 24 and 26, and again on Bun 1.4. On each of
+those runtimes, a smoke test then loads the built packages the way an application would: it
+imports each one, runs the `kafka` and `kafka-studio` executables, round-trips Snappy and LZ4
+through the compression workers (and checks that the process still exits on its own), and loads a
+TypeScript config file. Integration tests against real brokers run on Node.js only.
 
 See also: [Compatibility](../compatibility/) for broker versions and the implemented API surface.

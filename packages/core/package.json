@@ -51,6 +51,7 @@
     "dev": "vite build --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit && tsc -p bench/tsconfig.json --noEmit",
     "test": "vitest run --project unit",
+    "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run --project unit",
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest --project unit",
     "bench": "node bench/load-ts.mjs",

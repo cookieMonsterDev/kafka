@@ -34,6 +34,9 @@ function fakeRuntime(overrides: Partial<Runtime> = {}): {
   return { runtime, stdout, stderr };
 }
 
+// Each test binds its own fixed port, unique across every test file (src/main.test.ts uses
+// 59_106): vitest runs files in parallel processes, and an explicit port is never swapped for a
+// free one, so a port shared between two files fails whichever binds second.
 describe('startStudio', () => {
   it('binds to a free port, serves the built shell, and exposes health/cluster routes', async () => {
     const { runtime, stdout } = fakeRuntime();

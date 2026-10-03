@@ -11,7 +11,7 @@
  * `register-src-resolve.mjs`, imported first.
  *
  * Usage: `node run-load-sync.mjs <configPath> [allowTransformFallback=true|false]`. Prints one
- * JSON line to stdout: `{ ok, config | (name, tag, message), diagnostics, hooksInstalled }`.
+ * JSON line to stdout: `{ ok, config | (name, tag, message), diagnostics, hooksInstalled, runtime }`.
  */
 import './register-src-resolve.mjs';
 
@@ -24,6 +24,7 @@ if (configPath == null) {
 }
 
 const allowTransformFallback = allowTransformFallbackArg !== 'false';
+const runtime = typeof process.versions.bun === 'string' ? 'bun' : 'node';
 const diagnostics = [];
 
 try {
@@ -31,7 +32,9 @@ try {
     allowTransformFallback,
     onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
   });
-  console.log(JSON.stringify({ ok: true, config, diagnostics, hooksInstalled: areConfigTransformHooksInstalled() }));
+  console.log(
+    JSON.stringify({ ok: true, config, diagnostics, hooksInstalled: areConfigTransformHooksInstalled(), runtime }),
+  );
 } catch (error) {
   console.log(
     JSON.stringify({
@@ -41,6 +44,7 @@ try {
       message: error instanceof Error ? error.message : String(error),
       diagnostics,
       hooksInstalled: areConfigTransformHooksInstalled(),
+      runtime,
     }),
   );
 }

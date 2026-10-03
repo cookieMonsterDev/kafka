@@ -19,6 +19,8 @@ to), the discovery/loading/merging machinery doesn't need to be written twice.
 npm install @cookiemonsterdev/kafka-config
 ```
 
+It runs on Node.js 24 or newer and on Bun 1.4 or newer.
+
 ## Why a separate package
 
 The loader machinery has no Kafka-specific code in it at all — file discovery, `require()`/

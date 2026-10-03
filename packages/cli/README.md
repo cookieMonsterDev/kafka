@@ -44,6 +44,15 @@ npm install -g @cookiemonsterdev/kafka-cli
 kafka --version
 ```
 
+Needs Node.js 24 or newer, or Bun 1.4 or newer. The binary has a `node` shebang, so Bun's tools run
+it on Node.js unless you pass `--bun`:
+
+```sh
+bunx --bun @cookiemonsterdev/kafka-cli ping --brokers localhost:9092
+# or, after `bun add -g @cookiemonsterdev/kafka-cli`
+bunx --bun kafka --version
+```
+
 ## Try it
 
 Every command that connects takes `--brokers` directly — a single `localhost:9092`, or a

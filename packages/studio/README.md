@@ -46,6 +46,10 @@ node packages/studio/dist/bin.js
 `build` produces the server bundle (`dist/`) and the browser SPA (`dist/web/`). Run
 `node packages/studio/dist/bin.js --help` for the flag list (port, host, browser, read-only mode).
 
+The studio needs Node.js 24 or newer, or Bun 1.4 or newer. To run the build on Bun, use
+`bun packages/studio/dist/bin.js`. An installed `kafka-studio` has a `node` shebang, so run it
+with `bunx --bun kafka-studio` to use Bun.
+
 `pnpm --filter @cookiemonsterdev/kafka-studio dev` watches and rebuilds the server bundle only. To
 serve `src/web` with Vite's own dev server instead of a static build, set `KAFKA_STUDIO_DEV=1`
 before starting the server from source — or run the one-liner below, which does both:

@@ -25,6 +25,8 @@ reference.
 npm install @cookiemonsterdev/kafka-config
 ```
 
+Runs on Node.js 24 or newer and on Bun 1.4 or newer.
+
 ## Quick example
 
 ```ts

@@ -12,6 +12,11 @@ function hasTypeScriptSibling(url: string | undefined): boolean {
   }
 }
 
+/** Appends the underlying error's message (a JSON position, a SyntaxError, a thrown error) so callers that print only `message` still see why. */
+export function withCauseMessage(message: string, cause: unknown): string {
+  return cause instanceof Error ? `${message}: ${cause.message}` : message;
+}
+
 /** A load failure the sync loader's transform-hook fallback can rescue, and the fix that avoids needing it. */
 export interface Rescue {
   detail: string;

@@ -531,7 +531,7 @@ describe('share-consumer/share-runner', () => {
     }
   });
 
-  it('crashes on a non-retriable partition fetch error', async () => {
+  it("crashes on a non-retriable partition fetch error and releases the healthy partitions' records", async () => {
     const shareFetch = vi.fn().mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return {
@@ -548,17 +548,28 @@ describe('share-consumer/share-runner', () => {
                 records: [],
                 acquiredRecords: [],
               },
+              {
+                partitionIndex: 1,
+                errorCode: 0,
+                acknowledgeErrorCode: 0,
+                currentLeader: { leaderId: -1, leaderEpoch: -1 },
+                records: [],
+                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
+              },
             ],
           },
         ],
       };
     });
+    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
     const { shareGroup } = createShareGroup({
       cluster: {
         refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
         findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
+        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge }),
       },
+      filterPartitionsByNode: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
+      assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
     });
     const onCrash = vi.fn();
     const runner = new ShareRunner({
@@ -578,6 +589,24 @@ describe('share-consumer/share-runner', () => {
       runner.shuttingDown = true;
       await runner.stop();
     }
+
+    expect(shareAcknowledge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topics: [
+          {
+            topicId: TOPIC_ID,
+            partitions: [
+              {
+                partitionIndex: 1,
+                acknowledgementBatches: [
+                  { firstOffset: 10n, lastOffset: 10n, acknowledgeTypes: [SHARE_ACKNOWLEDGE_TYPE.RELEASE] },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
   });
 
   it('emits FETCH_START and FETCH around each fetch round', async () => {

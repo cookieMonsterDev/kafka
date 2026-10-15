@@ -1,6 +1,6 @@
 import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
 import type { EachMessageHandler } from '../consumer/types';
-import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
+import { KafkaError, KafkaNoBrokerAvailableError, type KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { createErrorFromCode, failure, staleMetadata } from '../protocol/error-codes';
@@ -11,6 +11,7 @@ import {
   type ShareAcquireMode,
   type ShareFetchAcknowledgementBatchInput,
   type ShareFetchForgottenTopicInput,
+  type ShareFetchResponseV1Body,
 } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
@@ -310,9 +311,10 @@ export class ShareRunner {
 
     let attempts = 0;
     let sentEpoch = shareSessionEpoch;
+    let response: ShareFetchResponseV1Body;
     try {
       const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-      const response = await this.#retrier(() => {
+      response = await this.#retrier(() => {
         // A failed attempt may already have been applied (epoch bumped, acknowledgements
         // recorded), so replaying it is ambiguous; retries open a fresh session without acks.
         const isRetry = attempts++ > 0;
@@ -337,38 +339,6 @@ export class ShareRunner {
           forgottenTopics: isRetry ? [] : forgottenTopics,
         });
       });
-      this.#shareSessionEpochByNode.set(nodeId, sentEpoch + 1);
-      this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
-
-      if (takenAcks.length > 0 && attempts === 1) {
-        this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
-          groupId: this.#shareGroup.groupId,
-          memberId,
-          nodeId,
-          topics: groupAcksByTopic(takenAcks),
-        });
-      }
-
-      const batches: ShareBatch[] = [];
-      for (const { topicId, partitions } of response.responses) {
-        const topic = await this.#resolveTopicName(topicId);
-        for (const partitionData of partitions) {
-          const { partitionIndex: partition, errorCode, acknowledgeErrorCode } = partitionData;
-          if (failure(acknowledgeErrorCode)) this.#warnAcknowledgeFailure(topic, partition, acknowledgeErrorCode);
-          if (failure(errorCode)) {
-            this.#handlePartitionFetchError(topic, partition, errorCode);
-            continue;
-          }
-          batches.push(
-            new ShareBatch(topic, {
-              partition,
-              messages: partitionData.records,
-              acquiredRecords: partitionData.acquiredRecords,
-            }),
-          );
-        }
-      }
-      return batches.filter((batch) => !this.#isStale(batch));
     } catch (error) {
       if (attempts === 0) {
         this.#pendingAcks.push(...takenAcks);
@@ -381,6 +351,46 @@ export class ShareRunner {
       this.#shareSessionPartitionsByNode.delete(nodeId);
       throw error;
     }
+
+    // The request succeeded, so the session advanced even if a partition below reports an error.
+    this.#shareSessionEpochByNode.set(nodeId, sentEpoch + 1);
+    this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
+
+    if (takenAcks.length > 0 && attempts === 1) {
+      this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+        groupId: this.#shareGroup.groupId,
+        memberId,
+        nodeId,
+        topics: groupAcksByTopic(takenAcks),
+      });
+    }
+
+    const batches: ShareBatch[] = [];
+    let fatalError: KafkaProtocolError | undefined;
+    for (const { topicId, partitions } of response.responses) {
+      const topic = await this.#resolveTopicName(topicId);
+      for (const partitionData of partitions) {
+        const { partitionIndex: partition, errorCode, acknowledgeErrorCode } = partitionData;
+        if (failure(acknowledgeErrorCode)) this.#warnAcknowledgeFailure(topic, partition, acknowledgeErrorCode);
+        if (failure(errorCode)) {
+          fatalError ??= this.#handlePartitionFetchError(topic, partition, errorCode);
+          continue;
+        }
+        batches.push(
+          new ShareBatch(topic, {
+            partition,
+            messages: partitionData.records,
+            acquiredRecords: partitionData.acquiredRecords,
+          }),
+        );
+      }
+    }
+    if (fatalError) {
+      // Release what the healthy partitions acquired rather than leave it locked until it times out.
+      for (const batch of batches) this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      throw fatalError;
+    }
+    return batches.filter((batch) => !this.#isStale(batch));
   }
 
   /** Like Java's AcknowledgementCommitCallback: a failed acknowledgement is reported, not fatal. */
@@ -393,10 +403,13 @@ export class ShareRunner {
     });
   }
 
-  /** A retriable error skips only this partition this round; anything else crashes the consumer. */
-  #handlePartitionFetchError(topic: string, partition: number, errorCode: number): void {
+  /**
+   * A retriable error skips only this partition this round; anything else is returned for the
+   * caller to crash the consumer with once the rest of the response is handled.
+   */
+  #handlePartitionFetchError(topic: string, partition: number, errorCode: number): KafkaProtocolError | undefined {
     const error = createErrorFromCode(errorCode, { topic, partition });
-    if (!error.retriable) throw error;
+    if (!error.retriable) return error;
     if (staleMetadata(error)) this.#metadataRefreshNeeded = true;
     this.#logger.warn('Share fetch failed for partition, retrying', {
       groupId: this.#shareGroup.groupId,
@@ -404,6 +417,7 @@ export class ShareRunner {
       partition,
       error: error.message,
     });
+    return undefined;
   }
 
   /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */

@@ -76,10 +76,12 @@ jobs:
       # package released successfully before a later one failed.
       released: ${{ steps.chain.outputs.released }}
     steps:
+      # Keep RELEASE_TOKEN out of the persisted git config, where every install script and test
+      # could read it; release-chain.mjs hands it only to semantic-release, which pushes.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
+          persist-credentials: false
       - uses: ./.github/actions/setup-node-pnpm
       - uses: ./.github/actions/require-npm-oidc
       # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. release-chain.mjs runs each
@@ -93,6 +95,7 @@ jobs:
         env:
           RELEASE_CHANGES: ${{ needs.changes.outputs.flags }}
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           HUSKY: '0'
         run: node scripts/release-chain.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
 

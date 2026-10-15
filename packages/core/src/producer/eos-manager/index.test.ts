@@ -684,4 +684,32 @@ describe('producer/eosManager', () => {
     expect(eosManager.getSequence(topic, 0)).toBe(4);
     expect(eosManager.getSequence(topic, 1)).toBe(7);
   });
+
+  it('keeps a queued Produce waiting on its partition gate past the lock timeout, until its signal aborts', async () => {
+    vi.useFakeTimers();
+    try {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      const controller = new AbortController();
+      let settled = false;
+      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 0 }], { signal: controller.signal });
+      waiting.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+
+      // A leader outage longer than the old 0xffff ms lock timeout must not fail queued sends.
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(settled).toBe(false);
+
+      controller.abort(new Error('delivery deadline'));
+      await expect(waiting).rejects.toThrow('delivery deadline');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

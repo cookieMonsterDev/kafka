@@ -90,4 +90,23 @@ describe('utils/Lock', () => {
     const waiting = lock.acquire({ signal: AbortSignal.abort(new Error('already aborted')) });
     await expect(waiting).rejects.toThrow('already aborted');
   });
+
+  it('waits without a deadline when the timeout is Infinity', async () => {
+    vi.useFakeTimers();
+    try {
+      const lock = new Lock({ timeout: Number.POSITIVE_INFINITY });
+      await lock.acquire();
+
+      let acquired = false;
+      const waiting = lock.acquire().then(() => (acquired = true));
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(acquired).toBe(false);
+
+      await lock.release();
+      await waiting;
+      expect(acquired).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -6,7 +6,7 @@ import { KafkaNonRetriableError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { retrier, type RetryOptions } from '../../retry/index';
-import { Lock } from '../../utils/lock';
+import { Lock, type AcquireOptions } from '../../utils/lock';
 import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
 
@@ -55,7 +55,7 @@ export interface EosManager {
    * Serialize Produce for these topic-partitions so sequences stay monotonic.
    * Distinct partitions may overlap; the same partition is exclusive (≤ 1 in-flight).
    */
-  acquirePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
+  acquirePartitionGates: (partitions: readonly EosManagerPartition[], options?: AcquireOptions) => Promise<void>;
   releasePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
   sendOffsets: (options: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => Promise<void>;
 }
@@ -106,6 +106,8 @@ export function createEosManager({
    * monotonic on mixed-partition RPCs. Distinct partitions on one broker may overlap.
    * The broker's idempotent window is 5; we keep 1 in-flight per partition rather than
    * pipelining the same partition without a single sender thread (OutOfOrderSequence).
+   * A holder keeps its gate for its whole retry cycle, which may outlast any fixed lock timeout
+   * during a leader outage, so waiters have none: each is bounded by its own send's deadline signal.
    */
   const partitionGates = new Map<string, Lock>();
 
@@ -380,20 +382,23 @@ export function createEosManager({
     const key = partitionGateKey(topic, partition);
     let lock = partitionGates.get(key);
     if (!lock) {
-      lock = new Lock({ timeout: 0xffff, description: `idempotent produce ${key}` });
+      lock = new Lock({ timeout: Number.POSITIVE_INFINITY, description: `idempotent produce ${key}` });
       partitionGates.set(key, lock);
     }
     return lock;
   }
 
-  async function acquirePartitionGates(partitions: readonly EosManagerPartition[]): Promise<void> {
+  async function acquirePartitionGates(
+    partitions: readonly EosManagerPartition[],
+    { signal }: AcquireOptions = {},
+  ): Promise<void> {
     if (!isInitialized()) return;
 
     const unique = uniqueSortedPartitions(partitions);
     const acquired: EosManagerPartition[] = [];
     try {
       for (const entry of unique) {
-        await partitionLock(entry.topic, entry.partition).acquire();
+        await partitionLock(entry.topic, entry.partition).acquire({ signal });
         acquired.push(entry);
       }
     } catch (error) {

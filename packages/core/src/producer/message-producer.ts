@@ -65,7 +65,7 @@ export interface MessageProducerOptions {
    * End-to-end deadline for one send/sendBatch call: linger wait, buffer-memory wait, and every
    * retry attempt, together. Once it elapses, the call rejects with `KafkaDeliveryTimeoutError`
    * regardless of retries remaining. Default 120_000; 0 (or below) disables the deadline.
-   * The already in-flight attempt, if any, is not cancelled - same as `signal` abort.
+   * No retry starts after the deadline; an attempt already in flight is left to finish.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
@@ -99,9 +99,8 @@ const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
 const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 
 /**
- * Races `promise` against `deliveryTimeoutMs`. Doesn't cancel the underlying send - the retrier
- * has no abort hook - but the caller sees the rejection as soon as the deadline is up instead of
- * waiting out however many retries are left, same "reject, don't cancel" contract as `rejectOnAbort`.
+ * Races `promise` against `deliveryTimeoutMs`, so the caller sees the rejection as soon as the
+ * deadline is up even while an attempt is still in flight. `dispatch` stops the retries themselves.
  */
 function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
   if (!(deliveryTimeoutMs > 0)) return promise;
@@ -119,6 +118,8 @@ interface PendingSend {
   compression: CompressionType | undefined;
   compressionLevel: number | undefined;
   timeout: number;
+  /** Epoch ms at which the caller is rejected with `KafkaDeliveryTimeoutError`. */
+  deadline: number;
   resolve: (metadata: RecordMetadata[]) => void;
   reject: (error: unknown) => void;
   bytes: number;
@@ -300,8 +301,31 @@ export function createMessageProducer({
     timeout: number,
     compression: CompressionType | undefined,
     compressionLevel: number | undefined,
+    deadline: number,
   ): Promise<RecordMetadata[]> {
-    return sendMessages({ acks, timeout, compression, compressionLevel, topicMessages });
+    const remaining = deadline - Date.now();
+    if (!Number.isFinite(remaining)) {
+      return sendMessages({ acks, timeout, compression, compressionLevel, topicMessages });
+    }
+    // Expired while lingering behind an earlier flush: its caller was already rejected.
+    if (remaining <= 0) return Promise.reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
+
+    // Stop retrying once the caller has been told the send failed, so the partition gates are
+    // released instead of being held by a send nobody is waiting for.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new KafkaDeliveryTimeoutError(deliveryTimeoutMs)), remaining);
+    return sendMessages({
+      acks,
+      timeout,
+      compression,
+      compressionLevel,
+      topicMessages,
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  }
+
+  function deliveryDeadline(): number {
+    return deliveryTimeoutMs > 0 ? Date.now() + deliveryTimeoutMs : Number.POSITIVE_INFINITY;
   }
 
   function hasBufferLimit(): boolean {
@@ -431,6 +455,8 @@ export function createMessageProducer({
             first.timeout,
             first.compression,
             first.compressionLevel,
+            // A merged request shares one fate, so it stops at its earliest caller's deadline.
+            group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
           );
           for (const entry of group) {
             entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
@@ -494,6 +520,7 @@ export function createMessageProducer({
     compression: CompressionType | undefined,
     compressionLevel: number | undefined,
     bytes: number,
+    deadline: number,
   ): Promise<RecordMetadata[]> {
     await reserveBuffer(bytes, timeout);
 
@@ -511,6 +538,7 @@ export function createMessageProducer({
       compression,
       compressionLevel,
       timeout,
+      deadline,
       resolve,
       reject,
       bytes,
@@ -555,9 +583,17 @@ export function createMessageProducer({
       await runHooks(hooks.onSend, hookEvent, 'onSend', logger);
     }
 
+    const deadline = deliveryDeadline();
     const produce =
       lingerMs <= 0
-        ? dispatch(mergedTopicMessages, resolvedAcks, resolvedTimeout, resolvedCompression, resolvedCompressionLevel)
+        ? dispatch(
+            mergedTopicMessages,
+            resolvedAcks,
+            resolvedTimeout,
+            resolvedCompression,
+            resolvedCompressionLevel,
+            deadline,
+          )
         : enqueue(
             mergedTopicMessages,
             resolvedAcks,
@@ -565,6 +601,7 @@ export function createMessageProducer({
             resolvedCompression,
             resolvedCompressionLevel,
             totalBytes,
+            deadline,
           );
 
     const settled = rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);

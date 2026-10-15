@@ -4,7 +4,7 @@ import { staleMetadata } from '../protocol/error-codes';
 import type { CompressionType } from '../protocol/compression/index';
 import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
-import type { Retrier } from '../retry/index';
+import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
 import { createTopicData } from './create-topic-data';
 import type { EosManager, EosManagerPartition } from './eos-manager/index';
@@ -31,6 +31,8 @@ export interface SendMessagesRequest {
   compression?: CompressionType;
   compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
+  /** Ends the retry cycle (the delivery deadline): no new attempt starts and queued gate waits give up. */
+  signal?: AbortSignal;
 }
 
 function partitionKey(topic: string, partition: number): string {
@@ -70,6 +72,7 @@ export function createSendMessages({
     compression,
     compressionLevel,
     topicMessages,
+    signal,
   }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
@@ -129,7 +132,7 @@ export function createSendMessages({
       for (const [topic, messagesPerPartition] of assignment) {
         for (const partition of messagesPerPartition.keys()) partitions.push({ topic, partition });
       }
-      await eosManager.acquirePartitionGates(partitions);
+      await eosManager.acquirePartitionGates(partitions, { signal });
       gatedPartitions = partitions;
     }
 
@@ -267,7 +270,7 @@ export function createSendMessages({
       });
     }
 
-    const send = retrier(async (bail, retryCount, retryTime) => {
+    const attempt: Retryable<RecordMetadata[]> = async (bail, retryCount, retryTime) => {
       const topics = topicMessages.map(({ topic }) => topic);
       await cluster.addMultipleTargetTopics(topics);
 
@@ -364,9 +367,9 @@ export function createSendMessages({
         bail(error);
         return collectResponse();
       }
-    });
+    };
 
-    return send
+    return retrier(attempt, { signal })
       .catch((error: unknown) => {
         rollbackUnackedSequences();
         // Some partitions may already be written inside the transaction (and KIP-890's

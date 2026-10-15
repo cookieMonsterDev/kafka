@@ -410,6 +410,29 @@ describe('producer/messageProducer', () => {
       expect(broker.produce).toHaveBeenCalledTimes(1);
     });
 
+    it('stops retrying and releases the partition gates once the deadline elapses', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
+      const eosManager = fakeEosManager();
+      const producer = createTestProducer(broker, {
+        eosManager,
+        retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
+        deliveryTimeoutMs: 500,
+      });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+      expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
+
+      // The caller was told the send failed, so it must not keep retrying in the background.
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+    });
+
     it('a non-positive deliveryTimeoutMs disables the deadline', async () => {
       const broker = fakeBroker(1);
       const producer = createTestProducer(broker, { deliveryTimeoutMs: 0 });

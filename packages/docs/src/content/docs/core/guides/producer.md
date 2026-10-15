@@ -62,9 +62,10 @@ loop now that they are off-thread.
 `send()` / `sendBatch()` call — it covers `lingerMs`, any wait for
 `bufferMemory` to free up, and every retry attempt together, not any single
 RPC. Once it elapses the call rejects with `KafkaDeliveryTimeoutError`,
-regardless of how many retries `retry` still has left; the in-flight attempt,
-if any, is not cancelled, so a late response can still land on the broker
-after the caller has already moved on. Pass `0` to disable it.
+regardless of how many retries `retry` still has left, and no further retry
+is attempted. An attempt already in flight is not cancelled, so a late
+response can still land on the broker after the caller has already moved on.
+Pass `0` to disable it.
 
 This is a different knob from the per-call `timeout` on `send()` /
 `sendBatch()` (default `30000`), which is the wire-level deadline the _broker_

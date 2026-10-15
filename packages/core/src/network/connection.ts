@@ -756,10 +756,11 @@ export class Connection {
   }
 
   /**
-   * Copy `additional` bytes into the receive buffer. Compacts unparsed bytes to offset 0
-   * (onto a fresh Buffer so in-flight payload views keep the previous backing store). Growth
-   * doubles while a frame accumulates; compaction sizes the fresh Buffer to just what is still
-   * needed, so one large response doesn't pin (and re-copy) its capacity for every later frame.
+   * Make room for `additional` bytes. Compacts unparsed bytes to offset 0 (onto a fresh Buffer so
+   * in-flight payload views keep the previous backing store). Growth doubles while a frame
+   * accumulates; compaction happens here rather than after parsing, so the fresh Buffer is sized
+   * once for the leftover bytes, the incoming chunk, and the pending frame, and one large
+   * response doesn't pin (and re-copy) its capacity for every later frame.
    */
   #ensureReceiveCapacity(additional: number): void {
     const remaining = this.#receiveWriteOffset - this.#receiveReadOffset;
@@ -768,7 +769,10 @@ export class Connection {
       return;
     }
 
-    const capacity = this.#receiveReadOffset === 0 ? Math.max(this.#receiveBuffer.length * 2, needed) : needed;
+    const capacity =
+      this.#receiveReadOffset === 0
+        ? Math.max(this.#receiveBuffer.length * 2, needed)
+        : Math.max(needed, this.#bytesNeeded);
     const next = Buffer.allocUnsafe(capacity);
     if (remaining > 0) {
       this.#receiveBuffer.copy(next, 0, this.#receiveReadOffset, this.#receiveWriteOffset);
@@ -778,11 +782,14 @@ export class Connection {
     this.#receiveWriteOffset = remaining;
   }
 
-  #compactReceiveBuffer(): void {
-    if (this.#receiveReadOffset === 0) {
+  /** Drops a fully consumed buffer; a partial frame is compacted by the next `#ensureReceiveCapacity`. */
+  #releaseConsumedReceiveBuffer(): void {
+    if (this.#receiveReadOffset === 0 || this.#receiveReadOffset !== this.#receiveWriteOffset) {
       return;
     }
-    this.#ensureReceiveCapacity(0);
+    this.#receiveBuffer = Buffer.allocUnsafe(0);
+    this.#receiveReadOffset = 0;
+    this.#receiveWriteOffset = 0;
   }
 
   #processData(rawData: Buffer): void {
@@ -802,7 +809,6 @@ export class Connection {
 
       if (this.#receiveWriteOffset - this.#receiveReadOffset < frameSize) {
         this.#bytesNeeded = frameSize;
-        this.#compactReceiveBuffer();
         return;
       }
 
@@ -813,7 +819,7 @@ export class Connection {
         const rawResponseBuffer = this.#receiveBuffer.subarray(this.#receiveReadOffset, responseEnd);
         this.#receiveReadOffset = responseEnd;
         this.#bytesNeeded = Decoder.int32Size();
-        this.#compactReceiveBuffer();
+        this.#releaseConsumedReceiveBuffer();
         this.#authHandlers.onSuccess(rawResponseBuffer);
         return;
       }
@@ -832,7 +838,7 @@ export class Connection {
       this.requestQueue.fulfillRequest({ size: expectedResponseSize, correlationId, payload });
     }
 
-    this.#compactReceiveBuffer();
+    this.#releaseConsumedReceiveBuffer();
   }
 
   #rejectRequests(error: unknown): void {

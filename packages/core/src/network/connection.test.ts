@@ -596,6 +596,35 @@ describe('network/Connection', () => {
       }
     });
 
+    it('allocates once per chunk when pipelined responses split across socket reads', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { maxInFlightRequests: 20 });
+      const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+      const frames = Array.from({ length: 20 }, (_, correlationId) => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        const body = Buffer.alloc(50, correlationId);
+        return Buffer.concat([
+          new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader).buffer,
+          body,
+        ]);
+      });
+      const requests = frames.map(() => connection.send({ request: metadataRequest(), response }));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const stream = Buffer.concat(frames);
+      const chunks: Buffer[] = [];
+      for (let offset = 0; offset < stream.length; offset += 100) chunks.push(stream.subarray(offset, offset + 100));
+
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        for (const chunk of chunks) socket.emit('data', chunk);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size > 0).length).toBeLessThanOrEqual(chunks.length);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+      const payloads = await Promise.all(requests);
+      expect(payloads.map((payload) => payload?.[0])).toEqual(frames.map((_, correlationId) => correlationId));
+    });
+
     it('rejects in-flight requests when the broker closes the connection', async () => {
       const { server, port } = await startFakeBroker((_request, socket) => {
         socket.end();

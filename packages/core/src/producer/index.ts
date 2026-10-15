@@ -234,7 +234,10 @@ export function createProducer({
     ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
         if (!isUsable()) {
-          return Promise.reject(new KafkaNonRetriableError('Cannot continue to use transaction once ended'));
+          const message = transactionDidEnd
+            ? 'Cannot continue to use transaction once ended'
+            : 'Cannot send or add offsets once the transaction is ending or can only be aborted';
+          return Promise.reject(new KafkaNonRetriableError(message));
         }
 
         return fn(...args);

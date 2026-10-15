@@ -384,6 +384,7 @@ describe('producer', () => {
       const txn = await producer.transaction();
       await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
       await expect(txn.commit()).rejects.toThrow('connection lost');
+      await expect(txn.send({ topic: 't', messages: [] })).rejects.toThrow('can only be aborted');
       await expect(txn.commit()).resolves.toBeUndefined();
 
       expect(coordinator.endTxn).toHaveBeenCalledTimes(2);

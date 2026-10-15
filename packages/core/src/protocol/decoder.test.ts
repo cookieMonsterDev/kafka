@@ -108,10 +108,8 @@ describe('protocol/Decoder', () => {
       const buffer = new Encoder()
         .writeUVarInt(1) // one tagged field
         .writeUVarInt(5) // tag
-        .writeUVarIntBytes(
-          Buffer.from([1, 2, 3]),
-        ) // value
-      .buffer;
+        .writeUVarInt(3) // raw size (KIP-482), not compact N+1
+        .writeBuffer(Buffer.from([1, 2, 3])).buffer;
 
       const decoder = new Decoder(buffer);
       expect(decoder.readTaggedFields()).toEqual({});

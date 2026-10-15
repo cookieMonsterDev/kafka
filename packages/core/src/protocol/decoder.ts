@@ -298,10 +298,10 @@ export class Decoder {
       return null;
     }
 
-    // Reads tag, field length, and then that many bytes for the field value, skipping over the tag.
+    // Each field is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482); the size is raw, not compact N+1.
     for (let i = 0; i < numberOfTaggedFields; i++) {
       this.readUVarInt();
-      this.readUVarIntBytes();
+      this.forward(this.readUVarInt());
     }
 
     return {};

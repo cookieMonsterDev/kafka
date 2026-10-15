@@ -130,8 +130,7 @@ const fetchNodeEndpointsArraySchema = compactArray(fetchNodeEndpointSchema);
  * Reads a Fetch partition's trailing tagged fields (v12+): DivergingEpoch (tag 0, KIP-320),
  * CurrentLeader (tag 1, KIP-951), and SnapshotId (tag 2, KIP-595). Only CurrentLeader is
  * surfaced today; DivergingEpoch and SnapshotId stay skipped until truncation detection needs
- * them. Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
- * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ * them. Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */

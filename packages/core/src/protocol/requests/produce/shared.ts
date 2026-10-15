@@ -331,8 +331,7 @@ const produceNodeEndpointsArraySchema = compactArray(produceNodeEndpointSchema);
 
 /**
  * Reads a Produce partition's trailing tagged fields: CurrentLeader (tag 0, v10+, KIP-951).
- * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
- * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */

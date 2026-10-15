@@ -88,7 +88,10 @@ export function useMessageTail(url: string | null, options: UseMessageTailOption
       }
     };
     // `tail-error`, not `error` — `EventSource`'s own native `error` fires on every reconnect blip.
+    // The server ends the stream right after it, so close here or `EventSource` would reconnect
+    // into the same failure forever.
     const handleServerError = (event: MessageEvent<string>): void => {
+      source.close();
       try {
         const { message } = JSON.parse(event.data) as { message: string };
         setError(message);

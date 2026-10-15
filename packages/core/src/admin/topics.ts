@@ -4,7 +4,7 @@ import {
   KafkaDeleteTopicRecordsError,
   KafkaNonRetriableError,
 } from '../errors';
-import { staleMetadata } from '../protocol/error-codes';
+import { createErrorFromCode, staleMetadata } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { DEFAULT_RESPONSE_PARTITION_LIMIT } from '../protocol/requests/describe-topic-partitions/index';
 import { retrier } from '../retry/index';
@@ -23,6 +23,7 @@ import type {
 } from './types';
 
 const NO_CONTROLLER_ID = -1;
+const LEADER_NOT_AVAILABLE_CODE = 5;
 
 export interface TopicsApi {
   listTopics: () => Promise<string[]>;
@@ -439,16 +440,7 @@ export function createTopicsApi(
       throw new KafkaDeleteTopicRecordsError({ partitions: leaderNotFoundErrors });
     }
 
-    const seekEntriesByBroker = new Map<
-      string,
-      { topic: string; partitions: { partition: number; offset: bigint }[] }
-    >();
-    for (const [nodeId, nodePartitions] of Object.entries(partitionsByBroker)) {
-      seekEntriesByBroker.set(nodeId, {
-        topic,
-        partitions: parsedPartitions.filter((entry) => nodePartitions.includes(entry.partition)),
-      });
-    }
+    let pendingPartitions = parsedPartitions;
 
     await retrier(retry)(async () => {
       try {
@@ -458,13 +450,30 @@ export function createTopicsApi(
           error: { retriable?: boolean; name?: string; type?: string };
         }[] = [];
 
-        const requests = [...seekEntriesByBroker.entries()].map(
-          ([nodeId, { topic: topicName, partitions: nodePartitions }]) =>
-            (async () => {
-              const broker = await cluster.findBroker({ nodeId });
-              await broker.deleteRecords({ topics: [{ topic: topicName, partitions: nodePartitions }] });
-              seekEntriesByBroker.delete(nodeId);
-            })(),
+        const leadersByBroker = cluster.findLeaderForPartitions(
+          topic,
+          pendingPartitions.map(({ partition }) => partition),
+        );
+        const routedPartitions = Object.values(leadersByBroker).flat();
+        for (const { partition, offset } of pendingPartitions) {
+          if (!routedPartitions.includes(partition)) {
+            partitionErrors.push({ partition, offset, error: createErrorFromCode(LEADER_NOT_AVAILABLE_CODE) });
+          }
+        }
+
+        const requests = Object.entries(leadersByBroker).map(([nodeId, nodePartitionIds]) =>
+          (async () => {
+            const broker = await cluster.findBroker({ nodeId });
+            await broker.deleteRecords({
+              topics: [
+                {
+                  topic,
+                  partitions: pendingPartitions.filter(({ partition }) => nodePartitionIds.includes(partition)),
+                },
+              ],
+            });
+            pendingPartitions = pendingPartitions.filter(({ partition }) => !nodePartitionIds.includes(partition));
+          })(),
         );
 
         await Promise.all(

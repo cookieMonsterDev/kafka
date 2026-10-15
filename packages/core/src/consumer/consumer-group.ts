@@ -835,6 +835,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body): Promise<void> {
     if (response.memberId) this.memberId = response.memberId;
     this.generationId = response.memberEpoch;
+    // The epoch can advance without a new assignment (so no new OffsetManager); commits must carry
+    // the current epoch or the broker rejects them with STALE_MEMBER_EPOCH.
+    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = response.memberEpoch;
     this.heartbeatIntervalMs = response.heartbeatIntervalMs;
     this.leaderId = null;
     this.groupProtocol = 'consumer';

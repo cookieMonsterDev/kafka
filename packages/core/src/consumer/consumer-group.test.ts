@@ -1442,4 +1442,47 @@ describe('consumer/consumer-group', () => {
       );
     });
   });
+
+  describe('consumer protocol (KIP-848) offset tracking', () => {
+    const topicId = Buffer.from('0123456789abcdef');
+
+    function heartbeatResponse(memberEpoch: number, partitions?: number[]) {
+      return {
+        memberId: 'member',
+        memberEpoch,
+        heartbeatIntervalMs: 5_000,
+        assignment: partitions ? { topicPartitions: [{ topicId, partitions }] } : null,
+      };
+    }
+
+    async function joinedGroup(...laterResponses: ReturnType<typeof heartbeatResponse>[]) {
+      const consumerGroupHeartbeat = vi.fn();
+      for (const response of [heartbeatResponse(1, [0, 1]), heartbeatResponse(1), ...laterResponses]) {
+        consumerGroupHeartbeat.mockResolvedValueOnce(response);
+      }
+      const offsetCommit = vi.fn(async () => undefined);
+      const coordinator = { consumerGroupHeartbeat, offsetCommit, isConnected: () => true };
+      const consumerGroup = createGroup();
+      consumerGroup.useConsumerProtocol = true;
+      consumerGroup.cluster = {
+        findGroupCoordinator: vi.fn(async () => coordinator),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+        committedOffsets: vi.fn(() => ({})),
+        refreshMetadata: vi.fn(async () => undefined),
+      } as unknown as Cluster;
+      await consumerGroup.joinAndSync();
+      return { consumerGroup, offsetCommit };
+    }
+
+    it('commits with the member epoch bumped by a heartbeat that carried no assignment', async () => {
+      const { consumerGroup, offsetCommit } = await joinedGroup(heartbeatResponse(2));
+      consumerGroup.lastRequest = 0;
+      await consumerGroup.heartbeat({ interval: 0 });
+
+      consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 5n });
+      await consumerGroup.commitOffsets();
+
+      expect(offsetCommit).toHaveBeenCalledWith(expect.objectContaining({ groupGenerationId: 2 }));
+    });
+  });
 });

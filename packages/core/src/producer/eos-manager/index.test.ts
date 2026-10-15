@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../../cluster/index';
-import { KafkaNonRetriableError } from '../../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { createErrorFromCode } from '../../protocol/error-codes';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createEosManager } from './index';
@@ -365,6 +366,51 @@ describe('producer/eosManager', () => {
         transactionalId,
         transactionResult: false,
       });
+    });
+
+    it('retries EndTxn against a re-discovered coordinator on retriable errors', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(new KafkaProtocolError(createErrorFromCode(16))).mockResolvedValue(undefined);
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+        retry: { retries: 3, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      const lookupsBeforeCommit = cluster.findGroupCoordinator.mock.calls.length;
+      await eosManager.commit();
+
+      expect(broker.endTxn).toHaveBeenCalledTimes(2);
+      expect(cluster.findGroupCoordinator.mock.calls.length - lookupsBeforeCommit).toBe(2);
+      expect(eosManager.isInTransaction()).toBe(false);
+    });
+
+    it('lets commit be called again after EndTxn fails instead of sticking in COMMITTING', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue(undefined);
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      await expect(eosManager.commit()).rejects.toThrow('connection lost');
+      await expect(eosManager.abort()).rejects.toThrow('Cannot call "abort" in state "COMMITTING"');
+
+      await eosManager.commit();
+      expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: true }));
+      eosManager.beginTransaction();
     });
 
     it('does not send EndTxn when aborting/committing a transaction with no operations', async () => {

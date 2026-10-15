@@ -367,6 +367,28 @@ describe('producer', () => {
 
       await expect(producer.transaction()).resolves.toBeTruthy();
     });
+
+    it('lets a commit whose EndTxn failed be retried', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue(undefined),
+      };
+      const producer = createProducer({
+        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).rejects.toThrow('connection lost');
+      await expect(txn.commit()).resolves.toBeUndefined();
+
+      expect(coordinator.endTxn).toHaveBeenCalledTimes(2);
+      await expect(producer.transaction()).resolves.toBeTruthy();
+    });
   });
 
   describe('listTopics / partitionsFor', () => {

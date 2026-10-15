@@ -229,15 +229,20 @@ export function createProducer({
 
     function transactionGuard<Args extends unknown[], R>(
       fn: (...args: Args) => Promise<R>,
+      isUsable: () => boolean = isActive,
     ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
-        if (!isActive()) {
+        if (!isUsable()) {
           return Promise.reject(new KafkaNonRetriableError('Cannot continue to use transaction once ended'));
         }
 
         return fn(...args);
       };
     }
+
+    // Ending stays callable after the transaction left TRANSACTING (abort-only, or a failed
+    // EndTxn to resend); the EOS manager's state machine decides which end is still legal.
+    const isNotEnded = (): boolean => !transactionDidEnd;
 
     return {
       sendBatch: transactionGuard(sendBatchTxn),
@@ -246,12 +251,12 @@ export function createProducer({
         await flushTxn();
         await activeEosManager.abort();
         transactionDidEnd = true;
-      }),
+      }, isNotEnded),
       commit: transactionGuard(async () => {
         await flushTxn();
         await activeEosManager.commit();
         transactionDidEnd = true;
-      }),
+      }, isNotEnded),
       sendOffsets: transactionGuard(
         async ({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => {
           await activeEosManager.sendOffsets({ consumerGroupId, topics });

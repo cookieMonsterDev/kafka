@@ -313,7 +313,8 @@ export function createEosManager({
     nextState: typeof TRANSACTION_STATES.COMMITTING | typeof TRANSACTION_STATES.ABORTING,
   ): Promise<void> {
     transactionalGuard();
-    stateMachine.transitionTo(nextState);
+    // A previous attempt that failed leaves the machine in `nextState`, so the caller can resend EndTxn.
+    if (stateMachine.state() !== nextState) stateMachine.transitionTo(nextState);
 
     if (!isOngoing()) {
       logger.debug('No partitions or offsets registered, not sending EndTxn');
@@ -321,8 +322,21 @@ export function createEosManager({
       return;
     }
 
-    const broker = await findTransactionCoordinator();
-    await broker.endTxn({ producerId, producerEpoch, transactionalId: transactionalId!, transactionResult });
+    await retry(async (bail, retryCount, retryTime) => {
+      try {
+        // Looked up on every attempt so a moved coordinator (NOT_COORDINATOR, disconnect) is re-discovered.
+        const broker = await findTransactionCoordinator();
+        await broker.endTxn({ producerId, producerEpoch, transactionalId: transactionalId!, transactionResult });
+      } catch (e) {
+        const error = e as Error & { retriable?: boolean };
+        if (!error.retriable) {
+          bail(error);
+          return;
+        }
+        logger.debug('EndTxn failed, retrying', { error: error.message, transactionalId, retryCount, retryTime });
+        throw error;
+      }
+    });
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
@@ -499,8 +513,10 @@ export function createEosManager({
       beginTransaction: { legalStates: [TRANSACTION_STATES.READY], async: false },
       addPartitionsToTransaction: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
       sendOffsets: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
-      commit: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
-      abort: { legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.ABORTABLE] },
+      commit: { legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.COMMITTING] },
+      abort: {
+        legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.ABORTABLE, TRANSACTION_STATES.ABORTING],
+      },
     },
   );
 }

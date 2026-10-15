@@ -28,4 +28,4 @@ TLS and SASL are optional. See [Security](../../guides/security/) when the broke
 requires them. SASL/GSSAPI needs a KDC and either `sasl.gssProvider` or the
 optional `kerberos` package (`npm install kerberos`).
 
-Next: [Getting started](./getting-started/).
+Next: [Getting started](../getting-started/).

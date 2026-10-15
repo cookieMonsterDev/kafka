@@ -27,7 +27,7 @@ interface Producer {
 Source: [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 Types: [`producer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/types.ts).
 Guide: [Producer](../../guides/producer/). Config:
-[ProducerConfig](./configuration/#producerconfig).
+[ProducerConfig](../configuration/#producerconfig).
 Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 ## `send` / `sendBatch`
@@ -87,7 +87,7 @@ will describe). `partitionsFor(topic)` refreshes that topic’s metadata if stal
 ## `clientInstanceId`
 
 KIP-714 UUID assigned by the broker after connect when
-[`enableMetricsPush`](./configuration/#kafkaconfig) is on (the default) and the
+[`enableMetricsPush`](../configuration/#kafkaconfig) is on (the default) and the
 broker advertises GetTelemetrySubscriptions (Kafka 3.5+). `null` until that
 RPC completes, or when telemetry is off / unsupported.
 
@@ -99,4 +99,4 @@ const id = producer.clientInstanceId(); // Buffer | null
 For load, spread `throughputPreset().producer` into `kafka.producer()` (sticky
 partitioner and 32 MiB `bufferMemory`; linger/batch/in-flight are already
 constructor defaults). See
-[Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).
+[Throughput](../../guides/throughput/) and [Compatibility](../compatibility/).

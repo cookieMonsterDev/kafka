@@ -5,7 +5,7 @@ order: 5
 section: reference
 ---
 
-Defaults are product choices for this client; see [Compatibility](./compatibility/)
+Defaults are product choices for this client; see [Compatibility](../compatibility/)
 for the constructor-defaults table. Source:
 [`types/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/types/index.ts).
 
@@ -89,7 +89,7 @@ await kafka.consumer({ groupId }).run({
 | `producer` | sticky partitioner, `bufferMemory` 32 MiB (linger/batch/in-flight are constructor defaults) |
 | `consumer` | `partitionsConsumedConcurrently: 4` (a `run()` option)                                      |
 
-See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).
+See [Throughput](../../guides/throughput/) and [Compatibility](../compatibility/).
 
 ## `ConsumerConfig`
 
@@ -117,7 +117,7 @@ See [Throughput](../../guides/throughput/) and [Compatibility](./compatibility/)
 `committed`, `position`, and `currentLag` on `Consumer` read committed
 offsets, fetch position, and lag without any extra config. See
 [Consumer](../../guides/consumer/#committed-offsets-position-and-lag) and
-[`committed` / `position` / `currentLag`](./consumer/#committed--position--currentlag).
+[`committed` / `position` / `currentLag`](../consumer/#committed--position--currentlag).
 
 ## `ShareConsumerConfig`
 

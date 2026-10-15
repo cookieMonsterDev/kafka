@@ -159,4 +159,4 @@ authenticate with the token — see [Security](../../guides/security/).
 
 Also `connect`, `disconnect`, `logger()`, `on` / `events`, `Symbol.asyncDispose`.
 APIs this client does not implement are listed under
-[Compatibility](./compatibility/#not-implemented).
+[Compatibility](../compatibility/#not-implemented).

@@ -42,7 +42,7 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
 call omits them. `lingerMs` defaults to `5`, so consecutive `send()` calls can
 share a Produce request. Pass `lingerMs: 0` for one Produce per `send()`, or
-spread [`throughputPreset()`](./throughput/) for sticky partitioning and a
+spread [`throughputPreset()`](../throughput/) for sticky partitioning and a
 32 MiB send buffer. See
 [Breaking changes](../../migration/breaking-changes/). See
 [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).

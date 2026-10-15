@@ -46,13 +46,7 @@ export function readApiVersionsFeatureFields(decoder: Decoder): ApiVersionsFeatu
   const finalizedFeatures: FinalizedFeature[] = [];
   let zkMigrationReady: boolean | null = null;
 
-  const numberOfTaggedFields = decoder.readUVarInt();
-  for (let i = 0; i < numberOfTaggedFields; i++) {
-    const tag = decoder.readUVarInt();
-    const size = decoder.readUVarInt();
-    const fieldDecoder = decoder.slice(size);
-    decoder.forward(size);
-
+  decoder.forEachTaggedField((tag, fieldDecoder) => {
     switch (tag) {
       case 0:
         supportedFeatures.push(...supportedFeaturesSchema.read(fieldDecoder));
@@ -69,7 +63,7 @@ export function readApiVersionsFeatureFields(decoder: Decoder): ApiVersionsFeatu
       default:
         break;
     }
-  }
+  });
 
   return { supportedFeatures, finalizedFeaturesEpoch, finalizedFeatures, zkMigrationReady };
 }

@@ -117,6 +117,33 @@ describe('protocol/Decoder', () => {
     });
   });
 
+  describe('forEachTaggedField', () => {
+    it('visits each tag with a decoder scoped to its raw-sized value', () => {
+      const buffer = new Encoder()
+        .writeUVarInt(2)
+        .writeUVarInt(0)
+        .writeUVarInt(4)
+        .writeInt32(42)
+        .writeUVarInt(3)
+        .writeUVarInt(1)
+        .writeInt8(7)
+        .writeInt8(9).buffer;
+
+      const decoder = new Decoder(buffer);
+      const seen: [number, number][] = [];
+      const count = decoder.forEachTaggedField((tag, field) => {
+        seen.push([tag, tag === 0 ? field.readInt32() : field.readInt8()]);
+      });
+
+      expect(count).toBe(2);
+      expect(seen).toEqual([
+        [0, 42],
+        [3, 7],
+      ]);
+      expect(decoder.readInt8()).toBe(9);
+    });
+  });
+
   describe('canReadBytes / canReadInt16 / canReadInt32 / canReadInt64', () => {
     it('reports whether enough bytes remain', () => {
       const decoder = new Decoder(Buffer.alloc(4));

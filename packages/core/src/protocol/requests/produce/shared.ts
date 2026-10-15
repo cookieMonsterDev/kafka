@@ -337,18 +337,11 @@ const produceNodeEndpointsArraySchema = compactArray(produceNodeEndpointSchema);
  */
 export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
   let currentLeader: LeaderIdAndEpoch | null = null;
-  const numberOfTaggedFields = decoder.readUVarInt();
-
-  for (let i = 0; i < numberOfTaggedFields; i++) {
-    const tag = decoder.readUVarInt();
-    const size = decoder.readUVarInt();
-    const fieldDecoder = decoder.slice(size);
-    decoder.forward(size);
-
+  decoder.forEachTaggedField((tag, fieldDecoder) => {
     if (tag === 0) {
       currentLeader = { leaderId: fieldDecoder.readInt32(), leaderEpoch: fieldDecoder.readInt32() };
     }
-  }
+  });
 
   return currentLeader;
 }
@@ -362,18 +355,11 @@ export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndE
  */
 export function readProduceResponseNodeEndpoints(decoder: Decoder): ProduceNodeEndpoint[] {
   let nodeEndpoints: ProduceNodeEndpoint[] = [];
-  const numberOfTaggedFields = decoder.readUVarInt();
-
-  for (let i = 0; i < numberOfTaggedFields; i++) {
-    const tag = decoder.readUVarInt();
-    const size = decoder.readUVarInt();
-    const fieldDecoder = decoder.slice(size);
-    decoder.forward(size);
-
+  decoder.forEachTaggedField((tag, fieldDecoder) => {
     if (tag === 0) {
       nodeEndpoints = produceNodeEndpointsArraySchema.read(fieldDecoder);
     }
-  }
+  });
 
   return nodeEndpoints;
 }

@@ -69,5 +69,10 @@ export interface CommandSpec {
    * rather than typed by a person.
    */
   readonly hidden?: boolean;
+  /**
+   * The command watches `runtime.signal` and shuts itself down on SIGINT/SIGTERM. Without this,
+   * dispatch stops waiting for a command as soon as the signal fires, so Ctrl-C always exits.
+   */
+  readonly handlesSignal?: boolean;
   readonly run: (context: CommandContext) => Promise<number>;
 }

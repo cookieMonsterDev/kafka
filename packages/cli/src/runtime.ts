@@ -100,7 +100,7 @@ export function createRuntime(proc: RuntimeProcessLike): Runtime {
     exit(code: number): never {
       throw new RuntimeExitCalledError(code);
     },
-    openAdmin,
+    openAdmin: (options) => openAdmin({ signal: controller.signal, ...options }),
     loadConfig: (options) => resolveCliConfig({ cwd, env: proc.env, ...options }),
     signal: controller.signal,
   };

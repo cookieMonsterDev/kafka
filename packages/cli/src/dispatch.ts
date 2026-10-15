@@ -4,6 +4,7 @@ import { parseCommandArgs } from './args/parse';
 import { ALL_COMMANDS } from './commands/index';
 import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
+import { EXIT_CODES } from './errors/exit-codes';
 import { mapKafkaError } from './errors/map-kafka-error';
 import { shouldUseColor } from './output/colors';
 import { createCommandOutput, resolveOutputFormat, type OutputFormat } from './output/format';
@@ -43,6 +44,19 @@ function attemptedPath(argv: readonly string[]): string[] {
     tokens.push(token);
   }
   return tokens;
+}
+
+/**
+ * Settles with `run`, or with the interrupted code as soon as `signal` aborts — most core calls
+ * take no signal, so a command mid-request would otherwise outlive Ctrl-C until it finished.
+ */
+function abandonOnAbort(run: Promise<number>, signal: AbortSignal): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(EXIT_CODES.aborted);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+    run.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 /**
@@ -133,7 +147,8 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       }
 
       const parsed = parseCommandArgs(rest, command.flags ?? [], command.positionals ?? []);
-      return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output, config });
+      const run = command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output, config });
+      return await (command.handlesSignal === true ? run : abandonOnAbort(run, runtime.signal));
     } catch (error) {
       const mapped = mapKafkaError(error);
       output.cliError(mapped);

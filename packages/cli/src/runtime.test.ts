@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntime, RuntimeExitCalledError, type RuntimeProcessLike } from './runtime';
+import { EMPTY_RESOLVED_CLI_CONFIG } from './testing/create-command-context';
+
+const { openAdminMock } = vi.hoisted(() => ({ openAdminMock: vi.fn(async () => ({})) }));
+vi.mock('./admin/open', () => ({ openAdmin: openAdminMock }));
 
 function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): RuntimeProcessLike & {
   emit(event: 'SIGINT' | 'SIGTERM'): void;
@@ -83,5 +87,12 @@ describe('createRuntime', () => {
     proc.emit('SIGTERM');
     expect(runtime.signal.aborted).toBe(true);
     expect(runtime.signal.reason).toBe('SIGTERM');
+  });
+
+  it('passes its signal to openAdmin so an in-flight connect aborts on SIGINT/SIGTERM', async () => {
+    const runtime = createRuntime(createFakeProcess());
+    await runtime.openAdmin({ env: {}, config: EMPTY_RESOLVED_CLI_CONFIG });
+
+    expect(openAdminMock).toHaveBeenCalledWith(expect.objectContaining({ signal: runtime.signal }));
   });
 });

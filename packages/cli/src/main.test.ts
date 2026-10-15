@@ -52,4 +52,19 @@ describe('main', () => {
 
     await expect(main(runtime)).resolves.toBe(143);
   });
+
+  it('resolves to 130 on SIGINT while a command is still waiting on the broker', async () => {
+    const controller = new AbortController();
+    const runtime = createFakeRuntime({
+      argv: ['topic', 'list'],
+      signal: controller.signal,
+      openAdmin: vi.fn(() => new Promise<never>(() => {})),
+    });
+
+    const result = main(runtime);
+    await vi.waitFor(() => expect(runtime.openAdmin).toHaveBeenCalled());
+    controller.abort('SIGINT');
+
+    await expect(result).resolves.toBe(130);
+  });
 });

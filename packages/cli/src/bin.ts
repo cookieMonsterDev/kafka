@@ -11,4 +11,6 @@ if (unsupported !== undefined) {
 } else {
   const runtime = createRuntime(process);
   process.exitCode = await main(runtime);
+  // An interrupted command is abandoned mid-flight, and its open sockets would keep the process alive.
+  if (runtime.signal.aborted) process.exit();
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
-import { createErrorFromCode } from '../../protocol/error-codes';
+import { createErrorFromCode, ERROR_CODES } from '../../protocol/error-codes';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createEosManager } from './index';
@@ -411,6 +411,79 @@ describe('producer/eosManager', () => {
       await eosManager.commit();
       expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: true }));
       eosManager.beginTransaction();
+    });
+
+    function errorOfType(type: string): KafkaProtocolError {
+      return createErrorFromCode(ERROR_CODES.find((entry) => entry.type === type)!.code);
+    }
+
+    async function transactionWithPartition(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: fakeCluster(broker, { transactionV2 }) as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      return eosManager;
+    }
+
+    it.each(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH'])(
+      'becomes unusable after EndTxn fails with %s instead of sticking in COMMITTING',
+      async (type) => {
+        const broker = fakeBroker();
+        broker.endTxn.mockRejectedValue(errorOfType(type));
+        const eosManager = await transactionWithPartition(broker);
+
+        await expect(eosManager.commit()).rejects.toMatchObject({ type });
+
+        const fatal = 'in state "FATAL_ERROR"';
+        await expect(eosManager.commit()).rejects.toThrow(fatal);
+        await expect(eosManager.abort()).rejects.toThrow(fatal);
+        await expect(eosManager.initProducerId()).rejects.toThrow(fatal);
+        expect(() => eosManager.beginTransaction()).toThrow(fatal);
+        expect(broker.endTxn).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('becomes unusable when an abort is fenced', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValue(errorOfType('PRODUCER_FENCED'));
+      const eosManager = await transactionWithPartition(broker);
+
+      await expect(eosManager.abort()).rejects.toMatchObject({ type: 'PRODUCER_FENCED' });
+      await expect(eosManager.abort()).rejects.toThrow('in state "FATAL_ERROR"');
+    });
+
+    it('lets a commit rejected with INVALID_TXN_STATE be aborted', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(errorOfType('INVALID_TXN_STATE')).mockResolvedValue(undefined);
+      const eosManager = await transactionWithPartition(broker);
+
+      await expect(eosManager.commit()).rejects.toMatchObject({ type: 'INVALID_TXN_STATE' });
+      await expect(eosManager.commit()).rejects.toThrow('Cannot call "commit" in state "ABORTABLE"');
+      await eosManager.abort();
+
+      expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: false }));
+      expect(() => eosManager.beginTransaction()).not.toThrow();
+    });
+
+    it('reports a committed transaction V2 as committed when the epoch bump after it fails, bumping later', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = await transactionWithPartition(broker, { transactionV2: true });
+
+      await expect(eosManager.commit()).resolves.toBeUndefined();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+      expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+
+      await eosManager.bumpEpochIfRequested();
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
 
     it('does not send EndTxn when aborting/committing a transaction with no operations', async () => {

@@ -212,6 +212,7 @@ export function createProducer({
     if (!activeEosManager.isInitialized()) {
       await activeEosManager.initProducerId();
     }
+    await activeEosManager.bumpEpochIfRequested();
     activeEosManager.beginTransaction();
 
     const {

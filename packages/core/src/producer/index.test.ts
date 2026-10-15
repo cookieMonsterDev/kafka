@@ -389,6 +389,34 @@ describe('producer', () => {
       expect(coordinator.endTxn).toHaveBeenCalledTimes(2);
       await expect(producer.transaction()).resolves.toBeTruthy();
     });
+
+    it('bumps the epoch before the next transaction when the bump after a V2 commit failed', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockResolvedValue(undefined),
+      };
+      const initProducerIdResponse = { producerId: 1000n, producerEpoch: 1 };
+      coordinator.initProducerId
+        .mockResolvedValueOnce(initProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce({ ...initProducerIdResponse, producerEpoch: 2 });
+      const cluster = fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) });
+      cluster.brokerPool.versions[API_KEYS.Produce].maxVersion = 12;
+      const producer = createProducer({
+        cluster: cluster as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).resolves.toBeUndefined();
+
+      await producer.transaction();
+      expect(coordinator.initProducerId).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('listTopics / partitionsFor', () => {

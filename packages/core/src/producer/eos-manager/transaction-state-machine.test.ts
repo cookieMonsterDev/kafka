@@ -45,6 +45,20 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     expect(machine.state()).toBe(TRANSACTION_STATES.READY);
   });
 
+  it('lets a rejected commit go abort-only and a fenced end go fatal, with no way out of FATAL_ERROR', () => {
+    const machine = new TransactionStateMachine({
+      logger: silentLogger,
+      initialState: TRANSACTION_STATES.COMMITTING,
+    });
+    machine.transitionTo(TRANSACTION_STATES.ABORTABLE);
+    machine.transitionTo(TRANSACTION_STATES.ABORTING);
+    machine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
+
+    for (const state of Object.values(TRANSACTION_STATES)) {
+      expect(() => machine.transitionTo(state)).toThrow('Invalid transition FATAL_ERROR');
+    }
+  });
+
   it('emits a transition event with from/to on every successful transition', () => {
     const machine = new TransactionStateMachine({ logger: silentLogger });
     const listener = vi.fn();

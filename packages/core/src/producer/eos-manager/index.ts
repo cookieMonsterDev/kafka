@@ -2,7 +2,7 @@ import { supportsTransactionV2 } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
 import { INT_32_MAX_VALUE } from '../../constants';
-import { KafkaNonRetriableError } from '../../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { retrier, type RetryOptions } from '../../retry/index';
@@ -29,6 +29,9 @@ const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set([
   'GROUP_COORDINATOR_NOT_AVAILABLE',
   'NOT_COORDINATOR_FOR_GROUP',
 ]);
+
+/** EndTxn errors meaning a newer producer took over this transactionalId (Java treats them as fatal). */
+const FENCED_PROTOCOL_ERRORS = new Set(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH']);
 
 export interface EosManagerTopicPartitions {
   topic: string;
@@ -361,13 +364,35 @@ export function createEosManager({
         logger.debug('EndTxn failed, retrying', { error: error.message, transactionalId, retryCount, retryTime });
         throw error;
       }
+    }).catch((error: unknown) => {
+      // Anything but a broker rejection (exhausted retries, a lost connection) keeps `nextState` so
+      // the caller can resend EndTxn; a rejected commit can still be aborted.
+      if (error instanceof KafkaProtocolError && !error.retriable) {
+        if (FENCED_PROTOCOL_ERRORS.has(error.type ?? '')) {
+          logger.error('Producer was fenced by a newer instance; it cannot be used anymore', { transactionalId });
+          stateMachine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
+        } else if (transactionResult) {
+          stateMachine.transitionTo(TRANSACTION_STATES.ABORTABLE);
+        }
+      }
+      throw error;
     });
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
     // fencing recovery), so the next transaction starts from a fresh epoch.
     if (isTransactionV2Enabled() || epochBumpRequested) {
-      await initProducerId();
+      // The transaction has already ended, so a failed bump must not fail it; the next transaction
+      // retries the bump before it begins.
+      try {
+        await initProducerId();
+      } catch (error) {
+        logger.warn('Failed to bump the producer epoch after ending the transaction; retrying later', {
+          error: (error as Error).message,
+          transactionalId,
+        });
+        epochBumpRequested = true;
+      }
     }
   }
 

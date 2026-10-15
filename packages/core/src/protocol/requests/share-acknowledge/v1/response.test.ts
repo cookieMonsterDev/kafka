@@ -47,4 +47,29 @@ describe('protocol/requests/share-acknowledge/v1/response', () => {
     });
     await expect(shareAcknowledgeResponseV1.parse(data)).resolves.toEqual(data);
   });
+
+  it('returns per-partition acknowledgement errors instead of throwing', async () => {
+    const data = {
+      throttleTime: 0,
+      clientSideThrottleTime: 0,
+      errorCode: 0,
+      errorMessage: null,
+      responses: [
+        {
+          topicId,
+          partitions: [
+            {
+              partitionIndex: 0,
+              errorCode: 121, // INVALID_RECORD_STATE
+              errorMessage: null,
+              currentLeader: { leaderId: 1, leaderEpoch: 5 },
+            },
+          ],
+        },
+      ],
+      nodeEndpoints: [],
+    };
+
+    await expect(shareAcknowledgeResponseV1.parse(data)).resolves.toEqual(data);
+  });
 });

@@ -3,6 +3,7 @@ import type { EachMessageHandler } from '../consumer/types';
 import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
+import { createErrorFromCode, failure, staleMetadata } from '../protocol/error-codes';
 import {
   SHARE_ACQUIRE_MODE,
   SHARE_SESSION_CLOSE_EPOCH,
@@ -105,6 +106,8 @@ export class ShareRunner {
   /** What each node's share session last had, so unassigned partitions can be forgotten (KIP-227-style). */
   #shareSessionPartitionsByNode = new Map<string, Map<string, Set<number>>>();
   #pendingAcks: PendingAck[] = [];
+  /** Set when a partition reported stale leadership; the next fetch forces a metadata refresh. */
+  #metadataRefreshNeeded = false;
 
   constructor({
     logger,
@@ -264,7 +267,12 @@ export class ShareRunner {
   }
 
   async #doFetchFromNode(nodeId: string): Promise<ShareBatch[]> {
-    await this.#shareGroup.cluster.refreshMetadataIfNecessary();
+    if (this.#metadataRefreshNeeded) {
+      await this.#shareGroup.cluster.refreshMetadata();
+      this.#metadataRefreshNeeded = false;
+    } else {
+      await this.#shareGroup.cluster.refreshMetadataIfNecessary();
+    }
     const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
     if (topicPartitions.length === 0) return [];
 
@@ -345,9 +353,15 @@ export class ShareRunner {
       for (const { topicId, partitions } of response.responses) {
         const topic = await this.#resolveTopicName(topicId);
         for (const partitionData of partitions) {
+          const { partitionIndex: partition, errorCode, acknowledgeErrorCode } = partitionData;
+          if (failure(acknowledgeErrorCode)) this.#warnAcknowledgeFailure(topic, partition, acknowledgeErrorCode);
+          if (failure(errorCode)) {
+            this.#handlePartitionFetchError(topic, partition, errorCode);
+            continue;
+          }
           batches.push(
             new ShareBatch(topic, {
-              partition: partitionData.partitionIndex,
+              partition,
               messages: partitionData.records,
               acquiredRecords: partitionData.acquiredRecords,
             }),
@@ -367,6 +381,29 @@ export class ShareRunner {
       this.#shareSessionPartitionsByNode.delete(nodeId);
       throw error;
     }
+  }
+
+  /** Like Java's AcknowledgementCommitCallback: a failed acknowledgement is reported, not fatal. */
+  #warnAcknowledgeFailure(topic: string, partition: number, errorCode: number): void {
+    this.#logger.warn('Share acknowledgement failed', {
+      groupId: this.#shareGroup.groupId,
+      topic,
+      partition,
+      error: createErrorFromCode(errorCode).message,
+    });
+  }
+
+  /** A retriable error skips only this partition this round; anything else crashes the consumer. */
+  #handlePartitionFetchError(topic: string, partition: number, errorCode: number): void {
+    const error = createErrorFromCode(errorCode, { topic, partition });
+    if (!error.retriable) throw error;
+    if (staleMetadata(error)) this.#metadataRefreshNeeded = true;
+    this.#logger.warn('Share fetch failed for partition, retrying', {
+      groupId: this.#shareGroup.groupId,
+      topic,
+      partition,
+      error: error.message,
+    });
   }
 
   /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */
@@ -501,7 +538,7 @@ export class ShareRunner {
       try {
         const acksForNode = this.#acksForNode(nodeId);
         const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-        await broker.shareAcknowledge({
+        const response = await broker.shareAcknowledge({
           groupId: this.#shareGroup.groupId,
           memberId,
           shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,
@@ -516,6 +553,12 @@ export class ShareRunner {
             nodeId,
             topics: groupAcksByTopic(acksForNode),
           });
+        }
+        for (const { topicId, partitions } of response.responses) {
+          const topic = await this.#resolveTopicName(topicId);
+          for (const { partitionIndex, errorCode } of partitions) {
+            if (failure(errorCode)) this.#warnAcknowledgeFailure(topic, partitionIndex, errorCode);
+          }
         }
       } catch {
         // Closing is best-effort; leave() still runs after this.

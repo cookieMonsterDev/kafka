@@ -124,14 +124,10 @@ export const shareFetchResponseV1: ResponseDefinition<ShareFetchResponseV1Body> 
       nodeEndpoints,
     };
   },
+  // Partition errors and acknowledgement results are per partition; the caller handles them
+  // so one failed partition (or a late acknowledgement) does not discard the others' records.
   parse: async (data) => {
     if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
-    const failed = data.responses
-      .flatMap(({ partitions }) => partitions)
-      .find(({ errorCode, acknowledgeErrorCode }) => failure(errorCode) || failure(acknowledgeErrorCode));
-    if (failed) {
-      throw createErrorFromCode(failure(failed.errorCode) ? failed.errorCode : failed.acknowledgeErrorCode);
-    }
     return data;
   },
 };

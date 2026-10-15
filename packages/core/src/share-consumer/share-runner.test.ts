@@ -441,6 +441,145 @@ describe('share-consumer/share-runner', () => {
     }
   });
 
+  it('keeps healthy partitions and logs a failed acknowledgement when other partitions report errors', async () => {
+    const partitionResponse = (overrides: Record<string, unknown>) => ({
+      partitionIndex: 1,
+      errorCode: 0,
+      acknowledgeErrorCode: 0,
+      currentLeader: { leaderId: -1, leaderEpoch: -1 },
+      records: [],
+      acquiredRecords: [],
+      ...overrides,
+    });
+    const record = { offset: 10n, key: null, value: Buffer.from('v'), headers: {}, batchContext: BATCH_CONTEXT };
+    const shareFetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        errorCode: 0,
+        responses: [
+          {
+            topicId: TOPIC_ID,
+            partitions: [
+              partitionResponse({ partitionIndex: 0, errorCode: 6, acknowledgeErrorCode: 121 }), // NOT_LEADER_OR_FOLLOWER, INVALID_RECORD_STATE
+              partitionResponse({
+                acknowledgeErrorCode: 121,
+                records: [record],
+                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
+              }),
+            ],
+          },
+        ],
+      })
+      .mockImplementation(
+        () => new Promise((resolve) => setTimeout(() => resolve({ errorCode: 0, responses: [] }), 10)),
+      );
+    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadata,
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
+      },
+      filterPartitionsByNode: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
+      assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
+    });
+    const warnings: { message: string; extra: Record<string, unknown> }[] = [];
+    const logger = createLogger({
+      level: LOG_LEVELS.WARN,
+      logCreator:
+        () =>
+        ({ log: { message, ...extra } }) =>
+          warnings.push({ message, extra }),
+    });
+    const onCrash = vi.fn();
+    const handled: { partition: number; offset: bigint }[] = [];
+    const runner = new ShareRunner({
+      logger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 0 },
+      eachMessage: async ({ partition, message }) => {
+        handled.push({ partition, offset: message.offset });
+      },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(handled).toEqual([{ partition: 1, offset: 10n }]));
+      await vi.waitFor(() => expect(refreshMetadata).toHaveBeenCalled());
+      expect(onCrash).not.toHaveBeenCalled();
+      expect(warnings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            extra: expect.objectContaining({
+              topic: 'events',
+              partition: 1,
+              error: expect.stringMatching(/record state/),
+            }),
+          }),
+          expect.objectContaining({
+            extra: expect.objectContaining({ topic: 'events', partition: 0, error: expect.stringMatching(/leader/i) }),
+          }),
+        ]),
+      );
+    } finally {
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
+  it('crashes on a non-retriable partition fetch error', async () => {
+    const shareFetch = vi.fn().mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return {
+        errorCode: 0,
+        responses: [
+          {
+            topicId: TOPIC_ID,
+            partitions: [
+              {
+                partitionIndex: 0,
+                errorCode: 29, // TOPIC_AUTHORIZATION_FAILED
+                acknowledgeErrorCode: 0,
+                currentLeader: { leaderId: -1, leaderEpoch: -1 },
+                records: [],
+                acquiredRecords: [],
+              },
+            ],
+          },
+        ],
+      };
+    });
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
+      },
+    });
+    const onCrash = vi.fn();
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() =>
+        expect(onCrash).toHaveBeenCalledWith(expect.objectContaining({ type: 'TOPIC_AUTHORIZATION_FAILED' })),
+      );
+    } finally {
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
   it('emits FETCH_START and FETCH around each fetch round', async () => {
     const { shareGroup } = createShareGroup();
     const instrumentationEmitter = new InstrumentationEventEmitter();

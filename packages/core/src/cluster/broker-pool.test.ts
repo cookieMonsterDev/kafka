@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Broker } from '../broker/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
-import { KafkaConnectionError } from '../errors';
+import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import type { ConnectionPool } from '../network/connection-pool';
 import { BrokerPool, clusterMetadataFromDescribeCluster } from './broker-pool';
 import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder';
@@ -72,6 +72,50 @@ describe('cluster/BrokerPool', () => {
 
     await brokerPool.connect();
     expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('connect also rotates the seed broker on KafkaConnectionError subclasses', async () => {
+    let attempt = 0;
+    const build = vi.fn(async () => {
+      attempt += 1;
+      const isFirstAttempt = attempt === 1;
+      return fakeConnectionPool({
+        getConnection: vi.fn().mockImplementation(() => {
+          if (isFirstAttempt) throw new KafkaConnectionClosedError('closed', { host: 'broker-1', port: 9092 });
+          return Promise.resolve({
+            getSupportAuthenticationProtocol: vi.fn().mockReturnValue(true),
+            authenticate: vi.fn().mockResolvedValue(undefined),
+          });
+        }),
+      });
+    });
+
+    const brokerPool = new BrokerPool({
+      connectionPoolBuilder: fakeBuilder(build),
+      logger: silentLogger,
+      retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+    });
+
+    await brokerPool.connect();
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it('findBroker bails without retrying on a KafkaConnectionError subclass', async () => {
+    const getConnection = vi
+      .fn()
+      .mockRejectedValue(new KafkaConnectionClosedError('closed', { host: 'broker-1', port: 9092 }));
+    const destroy = vi.fn().mockResolvedValue(undefined);
+    const brokerPool = new BrokerPool({
+      connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool({ getConnection, destroy })),
+      logger: silentLogger,
+      retry: { retries: 3, initialRetryTime: 1, maxRetryTime: 5 },
+    });
+    await brokerPool.createSeedBroker();
+    brokerPool.brokers = { '1': brokerPool.seedBroker! };
+
+    await expect(brokerPool.findBroker({ nodeId: '1' })).rejects.toBeInstanceOf(KafkaConnectionClosedError);
+    expect(getConnection).toHaveBeenCalledOnce();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it('disconnect tears down the seed broker and every known broker, clearing state', async () => {

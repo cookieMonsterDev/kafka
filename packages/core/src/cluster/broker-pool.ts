@@ -1,6 +1,6 @@
 import { Broker } from '../broker/index';
 import { supportsDescribeClusterControllers } from '../broker/capabilities';
-import { KafkaBrokerNotFound, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
+import { KafkaBrokerNotFound, KafkaConnectionError, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
 import { staleMetadata } from '../protocol/error-codes';
@@ -157,7 +157,7 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        if (e instanceof KafkaConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
           // The connection pool builder always rotates the seed broker.
           await this.createSeedBroker();
           this.logger.error(`Failed to connect to seed broker, trying another broker from the list: ${error.message}`, {
@@ -256,7 +256,7 @@ export class BrokerPool {
 
         if (
           this.metadataRecovery === 'rebootstrap' &&
-          (error.type === 'REBOOTSTRAP_REQUIRED' || error.name === 'KafkaConnectionError')
+          (error.type === 'REBOOTSTRAP_REQUIRED' || e instanceof KafkaConnectionError)
         ) {
           this.logger.warn('Rediscovering the cluster from the bootstrap broker list', {
             reason: error.type ?? error.name,
@@ -438,13 +438,14 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        const isConnectionError = e instanceof KafkaConnectionError;
+        if (isConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
           await broker.disconnect();
         }
 
         // To avoid reconnecting to an unavailable host, bail on connection errors and refresh
         // metadata on a higher level before reconnecting.
-        if (error.name === 'KafkaConnectionError') {
+        if (isConnectionError) {
           bail(error);
           return;
         }

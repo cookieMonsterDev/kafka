@@ -5,6 +5,7 @@ import type { Rendered } from '../output/format';
 import type { CliLogger } from '../output/logger';
 import type { Runtime } from '../runtime';
 
+/** `number` accepts only a decimal safe integer — every numeric flag is a count, id, port, or ms. */
 export type FlagType = 'string' | 'boolean' | 'number' | 'enum';
 
 export interface FlagSpec {

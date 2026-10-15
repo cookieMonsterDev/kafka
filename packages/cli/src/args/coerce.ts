@@ -14,6 +14,15 @@ export function coerceNumber(raw: string, flagName: string): number {
   return value;
 }
 
+/** A plain decimal safe integer — no fraction, exponent, hex, or `Infinity` that `Number()` would accept. */
+export function coerceInteger(raw: string, flagName: string): number {
+  const value = Number(raw);
+  if (!/^\s*[+-]?\d+\s*$/.test(raw) || !Number.isSafeInteger(value)) {
+    throw new CliUsageError(`--${flagName} expects an integer, got "${raw}"`);
+  }
+  return value;
+}
+
 export function coerceBigInt(raw: string, flagName: string): bigint {
   try {
     return BigInt(raw);

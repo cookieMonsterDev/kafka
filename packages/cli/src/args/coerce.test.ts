@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CliUsageError, coerceEnum, coerceKeyValueRecord, coerceNumber, splitKeyValue } from './coerce';
+import { CliUsageError, coerceEnum, coerceInteger, coerceKeyValueRecord, coerceNumber, splitKeyValue } from './coerce';
 
 describe('coerceNumber', () => {
   it('parses an integer', () => {
@@ -19,6 +19,17 @@ describe('coerceNumber', () => {
   it('throws on a blank string rather than coercing to 0', () => {
     expect(() => coerceNumber('', 'timeout')).toThrow(CliUsageError);
     expect(() => coerceNumber('   ', 'timeout')).toThrow(CliUsageError);
+  });
+});
+
+describe('coerceInteger', () => {
+  it('parses a decimal integer, including a signed one', () => {
+    expect(coerceInteger('42', 'partitions')).toBe(42);
+    expect(coerceInteger('-1', 'producer-epoch')).toBe(-1);
+  });
+
+  it.each(['1.5', '0x10', '1e3', 'Infinity', '9007199254740993', '', ' '])('rejects "%s"', (raw) => {
+    expect(() => coerceInteger(raw, 'partitions')).toThrow(/--partitions expects an integer/);
   });
 });
 

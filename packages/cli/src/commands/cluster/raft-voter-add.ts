@@ -1,6 +1,6 @@
 import { decodeUuid } from '../../admin/decode-args';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError, coerceNumber } from '../../args/coerce';
+import { CliUsageError, coerceInteger } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { stringifyJsonSafe } from '../../output/json';
@@ -24,8 +24,8 @@ function parseListenerFlag(raw: string): RaftVoterListener {
     throw new CliUsageError(`--listener must be "name=host:port", got "${raw}"`);
   }
   const host = hostPort.slice(0, separatorIndex);
-  const port = coerceNumber(hostPort.slice(separatorIndex + 1), 'listener');
-  if (!Number.isInteger(port) || port < 0 || port > 65_535) {
+  const port = coerceInteger(hostPort.slice(separatorIndex + 1), 'listener');
+  if (port < 0 || port > 65_535) {
     throw new CliUsageError(`--listener port must be between 0 and 65535, got "${raw}"`);
   }
   return { name, host, port };

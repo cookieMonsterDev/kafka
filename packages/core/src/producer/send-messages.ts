@@ -57,6 +57,27 @@ function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: 
   return { records, bytes };
 }
 
+/** Errors the broker returns although the records may already be on the leader's log. */
+const WRITE_UNKNOWN_ERROR_TYPES = new Set([
+  'REQUEST_TIMED_OUT',
+  'NOT_ENOUGH_REPLICAS_AFTER_APPEND',
+  'OUT_OF_ORDER_SEQUENCE_NUMBER',
+]);
+
+/**
+ * Whether the broker definitely did not append this partition's records: only a partition-level
+ * error names it. Anything else (a timeout, a dropped connection, a sibling's error failing the
+ * whole response) leaves the outcome unknown.
+ */
+function wasRejected(error: unknown, topic: string, partition: number): boolean {
+  return (
+    error instanceof KafkaProtocolError &&
+    error.topic === topic &&
+    error.partition === partition &&
+    !WRITE_UNKNOWN_ERROR_TYPES.has(error.type ?? '')
+  );
+}
+
 export function createSendMessages({
   logger,
   cluster,
@@ -84,6 +105,8 @@ export function createSendMessages({
      * other send may be handed it. Only valid for the producer id/epoch they were assigned under.
      */
     const firstSequences = new Map<string, number>();
+    /** Partitions whose failed request may still have been written, so their sequences are spent. */
+    const writeUnknownPartitions = new Set<string>();
     let sequenceGeneration: string | undefined;
     let gatedPartitions: EosManagerPartition[] | undefined;
 
@@ -95,6 +118,7 @@ export function createSendMessages({
       const generation = producerGeneration();
       if (generation !== sequenceGeneration) {
         firstSequences.clear();
+        writeUnknownPartitions.clear();
         sequenceGeneration = generation;
       }
 
@@ -108,9 +132,17 @@ export function createSendMessages({
       return firstSequence;
     }
 
-    /** Hand back the ranges of partitions that never got acked; safe because their gates are still held. */
-    function rollbackUnackedSequences(): void {
+    /**
+     * Hand back the ranges of partitions that never got acked; safe because their gates are still
+     * held. A range that may be on the log can't be handed back (the next send's records would be
+     * deduplicated away) nor skipped (OUT_OF_ORDER_SEQUENCE), so that needs a new epoch instead.
+     */
+    function releaseUnackedSequences(): void {
       if (producerGeneration() !== sequenceGeneration) return;
+      if ([...writeUnknownPartitions].some((key) => !ackedPartitions.has(key))) {
+        eosManager.requestEpochBump();
+        return;
+      }
       for (const [topic, messagesPerPartition] of assignment) {
         for (const [partition, messages] of messagesPerPartition) {
           const key = partitionKey(topic, partition);
@@ -185,6 +217,7 @@ export function createSendMessages({
       await cluster.refreshMetadataIfNecessary();
       assignMessages();
       await acquireGatesOnce();
+      await eosManager.bumpEpochIfRequested();
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 
@@ -237,16 +270,25 @@ export function createSendMessages({
         }
 
         const producedAt = Date.now();
-        const response = await broker.produce({
-          transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
-          producerId: eosManager.getProducerId(),
-          producerEpoch: eosManager.getProducerEpoch(),
-          acks,
-          timeout,
-          compression,
-          compressionLevel,
-          topicData,
-        });
+        const response = await broker
+          .produce({
+            transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
+            producerId: eosManager.getProducerId(),
+            producerEpoch: eosManager.getProducerEpoch(),
+            acks,
+            timeout,
+            compression,
+            compressionLevel,
+            topicData,
+          })
+          .catch((error: unknown) => {
+            for (const { topic, partitions } of topicData) {
+              for (const { partition } of partitions) {
+                if (!wasRejected(error, topic, partition)) writeUnknownPartitions.add(partitionKey(topic, partition));
+              }
+            }
+            throw error;
+          });
 
         const expectsResponse = acks !== 0;
         // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
@@ -371,7 +413,7 @@ export function createSendMessages({
 
     return retrier(attempt, { signal })
       .catch((error: unknown) => {
-        rollbackUnackedSequences();
+        releaseUnackedSequences();
         // Some partitions may already be written inside the transaction (and KIP-890's
         // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
         // client's abortable error state; a later `commit()` must not keep a partial send.

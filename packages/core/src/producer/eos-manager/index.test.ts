@@ -712,4 +712,71 @@ describe('producer/eosManager', () => {
       vi.useRealTimers();
     }
   });
+
+  describe('epoch bump requests', () => {
+    it('bumps the epoch once on the next send after a request, then not again', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      await eosManager.initProducerId();
+      eosManager.updateSequence(topic, 0, 5);
+
+      await eosManager.bumpEpochIfRequested();
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      eosManager.requestEpochBump();
+      await Promise.all([eosManager.bumpEpochIfRequested(), eosManager.bumpEpochIfRequested()]);
+      await eosManager.bumpEpochIfRequested();
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(eosManager.getSequence(topic, 0)).toBe(0);
+    });
+
+    it('keeps the request when the bump fails so the next send tries again', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      await eosManager.initProducerId();
+
+      eosManager.requestEpochBump();
+      await expect(eosManager.bumpEpochIfRequested()).rejects.toThrow('coordinator down');
+      await eosManager.bumpEpochIfRequested();
+
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('defers a transactional bump until the transaction is aborted', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: fakeCluster(broker) as unknown as Cluster,
+        transactional: true,
+        transactionalId: 'transactional-id',
+      });
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic, partitions: [{ partition: 0 }] }]);
+
+      eosManager.requestEpochBump();
+      eosManager.markTransactionAbortable();
+      await eosManager.bumpEpochIfRequested();
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      await eosManager.abort();
+      expect(broker.endTxn).toHaveBeenCalledWith(
+        expect.objectContaining({ producerEpoch: mockInitProducerIdResponse.producerEpoch, transactionResult: false }),
+      );
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+  });
 });

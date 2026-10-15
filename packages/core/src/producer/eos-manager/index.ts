@@ -42,6 +42,13 @@ export interface EosManager {
   initProducerId: () => Promise<void>;
   getSequence: (topic: string, partition: number) => number;
   updateSequence: (topic: string, partition: number, increment: number) => void;
+  /**
+   * KIP-360: a failed send may have been written, so its sequences can neither be reused nor
+   * skipped. Start a new epoch (fresh sequences) before producing again. No-op until initialized.
+   */
+  requestEpochBump: () => void;
+  /** Runs a requested epoch bump; deferred while a transaction is open (its end bumps instead). */
+  bumpEpochIfRequested: () => Promise<void>;
   beginTransaction: () => void;
   addPartitionsToTransaction: (topicData: readonly EosManagerTopicPartitions[]) => Promise<void>;
   /** KIP-890: mark the current transaction abort-only after a `TRANSACTION_ABORTABLE` produce error. No-op outside an active transaction. */
@@ -116,6 +123,9 @@ export function createEosManager({
 
   /** Whether consumer-group offsets have been added to the current transaction. */
   let hasOffsetsAddedToTransaction = false;
+
+  let epochBumpRequested = false;
+  let epochBump: Promise<void> | undefined;
 
   const stateMachine = new TransactionStateMachine({ logger });
   stateMachine.on('transition', ({ to }: TransitionEvent) => {
@@ -194,6 +204,7 @@ export function createEosManager({
           producerId = result.producerId;
           producerEpoch = result.producerEpoch;
           producerSequence.clear();
+          epochBumpRequested = false;
           // Partition gates are left in place (not cleared): a gate is just a per-partition mutex,
           // and dropping it here would let a currently in-flight Produce - still holding the old
           // Lock object - get silently replaced by a fresh, already-unlocked one on its next
@@ -256,6 +267,18 @@ export function createEosManager({
     }
 
     producerSequence.get(topic)!.set(partition, sequence);
+  }
+
+  function requestEpochBump(): void {
+    if (isInitialized()) epochBumpRequested = true;
+  }
+
+  async function bumpEpochIfRequested(): Promise<void> {
+    if (!epochBumpRequested || stateMachine.state() !== TRANSACTION_STATES.READY) return;
+    epochBump ??= initProducerId().finally(() => {
+      epochBump = undefined;
+    });
+    await epochBump;
   }
 
   function beginTransaction(): void {
@@ -343,7 +366,7 @@ export function createEosManager({
 
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
     // fencing recovery), so the next transaction starts from a fresh epoch.
-    if (isTransactionV2Enabled()) {
+    if (isTransactionV2Enabled() || epochBumpRequested) {
       await initProducerId();
     }
   }
@@ -501,6 +524,8 @@ export function createEosManager({
       initProducerId,
       getSequence,
       updateSequence,
+      requestEpochBump,
+      bumpEpochIfRequested,
       beginTransaction,
       addPartitionsToTransaction,
       markTransactionAbortable,

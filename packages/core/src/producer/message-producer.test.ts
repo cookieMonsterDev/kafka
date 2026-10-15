@@ -57,6 +57,8 @@ function fakeEosManager() {
     updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
+    requestEpochBump: vi.fn(),
+    bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
     acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
     releasePartitionGates: vi.fn().mockResolvedValue(undefined),
   } as unknown as EosManager;

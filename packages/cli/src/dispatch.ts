@@ -4,6 +4,8 @@ import { parseCommandArgs } from './args/parse';
 import { ALL_COMMANDS } from './commands/index';
 import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
+import { EMPTY_RESOLVED_CLI_CONFIG, type ResolvedCliConfig } from './config/resolve';
+import { CliConfigError } from './errors/cli-config-error';
 import { EXIT_CODES } from './errors/exit-codes';
 import { mapKafkaError } from './errors/map-kafka-error';
 import { shouldUseColor } from './output/colors';
@@ -44,6 +46,20 @@ function attemptedPath(argv: readonly string[]): string[] {
     tokens.push(token);
   }
   return tokens;
+}
+
+/** Applies a command's {@link CommandSpec.config} mode to this invocation's config load. */
+async function loadConfigFor(
+  mode: NonNullable<CommandSpec['config']>,
+  load: () => Promise<ResolvedCliConfig>,
+): Promise<ResolvedCliConfig> {
+  if (mode === 'skip') return EMPTY_RESOLVED_CLI_CONFIG;
+  try {
+    return await load();
+  } catch (error) {
+    if (mode !== 'tolerate' || !(error instanceof CliConfigError)) throw error;
+    return { ...EMPTY_RESOLVED_CLI_CONFIG, loadError: error.message };
+  }
 }
 
 /**
@@ -122,16 +138,18 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       // command sees the same config for this invocation, and a command that never connects
       // (`profiles`, `admin methods`) still gets to read `cli:` section defaults. `--help`/
       // `--version` (both handled above) never reach this, so they never pay for it.
-      const config = await runtime.loadConfig({
-        configFlag: global.configFlag,
-        profileFlag: global.profileFlag,
-        onDiagnostic: (diagnostic) => {
-          const message = `[kafka] ${diagnostic.message}`;
-          if (diagnostic.level === 'warn') output.log.warn(message);
-          else output.log.info(message);
-        },
-        onWarn: (message) => output.log.warn(`[kafka] ${message}`),
-      });
+      const config = await loadConfigFor(command.config ?? 'load', () =>
+        runtime.loadConfig({
+          configFlag: global.configFlag,
+          profileFlag: global.profileFlag,
+          onDiagnostic: (diagnostic) => {
+            const message = `[kafka] ${diagnostic.message}`;
+            if (diagnostic.level === 'warn') output.log.warn(message);
+            else output.log.info(message);
+          },
+          onWarn: (message) => output.log.warn(`[kafka] ${message}`),
+        }),
+      );
 
       // `cli.output` is the lowest-precedence output-format source — only applied when nothing
       // above it (`--json`, `--format`, `KAFKA_OUTPUT`) already chose one, and rebuilt after

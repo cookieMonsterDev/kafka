@@ -506,6 +506,10 @@ kafka profiles          # lists every configured profile, marking the active one
 kafka doctor            # reports the config file path, active profile, and where every value came from
 ```
 
+`doctor` still runs when the config file fails to load (or `--profile` is unknown), reporting the
+error on a `config error` line; `init`, `completion`, and shell completion never read the config
+file, so they keep working while it is broken.
+
 The `cli:` section also accepts `output` (`"human"`/`"json"`, the lowest-precedence source for
 `--json`/`--format`/`KAFKA_OUTPUT`), `timeoutMs` (a last-resort default for the connection and
 request timeouts), and `topicDefaults` (`partitions`/`replicationFactor` applied to `topic create`

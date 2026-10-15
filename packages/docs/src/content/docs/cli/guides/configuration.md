@@ -68,6 +68,10 @@ kafka doctor
 kafka doctor --profile staging
 ```
 
+A config file that fails to load, or an unknown `--profile`, doesn't stop `doctor`: it reports the
+error on a `config error` line instead. `init`, `completion`, and shell completion never read the
+config file at all, so they keep working while it is broken.
+
 Reach for it first whenever a command connects to the wrong cluster, or fails to connect at all.
 
 Next: [Output and scripting with JSON](../output-and-scripting/).

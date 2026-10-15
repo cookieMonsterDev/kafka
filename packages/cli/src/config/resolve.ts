@@ -46,7 +46,18 @@ export interface ResolvedCliConfig {
    * naming the fix. Kept so `doctor`'s output shape doesn't change.
    */
   readonly transformFallbackUsed: boolean;
+  /** Why the config couldn't be loaded — only set for a command that tolerates a broken config (`doctor`). */
+  readonly loadError?: string;
 }
+
+/** No config file — what a command that never reads one (or couldn't load one) sees. */
+export const EMPTY_RESOLVED_CLI_CONFIG: ResolvedCliConfig = Object.freeze({
+  path: null,
+  fileConfig: null,
+  cli: {},
+  profile: null,
+  transformFallbackUsed: false,
+});
 
 function hasName<T extends { name: string }>(error: unknown, name: T['name']): error is T {
   return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === name;

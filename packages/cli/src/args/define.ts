@@ -74,5 +74,11 @@ export interface CommandSpec {
    * dispatch stops waiting for a command as soon as the signal fires, so Ctrl-C always exits.
    */
   readonly handlesSignal?: boolean;
+  /**
+   * How dispatch resolves the config file before `run`. `'load'` (default) fails the command on a
+   * broken config; `'skip'` never reads one (completion, `init`), so it keeps working while the
+   * config is broken; `'tolerate'` runs with an empty config whose `loadError` says why (`doctor`).
+   */
+  readonly config?: 'load' | 'skip' | 'tolerate';
   readonly run: (context: CommandContext) => Promise<number>;
 }

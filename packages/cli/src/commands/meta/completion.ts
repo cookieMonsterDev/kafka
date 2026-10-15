@@ -8,6 +8,7 @@ const PROGRAM_NAME = 'kafka';
 export const completionCommand: CommandSpec = {
   path: ['completion'],
   summary: 'Print a shell completion script for bash, zsh, or fish',
+  config: 'skip',
   positionals: [{ name: 'shell', brief: `the shell to generate a script for (${COMPLETION_SHELLS.join('|')})` }],
   examples: ['completion bash', 'completion zsh', 'completion fish'],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.usage],

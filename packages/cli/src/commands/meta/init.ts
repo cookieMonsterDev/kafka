@@ -40,6 +40,7 @@ function detectTypeScript(cwd: string): boolean {
 export const initCommand: CommandSpec = {
   path: ['init'],
   summary: 'Scaffold a kafka.config file in the current directory',
+  config: 'skip',
   flags: [
     { name: 'ts', type: 'boolean', brief: 'scaffold kafka.config.ts (default when TypeScript is detected)' },
     { name: 'js', type: 'boolean', brief: 'scaffold kafka.config.mjs instead' },

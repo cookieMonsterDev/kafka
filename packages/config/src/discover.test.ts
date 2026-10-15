@@ -197,8 +197,19 @@ describe('discoverConfigFile — dynamic trees', () => {
       writeFileSync(join(shared, 'kafka.config.mjs'), 'export default { client: { brokers: ["planted:9092"] } };\n');
 
       expect(discoverConfigFile({ cwd: nested })).toBeNull();
-      // The start directory itself is always searched — it is where the user chose to run.
-      expect(discoverConfigFile({ cwd: shared })).toBe(join(shared, 'kafka.config.mjs'));
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'never searches a world-writable start directory, so `cd /tmp && kafka …` cannot run a planted config',
+    () => {
+      const shared = join(makeTempDir(), 'shared');
+      mkdirSync(shared);
+      chmodSync(shared, 0o777);
+      writeFileSync(join(shared, 'kafka.config.mjs'), 'export default { client: { brokers: ["planted:9092"] } };\n');
+
+      expect(discoverConfigFile({ cwd: shared })).toBeNull();
+      expect(discoverConfigFile({ cwd: shared, searchParents: false })).toBeNull();
     },
   );
 

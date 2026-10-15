@@ -39,12 +39,12 @@ function isSearchBoundary(dir: string): boolean {
 }
 
 /**
- * Whether the upward search may step into `dir`. A discovered config is executed, so never one
- * another user could have planted: a world-writable directory (e.g. `/tmp`), or one owned by
- * someone other than the current user or root. Ownership isn't exposed on Windows, so the check
- * is skipped there.
+ * Whether discovery may search `dir` (the start directory included). A discovered config is
+ * executed, so never one another user could have planted: a world-writable directory (e.g.
+ * `/tmp`), or one owned by someone other than the current user or root. Ownership isn't exposed
+ * on Windows, so the check is skipped there.
  */
-function isTrustedAncestor(dir: string): boolean {
+function isTrustedDirectory(dir: string): boolean {
   const uid = process.getuid?.();
   if (uid === undefined) return true;
   try {
@@ -97,7 +97,7 @@ export interface DiscoverConfigFileOptions {
    * `<name>.config.ts` instead.
    */
   name?: string;
-  /** Walk upward toward the filesystem root, stopping at a workspace boundary or an untrusted parent. Default `true`. */
+  /** Walk upward toward the filesystem root, stopping at a workspace boundary or an untrusted directory. Default `true`. */
   searchParents?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
 }
@@ -109,8 +109,8 @@ export interface DiscoverConfigFileOptions {
  * containing any candidate wins
  * entirely — configs at multiple levels are never merged. Search stops (inclusive of the boundary
  * directory itself) at the first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` it
- * finds, before stepping into an untrusted parent (see `isTrustedAncestor`), or immediately when
- * `searchParents` is `false`.
+ * finds, at the first untrusted directory — `cwd` included — without searching it (see
+ * `isTrustedDirectory`), or immediately when `searchParents` is `false`.
  */
 export function discoverConfigFile({
   cwd,
@@ -121,13 +121,15 @@ export function discoverConfigFile({
   let dir = resolve(cwd);
 
   for (;;) {
+    if (!isTrustedDirectory(dir)) return null;
+
     const found = resolveInDirectory(dir, name, onDiagnostic);
     if (found != null) return found;
 
     if (!searchParents || isSearchBoundary(dir)) return null;
 
     const parent = dirname(dir);
-    if (parent === dir || !isTrustedAncestor(parent)) return null;
+    if (parent === dir) return null;
     dir = parent;
   }
 }

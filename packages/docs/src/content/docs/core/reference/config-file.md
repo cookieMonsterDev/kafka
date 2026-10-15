@@ -45,8 +45,10 @@ blamed on the config file.
   `.cjs` → `.json`, then the same ladder under `.config/kafka.*`.
 - Search starts at the current directory and walks upward, stopping at the first directory
   containing `.git`, `pnpm-workspace.yaml`, or a `package.json` with a `workspaces` field. It
-  never steps up into a world-writable directory (such as `/tmp`) or one owned by another user,
-  so nobody else can plant a config that a search from below would run.
+  never searches a world-writable directory (such as `/tmp`) or one owned by another user (other
+  than root) — the current directory included — so nobody else can plant a config that discovery
+  would run. Running as root over a checkout owned by another uid (common in CI containers)
+  therefore finds no config; pass an explicit path (`config: './kafka.config.ts'`) instead.
 - The first directory that has any candidate wins entirely — a config a level up is never merged
   with one closer to the current directory.
 - Two candidates in the same directory: the first one in ladder order wins, and a warning names

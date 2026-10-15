@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { KafkaInvariantViolation } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import type { Logger } from '../../loggers/index';
-import { NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events';
+import { emitNetworkEvent, NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events';
 import type { NetworkEventMap } from '../instrumentation-events';
 import { SocketRequest } from './socket-request';
 import type { RequestEntry } from './socket-request';
@@ -76,7 +76,7 @@ export class RequestQueue extends EventEmitter {
   }
 
   #emitQueueSizeEvent(): void {
-    this.instrumentationEmitter?.emit(NETWORK_REQUEST_QUEUE_SIZE, {
+    emitNetworkEvent(this.instrumentationEmitter, this.logger, NETWORK_REQUEST_QUEUE_SIZE, {
       broker: this.broker,
       clientId: this.clientId,
       queueSize: this.pending.length,
@@ -108,6 +108,7 @@ export class RequestQueue extends EventEmitter {
       broker: this.broker,
       clientId: this.clientId,
       instrumentationEmitter: this.instrumentationEmitter,
+      logger: this.logger,
       requestTimeout,
       enforceRequestTimeout: this.enforceRequestTimeout,
       send: () => {

@@ -3,6 +3,7 @@ import net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { Decoder } from '../protocol/decoder';
 import { Encoder } from '../protocol/encoder';
@@ -10,6 +11,8 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import { Connection } from './connection';
 import type { ConnectionOptions, CreateSaslAuthenticator } from './connection';
 import { resolveBrokerAddresses } from './dns-lookup';
+import { NETWORK_REQUEST, NETWORK_REQUEST_QUEUE_SIZE } from './instrumentation-events';
+import type { NetworkEventMap } from './instrumentation-events';
 import type * as DnsLookupModule from './dns-lookup';
 import { createDefaultSocketFactory } from './socket-factory';
 import type { SocketFactory } from './socket-factory';
@@ -477,6 +480,35 @@ describe('network/Connection', () => {
       const result = await connection.send({ request: metadataRequest(), response });
       expect(result?.bytes).toHaveLength(64_000);
       expect(result?.bytes?.equals(payload)).toBe(true);
+    });
+
+    it('keeps a throwing instrumentation listener out of the socket data handler', async () => {
+      const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
+      const listener = vi.fn(() => {
+        throw new Error('listener blew up');
+      });
+      instrumentationEmitter.addListener(NETWORK_REQUEST, listener);
+      instrumentationEmitter.addListener(NETWORK_REQUEST_QUEUE_SIZE, listener);
+      const { connection, socket } = await connectWithFakeSocket(createConnection, {
+        instrumentationEmitter,
+        maxInFlightRequests: 1,
+      });
+      const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+      const frame = (correlationId: number): Buffer => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        return new Encoder().writeInt32(responseHeader.size()).writeEncoder(responseHeader).buffer;
+      };
+
+      const first = connection.send({ request: metadataRequest(), response });
+      const second = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(() => socket.emit('data', frame(0))).not.toThrow();
+      await expect(first).resolves.toHaveLength(0);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(() => socket.emit('data', frame(1))).not.toThrow();
+      await expect(second).resolves.toHaveLength(0);
+      expect(listener).toHaveBeenCalled();
     });
 
     it('does not keep reallocating a large receive buffer once a big response has been consumed', async () => {

@@ -3,6 +3,7 @@ import { Broker } from '../broker/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import type { ConnectionPool } from '../network/connection-pool';
+import { createErrorFromCode } from '../protocol/error-codes';
 import { BrokerPool, clusterMetadataFromDescribeCluster } from './broker-pool';
 import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder';
 
@@ -499,6 +500,31 @@ describe('cluster/BrokerPool', () => {
         expect(brokerPool.brokers).toEqual({});
         expect(brokerPool.metadata).toBeNull();
         expect(built.filter((pool) => !destroyed.has(pool))).toEqual([]);
+      });
+
+      it('does not reconnect the seed when disconnect() lands during a refresh retry backoff', async () => {
+        const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+        const send = vi
+          .fn()
+          .mockResolvedValueOnce(API_VERSIONS)
+          .mockRejectedValueOnce(createErrorFromCode(5)) // LEADER_NOT_AVAILABLE: retried after a backoff
+          .mockResolvedValue(metadataFor([{ nodeId: 1, host: 'seed-host', port: 9092, rack: null }]));
+        seedPool.send = send;
+        const brokerPool = new BrokerPool({
+          connectionPoolBuilder: fakeBuilder(async () => seedPool),
+          logger: silentLogger,
+          retry: { retries: 2, initialRetryTime: 300, maxRetryTime: 300 },
+        });
+        await brokerPool.connect();
+        seedPool.isConnected = vi.fn().mockReturnValue(true);
+
+        const refresh = brokerPool.refreshMetadata([]);
+        void refresh.catch(() => {});
+        await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2), { interval: 5 });
+        await brokerPool.disconnect();
+
+        await expect(refresh).rejects.toThrow('disconnected during metadata refresh');
+        expect(send).toHaveBeenCalledTimes(2);
       });
 
       it('does not resurrect a broker removeBroker() dropped mid-refresh', async () => {

@@ -224,7 +224,13 @@ export class BrokerPool {
 
   async #refreshMetadata(topics: readonly string[]): Promise<void> {
     const generation = this.#generation;
+    const disconnectedError = () => new KafkaNonRetriableError('Broker pool disconnected during metadata refresh');
     await this.retrier(async (bail, _retryCount, _retryTime) => {
+      // disconnect() may have landed during a retry backoff; don't reconnect the seed for it.
+      if (generation !== this.#generation) {
+        bail(disconnectedError());
+        return;
+      }
       try {
         const broker = await this.findConnectedBroker();
         const seedHost = this.seedBroker!.connectionPool.host;
@@ -283,7 +289,7 @@ export class BrokerPool {
           );
           await Promise.all(created.map(([, broker]) => broker.disconnect()));
           this.metadata = null;
-          throw new KafkaNonRetriableError('Broker pool disconnected during metadata refresh');
+          throw disconnectedError();
         }
 
         // removeBroker() may have dropped a broker this refresh kept; don't resurrect it.
@@ -295,6 +301,8 @@ export class BrokerPool {
         const error = e as Error & { type?: string; name?: string };
 
         if (generation !== this.#generation) {
+          // findConnectedBroker() may have reconnected the seed during this attempt.
+          await this.seedBroker?.disconnect();
           bail(error);
           return;
         }

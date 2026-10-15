@@ -186,6 +186,31 @@ export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
   );
 }
 
+/**
+ * Array that keeps null and empty distinct: `null` is written as wire length `-1` and `[]` as
+ * `0`. Use it where null means "all" and an empty array must stay a no-op. A `-1` length
+ * decodes as `null`.
+ *
+ * @see https://kafka.apache.org/43/design/protocol/
+ */
+export function nullPreservingArray<T>(element: FieldCodec<T>): FieldCodec<T[] | null> {
+  return codec(
+    (e, values) => {
+      if (values === null) {
+        e.writeInt32(-1);
+        return;
+      }
+      e.writeInt32(values.length);
+      for (const value of values) element.write(e, value);
+    },
+    (d) => {
+      const length = d.readInt32();
+      if (length === -1) return null;
+      return readArrayBody(d, length, element);
+    },
+  );
+}
+
 function readCompactArrayBody<T>(d: Decoder, encodedLength: number, element: FieldCodec<T>): T[] {
   if (encodedLength === 0) return [];
   return readArrayBody(d, encodedLength - 1, element);

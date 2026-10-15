@@ -76,6 +76,7 @@ describe('consumer/runner', () => {
       resume: vi.fn(),
       hasSeekOffset: vi.fn().mockReturnValue(false),
       notifyPartitionsLost: vi.fn(async () => undefined),
+      position: vi.fn(() => null),
       ...overrides,
     } as unknown as ConsumerGroupHandle;
   }
@@ -180,6 +181,51 @@ describe('consumer/runner', () => {
     expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalled();
     expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
     expect(onCrash).not.toHaveBeenCalled();
+  });
+
+  it('drops a prefetched batch whose fetch offset the partition has already moved past', async () => {
+    let position = 0n;
+    let releasePrefetch: (() => void) | undefined;
+    const prefetched = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    const batchFromZero = () =>
+      new Batch(topicName, 0n, { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] });
+    const consumerGroup = fakeConsumerGroup({
+      getNodeIds: vi.fn(() => ['1']),
+      // The second fetch is issued while the first batch is in flight, so it still reads from 0
+      // and only returns once that batch has been processed.
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce([batchFromZero()])
+        .mockImplementationOnce(async () => {
+          await prefetched;
+          return [batchFromZero()];
+        })
+        .mockResolvedValue([]),
+      resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
+        position = offset + 1n;
+        if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+      }),
+      position: vi.fn(() => position),
+    });
+    const seenOffsets: bigint[] = [];
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async ({ message }) => {
+        seenOffsets.push(message.offset);
+      },
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.fetch).mock.calls.length > 3);
+
+    expect(seenOffsets).toEqual([0n, 1n]);
   });
 
   it('allows providing offsets to commitOffsetsIfNecessary from eachBatch', async () => {

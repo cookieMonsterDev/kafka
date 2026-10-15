@@ -130,8 +130,18 @@ export class Runner extends EventEmitter {
       prefetchMaxBatches,
       prefetchMaxBytes,
       getBatchBytes: (batch) => estimatePrefetchBytes(batch),
-      isStale: (batch) => this.consumerGroup.hasSeekOffset({ topic: batch.topic, partition: batch.partition }),
+      isStale: (batch) => this.isStaleBatch(batch),
     });
+  }
+
+  /**
+   * A prefetch issued while the partition's previous batch was still in flight reads from the
+   * old position; once that batch has been processed, its records would be delivered twice.
+   */
+  isStaleBatch({ topic, partition, fetchedOffset }: Batch): boolean {
+    if (this.consumerGroup.hasSeekOffset({ topic, partition })) return true;
+    const position = this.consumerGroup.position(topic, partition);
+    return position != null && position !== fetchedOffset;
   }
 
   get consuming(): boolean {

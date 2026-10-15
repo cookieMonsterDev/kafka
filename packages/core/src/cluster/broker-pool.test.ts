@@ -184,6 +184,25 @@ describe('cluster/BrokerPool', () => {
       const result = await brokerPool.withBroker(async ({ nodeId }) => `handled-${nodeId}`);
       expect(result).toBe('handled-1');
     });
+    it('withBroker moves on to the next broker when one cannot be connected', async () => {
+      const unreachablePool = fakeConnectionPool({
+        getConnection: vi.fn().mockRejectedValue(new KafkaConnectionError('refused')),
+      });
+      const connectedPool = fakeConnectionPool({ isConnected: vi.fn().mockReturnValue(true) });
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.brokers = {
+        '1': new Broker({ connectionPool: unreachablePool, logger: silentLogger, nodeId: 1 }),
+        '2': new Broker({ connectionPool: connectedPool, logger: silentLogger, nodeId: 2 }),
+      };
+
+      // Retry a few times so shuffle order puts the unreachable broker first at least once.
+      for (let i = 0; i < 20; i++) {
+        await expect(brokerPool.withBroker(async ({ nodeId }) => `handled-${nodeId}`)).resolves.toBe('handled-2');
+      }
+    });
   });
 
   describe('refreshMetadata', () => {

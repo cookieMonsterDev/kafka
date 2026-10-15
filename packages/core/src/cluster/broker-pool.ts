@@ -396,8 +396,8 @@ export class BrokerPool {
     }
 
     for (const nodeId of nodeIds) {
-      const broker = await this.findBroker({ nodeId });
       try {
+        const broker = await this.findBroker({ nodeId });
         return await callback({ nodeId, broker });
       } catch {
         // try the next broker

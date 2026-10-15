@@ -23,6 +23,13 @@ const DEFAULT_MIN_BYTES = 1;
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 const DEFAULT_MAX_RECORDS = 500;
 const DEFAULT_BATCH_SIZE = 100;
+const FETCH_RETRY_BACKOFF_MS = 100;
+
+/** Retriable on its own, or a retriable error the fetch retrier gave up on (`KafkaNumberOfRetriesExceeded`). */
+function isRetriableFetchError(error: unknown): boolean {
+  if (!(error instanceof KafkaError)) return false;
+  return error.retriable || (error.cause instanceof KafkaError && error.cause.retriable);
+}
 
 interface PendingAck {
   topic: string;
@@ -218,12 +225,15 @@ export class ShareRunner {
       } catch (error) {
         if (this.shuttingDown || !this.running) break;
         if (error instanceof KafkaNoBrokerAvailableError) {
-          await sleep(100);
+          await sleep(FETCH_RETRY_BACKOFF_MS);
           continue;
         }
         await this.#shareGroup.recoverFromFetch(error);
         if (this.shuttingDown || !this.running) break;
-        if (error instanceof KafkaError) continue;
+        if (isRetriableFetchError(error)) {
+          await sleep(FETCH_RETRY_BACKOFF_MS);
+          continue;
+        }
         await this.#onCrash(error as Error);
         this.running = false;
         return;

@@ -329,6 +329,65 @@ describe('share-consumer/share-runner', () => {
     expect(shareFetch.mock.calls[2]?.[0]?.shareSessionEpoch).toBe(0);
   });
 
+  it('crashes on a non-retriable fetch error instead of retrying it forever', async () => {
+    const code = ERROR_CODES.find((entry) => entry.type === 'TOPIC_AUTHORIZATION_FAILED')!.code;
+    const shareFetch = vi.fn().mockRejectedValue(createErrorFromCode(code));
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
+      },
+    });
+    const onCrash = vi.fn();
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(onCrash).toHaveBeenCalledWith(expect.objectContaining({ retriable: false })));
+      expect(shareFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
+  it('backs off before retrying a retriable fetch error', async () => {
+    const code = ERROR_CODES.find((entry) => entry.type === 'LEADER_NOT_AVAILABLE')!.code;
+    const shareFetch = vi.fn().mockRejectedValue(createErrorFromCode(code));
+    const { shareGroup } = createShareGroup({
+      cluster: {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
+        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
+      },
+    });
+    const onCrash = vi.fn();
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      retry: { retries: 0 },
+      onCrash,
+    });
+
+    try {
+      await runner.start();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(onCrash).not.toHaveBeenCalled();
+      expect(shareFetch.mock.calls.length).toBeLessThan(5);
+    } finally {
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
+  });
+
   it('emits FETCH_START and FETCH around each fetch round', async () => {
     const { shareGroup } = createShareGroup();
     const instrumentationEmitter = new InstrumentationEventEmitter();

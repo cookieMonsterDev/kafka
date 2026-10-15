@@ -55,16 +55,6 @@ function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: 
   return { records, bytes };
 }
 
-function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicData>): EosManagerPartition[] {
-  const partitions: EosManagerPartition[] = [];
-  for (const { topic, partitions: entries } of topicData) {
-    for (const entry of entries) {
-      partitions.push({ topic, partition: entry.partition });
-    }
-  }
-  return partitions;
-}
-
 export function createSendMessages({
   logger,
   cluster,
@@ -85,6 +75,63 @@ export function createSendMessages({
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
     const produceSize = topicMessagesSize(topicMessages);
+    /**
+     * Sequences handed to this send, kept across retries like the Java client's in-flight batches:
+     * a failed attempt may still have been written, so its retry must reuse the same range and no
+     * other send may be handed it. Only valid for the producer id/epoch they were assigned under.
+     */
+    const firstSequences = new Map<string, number>();
+    let sequenceGeneration: string | undefined;
+    let gatedPartitions: EosManagerPartition[] | undefined;
+
+    function producerGeneration(): string {
+      return `${eosManager.getProducerId()}:${eosManager.getProducerEpoch()}`;
+    }
+
+    function firstSequenceFor(topic: string, partition: number, recordCount: number): number {
+      const generation = producerGeneration();
+      if (generation !== sequenceGeneration) {
+        firstSequences.clear();
+        sequenceGeneration = generation;
+      }
+
+      const key = partitionKey(topic, partition);
+      let firstSequence = firstSequences.get(key);
+      if (firstSequence === undefined) {
+        firstSequence = eosManager.getSequence(topic, partition);
+        eosManager.updateSequence(topic, partition, recordCount);
+        firstSequences.set(key, firstSequence);
+      }
+      return firstSequence;
+    }
+
+    /** Hand back the ranges of partitions that never got acked; safe because their gates are still held. */
+    function rollbackUnackedSequences(): void {
+      if (producerGeneration() !== sequenceGeneration) return;
+      for (const [topic, messagesPerPartition] of assignment) {
+        for (const [partition, messages] of messagesPerPartition) {
+          const key = partitionKey(topic, partition);
+          if (!ackedPartitions.has(key) && firstSequences.has(key)) {
+            eosManager.updateSequence(topic, partition, -messages.length);
+          }
+        }
+      }
+    }
+
+    /**
+     * Hold every partition's gate from the first attempt until the send settles, so a queued send
+     * cannot take sequences ahead of this one's retries. Acquired all at once (sorted inside the
+     * EOS manager) so two sends sharing partitions cannot deadlock.
+     */
+    async function acquireGatesOnce(): Promise<void> {
+      if (gatedPartitions) return;
+      const partitions: EosManagerPartition[] = [];
+      for (const [topic, messagesPerPartition] of assignment) {
+        for (const partition of messagesPerPartition.keys()) partitions.push({ topic, partition });
+      }
+      await eosManager.acquirePartitionGates(partitions);
+      gatedPartitions = partitions;
+    }
 
     function collectResponse(): RecordMetadata[] {
       if (acks === 0) return [];
@@ -134,6 +181,7 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       await cluster.refreshMetadataIfNecessary();
       assignMessages();
+      await acquireGatesOnce();
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 
@@ -175,76 +223,51 @@ export function createSendMessages({
       }
 
       return [...topicDataByBroker.entries()].map(async ([broker, topicData]) => {
-        const topicPartitions = topicPartitionsFromTopicData(topicData);
-        await eosManager.acquirePartitionGates(topicPartitions);
-        try {
-          if (eosManager.isTransactional()) {
-            await eosManager.addPartitionsToTransaction(topicData);
-          }
+        if (eosManager.isTransactional()) {
+          await eosManager.addPartitionsToTransaction(topicData);
+        }
 
+        for (const { topic, partitions } of topicData) {
+          for (const entry of partitions) {
+            entry.firstSequence = firstSequenceFor(topic, entry.partition, entry.messages.length);
+          }
+        }
+
+        const producedAt = Date.now();
+        const response = await broker.produce({
+          transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
+          producerId: eosManager.getProducerId(),
+          producerEpoch: eosManager.getProducerEpoch(),
+          acks,
+          timeout,
+          compression,
+          compressionLevel,
+          topicData,
+        });
+
+        const expectsResponse = acks !== 0;
+        // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
+        // write, not the node's responsiveness - only record when a response was awaited.
+        if (expectsResponse && broker.nodeId != null) {
+          nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
+        }
+        const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
+
+        if (expectsResponse) {
+          for (const metadata of formattedResponse) {
+            const key = partitionKey(metadata.topicName, metadata.partition);
+            ackedPartitions.add(key);
+            metadataByPartition.set(key, metadata);
+          }
+        } else {
           for (const { topic, partitions } of topicData) {
-            for (const entry of partitions) {
-              entry.firstSequence = eosManager.getSequence(topic, entry.partition);
-              eosManager.updateSequence(topic, entry.partition, entry.messages.length);
-            }
+            for (const { partition } of partitions) ackedPartitions.add(partitionKey(topic, partition));
           }
-
-          let response;
-          const producedAt = Date.now();
-          const producerEpoch = eosManager.getProducerEpoch();
-          try {
-            response = await broker.produce({
-              transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
-              producerId: eosManager.getProducerId(),
-              producerEpoch,
-              acks,
-              timeout,
-              compression,
-              compressionLevel,
-              topicData,
-            });
-          } catch (e) {
-            // A concurrent InitProducerId (e.g. from another partition's UNKNOWN_PRODUCER_ID
-            // recovery) may already have bumped the epoch and reset sequence tracking to zero
-            // while this request was in flight. Rolling back against that fresh state would
-            // drive it negative instead of leaving it alone, since the increment being undone
-            // belongs to a generation that no longer exists.
-            if (eosManager.getProducerEpoch() === producerEpoch) {
-              for (const { topic, partitions } of topicData) {
-                for (const entry of partitions) {
-                  eosManager.updateSequence(topic, entry.partition, -entry.messages.length);
-                }
-              }
-            }
-            throw e;
-          }
-
-          const expectsResponse = acks !== 0;
-          // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
-          // write, not the node's responsiveness - only record when a response was awaited.
-          if (expectsResponse && broker.nodeId != null) {
-            nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
-          }
-          const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
-
-          if (expectsResponse) {
-            for (const metadata of formattedResponse) {
-              const key = partitionKey(metadata.topicName, metadata.partition);
-              ackedPartitions.add(key);
-              metadataByPartition.set(key, metadata);
-            }
-          } else {
-            for (const { topic, partition } of topicPartitions) {
-              ackedPartitions.add(partitionKey(topic, partition));
-            }
-          }
-        } finally {
-          await eosManager.releasePartitionGates(topicPartitions);
         }
       });
     }
 
-    return retrier(async (bail, retryCount, retryTime) => {
+    const send = retrier(async (bail, retryCount, retryTime) => {
       const topics = topicMessages.map(({ topic }) => topic);
       await cluster.addMultipleTargetTopics(topics);
 
@@ -348,5 +371,14 @@ export function createSendMessages({
         return collectResponse();
       }
     });
+
+    return send
+      .catch((error: unknown) => {
+        rollbackUnackedSequences();
+        throw error;
+      })
+      .finally(async () => {
+        if (gatedPartitions) await eosManager.releasePartitionGates(gatedPartitions);
+      });
   };
 }

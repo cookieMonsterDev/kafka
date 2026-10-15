@@ -4,7 +4,7 @@ import { KafkaRequestTimeoutError } from '../errors';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
-import type { EosManager } from './eos-manager/index';
+import { createEosManager, type EosManager } from './eos-manager/index';
 import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { PartitionerArgs } from './types';
@@ -686,5 +686,53 @@ describe('producer/sendMessages', () => {
     });
 
     expect(recordProduce).toHaveBeenCalledWith({ records: 1, bytes: 4, retries: 0 });
+  });
+
+  it("keeps a failed batch's sequence numbers across retries instead of handing them to a queued send", async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const sentSequences: { value: string; firstSequence: number }[] = [];
+    brokers[1].produce.mockImplementation(
+      (request: { topicData: { partitions: { firstSequence: number; messages: { value: string }[] }[] }[] }) => {
+        const entry = request.topicData[0]!.partitions[0]!;
+        sentSequences.push({ value: entry.messages[0]!.value, firstSequence: entry.firstSequence });
+        if (sentSequences.length === 1) {
+          return Promise.reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' }));
+        }
+        return Promise.resolve(fakeProduceResponse(topic, 0));
+      },
+    );
+
+    const eosCluster = {
+      refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      findControllerBroker: vi.fn().mockResolvedValue({
+        initProducerId: vi.fn().mockResolvedValue({ producerId: 1000n, producerEpoch: 0 }),
+      }),
+      brokerPool: { versions: undefined },
+    };
+    const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+    await eosManager.initProducerId();
+
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: fakeCluster(brokers) as unknown as Cluster,
+      partitioner: () => 0,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await Promise.all(
+      ['first', 'second'].map((value) =>
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value }] }] }),
+      ),
+    );
+
+    // The timed-out request may already be on the log, so its retry must reuse sequence 0 and the
+    // queued send must never be handed that range (the broker would dedupe it away as a duplicate).
+    expect(sentSequences).toEqual([
+      { value: 'first', firstSequence: 0 },
+      { value: 'first', firstSequence: 0 },
+      { value: 'second', firstSequence: 1 },
+    ]);
+    expect(eosManager.getSequence(topic, 0)).toBe(2);
   });
 });

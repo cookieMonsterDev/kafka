@@ -359,12 +359,6 @@ export function createSendMessages({
           throw new KafkaProtocolError(error, { retriable: true });
         }
 
-        // KIP-890: the broker rejected this produce and the transaction can no longer commit,
-        // only abort. Mark it so a later `commit()` fails clearly instead of racing the broker.
-        if (error.type === 'TRANSACTION_ABORTABLE') {
-          eosManager.markTransactionAbortable();
-        }
-
         logger.error(`${error.message}`, { retryCount, retryTime });
         if (error.retriable) throw error;
         bail(error);
@@ -375,6 +369,10 @@ export function createSendMessages({
     return send
       .catch((error: unknown) => {
         rollbackUnackedSequences();
+        // Some partitions may already be written inside the transaction (and KIP-890's
+        // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
+        // client's abortable error state; a later `commit()` must not keep a partial send.
+        if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
         throw error;
       })
       .finally(async () => {

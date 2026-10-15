@@ -512,6 +512,28 @@ describe('producer/sendMessages', () => {
     expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
   });
 
+  it('marks the transaction abort-only when a transactional send fails after a partial write', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce.mockRejectedValue(createErrorFromCode(5));
+
+    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: fakeCluster(brokers) as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
+
+    // Partitions 1 and 2 were written inside the transaction; committing now would keep a partial send.
+    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
+    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
+  });
+
   it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;

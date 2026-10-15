@@ -1,6 +1,7 @@
 import type { OnConfigDiagnostic } from '@cookiemonsterdev/kafka-config';
 import { openAdmin, type OpenAdmin } from './admin/open';
 import { resolveCliConfig, type ResolvedCliConfig } from './config/resolve';
+import { exitCodeForSignal } from './errors/exit-codes';
 
 /** Minimal writable stream contract — enough for `process.stdout`/`process.stderr`. */
 export interface RuntimeWriter {
@@ -78,12 +79,18 @@ export interface RuntimeProcessLike {
   readonly stderr: RuntimeWriter;
   readonly stdin: RuntimeReader;
   on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  exit(code: number): never;
 }
 
 export function createRuntime(proc: RuntimeProcessLike): Runtime {
   const controller = new AbortController();
-  proc.on('SIGINT', () => controller.abort('SIGINT'));
-  proc.on('SIGTERM', () => controller.abort('SIGTERM'));
+  // The first signal starts a graceful shutdown; a second one force-exits in case that hangs.
+  function onSignal(signal: 'SIGINT' | 'SIGTERM'): void {
+    if (controller.signal.aborted) proc.exit(exitCodeForSignal(signal));
+    controller.abort(signal);
+  }
+  proc.on('SIGINT', () => onSignal('SIGINT'));
+  proc.on('SIGTERM', () => onSignal('SIGTERM'));
 
   const cwd = proc.cwd();
 

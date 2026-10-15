@@ -17,6 +17,11 @@ export const EXIT_CODES = Object.freeze({
 
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
 
+/** `SIGTERM` gets its own conventional code (128 + 15); everything else aborts as `SIGINT` does. */
+export function exitCodeForSignal(reason: unknown): number {
+  return reason === 'SIGTERM' ? 143 : EXIT_CODES.aborted;
+}
+
 /**
  * The exit code for a batch command's per-item results: `ok` when every item succeeded,
  * `operationFailed` when none did, `partialBatch` otherwise.

@@ -39,6 +39,9 @@ export async function runCli(
       pause: () => undefined,
     },
     on: () => undefined,
+    exit: (code: number) => {
+      throw new Error(`unexpected process.exit(${String(code)})`);
+    },
   };
 
   const code = await main(createRuntime(fakeProcess));

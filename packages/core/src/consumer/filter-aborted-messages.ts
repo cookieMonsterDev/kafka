@@ -1,7 +1,7 @@
 const ABORTED_MESSAGE_KEY = Buffer.from([0, 0, 0, 0]);
 
-function isAbortMarker(message: { key?: Buffer | string | null }): boolean {
-  if (!message.key) return false;
+function isAbortMarker(message: { key?: Buffer | string | null; isControlRecord?: boolean }): boolean {
+  if (!message.isControlRecord || !message.key) return false;
   const key = Buffer.isBuffer(message.key) ? message.key : Buffer.from(message.key);
   return key.equals(ABORTED_MESSAGE_KEY);
 }
@@ -43,13 +43,13 @@ export function filterAbortedMessages<T extends FilterableMessage>({
   }
 
   const currentAbortedTransactions = new Map<bigint, true>();
-  const remainingAbortedTransactions = [...abortedTransactions];
+  const remainingAbortedTransactions = [...abortedTransactions].sort((a, b) =>
+    a.firstOffset < b.firstOffset ? -1 : a.firstOffset > b.firstOffset ? 1 : 0,
+  );
 
   return messages.filter((message) => {
-    const nextAborted = remainingAbortedTransactions[0];
-    if (nextAborted && message.offset >= nextAborted.firstOffset) {
-      remainingAbortedTransactions.shift();
-      currentAbortedTransactions.set(nextAborted.producerId, true);
+    while (remainingAbortedTransactions[0] && message.offset >= remainingAbortedTransactions[0].firstOffset) {
+      currentAbortedTransactions.set(remainingAbortedTransactions.shift()!.producerId, true);
     }
 
     const { producerId, inTransaction } = message.batchContext;

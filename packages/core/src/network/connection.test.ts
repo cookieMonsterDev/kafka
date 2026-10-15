@@ -9,8 +9,15 @@ import { Encoder } from '../protocol/encoder';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { Connection } from './connection';
 import type { ConnectionOptions, CreateSaslAuthenticator } from './connection';
+import { resolveBrokerAddresses } from './dns-lookup';
+import type * as DnsLookupModule from './dns-lookup';
 import { createDefaultSocketFactory } from './socket-factory';
 import type { SocketFactory } from './socket-factory';
+
+vi.mock('./dns-lookup', async (importOriginal) => {
+  const actual = await importOriginal<typeof DnsLookupModule>();
+  return { ...actual, resolveBrokerAddresses: vi.fn(actual.resolveBrokerAddresses) };
+});
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -182,6 +189,31 @@ describe('network/Connection', () => {
       await expect(Promise.all([connection.connect(), connection.connect()])).resolves.toEqual([true, true]);
       expect(sockets).toHaveLength(1);
       expect(connection.isConnected()).toBe(true);
+    });
+
+    it('falls back to the next resolved address when the first one fails', async () => {
+      vi.mocked(resolveBrokerAddresses).mockResolvedValueOnce({
+        hostname: 'broker.example',
+        addresses: [
+          { address: '10.0.0.1', family: 4 },
+          { address: '10.0.0.2', family: 4 },
+        ],
+      });
+      const attempted: string[] = [];
+      const socketFactory: SocketFactory = ({ host, onConnect }) => {
+        attempted.push(host);
+        const { socket } = createFakeSocket();
+        if (host === '10.0.0.1') {
+          setImmediate(() => socket.emit('error', Object.assign(new Error('refused'), { code: 'ECONNREFUSED' })));
+        } else {
+          setImmediate(onConnect);
+        }
+        return socket;
+      };
+
+      const connection = createConnection(9092, { host: 'broker.example', socketFactory });
+      await expect(connection.connect()).resolves.toBe(true);
+      expect(attempted).toEqual(['10.0.0.1', '10.0.0.2']);
     });
 
     it('rejects with a connection error when the broker is unreachable', async () => {

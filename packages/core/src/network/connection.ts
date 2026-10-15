@@ -380,23 +380,6 @@ export class Connection {
         })();
       };
 
-      const onError = (e: Error & { code?: string }): void => {
-        void (async () => {
-          const error = new KafkaConnectionError(`Connection error: ${e.message}`, {
-            broker: `${this.host}:${this.port}`,
-            code: e.code,
-          });
-
-          this.#logError(error.message, { stack: e.stack });
-          this.#rejectRequests(error);
-          await this.disconnect();
-
-          if (!this.isConnected()) {
-            fail(error);
-          }
-        })();
-      };
-
       const onTimeout = (): void => {
         void (async () => {
           const error = new KafkaConnectionError('Connection timeout', {
@@ -460,15 +443,14 @@ export class Connection {
             },
             onData,
             onEnd,
-            onError: (e) => {
-              if (!this.isConnected()) {
-                onError(e);
-              }
-            },
+            // A setup error only fails this candidate (`onSocketError`), so Happy Eyeballs can try
+            // the next address; once connected, `#onPostConnectSocketError` takes over.
+            onError: () => {},
             onTimeout,
           });
 
           const onSocketError = (e: Error & { code?: string }): void => {
+            this.#logError(`Connection error: ${e.message}`, { address: address.address, stack: e.stack });
             finishReject(
               new KafkaConnectionError(`Connection error: ${e.message}`, {
                 broker: `${this.host}:${this.port}`,
@@ -846,10 +828,9 @@ export class Connection {
   }
 
   /**
-   * Permanent post-handshake socket error handler. The setup-phase `onError` only reacts while
-   * `!isConnected()` (so a losing Happy Eyeballs candidate can't tear down an already-established
-   * connection); once connected, an error on the active socket would otherwise have no listener
-   * reacting to it at all.
+   * Permanent post-handshake socket error handler. Setup-phase errors only fail their own Happy
+   * Eyeballs candidate; once connected, an error on the active socket would otherwise have no
+   * listener reacting to it at all.
    */
   #onPostConnectSocketError = (e: Error & { code?: string }): void => {
     if (!this.isConnected()) return;

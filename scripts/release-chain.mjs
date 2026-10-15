@@ -7,11 +7,14 @@ import { RELEASE_PACKAGES } from './resolve-release-package.mjs';
 const dryRun = process.argv.includes('--dry-run');
 const changes = JSON.parse(process.env.RELEASE_CHANGES ?? '{}');
 
-// Only semantic-release, which pushes the release commit and tag, gets the release token; builds
-// and tests run without it. semantic-release prefers GIT_CREDENTIALS over GITHUB_TOKEN for git
+// Only semantic-release, which pushes the release commit and tag, gets either token; builds and
+// tests run without them. semantic-release prefers GIT_CREDENTIALS over GITHUB_TOKEN for git
 // pushes, while @semantic-release/github keeps using GITHUB_TOKEN for the API.
-const { RELEASE_TOKEN: releaseToken, ...baseEnv } = process.env;
-const releaseGitEnv = releaseToken ? { GIT_CREDENTIALS: `x-access-token:${releaseToken}` } : undefined;
+const { RELEASE_TOKEN: releaseToken, GITHUB_TOKEN: githubToken, ...baseEnv } = process.env;
+const releaseEnv = {
+  ...(githubToken && { GITHUB_TOKEN: githubToken }),
+  ...(releaseToken && { GIT_CREDENTIALS: `x-access-token:${releaseToken}` }),
+};
 
 let released = false;
 
@@ -71,7 +74,7 @@ for (const pkg of RELEASE_PACKAGES) {
 
   const releaseArgs = ['scripts/run-semantic-release.mjs', pkg.name];
   if (dryRun) releaseArgs.push('--dry-run');
-  run('node', releaseArgs, { ...npmAuthEnv, ...releaseGitEnv });
+  run('node', releaseArgs, { ...npmAuthEnv, ...releaseEnv });
 
   console.log('::endgroup::');
   released = true;

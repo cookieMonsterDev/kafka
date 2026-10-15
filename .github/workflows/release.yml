@@ -77,7 +77,7 @@ jobs:
       released: ${{ steps.chain.outputs.released }}
     steps:
       # Keep RELEASE_TOKEN out of the persisted git config, where every install script and test
-      # could read it; release-chain.mjs hands it only to semantic-release, which pushes.
+      # could read it; release-chain.mjs hands it and GITHUB_TOKEN only to semantic-release.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0

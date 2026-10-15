@@ -18,11 +18,11 @@ describe('protocol/requests/share-acknowledge/v1/response', () => {
       .writeUVarIntString(null)
       .writeInt32(1)
       .writeInt32(5)
-      .writeUVarInt(0)
-      .writeUVarInt(0)
-      .writeUVarInt(1)
-      .writeUVarInt(0)
-      .writeUVarInt(0).buffer;
+      .writeUVarInt(0) // current leader tagged fields
+      .writeUVarInt(0) // partition tagged fields
+      .writeUVarInt(0) // topic tagged fields
+      .writeUVarInt(1) // empty node endpoints
+      .writeUVarInt(0).buffer; // response tagged fields
 
     const data = await shareAcknowledgeResponseV1.decode(buffer);
     expect(data).toEqual({

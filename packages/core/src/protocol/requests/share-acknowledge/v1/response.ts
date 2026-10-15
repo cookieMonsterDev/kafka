@@ -41,6 +41,7 @@ function decodePartition(decoder: Decoder): ShareAcknowledgePartitionResponseV1 
     leaderId: decoder.readInt32(),
     leaderEpoch: decoder.readInt32(),
   };
+  decoder.readTaggedFields(); // CurrentLeader
   decoder.readTaggedFields();
   return { partitionIndex, errorCode, errorMessage, currentLeader };
 }

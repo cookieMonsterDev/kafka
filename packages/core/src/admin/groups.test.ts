@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { KafkaDeleteGroupsError, KafkaNumberOfRetriesExceeded } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode } from '../protocol/error-codes';
 import { createGroupsApi } from './groups';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -162,6 +163,31 @@ describe('admin/groups', () => {
       expect((error as KafkaDeleteGroupsError).groups).toEqual([
         { groupId: 'g-bad', errorCode: 69, error: expect.any(Error) },
       ]);
+    });
+
+    it('retries only groups whose coordinator moved and keeps earlier successes', async () => {
+      const coordinator = {
+        nodeId: 1,
+        deleteGroups: vi
+          .fn()
+          .mockResolvedValueOnce({
+            results: [
+              { groupId: 'g-ok', errorCode: 0 },
+              { groupId: 'g-moved', errorCode: 16, error: createErrorFromCode(16) },
+            ],
+          })
+          .mockResolvedValueOnce({ results: [{ groupId: 'g-moved', errorCode: 0 }] }),
+      };
+      const cluster = {
+        refreshMetadata: vi.fn().mockResolvedValue(undefined),
+        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
+      };
+
+      await expect(makeApi(cluster, fastRetry).deleteGroups(['g-ok', 'g-moved'])).resolves.toEqual([
+        { groupId: 'g-ok', errorCode: 0 },
+        { groupId: 'g-moved', errorCode: 0 },
+      ]);
+      expect(coordinator.deleteGroups).toHaveBeenNthCalledWith(2, { groupIds: ['g-moved'] });
     });
   });
 

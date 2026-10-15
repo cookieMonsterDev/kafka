@@ -310,12 +310,12 @@ describe('admin/share-groups', () => {
       ]);
     });
 
-    it('retries COORDINATOR_NOT_AVAILABLE then succeeds', async () => {
+    it('retries GROUP_COORDINATOR_NOT_AVAILABLE then succeeds', async () => {
       const coordinator = {
         nodeId: 1,
         deleteGroups: vi
           .fn()
-          .mockRejectedValueOnce(Object.assign(new Error('loading'), { type: 'COORDINATOR_NOT_AVAILABLE' }))
+          .mockRejectedValueOnce(Object.assign(new Error('loading'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' }))
           .mockResolvedValueOnce({ results: [{ groupId: 'share-1', errorCode: 0 }] }),
       };
       const cluster = {

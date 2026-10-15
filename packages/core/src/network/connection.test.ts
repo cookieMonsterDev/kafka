@@ -479,6 +479,35 @@ describe('network/Connection', () => {
       expect(result?.bytes?.equals(payload)).toBe(true);
     });
 
+    it('does not keep reallocating a large receive buffer once a big response has been consumed', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const response = {
+        decode: async (rawData: Buffer) => rawData,
+        parse: async (data: Buffer) => data,
+      };
+      const frame = (correlationId: number, body: Buffer): Buffer => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        const framed = new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader);
+        return Buffer.concat([framed.buffer, body]);
+      };
+
+      const big = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      socket.emit('data', frame(0, Buffer.alloc(1_000_000)));
+      await expect(big).resolves.toHaveLength(1_000_000);
+
+      const small = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        socket.emit('data', frame(1, Buffer.alloc(16)));
+        await expect(small).resolves.toHaveLength(16);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size >= 1_000_000)).toEqual([]);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+    });
+
     it('rejects in-flight requests when the broker closes the connection', async () => {
       const { server, port } = await startFakeBroker((_request, socket) => {
         socket.end();

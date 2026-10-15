@@ -743,7 +743,9 @@ export class Connection {
 
   /**
    * Copy `additional` bytes into the receive buffer. Compacts unparsed bytes to offset 0
-   * (onto a fresh Buffer so in-flight payload views keep the previous backing store).
+   * (onto a fresh Buffer so in-flight payload views keep the previous backing store). Growth
+   * doubles while a frame accumulates; compaction sizes the fresh Buffer to just what is still
+   * needed, so one large response doesn't pin (and re-copy) its capacity for every later frame.
    */
   #ensureReceiveCapacity(additional: number): void {
     const remaining = this.#receiveWriteOffset - this.#receiveReadOffset;
@@ -752,11 +754,7 @@ export class Connection {
       return;
     }
 
-    let capacity = this.#receiveBuffer.length;
-    if (capacity < needed) {
-      capacity = Math.max(capacity * 2, needed);
-    }
-
+    const capacity = this.#receiveReadOffset === 0 ? Math.max(this.#receiveBuffer.length * 2, needed) : needed;
     const next = Buffer.allocUnsafe(capacity);
     if (remaining > 0) {
       this.#receiveBuffer.copy(next, 0, this.#receiveReadOffset, this.#receiveWriteOffset);

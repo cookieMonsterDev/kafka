@@ -283,6 +283,119 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.metadata?.topicMetadata.map((entry) => entry.topic)).toEqual(['orders']);
     });
 
+    it('concurrent refreshes do not leak brokers created by the losing run', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        })
+        .mockResolvedValue({
+          brokers: [
+            { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+            { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+          ],
+          topicMetadata: [],
+          throttleTime: 0,
+          clusterId: null,
+          controllerId: 1,
+          clientSideThrottleTime: 0,
+          clusterAuthorizedOperations: -2147483648,
+        });
+
+      const otherPools: ConnectionPool[] = [];
+      const destroyed = new Set<ConnectionPool>();
+      const build = vi.fn(async (destination?: ConnectionPoolDestination) => {
+        if (destination?.host !== 'other-host') return seedPool;
+        const pool = fakeConnectionPool({
+          host: 'other-host',
+          port: 9093,
+          destroy: vi.fn(async () => {
+            destroyed.add(pool);
+          }),
+        });
+        otherPools.push(pool);
+        return pool;
+      });
+
+      const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(build), logger: silentLogger });
+      await brokerPool.connect();
+      seedPool.isConnected = vi.fn().mockReturnValue(true);
+
+      await Promise.all([brokerPool.refreshMetadata([]), brokerPool.refreshMetadata([])]);
+
+      const live = brokerPool.brokers['2']!.connectionPool;
+      expect(otherPools.filter((pool) => pool !== live && !destroyed.has(pool))).toEqual([]);
+    });
+
+    it('applyLeaderUpdate racing a refresh does not leak the broker it created', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      const metadata = () => ({
+        brokers: [
+          { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+          { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+        ],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      });
+      seedPool.send = vi
+        .fn()
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        })
+        .mockImplementation(async () => metadata());
+
+      // The refresh's broker build stalls until released, so the leader update can land between
+      // the refresh snapshotting `brokers` and assigning its result.
+      let releaseRefreshBuild!: () => void;
+      const refreshBuildGate = new Promise<void>((resolve) => {
+        releaseRefreshBuild = resolve;
+      });
+      const otherPools: ConnectionPool[] = [];
+      const destroyed = new Set<ConnectionPool>();
+      const build = vi.fn(async (destination?: ConnectionPoolDestination) => {
+        if (destination?.host !== 'other-host') return seedPool;
+        const pool = fakeConnectionPool({
+          host: 'other-host',
+          port: 9093,
+          destroy: vi.fn(async () => {
+            destroyed.add(pool);
+          }),
+        });
+        otherPools.push(pool);
+        if (otherPools.length === 1) await refreshBuildGate;
+        return pool;
+      });
+
+      const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(build), logger: silentLogger });
+      await brokerPool.connect();
+      seedPool.isConnected = vi.fn().mockReturnValue(true);
+      brokerPool.metadata = metadata();
+
+      const refresh = brokerPool.refreshMetadata([]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const leaderUpdate = brokerPool.applyLeaderUpdate({
+        topic: 'orders',
+        partition: 0,
+        currentLeader: { leaderId: 2, leaderEpoch: 1 },
+        nodeEndpoints: [{ nodeId: 2, host: 'other-host', port: 9093, rack: null }],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      releaseRefreshBuild();
+      await Promise.all([refresh, leaderUpdate]);
+
+      const live = brokerPool.brokers['2']!.connectionPool;
+      expect(otherPools.filter((pool) => pool !== live && !destroyed.has(pool))).toEqual([]);
+    });
+
     it('disconnects brokers no longer present in fresh metadata', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
       const staleDestroySpy = vi.fn().mockResolvedValue(undefined);

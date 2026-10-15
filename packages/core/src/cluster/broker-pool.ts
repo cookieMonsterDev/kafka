@@ -100,6 +100,9 @@ export class BrokerPool {
   versions: BrokerVersions | null = null;
   readonly usingBootstrapControllers: boolean;
 
+  /** Tail of the queue that serializes read-await-write updates of `brokers`. */
+  #brokersUpdate: Promise<unknown> = Promise.resolve();
+
   readonly #createBroker: (options: {
     connectionPool: Broker['connectionPool'];
     logger: Logger;
@@ -198,7 +201,22 @@ export class BrokerPool {
     }
   }
 
-  async refreshMetadata(topics: readonly string[]): Promise<void> {
+  /**
+   * Runs `update` once every earlier one has settled. Refreshes and leader updates snapshot
+   * `brokers`, await, then write it back; run concurrently, the last writer would drop (and leak)
+   * brokers the others created.
+   */
+  #serializeBrokersUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const run = this.#brokersUpdate.then(update);
+    this.#brokersUpdate = run.catch(() => undefined);
+    return run;
+  }
+
+  refreshMetadata(topics: readonly string[]): Promise<void> {
+    return this.#serializeBrokersUpdate(() => this.#refreshMetadata(topics));
+  }
+
+  async #refreshMetadata(topics: readonly string[]): Promise<void> {
     await this.retrier(async (bail, _retryCount, _retryTime) => {
       try {
         const broker = await this.findConnectedBroker();
@@ -313,7 +331,11 @@ export class BrokerPool {
    * Metadata RPC. Returns whether the cached partition metadata was actually found and patched -
    * callers should fall back to `refreshMetadata` when it returns `false`.
    */
-  async applyLeaderUpdate({
+  applyLeaderUpdate(options: ApplyLeaderUpdateOptions): Promise<boolean> {
+    return this.#serializeBrokersUpdate(() => this.#applyLeaderUpdate(options));
+  }
+
+  async #applyLeaderUpdate({
     topic,
     partition,
     currentLeader,

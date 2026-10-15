@@ -39,6 +39,10 @@ export interface RunnerOptions {
   maxRecords?: number;
 }
 
+function processingKey(topic: string, partition: number): string {
+  return `${topic}\0${partition}`;
+}
+
 function sliceMessages<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -90,6 +94,8 @@ export class Runner extends EventEmitter {
   #consuming = false;
   #starting = false;
   #stopPromise: Promise<void> | null = null;
+  /** Partitions a worker is handling right now; a pending seek on one waits until it is released. */
+  readonly #processingPartitions = new Set<string>();
 
   constructor({
     logger,
@@ -125,7 +131,15 @@ export class Runner extends EventEmitter {
       logger: this.logger,
       getNodeIds: () => this.consumerGroup.getNodeIds(),
       fetch: (nodeId) => this.fetch(nodeId),
-      handler: (batch) => this.handleBatch(batch),
+      handler: async (batch) => {
+        const key = processingKey(batch.topic, batch.partition);
+        this.#processingPartitions.add(key);
+        try {
+          await this.handleBatch(batch);
+        } finally {
+          this.#processingPartitions.delete(key);
+        }
+      },
       concurrency,
       prefetchMaxBatches,
       prefetchMaxBytes,
@@ -499,7 +513,11 @@ export class Runner extends EventEmitter {
     const startFetch = Date.now();
     this.instrumentationEmitter.emit(FETCH_START, { nodeId });
 
-    const batches = await this.consumerGroup.fetch(nodeId);
+    // Applying a seek while its partition is mid-batch would hide it from the worker, which then
+    // keeps resolving offsets past it; leave it pending so the worker stops first.
+    const batches = await this.consumerGroup.fetch(nodeId, {
+      isProcessing: (topic, partition) => this.#processingPartitions.has(processingKey(topic, partition)),
+    });
 
     this.instrumentationEmitter.emit(FETCH, {
       // Always 0: fetchers deliver batches asynchronously, so a count isn't available here.

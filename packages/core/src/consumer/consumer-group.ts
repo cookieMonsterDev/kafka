@@ -200,6 +200,11 @@ export interface ConsumerGroupOptions {
   assignedPartitions?: readonly TopicPartitions[];
 }
 
+export interface ConsumerGroupFetchOptions {
+  /** Partitions a worker is still handling; their pending seeks are not applied yet. */
+  isProcessing?: (topic: string, partition: number) => boolean;
+}
+
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
 export interface ConsumerGroupHandle {
   groupId: string | null;
@@ -208,7 +213,7 @@ export interface ConsumerGroupHandle {
   connect: () => Promise<void>;
   joinAndSync: () => Promise<void>;
   leave: () => Promise<void>;
-  fetch: (nodeId: string) => Promise<Batch[]>;
+  fetch: (nodeId: string, options?: ConsumerGroupFetchOptions) => Promise<Batch[]>;
   getNodeIds: () => string[];
   resolveOffset: (topicPartitionOffset: TopicPartitionOffset) => void;
   commitOffsets: (offsets?: Offsets) => Promise<void>;
@@ -1095,7 +1100,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     );
   }
 
-  async fetch(nodeId: string): Promise<Batch[]> {
+  async fetch(nodeId: string, { isProcessing }: ConsumerGroupFetchOptions = {}): Promise<Batch[]> {
     try {
       await this.cluster.refreshMetadataIfNecessary();
       this.checkForStaleAssignment();
@@ -1103,7 +1108,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       let topicPartitions = this.subscriptionState.assigned();
       topicPartitions = this.filterPartitionsByNode(nodeId, topicPartitions);
 
-      await this.seekOffsets(topicPartitions);
+      await this.seekOffsets(topicPartitions, isProcessing);
 
       const offsetManager = this.#requireOffsetManager();
       const committedOffsets = offsetManager.committedOffsets();
@@ -1490,11 +1495,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
   }
 
-  async seekOffsets(topicPartitions: readonly TopicPartitions[]): Promise<void> {
+  async seekOffsets(
+    topicPartitions: readonly TopicPartitions[],
+    isProcessing?: ConsumerGroupFetchOptions['isProcessing'],
+  ): Promise<void> {
     const offsetManager = this.#requireOffsetManager();
 
     for (const { topic, partitions } of topicPartitions) {
       for (const partition of partitions) {
+        if (isProcessing?.(topic, partition)) continue;
         const seekEntry = this.seekOffset.pop(topic, partition);
         if (!seekEntry) continue;
 

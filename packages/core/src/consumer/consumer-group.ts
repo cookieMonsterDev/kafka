@@ -667,6 +667,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       }
     }
 
+    const previousAssignment = this.assigned();
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
@@ -694,7 +695,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       return;
     }
 
-    this.offsetManager = new OffsetManager({
+    const previousOffsetManager = this.offsetManager;
+    const offsetManager = new OffsetManager({
       cluster: this.cluster,
       topicConfigurations: this.topicConfigurations,
       instrumentationEmitter: this.instrumentationEmitter,
@@ -709,6 +711,24 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       logger: this.logger,
       hooks: this.hooks,
     });
+
+    // A partition the same member held before and after this change (cooperative-sticky, KIP-848)
+    // was owned throughout, so its processed-but-uncommitted position is still valid. Lost
+    // partitions were already cleared from `assigned()` by `notifyPartitionsLost`, so they never
+    // carry over.
+    if (previousOffsetManager instanceof OffsetManager && previousOffsetManager.memberId === memberId) {
+      for (const { topic, partitions } of previousAssignment) {
+        const retained = memberAssignment[topic];
+        for (const partition of partitions) {
+          const resolved = previousOffsetManager.resolvedOffsets[topic]?.[partition];
+          if (resolved !== undefined && retained?.includes(partition)) {
+            (offsetManager.resolvedOffsets[topic] ??= {})[partition] = resolved;
+          }
+        }
+      }
+    }
+
+    this.offsetManager = offsetManager;
   }
 
   /**

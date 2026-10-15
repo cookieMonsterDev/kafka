@@ -1484,5 +1484,21 @@ describe('consumer/consumer-group', () => {
 
       expect(offsetCommit).toHaveBeenCalledWith(expect.objectContaining({ groupGenerationId: 2 }));
     });
+
+    it('keeps resolved but uncommitted offsets of partitions retained across an assignment change', async () => {
+      const { consumerGroup, offsetCommit } = await joinedGroup(heartbeatResponse(2, [0]), heartbeatResponse(2));
+      consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 41n });
+      consumerGroup.resolveOffset({ topic: 'topic1', partition: 1, offset: 9n });
+
+      consumerGroup.lastRequest = 0;
+      await consumerGroup.heartbeat({ interval: 0 });
+      expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
+
+      expect(consumerGroup.position('topic1', 0)).toBe(42n);
+      await consumerGroup.commitOffsets();
+      expect(offsetCommit).toHaveBeenCalledWith(
+        expect.objectContaining({ topics: [{ topic: 'topic1', partitions: [{ partition: 0, offset: 42n }] }] }),
+      );
+    });
   });
 });

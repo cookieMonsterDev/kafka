@@ -396,6 +396,133 @@ describe('cluster/BrokerPool', () => {
       expect(otherPools.filter((pool) => pool !== live && !destroyed.has(pool))).toEqual([]);
     });
 
+    describe('racing disconnect() and removeBroker()', () => {
+      const API_VERSIONS = {
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+      };
+      const metadataFor = (brokers: { nodeId: number; host: string; port: number; rack: string | null }[]) => ({
+        brokers,
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      });
+
+      /** A pool whose next build for `gatedHost` stalls until `release()`. */
+      function gatedPool(gatedHost: string) {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let gated = false;
+        const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+        const built: ConnectionPool[] = [];
+        const destroyed = new Set<ConnectionPool>();
+        const build = vi.fn(async (destination?: ConnectionPoolDestination) => {
+          if (!destination) return seedPool;
+          const pool = fakeConnectionPool({
+            host: destination.host,
+            port: destination.port,
+            destroy: vi.fn(async () => {
+              destroyed.add(pool);
+            }),
+          });
+          built.push(pool);
+          if (destination.host === gatedHost && !gated) {
+            gated = true;
+            await gate;
+          }
+          return pool;
+        });
+        const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(build), logger: silentLogger });
+        return { brokerPool, seedPool, built, destroyed, release: () => release() };
+      }
+
+      it('does not reinstall brokers or metadata when disconnect() lands mid-refresh', async () => {
+        const { brokerPool, seedPool, built, destroyed, release } = gatedPool('other-host');
+        seedPool.send = vi
+          .fn()
+          .mockResolvedValueOnce(API_VERSIONS)
+          .mockResolvedValue(
+            metadataFor([
+              { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+              { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+            ]),
+          );
+        await brokerPool.connect();
+        seedPool.isConnected = vi.fn().mockReturnValue(true);
+
+        const refresh = brokerPool.refreshMetadata([]);
+        void refresh.catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await brokerPool.disconnect();
+        release();
+        await expect(refresh).rejects.toThrow('disconnected during metadata refresh');
+
+        expect(brokerPool.brokers).toEqual({});
+        expect(brokerPool.metadata).toBeNull();
+        expect(built.filter((pool) => !destroyed.has(pool))).toEqual([]);
+      });
+
+      it('does not resurrect a broker removeBroker() dropped mid-refresh', async () => {
+        const { brokerPool, seedPool, release } = gatedPool('third-host');
+        seedPool.send = vi
+          .fn()
+          .mockResolvedValueOnce(API_VERSIONS)
+          .mockResolvedValueOnce(
+            metadataFor([
+              { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+              { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+            ]),
+          )
+          .mockResolvedValue(
+            metadataFor([
+              { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+              { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+              { nodeId: 3, host: 'third-host', port: 9094, rack: null },
+            ]),
+          );
+        await brokerPool.connect();
+        seedPool.isConnected = vi.fn().mockReturnValue(true);
+        await brokerPool.refreshMetadata([]);
+        expect(brokerPool.brokers['2']).toBeDefined();
+
+        const refresh = brokerPool.refreshMetadata([]);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        brokerPool.removeBroker({ host: 'other-host', port: 9093 });
+        release();
+        await refresh;
+
+        expect(brokerPool.brokers['2']).toBeUndefined();
+        expect(brokerPool.brokers['3']).toBeDefined();
+      });
+
+      it('applyLeaderUpdate does not install a broker after disconnect()', async () => {
+        const { brokerPool, seedPool, built, destroyed, release } = gatedPool('other-host');
+        seedPool.send = vi.fn().mockResolvedValueOnce(API_VERSIONS);
+        await brokerPool.connect();
+        brokerPool.metadata = metadataFor([{ nodeId: 1, host: 'seed-host', port: 9092, rack: null }]);
+
+        const leaderUpdate = brokerPool.applyLeaderUpdate({
+          topic: 'orders',
+          partition: 0,
+          currentLeader: { leaderId: 2, leaderEpoch: 1 },
+          nodeEndpoints: [{ nodeId: 2, host: 'other-host', port: 9093, rack: null }],
+        });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        await brokerPool.disconnect();
+        release();
+
+        await expect(leaderUpdate).resolves.toBe(false);
+        expect(brokerPool.brokers).toEqual({});
+        expect(built.filter((pool) => !destroyed.has(pool))).toEqual([]);
+      });
+    });
+
     it('disconnects brokers no longer present in fresh metadata', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
       const staleDestroySpy = vi.fn().mockResolvedValue(undefined);

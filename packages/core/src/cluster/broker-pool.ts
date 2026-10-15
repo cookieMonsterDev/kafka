@@ -102,6 +102,11 @@ export class BrokerPool {
 
   /** Tail of the queue that serializes read-await-write updates of `brokers`. */
   #brokersUpdate: Promise<unknown> = Promise.resolve();
+  /**
+   * Bumped by `disconnect()`, which is not queued (it would wait out a refresh's retries); an
+   * update that sees it change while awaiting discards its result instead of reinstalling brokers.
+   */
+  #generation = 0;
 
   readonly #createBroker: (options: {
     connectionPool: Broker['connectionPool'];
@@ -178,6 +183,7 @@ export class BrokerPool {
   }
 
   async disconnect(): Promise<void> {
+    this.#generation++;
     if (this.seedBroker) await this.seedBroker.disconnect();
     await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
 
@@ -217,19 +223,22 @@ export class BrokerPool {
   }
 
   async #refreshMetadata(topics: readonly string[]): Promise<void> {
+    const generation = this.#generation;
     await this.retrier(async (bail, _retryCount, _retryTime) => {
       try {
         const broker = await this.findConnectedBroker();
         const seedHost = this.seedBroker!.connectionPool.host;
         const seedPort = this.seedBroker!.connectionPool.port;
 
-        this.metadata = await this.fetchClusterMetadata(broker, topics);
+        const metadata = await this.fetchClusterMetadata(broker, topics);
+        this.metadata = metadata;
         this.metadataExpireAt = Date.now() + this.metadataMaxAge;
 
         const replacedBrokers: Broker[] = [];
-        const nextBrokers: Record<string, Broker> = { ...this.brokers };
+        const previousBrokers = { ...this.brokers };
+        const nextBrokers: Record<string, Broker> = { ...previousBrokers };
 
-        for (const { nodeId, host, port, rack } of this.metadata.brokers) {
+        for (const { nodeId, host, port, rack } of metadata.brokers) {
           const key = String(nodeId);
           const existing = nextBrokers[key];
 
@@ -255,7 +264,7 @@ export class BrokerPool {
           });
         }
 
-        const freshBrokerIds = this.metadata.brokers.map(({ nodeId }) => String(nodeId)).sort();
+        const freshBrokerIds = metadata.brokers.map(({ nodeId }) => String(nodeId)).sort();
         const currentBrokerIds = Object.keys(nextBrokers).sort();
         const unusedBrokerIds = arrayDiff(currentBrokerIds, freshBrokerIds);
 
@@ -268,9 +277,27 @@ export class BrokerPool {
         const replacedBrokersDisconnects = replacedBrokers.map((replaced) => replaced.disconnect());
         await Promise.all([...brokerDisconnects, ...replacedBrokersDisconnects]);
 
+        if (generation !== this.#generation) {
+          const created = Object.entries(nextBrokers).filter(
+            ([nodeId, broker]) => broker !== previousBrokers[nodeId] && broker !== this.seedBroker,
+          );
+          await Promise.all(created.map(([, broker]) => broker.disconnect()));
+          this.metadata = null;
+          throw new KafkaNonRetriableError('Broker pool disconnected during metadata refresh');
+        }
+
+        // removeBroker() may have dropped a broker this refresh kept; don't resurrect it.
+        for (const [nodeId, broker] of Object.entries(previousBrokers)) {
+          if (nextBrokers[nodeId] === broker && this.brokers[nodeId] !== broker) delete nextBrokers[nodeId];
+        }
         this.brokers = nextBrokers;
       } catch (e) {
         const error = e as Error & { type?: string; name?: string };
+
+        if (generation !== this.#generation) {
+          bail(error);
+          return;
+        }
 
         if (
           this.metadataRecovery === 'rebootstrap' &&
@@ -341,32 +368,39 @@ export class BrokerPool {
     currentLeader,
     nodeEndpoints = [],
   }: ApplyLeaderUpdateOptions): Promise<boolean> {
-    if (currentLeader.leaderId < 0 || !this.metadata) return false;
+    const { metadata } = this;
+    if (currentLeader.leaderId < 0 || !metadata) return false;
+    const generation = this.#generation;
 
     for (const endpoint of nodeEndpoints) {
       const key = String(endpoint.nodeId);
       const existing = this.brokers[key];
       if (existing && !hasBrokerBeenReplaced(existing, endpoint)) continue;
 
-      const replaced = this.brokers[key];
-      this.brokers[key] = this.#createBroker({
+      const broker = this.#createBroker({
         logger: this.rootLogger,
         versions: this.versions,
         connectionPool: await this.connectionPoolBuilder.build(endpoint),
         nodeId: endpoint.nodeId,
       });
+      if (generation !== this.#generation) {
+        await broker.disconnect();
+        return false;
+      }
+      const replaced = this.brokers[key];
+      this.brokers[key] = broker;
       if (replaced) await replaced.disconnect();
 
-      const brokerIndex = this.metadata.brokers.findIndex((broker) => broker.nodeId === endpoint.nodeId);
+      const brokerIndex = metadata.brokers.findIndex((entry) => entry.nodeId === endpoint.nodeId);
       const brokerEntry = { nodeId: endpoint.nodeId, host: endpoint.host, port: endpoint.port, rack: endpoint.rack };
       if (brokerIndex === -1) {
-        this.metadata.brokers.push(brokerEntry);
+        metadata.brokers.push(brokerEntry);
       } else {
-        this.metadata.brokers[brokerIndex] = brokerEntry;
+        metadata.brokers[brokerIndex] = brokerEntry;
       }
     }
 
-    const topicMetadata = this.metadata.topicMetadata.find((entry) => entry.topic === topic);
+    const topicMetadata = metadata.topicMetadata.find((entry) => entry.topic === topic);
     const partitionMetadata = topicMetadata?.partitionMetadata.find((entry) => entry.partitionId === partition);
     if (!partitionMetadata) return false;
 

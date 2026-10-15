@@ -22,7 +22,7 @@ function parseTopicPartitionFlags(raw: readonly string[]): TopicPartitions[] {
     }
     const topic = entry.slice(0, separatorIndex);
     const partition = coerceInteger(entry.slice(separatorIndex + 1), 'topic-partition');
-    if (!Number.isInteger(partition) || partition < 0) {
+    if (partition < 0) {
       throw new CliUsageError(
         `--topic-partition must be "topic:partition" with a non-negative partition, got "${entry}"`,
       );

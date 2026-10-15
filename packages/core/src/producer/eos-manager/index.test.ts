@@ -824,6 +824,76 @@ describe('producer/eosManager', () => {
       expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
 
+    function bumpingEosManager() {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      return { broker, eosManager };
+    }
+
+    function track(promise: Promise<void>): { settled: () => boolean } {
+      let settled = false;
+      promise.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      return { settled: () => settled };
+    }
+
+    it('holds new sends back until the sends holding gates settle, then bumps once', async () => {
+      const { broker, eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      eosManager.requestEpochBump();
+      // Partition 1 is free, but its send must not start while partition 0's old-epoch send is in flight.
+      const second = eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
+      const third = eosManager.acquirePartitionGates([{ topic, partition: 2 }]);
+      const secondState = track(second);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(secondState.settled()).toBe(false);
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+      await Promise.all([second, third]);
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('does not let a send queued on a gate slip in ahead of the bump its holder requested', async () => {
+      const { eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      let epochWhenAcquired: number | undefined;
+      const queued = eosManager
+        .acquirePartitionGates([{ topic, partition: 0 }])
+        .then(() => (epochWhenAcquired = eosManager.getProducerEpoch()));
+
+      eosManager.requestEpochBump();
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+      await queued;
+
+      expect(epochWhenAcquired).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('gives up waiting for the drain when the send is aborted', async () => {
+      const { broker, eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+      eosManager.requestEpochBump();
+
+      const controller = new AbortController();
+      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 1 }], { signal: controller.signal });
+      controller.abort(new Error('delivery deadline'));
+
+      await expect(waiting).rejects.toThrow('delivery deadline');
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+    });
+
     it('defers a transactional bump until the transaction is aborted', async () => {
       const broker = fakeBroker();
       broker.initProducerId

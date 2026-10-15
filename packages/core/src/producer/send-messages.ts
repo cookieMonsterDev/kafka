@@ -217,7 +217,6 @@ export function createSendMessages({
       await cluster.refreshMetadataIfNecessary();
       assignMessages();
       await acquireGatesOnce();
-      await eosManager.bumpEpochIfRequested();
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 

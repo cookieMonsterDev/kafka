@@ -820,6 +820,51 @@ describe('producer/sendMessages', () => {
       ]);
     });
 
+    it("does not bump the epoch inside another send's retries, which may resend a written batch", async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const initProducerId = vi
+        .fn()
+        .mockResolvedValueOnce({ producerId: 1000n, producerEpoch: 0 })
+        .mockResolvedValue({ producerId: 1000n, producerEpoch: 1 });
+      const eosCluster = {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ initProducerId }),
+        brokerPool: { versions: undefined },
+      };
+      const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+      await eosManager.initProducerId();
+
+      const requests: { producerEpoch: number; firstSequence: number }[] = [];
+      brokers[1].produce.mockImplementation(
+        (request: { producerEpoch: number; topicData: { partitions: { firstSequence: number }[] }[] }) => {
+          requests.push({
+            producerEpoch: request.producerEpoch,
+            firstSequence: request.topicData[0]!.partitions[0]!.firstSequence,
+          });
+          if (requests.length > 1) return Promise.resolve(fakeProduceResponse(topic, 0));
+          // Another send gives up on a possibly-written batch while this one is in flight.
+          eosManager.requestEpochBump();
+          return Promise.reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' }));
+        },
+      );
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: () => 0,
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] });
+
+      // The retry must reuse its sequence under the same epoch so the broker can dedupe it.
+      expect(requests).toEqual([
+        { producerEpoch: 0, firstSequence: 0 },
+        { producerEpoch: 0, firstSequence: 0 },
+      ]);
+      expect(initProducerId).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the sequences of a sibling partition that shared the rejected request', async () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
       const code = ERROR_CODES.find((entry) => entry.type === 'MESSAGE_TOO_LARGE')!.code;

@@ -3,11 +3,13 @@ import { sendError, sendJson } from '../create-server';
 import { isKnownProfile, listProfileNames, type StudioConnectionConfig } from '../kafka/connection';
 import { readJsonBody } from '../json';
 import type { AdminPool } from '../kafka/admin-pool';
+import type { ProducerPool } from '../kafka/produce';
 import type { Router } from '../router';
 
 export interface ProfilesRouteContext {
   readonly connection: StudioConnectionConfig;
   readonly pool: AdminPool;
+  readonly producers: Pick<ProducerPool, 'invalidate'>;
   getActiveProfile(): string | null;
   setActiveProfile(profile: string | null): void;
 }
@@ -27,7 +29,7 @@ function profilesPayload(context: ProfilesRouteContext): { active: string | null
 /**
  * `GET /api/profiles` lists the named connection profiles (redacted), and `POST
  * /api/profiles/active` switches which one is active. Switching disconnects and forgets any
- * pooled admin for the profile being switched away from — the studio only ever needs one live
+ * pooled admin and producer for the profile being switched away from — the studio only ever needs one live
  * connection at a time — and starts warming the new profile's connection in the background so the
  * first real request against it doesn't pay the connect cost.
  */
@@ -59,7 +61,7 @@ export function registerProfileRoutes(router: Router, context: ProfilesRouteCont
       const previous = context.getActiveProfile();
       context.setActiveProfile(requested);
       if (previous !== requested) {
-        await context.pool.invalidate(previous);
+        await Promise.all([context.pool.invalidate(previous), context.producers.invalidate(previous)]);
         // Fire-and-forget: a failed warm-up doesn't fail the switch — the pool discards a failed
         // entry itself, so whatever calls get() next for real just retries and surfaces the error.
         void context.pool.get(requested).catch(() => {});

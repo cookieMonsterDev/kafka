@@ -84,6 +84,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   registerProfileRoutes(router, {
     connection,
     pool,
+    producers,
     getActiveProfile: () => activeProfile,
     setActiveProfile: (profile) => {
       activeProfile = profile;

@@ -45,8 +45,9 @@ export function registerMessageRoutes(router: Router, context: MessagesRouteCont
       return;
     }
 
-    const admin = await context.pool.get(context.getActiveProfile());
-    const consumer = context.consumerFactory(context.getActiveProfile()).consumer();
+    const profile = context.getActiveProfile();
+    const admin = await context.pool.get(profile);
+    const consumer = context.consumerFactory(profile).consumer();
     const response = await readMessagesPage(admin, consumer, { topic: name, query: parsed.data });
     sendJson(res, 200, response);
   });
@@ -59,8 +60,9 @@ export function registerMessageRoutes(router: Router, context: MessagesRouteCont
       return;
     }
 
-    const admin = await context.pool.get(context.getActiveProfile());
-    const consumer = context.consumerFactory(context.getActiveProfile()).consumer();
+    const profile = context.getActiveProfile();
+    const admin = await context.pool.get(profile);
+    const consumer = context.consumerFactory(profile).consumer();
     const controller = new AbortController();
     const stream = openSseStream(req, res, () => controller.abort());
     // Forwards every delivered frame to the activity firehose too — the board's particle layer is

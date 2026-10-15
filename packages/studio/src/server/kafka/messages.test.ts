@@ -164,6 +164,71 @@ describe('readMessagesPage', () => {
     expect(result.messages).toEqual([]);
   });
 
+  it('stops reading a partition once it has yielded `limit` messages', async () => {
+    const admin = createFakeAdmin({ fetchTopicOffsets: async () => [offset(0, 0n, 1_000n)] });
+    let batchesPulled = 0;
+    const consumer = createFakeMessageConsumer({
+      connect: async () => {},
+      disconnect: async () => {},
+      assign: async () => {},
+      seek: () => {},
+      stream: async function* () {
+        for (let start = 0n; start < 1_000n; start += 10n) {
+          batchesPulled++;
+          const messages = Array.from({ length: 10 }, (_, i) => createFakeKafkaMessage({ offset: start + BigInt(i) }));
+          yield createFakeBatch({
+            topic: 'orders',
+            partition: 0,
+            highWatermark: 1_000n,
+            fetchedOffset: start,
+            messages,
+          });
+        }
+      },
+    });
+
+    const result = await readMessagesPage(admin, consumer, { topic: 'orders', query: { from: 'earliest', limit: 5 } });
+
+    expect(result.messages.map((m) => m.offset)).toEqual(['0', '1', '2', '3', '4']);
+    expect(batchesPulled).toBe(1);
+  });
+
+  it('stops reading every partition once the lowest partitions already fill `limit`', async () => {
+    const admin = createFakeAdmin({ fetchTopicOffsets: async () => [offset(0, 0n, 3n), offset(1, 0n, 1_000n)] });
+    let partitionOneBatches = 0;
+    const consumer = createFakeMessageConsumer({
+      connect: async () => {},
+      disconnect: async () => {},
+      assign: async () => {},
+      seek: () => {},
+      stream: async function* () {
+        yield createFakeBatch({
+          topic: 'orders',
+          partition: 0,
+          highWatermark: 3n,
+          fetchedOffset: 0n,
+          messages: [0n, 1n, 2n].map((n) => createFakeKafkaMessage({ offset: n })),
+        });
+        for (let start = 0n; start < 1_000n; start += 10n) {
+          partitionOneBatches++;
+          const messages = Array.from({ length: 10 }, (_, i) => createFakeKafkaMessage({ offset: start + BigInt(i) }));
+          yield createFakeBatch({
+            topic: 'orders',
+            partition: 1,
+            highWatermark: 1_000n,
+            fetchedOffset: start,
+            messages,
+          });
+        }
+      },
+    });
+
+    const result = await readMessagesPage(admin, consumer, { topic: 'orders', query: { from: 'earliest', limit: 3 } });
+
+    expect(result.messages.map((m) => `${m.partition}:${m.offset}`)).toEqual(['0:0', '0:1', '0:2']);
+    expect(partitionOneBatches).toBe(0);
+  });
+
   it('always disconnects the consumer, even when assigning partitions fails', async () => {
     const admin = createFakeAdmin({ fetchTopicOffsets: async () => [offset(0, 0n, 5n)] });
     const disconnect = vi.fn(async () => {});

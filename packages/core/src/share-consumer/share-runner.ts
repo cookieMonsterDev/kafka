@@ -276,6 +276,9 @@ export class ShareRunner {
     const currentPartitions = new Map(topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)]));
     const forgottenTopics = this.#forgottenTopicsFor(previousPartitions, currentPartitions);
 
+    // An initial-epoch ShareFetch may not carry acknowledgements, and opening a new session
+    // releases whatever the previous one acquired, so acks still pending for it are dropped.
+    const isNewSession = shareSessionEpoch === SHARE_SESSION_INITIAL_EPOCH;
     const takenAcks: PendingAck[] = [];
     const topics = topicPartitions
       .map(({ topic, partitions }) => {
@@ -285,39 +288,51 @@ export class ShareRunner {
           topicId,
           partitions: partitions.map((partitionIndex) => {
             const acknowledgementBatches = this.#takeAcknowledgementBatchesFor(topic, partitionIndex, takenAcks);
-            return { partitionIndex, acknowledgementBatches };
+            return { partitionIndex, acknowledgementBatches: isNewSession ? [] : acknowledgementBatches };
           }),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+    if (isNewSession) takenAcks.length = 0;
 
     if (topics.length === 0) {
       this.#pendingAcks.push(...takenAcks);
       return [];
     }
 
+    let attempts = 0;
+    let sentEpoch = shareSessionEpoch;
     try {
       const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-      const response = await this.#retrier(() =>
-        broker.shareFetch({
+      const response = await this.#retrier(() => {
+        // A failed attempt may already have been applied (epoch bumped, acknowledgements
+        // recorded), so replaying it is ambiguous; retries open a fresh session without acks.
+        const isRetry = attempts++ > 0;
+        sentEpoch = isRetry ? SHARE_SESSION_INITIAL_EPOCH : shareSessionEpoch;
+        return broker.shareFetch({
           groupId: this.#shareGroup.groupId,
           memberId,
-          shareSessionEpoch,
+          shareSessionEpoch: sentEpoch,
           maxWaitMs: this.#maxWaitTimeInMs,
           minBytes: this.#minBytes,
           maxBytes: this.#maxBytes,
           maxRecords: this.#maxRecords,
           batchSize: this.#batchSize,
           shareAcquireMode: this.#shareAcquireMode,
-          isRenewAck: takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
-          topics,
-          forgottenTopics,
-        }),
-      );
-      this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
+          isRenewAck: !isRetry && takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
+          topics: isRetry
+            ? topics.map(({ topicId, partitions }) => ({
+                topicId,
+                partitions: partitions.map(({ partitionIndex }) => ({ partitionIndex, acknowledgementBatches: [] })),
+              }))
+            : topics,
+          forgottenTopics: isRetry ? [] : forgottenTopics,
+        });
+      });
+      this.#shareSessionEpochByNode.set(nodeId, sentEpoch + 1);
       this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
 
-      if (takenAcks.length > 0) {
+      if (takenAcks.length > 0 && attempts === 1) {
         this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
           groupId: this.#shareGroup.groupId,
           memberId,
@@ -341,17 +356,15 @@ export class ShareRunner {
       }
       return batches.filter((batch) => !this.#isStale(batch));
     } catch (error) {
-      this.#pendingAcks.push(...takenAcks);
-      // The session state we just tried to send may no longer match what the broker has -
-      // start the next fetch for this node with a fresh (epoch 0) session. `#retrier` wraps an
-      // exhausted-retries error in `KafkaNumberOfRetriesExceeded`, so the protocol error's `type`
-      // may only be reachable via `.cause`.
-      const errorLike = error as { type?: string; cause?: { type?: string } };
-      const type = errorLike.type ?? errorLike.cause?.type;
-      if (type === 'SHARE_SESSION_NOT_FOUND' || type === 'INVALID_SHARE_SESSION_EPOCH') {
-        this.#shareSessionEpochByNode.delete(nodeId);
-        this.#shareSessionPartitionsByNode.delete(nodeId);
+      if (attempts === 0) {
+        this.#pendingAcks.push(...takenAcks);
+        throw error;
       }
+      // Whether the broker applied any attempt is unknown, so the session state no longer matches
+      // what it has: start the next fetch for this node with a fresh (epoch 0) session. The
+      // acknowledgements taken for it cannot ride on that request and are dropped with the session.
+      this.#shareSessionEpochByNode.delete(nodeId);
+      this.#shareSessionPartitionsByNode.delete(nodeId);
       throw error;
     }
   }

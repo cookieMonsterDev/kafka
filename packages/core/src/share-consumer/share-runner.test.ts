@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
+import { KafkaRequestTimeoutError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
@@ -327,6 +328,58 @@ describe('share-consumer/share-runner', () => {
     expect(shareFetch.mock.calls[0]?.[0]?.shareSessionEpoch).toBe(0);
     expect(shareFetch.mock.calls[1]?.[0]?.shareSessionEpoch).toBe(1);
     expect(shareFetch.mock.calls[2]?.[0]?.shareSessionEpoch).toBe(0);
+  });
+
+  it('retries a failed ShareFetch on a fresh session instead of replaying its epoch and acknowledgements', async () => {
+    type ShareFetchArgs = {
+      shareSessionEpoch: number;
+      topics: { partitions: { acknowledgementBatches: unknown[] }[] }[];
+    };
+    const { shareGroup, shareFetch } = createShareGroup();
+    const recordResponse: unknown = await shareFetch();
+    shareFetch.mockReset();
+    const requests: ShareFetchArgs[] = [];
+    let failed = false;
+    shareFetch.mockImplementation(async (request: ShareFetchArgs) => {
+      requests.push(request);
+      if (requests.length === 1) return recordResponse;
+      const carriesAcks = request.topics.some(({ partitions }) =>
+        partitions.some(({ acknowledgementBatches }) => acknowledgementBatches.length > 0),
+      );
+      if (carriesAcks && !failed) {
+        failed = true;
+        throw new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' });
+      }
+      return { errorCode: 0, responses: [] };
+    });
+
+    const runner = new ShareRunner({
+      logger: silentLogger,
+      shareGroup,
+      heartbeatInterval: 1000,
+      maxWaitTimeInMs: 10,
+      retry: { retries: 1, initialRetryTime: 1, maxRetryTime: 5 },
+      eachMessage: async () => undefined,
+      onCrash: vi.fn(),
+    });
+
+    try {
+      await runner.start();
+      await vi.waitFor(() => expect(failed).toBe(true));
+      const failedIndex = requests.findIndex(
+        (request, index) => index > 0 && request.topics[0]?.partitions[0]?.acknowledgementBatches.length,
+      );
+      await vi.waitFor(() => expect(requests.length).toBeGreaterThan(failedIndex + 1));
+
+      // The broker may already have applied the timed-out request, so its epoch and
+      // acknowledgements must not be sent again; the retry opens a fresh session instead.
+      const retry = requests[failedIndex + 1]!;
+      expect(retry.shareSessionEpoch).toBe(0);
+      expect(retry.topics[0]?.partitions[0]?.acknowledgementBatches).toEqual([]);
+    } finally {
+      runner.shuttingDown = true;
+      await runner.stop();
+    }
   });
 
   it('crashes on a non-retriable fetch error instead of retrying it forever', async () => {

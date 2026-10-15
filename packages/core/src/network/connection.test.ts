@@ -301,6 +301,28 @@ describe('network/Connection', () => {
       expect(outcome).toBe('disconnected');
       await expect(inFlight).rejects.toThrow(KafkaConnectionError);
     });
+
+    it('completes a response that was partially received when disconnect started', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, {
+        requestTimeout: 1000,
+        enforceRequestTimeout: false,
+      });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      const responseHeader = new Encoder().writeInt32(0);
+      const body = Buffer.alloc(32, 7);
+      const frame = Buffer.concat([
+        new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader).buffer,
+        body,
+      ]);
+
+      socket.emit('data', frame.subarray(0, 10));
+      const disconnecting = connection.disconnect();
+      socket.emit('data', frame.subarray(10));
+
+      await expect(inFlight).resolves.toEqual(body);
+      await disconnecting;
+    });
   });
 
   describe('post-connect socket errors', () => {

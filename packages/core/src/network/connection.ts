@@ -494,10 +494,11 @@ export class Connection {
     this.#clearIdleTimer();
     this.#authenticatedAt = null;
     this.#connectionStatus = CONNECTION_STATUS.DISCONNECTING;
-    this.#resetReceiveBuffer();
     this.#logDebug('disconnecting...');
 
+    // In-flight responses keep arriving during the drain; resetting first would corrupt a partial frame.
     await this.requestQueue.waitForPendingRequests(this.requestQueue.requestTimeout);
+    this.#resetReceiveBuffer();
     if (this.requestQueue.isBusy()) {
       this.#rejectRequests(
         new KafkaConnectionError('Connection closed before pending requests completed', { broker: this.broker }),

@@ -45,6 +45,7 @@ async function withServer<T>(context: ProfilesRouteContext, run: (baseUrl: strin
   try {
     return await run(`http://127.0.0.1:${String(port)}`);
   } finally {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }

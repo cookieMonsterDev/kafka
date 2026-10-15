@@ -169,6 +169,21 @@ describe('network/Connection', () => {
       await expect(connection.connect()).resolves.toBe(true);
     });
 
+    it('shares one socket between concurrent connect calls', async () => {
+      const sockets: net.Socket[] = [];
+      const socketFactory: SocketFactory = ({ onConnect }) => {
+        const { socket } = createFakeSocket();
+        sockets.push(socket);
+        setTimeout(onConnect, 5);
+        return socket;
+      };
+
+      const connection = createConnection(9999, { socketFactory });
+      await expect(Promise.all([connection.connect(), connection.connect()])).resolves.toEqual([true, true]);
+      expect(sockets).toHaveLength(1);
+      expect(connection.isConnected()).toBe(true);
+    });
+
     it('rejects with a connection error when the broker is unreachable', async () => {
       const temp = net.createServer();
       const port = await new Promise<number>((resolve) => {

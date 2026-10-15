@@ -305,7 +305,17 @@ export class Connection {
     return CONNECTED_STATUS.includes(this.#connectionStatus);
   }
 
+  /**
+   * Concurrent callers share one in-flight attempt; otherwise each would open its own socket and
+   * reset the receive buffer and auth state under the others.
+   */
   connect(setupTimeoutMs?: number): Promise<boolean> {
+    return this.#connect(setupTimeoutMs);
+  }
+
+  #connect = sharedPromiseTo((setupTimeoutMs?: number) => this.#openSocket(setupTimeoutMs));
+
+  #openSocket(setupTimeoutMs?: number): Promise<boolean> {
     return new Promise((resolve, reject) => {
       if (this.isConnected()) {
         resolve(true);

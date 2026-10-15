@@ -44,7 +44,9 @@ blamed on the config file.
 - Candidate ladder, checked in this order: `kafka.config.ts` → `.mts` → `.cts` → `.js` → `.mjs` →
   `.cjs` → `.json`, then the same ladder under `.config/kafka.*`.
 - Search starts at the current directory and walks upward, stopping at the first directory
-  containing `.git`, `pnpm-workspace.yaml`, or a `package.json` with a `workspaces` field.
+  containing `.git`, `pnpm-workspace.yaml`, or a `package.json` with a `workspaces` field. It
+  never steps up into a world-writable directory (such as `/tmp`) or one owned by another user,
+  so nobody else can plant a config that a search from below would run.
 - The first directory that has any candidate wins entirely — a config a level up is never merged
   with one closer to the current directory.
 - Two candidates in the same directory: the first one in ladder order wins, and a warning names

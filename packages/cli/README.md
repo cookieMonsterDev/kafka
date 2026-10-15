@@ -475,7 +475,8 @@ Every connecting command resolves its options from, highest precedence first: **
 flags → environment variables → the active `--profile` → the config file's `client` section →
 built-in defaults**. The config file is discovered by walking upward from the current directory
 looking for `kafka.config.{ts,mts,cts,js,mjs,cjs,json}` (or `.config/kafka.*`), stopping at the
-first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` — override that with
+first `.git`, `pnpm-workspace.yaml`, or workspace `package.json`, and never stepping up into a
+world-writable directory (such as `/tmp`) or one owned by another user — override that with
 `--config-file <path>` or `KAFKA_CONFIG`.
 
 The file is loaded asynchronously, so a config that uses top-level `await` or exports an async

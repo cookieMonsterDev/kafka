@@ -33,6 +33,9 @@ in the same directory.
 - Search walks **upward** from `cwd` and stops, inclusive of that directory, at the first `.git`,
   `pnpm-workspace.yaml`, or `package.json` carrying a `workspaces` field. Pass
   `searchParents: false` to check only `cwd`.
+- A discovered config is executed, so the search never steps up into a parent directory that is
+  world-writable (such as `/tmp`) or owned by a user other than the current one or root. `cwd`
+  itself is always checked. Windows exposes no ownership, so this check is skipped there.
 - No `process.chdir` is ever used — every search takes an explicit `cwd`.
 
 ## Loading

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
 
@@ -33,6 +33,23 @@ function isSearchBoundary(dir: string): boolean {
       'workspaces' in packageJson &&
       (packageJson as { workspaces?: unknown }).workspaces !== undefined
     );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether the upward search may step into `dir`. A discovered config is executed, so never one
+ * another user could have planted: a world-writable directory (e.g. `/tmp`), or one owned by
+ * someone other than the current user or root. Ownership isn't exposed on Windows, so the check
+ * is skipped there.
+ */
+function isTrustedAncestor(dir: string): boolean {
+  const uid = process.getuid?.();
+  if (uid === undefined) return true;
+  try {
+    const { uid: owner, mode } = statSync(dir);
+    return (owner === uid || owner === 0) && (mode & 0o002) === 0;
   } catch {
     return false;
   }
@@ -80,7 +97,7 @@ export interface DiscoverConfigFileOptions {
    * `<name>.config.ts` instead.
    */
   name?: string;
-  /** Walk upward toward the filesystem root, stopping at a workspace boundary. Default `true`. */
+  /** Walk upward toward the filesystem root, stopping at a workspace boundary or an untrusted parent. Default `true`. */
   searchParents?: boolean;
   onDiagnostic?: OnConfigDiagnostic;
 }
@@ -92,7 +109,8 @@ export interface DiscoverConfigFileOptions {
  * containing any candidate wins
  * entirely — configs at multiple levels are never merged. Search stops (inclusive of the boundary
  * directory itself) at the first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` it
- * finds, or immediately when `searchParents` is `false`.
+ * finds, before stepping into an untrusted parent (see `isTrustedAncestor`), or immediately when
+ * `searchParents` is `false`.
  */
 export function discoverConfigFile({
   cwd,
@@ -109,7 +127,7 @@ export function discoverConfigFile({
     if (!searchParents || isSearchBoundary(dir)) return null;
 
     const parent = dirname(dir);
-    if (parent === dir) return null;
+    if (parent === dir || !isTrustedAncestor(parent)) return null;
     dir = parent;
   }
 }

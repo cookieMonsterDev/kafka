@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -185,6 +185,22 @@ describe('discoverConfigFile — dynamic trees', () => {
 
     expect(discoverConfigFile({ cwd: nested, searchParents: false })).toBeNull();
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'never steps up into a world-writable directory such as /tmp, where anyone could plant a config',
+    () => {
+      const root = makeTempDir();
+      const shared = join(root, 'shared');
+      const nested = join(shared, 'project');
+      mkdirSync(nested, { recursive: true });
+      chmodSync(shared, 0o777);
+      writeFileSync(join(shared, 'kafka.config.mjs'), 'export default { client: { brokers: ["planted:9092"] } };\n');
+
+      expect(discoverConfigFile({ cwd: nested })).toBeNull();
+      // The start directory itself is always searched — it is where the user chose to run.
+      expect(discoverConfigFile({ cwd: shared })).toBe(join(shared, 'kafka.config.mjs'));
+    },
+  );
 
   it('returns null when nothing is found before the filesystem root', () => {
     const root = makeTempDir();

@@ -335,7 +335,15 @@ export class BrokerPool {
     await this.connect();
   }
 
+  /** Re-checked inside the update queue, so concurrent stale callers share one Metadata request. */
   async refreshMetadataIfNecessary(topics: readonly string[]): Promise<void> {
+    if (!this.#metadataNeedsRefresh(topics)) return;
+    await this.#serializeBrokersUpdate(async () => {
+      if (this.#metadataNeedsRefresh(topics)) await this.#refreshMetadata(topics);
+    });
+  }
+
+  #metadataNeedsRefresh(topics: readonly string[]): boolean {
     const metadata = this.metadata;
     // KIP-919 controller pools have no topic metadata; skip the topic-presence check.
     // Otherwise require a cache hit before reading `topicMetadata` — the previous
@@ -344,12 +352,7 @@ export class BrokerPool {
       this.usingBootstrapControllers ||
       (metadata != null &&
         topics.every((topic) => metadata.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic)));
-    const shouldRefresh =
-      metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
-
-    if (shouldRefresh) {
-      await this.refreshMetadata(topics);
-    }
+    return metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
   }
 
   /**

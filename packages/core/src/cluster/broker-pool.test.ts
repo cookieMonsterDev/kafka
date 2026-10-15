@@ -283,6 +283,39 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.metadata?.topicMetadata.map((entry) => entry.topic)).toEqual(['orders']);
     });
 
+    it('concurrent refreshMetadataIfNecessary callers share one Metadata request', async () => {
+      const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+      const send = vi
+        .fn()
+        .mockResolvedValueOnce({
+          errorCode: 0,
+          throttleTime: 0,
+          apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        })
+        .mockResolvedValue({
+          brokers: [{ nodeId: 1, host: 'seed-host', port: 9092, rack: null }],
+          topicMetadata: [],
+          throttleTime: 0,
+          clusterId: null,
+          controllerId: 1,
+          clientSideThrottleTime: 0,
+          clusterAuthorizedOperations: -2147483648,
+        });
+      seedPool.send = send;
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => seedPool),
+        logger: silentLogger,
+        metadataMaxAge: 60_000,
+      });
+      await brokerPool.connect();
+      seedPool.isConnected = vi.fn().mockReturnValue(true);
+      const callsBefore = send.mock.calls.length;
+
+      await Promise.all(Array.from({ length: 3 }, () => brokerPool.refreshMetadataIfNecessary([])));
+
+      expect(send.mock.calls.length - callsBefore).toBe(1);
+    });
+
     it('concurrent refreshes do not leak brokers created by the losing run', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
       seedPool.send = vi

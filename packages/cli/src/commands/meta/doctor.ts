@@ -8,6 +8,7 @@ import { renderTable } from '../../output/table';
 
 interface DoctorReport {
   readonly configPath: string | null;
+  readonly configError?: string;
   readonly transformFallbackUsed: boolean;
   readonly activeProfile: string | null;
   readonly availableProfiles: readonly string[];
@@ -23,6 +24,7 @@ function hasName(error: unknown, name: string): boolean {
 function renderReport(report: DoctorReport): string {
   const lines = [
     `config file       ${report.configPath ?? '(none found)'}`,
+    ...(report.configError === undefined ? [] : [`config error      ${report.configError}`]),
     `transform rescue  ${report.transformFallbackUsed ? 'used' : 'not used'}`,
     `active profile    ${report.activeProfile ?? '(none)'}`,
     `known profiles    ${report.availableProfiles.length > 0 ? report.availableProfiles.join(', ') : '(none)'}`,
@@ -40,6 +42,7 @@ function renderReport(report: DoctorReport): string {
 export const doctorCommand: CommandSpec = {
   path: ['doctor'],
   summary: 'Report where connection settings come from — config file, environment, profile, or flag',
+  config: 'tolerate',
   flags: [{ name: 'brokers', type: 'string', brief: 'comma-separated broker list, to diagnose as if given' }],
   examples: ['doctor', 'doctor --profile staging'],
   exitCodes: [EXIT_CODES.ok],
@@ -67,6 +70,7 @@ export const doctorCommand: CommandSpec = {
 
     const report: DoctorReport = {
       configPath: config.path,
+      configError: config.loadError,
       transformFallbackUsed: config.transformFallbackUsed,
       activeProfile: config.profile,
       availableProfiles: Object.keys(config.cli.profiles ?? {}),

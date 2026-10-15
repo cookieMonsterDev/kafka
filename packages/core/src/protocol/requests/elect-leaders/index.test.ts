@@ -12,4 +12,13 @@ describe('protocol/requests/elect-leaders', () => {
     expect(ElectLeaders.protocol({ version: 1 })(options).request.apiVersion).toBe(1);
     expect(ElectLeaders.protocol({ version: 2 })(options).request.apiVersion).toBe(2);
   });
+
+  it.each([0, 1, 2])('v%i encodes an empty topicPartitions list as empty, not null (all)', async (version) => {
+    const encode = (options: Parameters<ReturnType<typeof ElectLeaders.protocol>>[0]) =>
+      ElectLeaders.protocol({ version })(options).request.encode();
+    const empty = (await encode({ topicPartitions: [] })).buffer;
+    const all = (await encode({})).buffer;
+    expect((await encode({ topicPartitions: null })).buffer).toEqual(all);
+    expect(empty).not.toEqual(all);
+  });
 });

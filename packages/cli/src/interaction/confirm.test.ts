@@ -1,34 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CliAbortedError } from '../errors/aborted-error';
+import { createFakeStdin, type FakeStdin } from '../testing/create-fake-stdin';
 import { confirmDestructive, requireForce, type ConfirmRuntime } from './confirm';
 
-function createFakeStdin() {
-  const dataListeners: ((chunk: string) => void)[] = [];
-  const endListeners: (() => void)[] = [];
-  return {
-    setEncoding: vi.fn(),
-    on: vi.fn((event: 'data' | 'end', listener: ((chunk: string) => void) | (() => void)) => {
-      if (event === 'data') dataListeners.push(listener);
-      else endListeners.push(listener as () => void);
-    }),
-    emitData(chunk: string) {
-      for (const listener of dataListeners) listener(chunk);
-    },
-    emitEnd() {
-      for (const listener of endListeners) listener();
-    },
-  };
-}
-
-function createRuntime(overrides: Partial<ConfirmRuntime> & { stdin?: ReturnType<typeof createFakeStdin> }): {
+function createRuntime(overrides: { isTty?: boolean; env?: ConfirmRuntime['env']; stdin?: FakeStdin }): {
   runtime: ConfirmRuntime;
-  stdin: ReturnType<typeof createFakeStdin>;
+  stdin: FakeStdin;
   stderrWrite: ReturnType<typeof vi.fn>;
 } {
-  const stdin = overrides.stdin ?? createFakeStdin();
+  const stdin = overrides.stdin ?? createFakeStdin({ isTTY: overrides.isTty ?? true });
   const stderrWrite = vi.fn((_chunk: string) => true);
   const runtime: ConfirmRuntime = {
-    isTty: overrides.isTty ?? true,
     env: overrides.env ?? {},
     stdin,
     stderr: { write: stderrWrite },
@@ -121,6 +103,29 @@ describe('confirmDestructive', () => {
     await promise;
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('Delete "orders"?'));
     expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining('[y/N]'));
+  });
+
+  it('requires --yes when stdout is a TTY but stdin is piped, e.g. `yes | kafka topic delete`', async () => {
+    const stdin = createFakeStdin({ isTTY: false });
+    // A stdout-TTY flag must not count as interactive: only a stdin TTY can answer the prompt.
+    const runtime = { isTty: true, env: {}, stdin, stderr: { write: () => true } };
+    await expect(confirmDestructive({ runtime, yes: false, message: 'Delete "orders"?' })).rejects.toThrow(/--yes/);
+  });
+
+  it('aborts instead of hanging when stdin has already ended', async () => {
+    const { runtime } = createRuntime({ stdin: createFakeStdin({ isTTY: true, readableEnded: true }) });
+    await expect(confirmDestructive({ runtime, yes: false, message: 'Delete "orders"?' })).rejects.toThrow(
+      CliAbortedError,
+    );
+  });
+
+  it('detaches its stdin listeners and pauses stdin once answered', async () => {
+    const { runtime, stdin } = createRuntime({ isTty: true });
+    const promise = confirmDestructive({ runtime, yes: false, message: 'Delete "orders"?' });
+    stdin.emitData('y\n');
+    await promise;
+    expect(stdin.listenerCount()).toBe(0);
+    expect(stdin.pause).toHaveBeenCalled();
   });
 
   it('never touches stdin when --yes short-circuits the prompt', async () => {

@@ -63,7 +63,7 @@ export interface TailOptions {
 
 const DEFAULT_RATE_PER_SECOND = 200;
 
-/** Streams newly-produced messages on `topic` (optionally one partition) to `stream` from "now" onward — a tail never replays history, that's the bounded page read (`./messages`). Runs until `signal` aborts or the stream ends. */
+/** Streams newly-produced messages on `topic` (optionally one partition) to `stream` from "now" onward — a tail never replays history, that's the bounded page read (`./messages`). Runs until `signal` aborts or the stream ends; rejects when there is nothing to tail. */
 export async function runTail(
   admin: PooledAdmin,
   consumer: PooledMessageConsumer,
@@ -78,7 +78,14 @@ export async function runTail(
 
   const offsets = await admin.fetchTopicOffsets(topic);
   const targets = partition === undefined ? offsets : offsets.filter((offset) => offset.partition === partition);
-  if (targets.length === 0) return;
+  // Fail rather than return: a silently ended SSE stream makes `EventSource` reconnect forever.
+  if (targets.length === 0) {
+    throw new Error(
+      partition === undefined
+        ? `topic "${topic}" has no partitions`
+        : `partition ${String(partition)} does not exist on topic "${topic}"`,
+    );
+  }
 
   const queue = new BoundedTailQueue(maxBuffered);
   const seen = new SeenOffsetTracker();

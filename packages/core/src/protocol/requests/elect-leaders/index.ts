@@ -19,7 +19,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ElectLeadersOptions>>> =
   0: (options) => ({
     request: electLeadersRequestV0({
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      topicPartitions: options.topicPartitions ?? [],
+      topicPartitions: options.topicPartitions ?? null,
     }),
     response: electLeadersResponseV0,
   }),
@@ -27,7 +27,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ElectLeadersOptions>>> =
     request: electLeadersRequestV1({
       electionType: options.electionType ?? PREFERRED_ELECTION,
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      topicPartitions: options.topicPartitions ?? [],
+      topicPartitions: options.topicPartitions ?? null,
     }),
     response: electLeadersResponseV1,
   }),
@@ -35,7 +35,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ElectLeadersOptions>>> =
     request: electLeadersRequestV2({
       electionType: options.electionType ?? PREFERRED_ELECTION,
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
-      topicPartitions: options.topicPartitions === undefined ? null : options.topicPartitions,
+      topicPartitions: options.topicPartitions ?? null,
     }),
     response: electLeadersResponseV2,
   }),

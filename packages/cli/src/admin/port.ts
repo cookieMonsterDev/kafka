@@ -14,6 +14,8 @@ export interface OpenAdminOptions {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly config: ResolvedCliConfig;
   readonly adminConfig?: AdminConfig;
+  /** Aborts the initial connect; the runtime supplies its own SIGINT/SIGTERM signal. */
+  readonly signal?: AbortSignal;
 }
 
 /**

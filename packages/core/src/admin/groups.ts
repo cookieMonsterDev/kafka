@@ -7,7 +7,7 @@ import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-del
 import type { LeaveGroupMember } from '../protocol/requests/leave-group/index';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { deleteGroupsViaCoordinators, protocolType, formatUnknown } from './helpers';
+import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, protocolType, formatUnknown } from './helpers';
 import type { RemoveMembersFromConsumerGroupOptions, RemoveMembersFromConsumerGroupResult } from './types';
 import type { TopicPartitions } from './types';
 
@@ -41,35 +41,14 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
   };
 
   const describeGroups = async (groupIds: string[]): Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }> => {
-    const coordinatorsForGroup = await Promise.all(
-      groupIds.map(async (groupId) => {
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        return { coordinator, groupId };
+    return {
+      groups: await describeGroupsViaCoordinators({
+        cluster,
+        retry,
+        groupIds,
+        describe: (coordinator, ids) => coordinator.describeGroups({ groupIds: ids }),
       }),
-    );
-
-    const groupsByCoordinator = new Map<
-      string,
-      { coordinator: (typeof coordinatorsForGroup)[number]['coordinator']; groupIds: string[] }
-    >();
-    for (const { coordinator, groupId } of coordinatorsForGroup) {
-      const key = String(coordinator.nodeId);
-      const existing = groupsByCoordinator.get(key);
-      if (existing) {
-        existing.groupIds.push(groupId);
-      } else {
-        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
-      }
-    }
-
-    const responses = await Promise.all(
-      [...groupsByCoordinator.values()].map(async ({ coordinator, groupIds: ids }) => {
-        const { groups } = await retrier(retry)(() => coordinator.describeGroups({ groupIds: ids }));
-        return groups;
-      }),
-    );
-
-    return { groups: responses.flat() };
+    };
   };
 
   const describeClassicGroups = async (
@@ -85,35 +64,14 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
     }
     if (groupIds.length === 0) return { groups: [] };
 
-    const coordinatorsForGroup = await Promise.all(
-      groupIds.map(async (groupId) => {
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        return { coordinator, groupId };
+    return {
+      groups: await describeGroupsViaCoordinators({
+        cluster,
+        retry,
+        groupIds,
+        describe: (coordinator, ids) => coordinator.consumerGroupDescribe({ groupIds: ids }),
       }),
-    );
-
-    const groupsByCoordinator = new Map<
-      string,
-      { coordinator: (typeof coordinatorsForGroup)[number]['coordinator']; groupIds: string[] }
-    >();
-    for (const { coordinator, groupId } of coordinatorsForGroup) {
-      const key = String(coordinator.nodeId);
-      const existing = groupsByCoordinator.get(key);
-      if (existing) {
-        existing.groupIds.push(groupId);
-      } else {
-        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
-      }
-    }
-
-    const responses = await Promise.all(
-      [...groupsByCoordinator.values()].map(async ({ coordinator, groupIds: ids }) => {
-        const { groups } = await retrier(retry)(() => coordinator.consumerGroupDescribe({ groupIds: ids }));
-        return groups;
-      }),
-    );
-
-    return { groups: responses.flat() };
+    };
   };
 
   const deleteGroups = async (groupIds: string[]): Promise<DeleteGroupsResult[]> => {

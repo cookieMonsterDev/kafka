@@ -4,7 +4,7 @@ import { KafkaRequestTimeoutError } from '../errors';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
-import type { EosManager } from './eos-manager/index';
+import { createEosManager, type EosManager } from './eos-manager/index';
 import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { PartitionerArgs } from './types';
@@ -54,6 +54,8 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
     initProducerId: vi.fn().mockResolvedValue(undefined),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
     markTransactionAbortable: vi.fn(),
+    requestEpochBump: vi.fn(),
+    bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
     acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
     releasePartitionGates: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -251,9 +253,10 @@ describe('producer/sendMessages', () => {
     expect(eosManager.releasePartitionGates).toHaveBeenCalled();
   });
 
-  it('rolls back sequence tracking when a produce fails under a stable epoch', async () => {
+  it('rolls back sequence tracking when the broker rejects a produce under a stable epoch', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    brokers[1].produce.mockImplementationOnce(() => Promise.reject(new Error('boom')));
+    const code = ERROR_CODES.find((entry) => entry.type === 'MESSAGE_TOO_LARGE')!.code;
+    brokers[1].produce.mockImplementationOnce(() => Promise.reject(createErrorFromCode(code, { topic, partition: 0 })));
 
     const cluster = fakeCluster(brokers);
     const eosManager = fakeEosManager({ getProducerEpoch: vi.fn().mockReturnValue(0) });
@@ -268,10 +271,11 @@ describe('producer/sendMessages', () => {
 
     await expect(
       sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] }),
-    ).rejects.toThrow('boom');
+    ).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
 
     expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 1);
     expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, -1);
+    expect(eosManager.requestEpochBump).not.toHaveBeenCalled();
   });
 
   it('does not roll back sequence tracking across a concurrent producer epoch reset', async () => {
@@ -512,6 +516,28 @@ describe('producer/sendMessages', () => {
     expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
   });
 
+  it('marks the transaction abort-only when a transactional send fails after a partial write', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    brokers[1].produce.mockRejectedValue(createErrorFromCode(5));
+
+    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: fakeCluster(brokers) as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await expect(
+      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+    ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
+
+    // Partitions 1 and 2 were written inside the transaction; committing now would keep a partial send.
+    expect(brokers[2].produce).toHaveBeenCalledTimes(1);
+    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
+  });
+
   it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
@@ -686,5 +712,194 @@ describe('producer/sendMessages', () => {
     });
 
     expect(recordProduce).toHaveBeenCalledWith({ records: 1, bytes: 4, retries: 0 });
+  });
+
+  it("keeps a failed batch's sequence numbers across retries instead of handing them to a queued send", async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const sentSequences: { value: string; firstSequence: number }[] = [];
+    brokers[1].produce.mockImplementation(
+      (request: { topicData: { partitions: { firstSequence: number; messages: { value: string }[] }[] }[] }) => {
+        const entry = request.topicData[0]!.partitions[0]!;
+        sentSequences.push({ value: entry.messages[0]!.value, firstSequence: entry.firstSequence });
+        if (sentSequences.length === 1) {
+          return Promise.reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' }));
+        }
+        return Promise.resolve(fakeProduceResponse(topic, 0));
+      },
+    );
+
+    const eosCluster = {
+      refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      findControllerBroker: vi.fn().mockResolvedValue({
+        initProducerId: vi.fn().mockResolvedValue({ producerId: 1000n, producerEpoch: 0 }),
+      }),
+      brokerPool: { versions: undefined },
+    };
+    const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+    await eosManager.initProducerId();
+
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: fakeCluster(brokers) as unknown as Cluster,
+      partitioner: () => 0,
+      eosManager,
+      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+    });
+
+    await Promise.all(
+      ['first', 'second'].map((value) =>
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value }] }] }),
+      ),
+    );
+
+    // The timed-out request may already be on the log, so its retry must reuse sequence 0 and the
+    // queued send must never be handed that range (the broker would dedupe it away as a duplicate).
+    expect(sentSequences).toEqual([
+      { value: 'first', firstSequence: 0 },
+      { value: 'first', firstSequence: 0 },
+      { value: 'second', firstSequence: 1 },
+    ]);
+    expect(eosManager.getSequence(topic, 0)).toBe(2);
+  });
+
+  describe('when a failed send may still have been written', () => {
+    const outOfOrderCode = ERROR_CODES.find((entry) => entry.type === 'OUT_OF_ORDER_SEQUENCE_NUMBER')!.code;
+
+    it.each([
+      ['a request timeout', () => new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' })],
+      ['OUT_OF_ORDER_SEQUENCE_NUMBER', () => createErrorFromCode(outOfOrderCode, { topic, partition: 0 })],
+    ])('bumps the epoch before the next send instead of reusing its sequences after %s', async (_, error) => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const requests: { value: string; producerEpoch: number; firstSequence: number }[] = [];
+      brokers[1].produce.mockImplementation(
+        (request: {
+          producerEpoch: number;
+          topicData: { partitions: { firstSequence: number; messages: { value: string }[] }[] }[];
+        }) => {
+          const entry = request.topicData[0]!.partitions[0]!;
+          const value = entry.messages[0]!.value;
+          requests.push({ value, producerEpoch: request.producerEpoch, firstSequence: entry.firstSequence });
+          return value === 'first' ? Promise.reject(error()) : Promise.resolve(fakeProduceResponse(topic, 0));
+        },
+      );
+
+      const initProducerId = vi
+        .fn()
+        .mockResolvedValueOnce({ producerId: 1000n, producerEpoch: 0 })
+        .mockResolvedValueOnce({ producerId: 1000n, producerEpoch: 1 });
+      const eosCluster = {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ initProducerId }),
+        brokerPool: { versions: undefined },
+      };
+      const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+      await eosManager.initProducerId();
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: () => 0,
+        eosManager,
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+
+      await expect(
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'first' }] }] }),
+      ).rejects.toBeDefined();
+      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'second' }] }] });
+
+      // Reusing sequence 0 under epoch 0 would let the broker drop 'second' as a duplicate of a
+      // 'first' that may be on the log; a new epoch restarts sequences without that ambiguity.
+      expect(initProducerId).toHaveBeenCalledTimes(2);
+      expect(requests.filter(({ value }) => value === 'first')).not.toHaveLength(0);
+      for (const request of requests.filter(({ value }) => value === 'first')) {
+        expect(request).toEqual({ value: 'first', producerEpoch: 0, firstSequence: 0 });
+      }
+      expect(requests.filter(({ value }) => value === 'second')).toEqual([
+        { value: 'second', producerEpoch: 1, firstSequence: 0 },
+      ]);
+    });
+
+    it("does not bump the epoch inside another send's retries, which may resend a written batch", async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const initProducerId = vi
+        .fn()
+        .mockResolvedValueOnce({ producerId: 1000n, producerEpoch: 0 })
+        .mockResolvedValue({ producerId: 1000n, producerEpoch: 1 });
+      const eosCluster = {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ initProducerId }),
+        brokerPool: { versions: undefined },
+      };
+      const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+      await eosManager.initProducerId();
+
+      const requests: { producerEpoch: number; firstSequence: number }[] = [];
+      brokers[1].produce.mockImplementation(
+        (request: { producerEpoch: number; topicData: { partitions: { firstSequence: number }[] }[] }) => {
+          requests.push({
+            producerEpoch: request.producerEpoch,
+            firstSequence: request.topicData[0]!.partitions[0]!.firstSequence,
+          });
+          if (requests.length > 1) return Promise.resolve(fakeProduceResponse(topic, 0));
+          // Another send gives up on a possibly-written batch while this one is in flight.
+          eosManager.requestEpochBump();
+          return Promise.reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' }));
+        },
+      );
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: () => 0,
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] });
+
+      // The retry must reuse its sequence under the same epoch so the broker can dedupe it.
+      expect(requests).toEqual([
+        { producerEpoch: 0, firstSequence: 0 },
+        { producerEpoch: 0, firstSequence: 0 },
+      ]);
+      expect(initProducerId).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the sequences of a sibling partition that shared the rejected request', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const code = ERROR_CODES.find((entry) => entry.type === 'MESSAGE_TOO_LARGE')!.code;
+      // Partition 0's rejection fails the whole response, but partition 1 in it may have been written.
+      brokers[1].produce.mockRejectedValue(createErrorFromCode(code, { topic, partition: 0 }));
+      const cluster = fakeCluster(brokers);
+      cluster.findLeaderForPartitions.mockReturnValue({ 1: [0, 1] });
+      const eosManager = fakeEosManager({ getProducerEpoch: vi.fn().mockReturnValue(0) });
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: ({ message }: PartitionerArgs) => Number(message.key),
+        eosManager,
+        retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+
+      await expect(
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          topicMessages: [
+            {
+              topic,
+              messages: [
+                { key: '0', value: 'a' },
+                { key: '1', value: 'b' },
+              ],
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
+
+      expect(eosManager.updateSequence).not.toHaveBeenCalledWith(topic, expect.any(Number), -1);
+      expect(eosManager.requestEpochBump).toHaveBeenCalled();
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import type { FlagSpec, PositionalSpec } from './define';
-import { CliUsageError, coerceEnum, coerceKeyValueRecord, coerceNumber } from './coerce';
+import { CliUsageError, coerceEnum, coerceInteger, coerceKeyValueRecord } from './coerce';
 
 export interface ParsedCommandArgs {
   readonly flags: Record<string, unknown>;
@@ -72,7 +72,7 @@ function coerceValue(flag: FlagSpec, raw: unknown): unknown {
 }
 
 function coerceScalar(flag: FlagSpec, raw: string): unknown {
-  if (flag.type === 'number') return coerceNumber(raw, flag.name);
+  if (flag.type === 'number') return coerceInteger(raw, flag.name);
   if (flag.type === 'enum') return coerceEnum(raw, flag.name, flag.values ?? []);
   return raw;
 }

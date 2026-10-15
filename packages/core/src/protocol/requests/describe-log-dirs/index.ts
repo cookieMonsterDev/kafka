@@ -12,15 +12,15 @@ export interface DescribeLogDirsOptions {
 
 const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeLogDirsOptions>>> = {
   0: (options) => ({
-    request: describeLogDirsRequestV0({ topics: options.topics ?? [] }),
+    request: describeLogDirsRequestV0({ topics: options.topics ?? null }),
     response: describeLogDirsResponseV0,
   }),
   1: (options) => ({
-    request: describeLogDirsRequestV1({ topics: options.topics ?? [] }),
+    request: describeLogDirsRequestV1({ topics: options.topics ?? null }),
     response: describeLogDirsResponseV1,
   }),
   2: (options) => ({
-    request: describeLogDirsRequestV2({ topics: options.topics === undefined ? null : options.topics }),
+    request: describeLogDirsRequestV2({ topics: options.topics ?? null }),
     response: describeLogDirsResponseV2,
   }),
 };

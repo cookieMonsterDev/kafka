@@ -64,7 +64,7 @@ candidate partition's leader has responded fastest, falling back to KIP-794's
 plain uniform choice once a node hasn't been measured yet. This is on by
 default (`adaptive: true`); pass `StickyPartitioner({ adaptive: false })` as
 `createPartitioner` for the plain uniform behavior. Keyed murmur2 routing is
-unaffected either way. See [Producer](./producer/#partitioners).
+unaffected either way. See [Producer](../producer/#partitioners).
 
 ### Compression level
 

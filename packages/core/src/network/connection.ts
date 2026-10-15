@@ -305,7 +305,17 @@ export class Connection {
     return CONNECTED_STATUS.includes(this.#connectionStatus);
   }
 
+  /**
+   * Concurrent callers share one in-flight attempt; otherwise each would open its own socket and
+   * reset the receive buffer and auth state under the others.
+   */
   connect(setupTimeoutMs?: number): Promise<boolean> {
+    return this.#connect(setupTimeoutMs);
+  }
+
+  #connect = sharedPromiseTo((setupTimeoutMs?: number) => this.#openSocket(setupTimeoutMs));
+
+  #openSocket(setupTimeoutMs?: number): Promise<boolean> {
     return new Promise((resolve, reject) => {
       if (this.isConnected()) {
         resolve(true);
@@ -367,23 +377,6 @@ export class Connection {
           }
 
           await this.disconnect();
-        })();
-      };
-
-      const onError = (e: Error & { code?: string }): void => {
-        void (async () => {
-          const error = new KafkaConnectionError(`Connection error: ${e.message}`, {
-            broker: `${this.host}:${this.port}`,
-            code: e.code,
-          });
-
-          this.#logError(error.message, { stack: e.stack });
-          this.#rejectRequests(error);
-          await this.disconnect();
-
-          if (!this.isConnected()) {
-            fail(error);
-          }
         })();
       };
 
@@ -450,15 +443,14 @@ export class Connection {
             },
             onData,
             onEnd,
-            onError: (e) => {
-              if (!this.isConnected()) {
-                onError(e);
-              }
-            },
+            // A setup error only fails this candidate (`onSocketError`), so Happy Eyeballs can try
+            // the next address; once connected, `#onPostConnectSocketError` takes over.
+            onError: () => {},
             onTimeout,
           });
 
           const onSocketError = (e: Error & { code?: string }): void => {
+            this.#logError(`Connection error: ${e.message}`, { address: address.address, stack: e.stack });
             finishReject(
               new KafkaConnectionError(`Connection error: ${e.message}`, {
                 broker: `${this.host}:${this.port}`,
@@ -502,10 +494,16 @@ export class Connection {
     this.#clearIdleTimer();
     this.#authenticatedAt = null;
     this.#connectionStatus = CONNECTION_STATUS.DISCONNECTING;
-    this.#resetReceiveBuffer();
     this.#logDebug('disconnecting...');
 
-    await this.requestQueue.waitForPendingRequests();
+    // In-flight responses keep arriving during the drain; resetting first would corrupt a partial frame.
+    await this.requestQueue.waitForPendingRequests(this.requestQueue.requestTimeout);
+    this.#resetReceiveBuffer();
+    if (this.requestQueue.isBusy()) {
+      this.#rejectRequests(
+        new KafkaConnectionError('Connection closed before pending requests completed', { broker: this.broker }),
+      );
+    }
     this.requestQueue.destroy();
 
     if (this.#socket) {
@@ -612,7 +610,7 @@ export class Connection {
       await this.#authenticate();
     }
 
-    this.#failIfNotConnected();
+    this.#failIfNotAcceptingRequests();
 
     const expectResponse = !request.expectResponse || request.expectResponse();
 
@@ -635,7 +633,7 @@ export class Connection {
 
       return new Promise((resolve, reject) => {
         try {
-          this.#failIfNotConnected();
+          this.#failIfNotAcceptingRequests();
           const entry: RequestEntry = { apiKey, apiName, apiVersion, correlationId, resolve, reject };
 
           this.requestQueue.push({
@@ -703,6 +701,14 @@ export class Connection {
     }
   }
 
+  /** `DISCONNECTING` still counts as connected so in-flight responses drain, but takes no new requests. */
+  #failIfNotAcceptingRequests(): void {
+    if (this.#connectionStatus === CONNECTION_STATUS.DISCONNECTING) {
+      throw new KafkaConnectionError('Connection is closing', { broker: this.broker });
+    }
+    this.#failIfNotConnected();
+  }
+
   #touchActivity(): void {
     if (this.isConnected()) {
       this.#armIdleTimer();
@@ -750,8 +756,11 @@ export class Connection {
   }
 
   /**
-   * Copy `additional` bytes into the receive buffer. Compacts unparsed bytes to offset 0
-   * (onto a fresh Buffer so in-flight payload views keep the previous backing store).
+   * Make room for `additional` bytes. Compacts unparsed bytes to offset 0 (onto a fresh Buffer so
+   * in-flight payload views keep the previous backing store). Growth doubles while a frame
+   * accumulates; compaction happens here rather than after parsing, so the fresh Buffer is sized
+   * once for the leftover bytes, the incoming chunk, and the pending frame, and one large
+   * response doesn't pin (and re-copy) its capacity for every later frame.
    */
   #ensureReceiveCapacity(additional: number): void {
     const remaining = this.#receiveWriteOffset - this.#receiveReadOffset;
@@ -760,11 +769,10 @@ export class Connection {
       return;
     }
 
-    let capacity = this.#receiveBuffer.length;
-    if (capacity < needed) {
-      capacity = Math.max(capacity * 2, needed);
-    }
-
+    const capacity =
+      this.#receiveReadOffset === 0
+        ? Math.max(this.#receiveBuffer.length * 2, needed)
+        : Math.max(needed, this.#bytesNeeded);
     const next = Buffer.allocUnsafe(capacity);
     if (remaining > 0) {
       this.#receiveBuffer.copy(next, 0, this.#receiveReadOffset, this.#receiveWriteOffset);
@@ -774,11 +782,14 @@ export class Connection {
     this.#receiveWriteOffset = remaining;
   }
 
-  #compactReceiveBuffer(): void {
-    if (this.#receiveReadOffset === 0) {
+  /** Drops a fully consumed buffer; a partial frame is compacted by the next `#ensureReceiveCapacity`. */
+  #releaseConsumedReceiveBuffer(): void {
+    if (this.#receiveReadOffset === 0 || this.#receiveReadOffset !== this.#receiveWriteOffset) {
       return;
     }
-    this.#ensureReceiveCapacity(0);
+    this.#receiveBuffer = Buffer.allocUnsafe(0);
+    this.#receiveReadOffset = 0;
+    this.#receiveWriteOffset = 0;
   }
 
   #processData(rawData: Buffer): void {
@@ -798,7 +809,6 @@ export class Connection {
 
       if (this.#receiveWriteOffset - this.#receiveReadOffset < frameSize) {
         this.#bytesNeeded = frameSize;
-        this.#compactReceiveBuffer();
         return;
       }
 
@@ -809,7 +819,7 @@ export class Connection {
         const rawResponseBuffer = this.#receiveBuffer.subarray(this.#receiveReadOffset, responseEnd);
         this.#receiveReadOffset = responseEnd;
         this.#bytesNeeded = Decoder.int32Size();
-        this.#compactReceiveBuffer();
+        this.#releaseConsumedReceiveBuffer();
         this.#authHandlers.onSuccess(rawResponseBuffer);
         return;
       }
@@ -828,7 +838,7 @@ export class Connection {
       this.requestQueue.fulfillRequest({ size: expectedResponseSize, correlationId, payload });
     }
 
-    this.#compactReceiveBuffer();
+    this.#releaseConsumedReceiveBuffer();
   }
 
   #rejectRequests(error: unknown): void {
@@ -836,10 +846,9 @@ export class Connection {
   }
 
   /**
-   * Permanent post-handshake socket error handler. The setup-phase `onError` only reacts while
-   * `!isConnected()` (so a losing Happy Eyeballs candidate can't tear down an already-established
-   * connection); once connected, an error on the active socket would otherwise have no listener
-   * reacting to it at all.
+   * Permanent post-handshake socket error handler. Setup-phase errors only fail their own Happy
+   * Eyeballs candidate; once connected, an error on the active socket would otherwise have no
+   * listener reacting to it at all.
    */
   #onPostConnectSocketError = (e: Error & { code?: string }): void => {
     if (!this.isConnected()) return;

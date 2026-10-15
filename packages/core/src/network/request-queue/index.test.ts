@@ -235,6 +235,15 @@ describe('network/request-queue/RequestQueue', () => {
       expect(resolved).toBe(true);
     });
 
+    it('gives up after the optional timeout even if requests are still in flight', async () => {
+      const requestQueue = createRequestQueue({ enforceRequestTimeout: false });
+      requestQueue.push(createPushedRequest());
+
+      await requestQueue.waitForPendingRequests(10);
+      expect(requestQueue.inflight.size).toBe(1);
+      expect(requestQueue.listenerCount('requestQueueEmpty')).toBe(0);
+    });
+
     it('unblocks once an in-flight request times out on its own', async () => {
       const requestQueue = createRequestQueue({ requestTimeout: 20, enforceRequestTimeout: true });
       requestQueue.push(createPushedRequest());

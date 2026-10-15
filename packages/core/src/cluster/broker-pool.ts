@@ -1,6 +1,6 @@
 import { Broker } from '../broker/index';
 import { supportsDescribeClusterControllers } from '../broker/capabilities';
-import { KafkaBrokerNotFound, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
+import { KafkaBrokerNotFound, KafkaConnectionError, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
 import { staleMetadata } from '../protocol/error-codes';
@@ -100,6 +100,14 @@ export class BrokerPool {
   versions: BrokerVersions | null = null;
   readonly usingBootstrapControllers: boolean;
 
+  /** Tail of the queue that serializes read-await-write updates of `brokers`. */
+  #brokersUpdate: Promise<unknown> = Promise.resolve();
+  /**
+   * Bumped by `disconnect()`, which is not queued (it would wait out a refresh's retries); an
+   * update that sees it change while awaiting discards its result instead of reinstalling brokers.
+   */
+  #generation = 0;
+
   readonly #createBroker: (options: {
     connectionPool: Broker['connectionPool'];
     logger: Logger;
@@ -157,7 +165,7 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        if (e instanceof KafkaConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
           // The connection pool builder always rotates the seed broker.
           await this.createSeedBroker();
           this.logger.error(`Failed to connect to seed broker, trying another broker from the list: ${error.message}`, {
@@ -175,6 +183,7 @@ export class BrokerPool {
   }
 
   async disconnect(): Promise<void> {
+    this.#generation++;
     if (this.seedBroker) await this.seedBroker.disconnect();
     await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
 
@@ -198,20 +207,44 @@ export class BrokerPool {
     }
   }
 
-  async refreshMetadata(topics: readonly string[]): Promise<void> {
+  /**
+   * Runs `update` once every earlier one has settled. Refreshes and leader updates snapshot
+   * `brokers`, await, then write it back; run concurrently, the last writer would drop (and leak)
+   * brokers the others created.
+   */
+  #serializeBrokersUpdate<T>(update: () => Promise<T>): Promise<T> {
+    const run = this.#brokersUpdate.then(update);
+    this.#brokersUpdate = run.catch(() => undefined);
+    return run;
+  }
+
+  refreshMetadata(topics: readonly string[]): Promise<void> {
+    return this.#serializeBrokersUpdate(() => this.#refreshMetadata(topics));
+  }
+
+  async #refreshMetadata(topics: readonly string[]): Promise<void> {
+    const generation = this.#generation;
+    const disconnectedError = () => new KafkaNonRetriableError('Broker pool disconnected during metadata refresh');
     await this.retrier(async (bail, _retryCount, _retryTime) => {
+      // disconnect() may have landed during a retry backoff; don't reconnect the seed for it.
+      if (generation !== this.#generation) {
+        bail(disconnectedError());
+        return;
+      }
       try {
         const broker = await this.findConnectedBroker();
         const seedHost = this.seedBroker!.connectionPool.host;
         const seedPort = this.seedBroker!.connectionPool.port;
 
-        this.metadata = await this.fetchClusterMetadata(broker, topics);
+        const metadata = await this.fetchClusterMetadata(broker, topics);
+        this.metadata = metadata;
         this.metadataExpireAt = Date.now() + this.metadataMaxAge;
 
         const replacedBrokers: Broker[] = [];
-        const nextBrokers: Record<string, Broker> = { ...this.brokers };
+        const previousBrokers = { ...this.brokers };
+        const nextBrokers: Record<string, Broker> = { ...previousBrokers };
 
-        for (const { nodeId, host, port, rack } of this.metadata.brokers) {
+        for (const { nodeId, host, port, rack } of metadata.brokers) {
           const key = String(nodeId);
           const existing = nextBrokers[key];
 
@@ -237,7 +270,7 @@ export class BrokerPool {
           });
         }
 
-        const freshBrokerIds = this.metadata.brokers.map(({ nodeId }) => String(nodeId)).sort();
+        const freshBrokerIds = metadata.brokers.map(({ nodeId }) => String(nodeId)).sort();
         const currentBrokerIds = Object.keys(nextBrokers).sort();
         const unusedBrokerIds = arrayDiff(currentBrokerIds, freshBrokerIds);
 
@@ -250,13 +283,33 @@ export class BrokerPool {
         const replacedBrokersDisconnects = replacedBrokers.map((replaced) => replaced.disconnect());
         await Promise.all([...brokerDisconnects, ...replacedBrokersDisconnects]);
 
+        if (generation !== this.#generation) {
+          const created = Object.entries(nextBrokers).filter(
+            ([nodeId, broker]) => broker !== previousBrokers[nodeId] && broker !== this.seedBroker,
+          );
+          await Promise.all(created.map(([, broker]) => broker.disconnect()));
+          this.metadata = null;
+          throw disconnectedError();
+        }
+
+        // removeBroker() may have dropped a broker this refresh kept; don't resurrect it.
+        for (const [nodeId, broker] of Object.entries(previousBrokers)) {
+          if (nextBrokers[nodeId] === broker && this.brokers[nodeId] !== broker) delete nextBrokers[nodeId];
+        }
         this.brokers = nextBrokers;
       } catch (e) {
         const error = e as Error & { type?: string; name?: string };
 
+        if (generation !== this.#generation) {
+          // findConnectedBroker() may have reconnected the seed during this attempt.
+          await this.seedBroker?.disconnect();
+          bail(error);
+          return;
+        }
+
         if (
           this.metadataRecovery === 'rebootstrap' &&
-          (error.type === 'REBOOTSTRAP_REQUIRED' || error.name === 'KafkaConnectionError')
+          (error.type === 'REBOOTSTRAP_REQUIRED' || e instanceof KafkaConnectionError)
         ) {
           this.logger.warn('Rediscovering the cluster from the bootstrap broker list', {
             reason: error.type ?? error.name,
@@ -290,7 +343,15 @@ export class BrokerPool {
     await this.connect();
   }
 
+  /** Re-checked inside the update queue, so concurrent stale callers share one Metadata request. */
   async refreshMetadataIfNecessary(topics: readonly string[]): Promise<void> {
+    if (!this.#metadataNeedsRefresh(topics)) return;
+    await this.#serializeBrokersUpdate(async () => {
+      if (this.#metadataNeedsRefresh(topics)) await this.#refreshMetadata(topics);
+    });
+  }
+
+  #metadataNeedsRefresh(topics: readonly string[]): boolean {
     const metadata = this.metadata;
     // KIP-919 controller pools have no topic metadata; skip the topic-presence check.
     // Otherwise require a cache hit before reading `topicMetadata` — the previous
@@ -299,12 +360,7 @@ export class BrokerPool {
       this.usingBootstrapControllers ||
       (metadata != null &&
         topics.every((topic) => metadata.topicMetadata.some((topicMetadata) => topicMetadata.topic === topic)));
-    const shouldRefresh =
-      metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
-
-    if (shouldRefresh) {
-      await this.refreshMetadata(topics);
-    }
+    return metadata == null || this.metadataExpireAt == null || Date.now() > this.metadataExpireAt || !topicsReady;
   }
 
   /**
@@ -313,38 +369,49 @@ export class BrokerPool {
    * Metadata RPC. Returns whether the cached partition metadata was actually found and patched -
    * callers should fall back to `refreshMetadata` when it returns `false`.
    */
-  async applyLeaderUpdate({
+  applyLeaderUpdate(options: ApplyLeaderUpdateOptions): Promise<boolean> {
+    return this.#serializeBrokersUpdate(() => this.#applyLeaderUpdate(options));
+  }
+
+  async #applyLeaderUpdate({
     topic,
     partition,
     currentLeader,
     nodeEndpoints = [],
   }: ApplyLeaderUpdateOptions): Promise<boolean> {
-    if (currentLeader.leaderId < 0 || !this.metadata) return false;
+    const { metadata } = this;
+    if (currentLeader.leaderId < 0 || !metadata) return false;
+    const generation = this.#generation;
 
     for (const endpoint of nodeEndpoints) {
       const key = String(endpoint.nodeId);
       const existing = this.brokers[key];
       if (existing && !hasBrokerBeenReplaced(existing, endpoint)) continue;
 
-      const replaced = this.brokers[key];
-      this.brokers[key] = this.#createBroker({
+      const broker = this.#createBroker({
         logger: this.rootLogger,
         versions: this.versions,
         connectionPool: await this.connectionPoolBuilder.build(endpoint),
         nodeId: endpoint.nodeId,
       });
+      if (generation !== this.#generation) {
+        await broker.disconnect();
+        return false;
+      }
+      const replaced = this.brokers[key];
+      this.brokers[key] = broker;
       if (replaced) await replaced.disconnect();
 
-      const brokerIndex = this.metadata.brokers.findIndex((broker) => broker.nodeId === endpoint.nodeId);
+      const brokerIndex = metadata.brokers.findIndex((entry) => entry.nodeId === endpoint.nodeId);
       const brokerEntry = { nodeId: endpoint.nodeId, host: endpoint.host, port: endpoint.port, rack: endpoint.rack };
       if (brokerIndex === -1) {
-        this.metadata.brokers.push(brokerEntry);
+        metadata.brokers.push(brokerEntry);
       } else {
-        this.metadata.brokers[brokerIndex] = brokerEntry;
+        metadata.brokers[brokerIndex] = brokerEntry;
       }
     }
 
-    const topicMetadata = this.metadata.topicMetadata.find((entry) => entry.topic === topic);
+    const topicMetadata = metadata.topicMetadata.find((entry) => entry.topic === topic);
     const partitionMetadata = topicMetadata?.partitionMetadata.find((entry) => entry.partitionId === partition);
     if (!partitionMetadata) return false;
 
@@ -396,8 +463,8 @@ export class BrokerPool {
     }
 
     for (const nodeId of nodeIds) {
-      const broker = await this.findBroker({ nodeId });
       try {
+        const broker = await this.findBroker({ nodeId });
         return await callback({ nodeId, broker });
       } catch {
         // try the next broker
@@ -438,13 +505,14 @@ export class BrokerPool {
       } catch (e) {
         const error = e as Error & { name: string; type?: string; retriable?: boolean };
 
-        if (error.name === 'KafkaConnectionError' || error.type === 'ILLEGAL_SASL_STATE') {
+        const isConnectionError = e instanceof KafkaConnectionError;
+        if (isConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
           await broker.disconnect();
         }
 
         // To avoid reconnecting to an unavailable host, bail on connection errors and refresh
         // metadata on a higher level before reconnecting.
-        if (error.name === 'KafkaConnectionError') {
+        if (isConnectionError) {
           bail(error);
           return;
         }

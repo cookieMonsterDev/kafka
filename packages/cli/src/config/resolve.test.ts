@@ -177,6 +177,7 @@ describe('resolveCliConfig', () => {
     await expect(resolveCliConfig({ cwd, env: {} })).rejects.toThrow(
       expect.objectContaining({ name: 'CliConfigError', message: expect.stringContaining(configPath) }),
     );
+    await expect(resolveCliConfig({ cwd, env: {} })).rejects.toThrow(/: boom$/);
   });
 
   it('wraps a generic loader failure (e.g. invalid JSON) into a CliConfigError', async () => {

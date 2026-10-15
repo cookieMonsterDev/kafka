@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { KafkaConfigError } from './errors';
-import { describeRescue, rethrowIfUnsupportedTypeScriptSyntax } from './load-errors';
+import { describeRescue, rethrowIfUnsupportedTypeScriptSyntax, withCauseMessage } from './load-errors';
 import { type AssertValidFileConfig, assertResolvedFileConfig, extractDefaultExport } from './resolve-module';
 
 async function parseJson(path: string): Promise<unknown> {
@@ -10,10 +10,14 @@ async function parseJson(path: string): Promise<unknown> {
   try {
     return JSON.parse(raw);
   } catch (cause) {
-    throw new KafkaConfigError('ConfigLoadError', `Failed to parse kafka config file "${path}" as JSON`, {
-      path,
-      cause,
-    });
+    throw new KafkaConfigError(
+      'ConfigLoadError',
+      withCauseMessage(`Failed to parse kafka config file "${path}" as JSON`, cause),
+      {
+        path,
+        cause,
+      },
+    );
   }
 }
 
@@ -31,10 +35,14 @@ async function importDefaultExport(path: string): Promise<unknown> {
         { path, cause: error },
       );
     }
-    throw new KafkaConfigError('ConfigLoadError', `Failed to load kafka config file "${path}"`, {
-      path,
-      cause: error,
-    });
+    throw new KafkaConfigError(
+      'ConfigLoadError',
+      withCauseMessage(`Failed to load kafka config file "${path}"`, error),
+      {
+        path,
+        cause: error,
+      },
+    );
   }
 
   return extractDefaultExport(moduleExports, path);

@@ -1,6 +1,6 @@
 import { readJsonFile } from '../../admin/read-json-file';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError, coerceNumber } from '../../args/coerce';
+import { CliUsageError, coerceInteger } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 import { confirmDestructive, requireForce } from '../../interaction/confirm';
@@ -21,8 +21,8 @@ function parseTopicPartitionFlags(raw: readonly string[]): TopicPartitions[] {
       throw new CliUsageError(`--topic-partition must be "topic:partition", got "${entry}"`);
     }
     const topic = entry.slice(0, separatorIndex);
-    const partition = coerceNumber(entry.slice(separatorIndex + 1), 'topic-partition');
-    if (!Number.isInteger(partition) || partition < 0) {
+    const partition = coerceInteger(entry.slice(separatorIndex + 1), 'topic-partition');
+    if (partition < 0) {
       throw new CliUsageError(
         `--topic-partition must be "topic:partition" with a non-negative partition, got "${entry}"`,
       );

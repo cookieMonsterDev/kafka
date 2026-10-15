@@ -154,19 +154,20 @@ describe('runTail', () => {
     expect(disconnect).toHaveBeenCalledOnce();
   });
 
-  it('does nothing when the requested partition does not exist', async () => {
+  it('rejects without touching the consumer when the requested partition does not exist', async () => {
     const admin = createFakeAdmin({ fetchTopicOffsets: async () => [offset(0, 0n, 0n)] });
     const consumer = createFakeMessageConsumer({}); // any call throws — proves none happen
     const stream = { send: vi.fn() };
 
-    await runTail(
-      admin,
-      consumer,
-      stream,
-      { topic: 'orders', partition: 9, maxBuffered: 10 },
-      new AbortController().signal,
-    );
-
+    await expect(
+      runTail(
+        admin,
+        consumer,
+        stream,
+        { topic: 'orders', partition: 9, maxBuffered: 10 },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow('partition 9 does not exist on topic "orders"');
     expect(stream.send).not.toHaveBeenCalled();
   });
 });

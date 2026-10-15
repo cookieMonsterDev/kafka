@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import type { CommandContext } from '../args/define';
-import type { ResolvedCliConfig } from '../config/resolve';
+import { EMPTY_RESOLVED_CLI_CONFIG, type ResolvedCliConfig } from '../config/resolve';
 import { createCommandOutput } from '../output/format';
 import { CLI_LOG_LEVELS } from '../output/logger';
 import type { Runtime } from '../runtime';
@@ -16,13 +16,7 @@ function createWriteSpy() {
   return vi.fn((_chunk: string) => true);
 }
 
-export const EMPTY_RESOLVED_CLI_CONFIG: ResolvedCliConfig = Object.freeze({
-  path: null,
-  fileConfig: null,
-  cli: {},
-  profile: null,
-  transformFallbackUsed: false,
-});
+export { EMPTY_RESOLVED_CLI_CONFIG };
 
 export function createFakeCommandContext(input: {
   flags?: Record<string, unknown>;

@@ -33,6 +33,7 @@ function waitForAbort(signal: AbortSignal): Promise<void> {
 export const studioCommand: CommandSpec = {
   path: ['studio'],
   summary: 'Launch the local web UI for browsing and driving the cluster',
+  handlesSignal: true,
   flags: [
     { name: 'port', type: 'number', alias: 'p', brief: 'port to listen on (default: first free port in 5757-5807)' },
     { name: 'host', type: 'string', brief: 'address to bind (default: 127.0.0.1)' },

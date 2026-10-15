@@ -50,6 +50,7 @@ async function withServer<T>(context: MessagesRouteContext, run: (baseUrl: strin
   try {
     return await run(`http://127.0.0.1:${String(port)}`);
   } finally {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
@@ -176,6 +177,26 @@ describe('registerMessageRoutes', () => {
       expect(body).toContain('broker unreachable');
     });
   });
+
+  it.each(['messages', 'tail'])(
+    'GET /api/topics/:name/%s reads the active profile once, so a mid-request switch cannot split it',
+    async (route) => {
+      const consumerProfiles: (string | null)[] = [];
+      const context: MessagesRouteContext = {
+        ...buildContext({ fetchTopicOffsets: async () => [] }, (profile) => {
+          consumerProfiles.push(profile);
+          return { consumer: () => createFakeMessageConsumer({}) };
+        }),
+        getActiveProfile: vi.fn<() => string | null>().mockReturnValueOnce('staging').mockReturnValue('prod'),
+      };
+
+      await withServer(context, async (baseUrl) => {
+        await (await fetch(`${baseUrl}/api/topics/orders/${route}`)).text();
+      });
+
+      expect(consumerProfiles).toEqual(['staging']);
+    },
+  );
 
   it('POST /api/topics/:name/offsets/by-time maps a negative broker offset to null', async () => {
     const context = buildContext({

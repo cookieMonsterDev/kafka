@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 const middlewares = vi.fn((_req: IncomingMessage, _res: ServerResponse, next: (error?: unknown) => void) => {
   next();
 });
-const createServer = vi.fn(async () => ({ middlewares }));
+const close = vi.fn(async () => {});
+const createServer = vi.fn(async () => ({ middlewares, close }));
 
 vi.mock('vite', () => ({ createServer }));
 
@@ -22,7 +23,7 @@ describe('createDevMiddleware', () => {
 
   it('resolves true once vite calls next() with no error', async () => {
     const { createDevMiddleware } = await import('./dev');
-    const handler = await createDevMiddleware('/some/web/root');
+    const { middleware: handler } = await createDevMiddleware('/some/web/root');
 
     const req = {} as IncomingMessage;
     const res = {} as ServerResponse;
@@ -35,10 +36,19 @@ describe('createDevMiddleware', () => {
       next(new Error('vite blew up'));
     });
     const { createDevMiddleware } = await import('./dev');
-    const handler = await createDevMiddleware('/some/web/root');
+    const { middleware: handler } = await createDevMiddleware('/some/web/root');
 
     await expect(handler({} as IncomingMessage, {} as ServerResponse, new URL('http://x/'))).rejects.toThrow(
       'vite blew up',
     );
+  });
+
+  it('close() shuts the vite server down', async () => {
+    const { createDevMiddleware } = await import('./dev');
+    const dev = await createDevMiddleware('/some/web/root');
+
+    await dev.close();
+
+    expect(close).toHaveBeenCalledOnce();
   });
 });

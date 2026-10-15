@@ -36,6 +36,11 @@ function api(studio: StudioHandle, method: string, path: string, body?: unknown)
   });
 }
 
+/** Status plus body (read from a clone), so a failed status assertion also shows the error the server sent. */
+async function statusOf(response: Response): Promise<{ status: number; body: string }> {
+  return { status: response.status, body: await response.clone().text() };
+}
+
 /**
  * Runs the studio's own HTTP server (via the library entry point, `startStudio` — the same one
  * `src/index.test.ts` exercises against a fake connection) against a real broker started by
@@ -56,36 +61,37 @@ describe('studio server against a real broker', () => {
 
   it('reports a healthy, writable server', async () => {
     const res = await api(studio, 'GET', '/api/health');
-    expect(res.status).toBe(200);
+    expect(await statusOf(res)).toEqual({ status: 200, body: expect.any(String) });
     await expect(res.json()).resolves.toMatchObject({ readOnly: false });
   });
 
   it('creates the topic, then lists and describes it', async () => {
     const created = await api(studio, 'POST', '/api/topics', { topic: TOPIC, numPartitions: 1, replicationFactor: 1 });
-    expect(created.status).toBe(201);
+    expect(await statusOf(created)).toEqual({ status: 201, body: expect.any(String) });
 
     const listed = await api(studio, 'GET', '/api/topics');
     const { topics } = (await listed.json()) as { topics: { name: string }[] };
     expect(topics.some((topic) => topic.name === TOPIC)).toBe(true);
 
     const described = await api(studio, 'GET', `/api/topics/${TOPIC}`);
-    expect(described.status).toBe(200);
+    expect(await statusOf(described)).toEqual({ status: 200, body: expect.any(String) });
     const detail = (await described.json()) as { partitions: { partitionIndex: number }[] };
     expect(detail.partitions).toHaveLength(1);
   });
 
   it('rejects creating the same topic twice', async () => {
     const result = await api(studio, 'POST', '/api/topics', { topic: TOPIC });
-    expect(result.status).toBe(409);
+    expect(await statusOf(result)).toEqual({ status: 409, body: expect.any(String) });
   });
 
   it('raises the topic to two partitions', async () => {
     const result = await api(studio, 'POST', `/api/topics/${TOPIC}/partitions`, { count: 2 });
-    expect(result.status).toBe(200);
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
 
     await waitFor(
       async () => {
         const described = await api(studio, 'GET', `/api/topics/${TOPIC}`);
+        if (!described.ok) return false;
         const detail = (await described.json()) as { partitions: unknown[] };
         return detail.partitions.length === 2 ? true : false;
       },
@@ -95,11 +101,12 @@ describe('studio server against a real broker', () => {
 
   it('sets and reads back a topic config', async () => {
     const result = await api(studio, 'PATCH', `/api/topics/${TOPIC}/configs`, { set: { 'retention.ms': '3600000' } });
-    expect(result.status).toBe(200);
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
 
     await waitFor(
       async () => {
         const described = await api(studio, 'GET', `/api/topics/${TOPIC}`);
+        if (!described.ok) return false;
         const detail = (await described.json()) as { configs: { name: string; value: string | null }[] };
         const retention = detail.configs.find((entry) => entry.name === 'retention.ms');
         return retention?.value === '3600000' ? true : false;
@@ -113,13 +120,13 @@ describe('studio server against a real broker', () => {
       topic: TOPIC,
       messages: [{ key: 'order-1', value: 'hello studio', partition: 0 }],
     });
-    expect(sent.status).toBe(200);
+    expect(await statusOf(sent)).toEqual({ status: 200, body: expect.any(String) });
     const { results } = (await sent.json()) as { results: { partition: number; offset: string }[] };
     expect(results).toHaveLength(1);
     expect(() => BigInt(results[0]?.offset ?? '')).not.toThrow();
 
     const page = await api(studio, 'GET', `/api/topics/${TOPIC}/messages?partition=0&from=earliest&limit=10`);
-    expect(page.status).toBe(200);
+    expect(await statusOf(page)).toEqual({ status: 200, body: expect.any(String) });
     const { messages } = (await page.json()) as { messages: { key: string | null; value: string | null }[] };
     expect(messages).toContainEqual(
       expect.objectContaining({
@@ -131,21 +138,21 @@ describe('studio server against a real broker', () => {
 
   it('resolves offsets by timestamp without mutating anything', async () => {
     const result = await api(studio, 'POST', `/api/topics/${TOPIC}/offsets/by-time`, { timestamp: 0, partition: 0 });
-    expect(result.status).toBe(200);
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
     const { offsets } = (await result.json()) as { offsets: { partition: number; offset: string | null }[] };
     expect(offsets).toHaveLength(1);
   });
 
   it('lists consumer groups without error (none joined yet)', async () => {
     const result = await api(studio, 'GET', '/api/groups');
-    expect(result.status).toBe(200);
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
     const { groups } = (await result.json()) as { groups: unknown[] };
     expect(Array.isArray(groups)).toBe(true);
   });
 
   it('deletes the topic', async () => {
     const result = await api(studio, 'DELETE', `/api/topics/${TOPIC}`);
-    expect(result.status).toBe(204);
+    expect(await statusOf(result)).toEqual({ status: 204, body: expect.any(String) });
 
     await waitFor(
       async () => {

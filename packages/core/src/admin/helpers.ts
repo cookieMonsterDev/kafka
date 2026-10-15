@@ -67,8 +67,61 @@ export function isConsumerGroupIdle(state: string): boolean {
   return state === 'Empty' || state === 'Dead';
 }
 
+const RETRIABLE_DELETE_GROUPS_ERRORS = new Set([
+  'NOT_CONTROLLER',
+  'GROUP_COORDINATOR_NOT_AVAILABLE',
+  'NOT_COORDINATOR_FOR_GROUP',
+  'GROUP_LOAD_IN_PROGRESS',
+]);
+
+function isRetriableDeleteGroupsError(error: unknown): boolean {
+  if (error instanceof KafkaDeleteGroupsError) {
+    return error.groups.every((group) => RETRIABLE_DELETE_GROUPS_ERRORS.has(protocolType(group.error) ?? ''));
+  }
+  return RETRIABLE_DELETE_GROUPS_ERRORS.has(protocolType(error) ?? '');
+}
+
 export function isBrokerConfig(type: number): boolean {
   return type === CONFIG_RESOURCE_TYPES.BROKER || type === CONFIG_RESOURCE_TYPES.BROKER_LOGGER;
+}
+
+/**
+ * Batches a per-coordinator describe request for each group id. Coordinators are resolved inside
+ * the retrier so a retry after NOT_COORDINATOR_FOR_GROUP targets the group's current coordinator.
+ */
+export async function describeGroupsViaCoordinators<T>({
+  cluster,
+  retry,
+  groupIds,
+  describe,
+}: {
+  cluster: Cluster;
+  retry?: RetryOptions;
+  groupIds: readonly string[];
+  describe: (coordinator: Broker, groupIds: string[]) => Promise<{ groups: T[] }>;
+}): Promise<T[]> {
+  const responses = await retrier(retry)(async () => {
+    const coordinatorsForGroup = await Promise.all(
+      groupIds.map(async (groupId) => ({ groupId, coordinator: await cluster.findGroupCoordinator({ groupId }) })),
+    );
+
+    const groupsByCoordinator = new Map<string, { coordinator: Broker; groupIds: string[] }>();
+    for (const { groupId, coordinator } of coordinatorsForGroup) {
+      const key = String(coordinator.nodeId);
+      const existing = groupsByCoordinator.get(key);
+      if (existing) {
+        existing.groupIds.push(groupId);
+      } else {
+        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
+      }
+    }
+
+    return Promise.all(
+      [...groupsByCoordinator.values()].map(({ coordinator, groupIds: ids }) => describe(coordinator, ids)),
+    );
+  });
+
+  return responses.flatMap(({ groups }) => groups);
 }
 
 /**
@@ -92,6 +145,7 @@ export function deleteGroupsViaCoordinators({
   logMessage: string;
 }): Promise<DeleteGroupsResult[]> {
   let remaining = groupIds.slice();
+  const deleted: DeleteGroupsResult[] = [];
 
   return retrier(retry)(async (bail, retryCount, retryTime) => {
     try {
@@ -117,20 +171,21 @@ export function deleteGroupsViaCoordinators({
         ),
       );
 
-      const errors = responses
-        .flatMap(({ results }) => results.map(({ groupId, errorCode, error }) => ({ groupId, errorCode, error })))
-        .filter(({ errorCode }) => errorCode !== 0);
+      const results = responses.flatMap((response) => response.results);
+      const errors = results
+        .filter(({ errorCode }) => errorCode !== 0)
+        .map(({ groupId, errorCode, error }) => ({ groupId, errorCode, error }));
 
+      deleted.push(...results.filter(({ errorCode }) => errorCode === 0));
       remaining = errors.map(({ groupId }) => groupId);
 
       if (errors.length > 0) {
         throw new KafkaDeleteGroupsError(errorLabel, errors);
       }
 
-      return responses.flatMap(({ results }) => results);
+      return deleted;
     } catch (error) {
-      const type = protocolType(error);
-      if (type === 'NOT_CONTROLLER' || type === 'COORDINATOR_NOT_AVAILABLE') {
+      if (isRetriableDeleteGroupsError(error)) {
         logger.warn(logMessage, {
           error: error instanceof Error ? error.message : String(error),
           retryCount,

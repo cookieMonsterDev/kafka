@@ -3,14 +3,24 @@ import net from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
+import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { Decoder } from '../protocol/decoder';
 import { Encoder } from '../protocol/encoder';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { Connection } from './connection';
 import type { ConnectionOptions, CreateSaslAuthenticator } from './connection';
+import { resolveBrokerAddresses } from './dns-lookup';
+import { NETWORK_REQUEST, NETWORK_REQUEST_QUEUE_SIZE } from './instrumentation-events';
+import type { NetworkEventMap } from './instrumentation-events';
+import type * as DnsLookupModule from './dns-lookup';
 import { createDefaultSocketFactory } from './socket-factory';
 import type { SocketFactory } from './socket-factory';
+
+vi.mock('./dns-lookup', async (importOriginal) => {
+  const actual = await importOriginal<typeof DnsLookupModule>();
+  return { ...actual, resolveBrokerAddresses: vi.fn(actual.resolveBrokerAddresses) };
+});
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -169,6 +179,46 @@ describe('network/Connection', () => {
       await expect(connection.connect()).resolves.toBe(true);
     });
 
+    it('shares one socket between concurrent connect calls', async () => {
+      const sockets: net.Socket[] = [];
+      const socketFactory: SocketFactory = ({ onConnect }) => {
+        const { socket } = createFakeSocket();
+        sockets.push(socket);
+        setTimeout(onConnect, 5);
+        return socket;
+      };
+
+      const connection = createConnection(9999, { socketFactory });
+      await expect(Promise.all([connection.connect(), connection.connect()])).resolves.toEqual([true, true]);
+      expect(sockets).toHaveLength(1);
+      expect(connection.isConnected()).toBe(true);
+    });
+
+    it('falls back to the next resolved address when the first one fails', async () => {
+      vi.mocked(resolveBrokerAddresses).mockResolvedValueOnce({
+        hostname: 'broker.example',
+        addresses: [
+          { address: '10.0.0.1', family: 4 },
+          { address: '10.0.0.2', family: 4 },
+        ],
+      });
+      const attempted: string[] = [];
+      const socketFactory: SocketFactory = ({ host, onConnect }) => {
+        attempted.push(host);
+        const { socket } = createFakeSocket();
+        if (host === '10.0.0.1') {
+          setImmediate(() => socket.emit('error', Object.assign(new Error('refused'), { code: 'ECONNREFUSED' })));
+        } else {
+          setImmediate(onConnect);
+        }
+        return socket;
+      };
+
+      const connection = createConnection(9092, { host: 'broker.example', socketFactory });
+      await expect(connection.connect()).resolves.toBe(true);
+      expect(attempted).toEqual(['10.0.0.1', '10.0.0.2']);
+    });
+
     it('rejects with a connection error when the broker is unreachable', async () => {
       const temp = net.createServer();
       const port = await new Promise<number>((resolve) => {
@@ -216,6 +266,62 @@ describe('network/Connection', () => {
       expect(destroy).toHaveBeenCalled();
       expect(removeAllListeners).toHaveBeenCalled();
       expect(end).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disconnect while requests are in flight', () => {
+    const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+
+    it('rejects new sends once disconnecting', async () => {
+      const { connection } = await connectWithFakeSocket(createConnection, { requestTimeout: 50 });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const disconnecting = connection.disconnect();
+      await expect(connection.send({ request: metadataRequest(), response })).rejects.toThrow(KafkaConnectionError);
+
+      await expect(inFlight).rejects.toThrow();
+      await disconnecting;
+    });
+
+    it('bounds the wait for in-flight requests and rejects whatever is left', async () => {
+      const { connection } = await connectWithFakeSocket(createConnection, {
+        requestTimeout: 20,
+        enforceRequestTimeout: false,
+      });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      void inFlight.catch(() => {});
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const outcome = await Promise.race([
+        connection.disconnect().then(() => 'disconnected'),
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 500)),
+      ]);
+
+      expect(outcome).toBe('disconnected');
+      await expect(inFlight).rejects.toThrow(KafkaConnectionError);
+    });
+
+    it('completes a response that was partially received when disconnect started', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, {
+        requestTimeout: 1000,
+        enforceRequestTimeout: false,
+      });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      const responseHeader = new Encoder().writeInt32(0);
+      const body = Buffer.alloc(32, 7);
+      const frame = Buffer.concat([
+        new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader).buffer,
+        body,
+      ]);
+
+      socket.emit('data', frame.subarray(0, 10));
+      const disconnecting = connection.disconnect();
+      socket.emit('data', frame.subarray(10));
+
+      await expect(inFlight).resolves.toEqual(body);
+      await disconnecting;
     });
   });
 
@@ -430,6 +536,93 @@ describe('network/Connection', () => {
       const result = await connection.send({ request: metadataRequest(), response });
       expect(result?.bytes).toHaveLength(64_000);
       expect(result?.bytes?.equals(payload)).toBe(true);
+    });
+
+    it('keeps a throwing instrumentation listener out of the socket data handler', async () => {
+      const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
+      const listener = vi.fn(() => {
+        throw new Error('listener blew up');
+      });
+      instrumentationEmitter.addListener(NETWORK_REQUEST, listener);
+      instrumentationEmitter.addListener(NETWORK_REQUEST_QUEUE_SIZE, listener);
+      const { connection, socket } = await connectWithFakeSocket(createConnection, {
+        instrumentationEmitter,
+        maxInFlightRequests: 1,
+      });
+      const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+      const frame = (correlationId: number): Buffer => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        return new Encoder().writeInt32(responseHeader.size()).writeEncoder(responseHeader).buffer;
+      };
+
+      const first = connection.send({ request: metadataRequest(), response });
+      const second = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(() => socket.emit('data', frame(0))).not.toThrow();
+      await expect(first).resolves.toHaveLength(0);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(() => socket.emit('data', frame(1))).not.toThrow();
+      await expect(second).resolves.toHaveLength(0);
+      expect(listener).toHaveBeenCalled();
+    });
+
+    it('does not keep reallocating a large receive buffer once a big response has been consumed', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const response = {
+        decode: async (rawData: Buffer) => rawData,
+        parse: async (data: Buffer) => data,
+      };
+      const frame = (correlationId: number, body: Buffer): Buffer => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        const framed = new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader);
+        return Buffer.concat([framed.buffer, body]);
+      };
+
+      const big = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      socket.emit('data', frame(0, Buffer.alloc(1_000_000)));
+      await expect(big).resolves.toHaveLength(1_000_000);
+
+      const small = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        socket.emit('data', frame(1, Buffer.alloc(16)));
+        await expect(small).resolves.toHaveLength(16);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size >= 1_000_000)).toEqual([]);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+    });
+
+    it('allocates once per chunk when pipelined responses split across socket reads', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { maxInFlightRequests: 20 });
+      const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+      const frames = Array.from({ length: 20 }, (_, correlationId) => {
+        const responseHeader = new Encoder().writeInt32(correlationId);
+        const body = Buffer.alloc(50, correlationId);
+        return Buffer.concat([
+          new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader).buffer,
+          body,
+        ]);
+      });
+      const requests = frames.map(() => connection.send({ request: metadataRequest(), response }));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const stream = Buffer.concat(frames);
+      const chunks: Buffer[] = [];
+      for (let offset = 0; offset < stream.length; offset += 100) chunks.push(stream.subarray(offset, offset + 100));
+
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        for (const chunk of chunks) socket.emit('data', chunk);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size > 0).length).toBeLessThanOrEqual(chunks.length);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+      const payloads = await Promise.all(requests);
+      expect(payloads.map((payload) => payload?.[0])).toEqual(frames.map((_, correlationId) => correlationId));
     });
 
     it('rejects in-flight requests when the broker closes the connection', async () => {

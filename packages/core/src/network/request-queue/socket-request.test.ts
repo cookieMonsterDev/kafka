@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
 import type { NetworkEventMap } from '../instrumentation-events';
 import { SocketRequest } from './socket-request';
 import type { RequestEntry, SocketRequestOptions } from './socket-request';
+
+const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('network/request-queue/SocketRequest', () => {
   let correlationId = 0;
@@ -31,6 +34,7 @@ describe('network/request-queue/SocketRequest', () => {
       entry: createEntry(),
       send: vi.fn(),
       timeout: vi.fn(),
+      logger: silentLogger,
       ...overrides,
     });
 
@@ -200,6 +204,25 @@ describe('network/request-queue/SocketRequest', () => {
       const [event] = eventCalled.mock.calls[0]!;
       expect(event.type).toBe(NETWORK_REQUEST_TIMEOUT);
       expect(event.payload).toMatchObject({ apiKey: 0, apiName: 'Produce', apiVersion: 4 });
+    });
+
+    it('logs a throwing listener instead of propagating it', () => {
+      const emitter = new InstrumentationEventEmitter<NetworkEventMap>();
+      emitter.addListener(NETWORK_REQUEST, () => {
+        throw new Error('listener blew up');
+      });
+      const error = vi.fn();
+      const logger = { ...silentLogger, error };
+
+      const request = createSocketRequest({ instrumentationEmitter: emitter, logger });
+      request.send();
+
+      expect(() => request.completed({ size, payload })).not.toThrow();
+      expect(request.entry.resolve).toHaveBeenCalledOnce();
+      expect(error).toHaveBeenCalledWith(
+        'Instrumentation listener failed',
+        expect.objectContaining({ eventName: NETWORK_REQUEST, error: 'listener blew up' }),
+      );
     });
   });
 });

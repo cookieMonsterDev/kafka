@@ -17,9 +17,15 @@ describe('protocol/requests/elect-leaders/v0/request', () => {
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(value);
   });
 
-  it('encodes an empty topicPartitions list as a null array (all partitions)', async () => {
-    const encoder = await electLeadersRequestV0({ timeout: 1000, topicPartitions: [] }).encode();
+  it('encodes null topicPartitions as a null array (all partitions)', async () => {
+    const encoder = await electLeadersRequestV0({ timeout: 1000, topicPartitions: null }).encode();
     expect(encoder.buffer).toEqual(new Encoder().writeInt32(-1).writeInt32(1000).buffer);
+    expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual({ timeout: 1000, topicPartitions: null });
+  });
+
+  it('encodes an empty topicPartitions list as an empty array (no partitions)', async () => {
+    const encoder = await electLeadersRequestV0({ timeout: 1000, topicPartitions: [] }).encode();
+    expect(encoder.buffer).toEqual(new Encoder().writeInt32(0).writeInt32(1000).buffer);
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual({ timeout: 1000, topicPartitions: [] });
   });
 });

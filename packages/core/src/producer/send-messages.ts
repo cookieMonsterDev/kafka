@@ -4,7 +4,7 @@ import { staleMetadata } from '../protocol/error-codes';
 import type { CompressionType } from '../protocol/compression/index';
 import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
-import type { Retrier } from '../retry/index';
+import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
 import { createTopicData } from './create-topic-data';
 import type { EosManager, EosManagerPartition } from './eos-manager/index';
@@ -31,6 +31,8 @@ export interface SendMessagesRequest {
   compression?: CompressionType;
   compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
+  /** Ends the retry cycle (the delivery deadline): no new attempt starts and queued gate waits give up. */
+  signal?: AbortSignal;
 }
 
 function partitionKey(topic: string, partition: number): string {
@@ -55,14 +57,25 @@ function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: 
   return { records, bytes };
 }
 
-function topicPartitionsFromTopicData(topicData: ReturnType<typeof createTopicData>): EosManagerPartition[] {
-  const partitions: EosManagerPartition[] = [];
-  for (const { topic, partitions: entries } of topicData) {
-    for (const entry of entries) {
-      partitions.push({ topic, partition: entry.partition });
-    }
-  }
-  return partitions;
+/** Errors the broker returns although the records may already be on the leader's log. */
+const WRITE_UNKNOWN_ERROR_TYPES = new Set([
+  'REQUEST_TIMED_OUT',
+  'NOT_ENOUGH_REPLICAS_AFTER_APPEND',
+  'OUT_OF_ORDER_SEQUENCE_NUMBER',
+]);
+
+/**
+ * Whether the broker definitely did not append this partition's records: only a partition-level
+ * error names it. Anything else (a timeout, a dropped connection, a sibling's error failing the
+ * whole response) leaves the outcome unknown.
+ */
+function wasRejected(error: unknown, topic: string, partition: number): boolean {
+  return (
+    error instanceof KafkaProtocolError &&
+    error.topic === topic &&
+    error.partition === partition &&
+    !WRITE_UNKNOWN_ERROR_TYPES.has(error.type ?? '')
+  );
 }
 
 export function createSendMessages({
@@ -80,11 +93,80 @@ export function createSendMessages({
     compression,
     compressionLevel,
     topicMessages,
+    signal,
   }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
     const produceSize = topicMessagesSize(topicMessages);
+    /**
+     * Sequences handed to this send, kept across retries like the Java client's in-flight batches:
+     * a failed attempt may still have been written, so its retry must reuse the same range and no
+     * other send may be handed it. Only valid for the producer id/epoch they were assigned under.
+     */
+    const firstSequences = new Map<string, number>();
+    /** Partitions whose failed request may still have been written, so their sequences are spent. */
+    const writeUnknownPartitions = new Set<string>();
+    let sequenceGeneration: string | undefined;
+    let gatedPartitions: EosManagerPartition[] | undefined;
+
+    function producerGeneration(): string {
+      return `${eosManager.getProducerId()}:${eosManager.getProducerEpoch()}`;
+    }
+
+    function firstSequenceFor(topic: string, partition: number, recordCount: number): number {
+      const generation = producerGeneration();
+      if (generation !== sequenceGeneration) {
+        firstSequences.clear();
+        writeUnknownPartitions.clear();
+        sequenceGeneration = generation;
+      }
+
+      const key = partitionKey(topic, partition);
+      let firstSequence = firstSequences.get(key);
+      if (firstSequence === undefined) {
+        firstSequence = eosManager.getSequence(topic, partition);
+        eosManager.updateSequence(topic, partition, recordCount);
+        firstSequences.set(key, firstSequence);
+      }
+      return firstSequence;
+    }
+
+    /**
+     * Hand back the ranges of partitions that never got acked; safe because their gates are still
+     * held. A range that may be on the log can't be handed back (the next send's records would be
+     * deduplicated away) nor skipped (OUT_OF_ORDER_SEQUENCE), so that needs a new epoch instead.
+     */
+    function releaseUnackedSequences(): void {
+      if (producerGeneration() !== sequenceGeneration) return;
+      if ([...writeUnknownPartitions].some((key) => !ackedPartitions.has(key))) {
+        eosManager.requestEpochBump();
+        return;
+      }
+      for (const [topic, messagesPerPartition] of assignment) {
+        for (const [partition, messages] of messagesPerPartition) {
+          const key = partitionKey(topic, partition);
+          if (!ackedPartitions.has(key) && firstSequences.has(key)) {
+            eosManager.updateSequence(topic, partition, -messages.length);
+          }
+        }
+      }
+    }
+
+    /**
+     * Hold every partition's gate from the first attempt until the send settles, so a queued send
+     * cannot take sequences ahead of this one's retries. Acquired all at once (sorted inside the
+     * EOS manager) so two sends sharing partitions cannot deadlock.
+     */
+    async function acquireGatesOnce(): Promise<void> {
+      if (gatedPartitions) return;
+      const partitions: EosManagerPartition[] = [];
+      for (const [topic, messagesPerPartition] of assignment) {
+        for (const partition of messagesPerPartition.keys()) partitions.push({ topic, partition });
+      }
+      await eosManager.acquirePartitionGates(partitions, { signal });
+      gatedPartitions = partitions;
+    }
 
     function collectResponse(): RecordMetadata[] {
       if (acks === 0) return [];
@@ -134,6 +216,7 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       await cluster.refreshMetadataIfNecessary();
       assignMessages();
+      await acquireGatesOnce();
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 
@@ -175,76 +258,60 @@ export function createSendMessages({
       }
 
       return [...topicDataByBroker.entries()].map(async ([broker, topicData]) => {
-        const topicPartitions = topicPartitionsFromTopicData(topicData);
-        await eosManager.acquirePartitionGates(topicPartitions);
-        try {
-          if (eosManager.isTransactional()) {
-            await eosManager.addPartitionsToTransaction(topicData);
-          }
+        if (eosManager.isTransactional()) {
+          await eosManager.addPartitionsToTransaction(topicData);
+        }
 
-          for (const { topic, partitions } of topicData) {
-            for (const entry of partitions) {
-              entry.firstSequence = eosManager.getSequence(topic, entry.partition);
-              eosManager.updateSequence(topic, entry.partition, entry.messages.length);
-            }
+        for (const { topic, partitions } of topicData) {
+          for (const entry of partitions) {
+            entry.firstSequence = firstSequenceFor(topic, entry.partition, entry.messages.length);
           }
+        }
 
-          let response;
-          const producedAt = Date.now();
-          const producerEpoch = eosManager.getProducerEpoch();
-          try {
-            response = await broker.produce({
-              transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
-              producerId: eosManager.getProducerId(),
-              producerEpoch,
-              acks,
-              timeout,
-              compression,
-              compressionLevel,
-              topicData,
-            });
-          } catch (e) {
-            // A concurrent InitProducerId (e.g. from another partition's UNKNOWN_PRODUCER_ID
-            // recovery) may already have bumped the epoch and reset sequence tracking to zero
-            // while this request was in flight. Rolling back against that fresh state would
-            // drive it negative instead of leaving it alone, since the increment being undone
-            // belongs to a generation that no longer exists.
-            if (eosManager.getProducerEpoch() === producerEpoch) {
-              for (const { topic, partitions } of topicData) {
-                for (const entry of partitions) {
-                  eosManager.updateSequence(topic, entry.partition, -entry.messages.length);
-                }
+        const producedAt = Date.now();
+        const response = await broker
+          .produce({
+            transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
+            producerId: eosManager.getProducerId(),
+            producerEpoch: eosManager.getProducerEpoch(),
+            acks,
+            timeout,
+            compression,
+            compressionLevel,
+            topicData,
+          })
+          .catch((error: unknown) => {
+            for (const { topic, partitions } of topicData) {
+              for (const { partition } of partitions) {
+                if (!wasRejected(error, topic, partition)) writeUnknownPartitions.add(partitionKey(topic, partition));
               }
             }
-            throw e;
-          }
+            throw error;
+          });
 
-          const expectsResponse = acks !== 0;
-          // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
-          // write, not the node's responsiveness - only record when a response was awaited.
-          if (expectsResponse && broker.nodeId != null) {
-            nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
-          }
-          const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
+        const expectsResponse = acks !== 0;
+        // acks: 0 doesn't wait on the broker at all, so timing it would measure the socket
+        // write, not the node's responsiveness - only record when a response was awaited.
+        if (expectsResponse && broker.nodeId != null) {
+          nodeLatencyTracker.record(broker.nodeId, Date.now() - producedAt);
+        }
+        const formattedResponse = expectsResponse && response ? responseSerializer(response) : [];
 
-          if (expectsResponse) {
-            for (const metadata of formattedResponse) {
-              const key = partitionKey(metadata.topicName, metadata.partition);
-              ackedPartitions.add(key);
-              metadataByPartition.set(key, metadata);
-            }
-          } else {
-            for (const { topic, partition } of topicPartitions) {
-              ackedPartitions.add(partitionKey(topic, partition));
-            }
+        if (expectsResponse) {
+          for (const metadata of formattedResponse) {
+            const key = partitionKey(metadata.topicName, metadata.partition);
+            ackedPartitions.add(key);
+            metadataByPartition.set(key, metadata);
           }
-        } finally {
-          await eosManager.releasePartitionGates(topicPartitions);
+        } else {
+          for (const { topic, partitions } of topicData) {
+            for (const { partition } of partitions) ackedPartitions.add(partitionKey(topic, partition));
+          }
         }
       });
     }
 
-    return retrier(async (bail, retryCount, retryTime) => {
+    const attempt: Retryable<RecordMetadata[]> = async (bail, retryCount, retryTime) => {
       const topics = topicMessages.map(({ topic }) => topic);
       await cluster.addMultipleTargetTopics(topics);
 
@@ -336,17 +403,24 @@ export function createSendMessages({
           throw new KafkaProtocolError(error, { retriable: true });
         }
 
-        // KIP-890: the broker rejected this produce and the transaction can no longer commit,
-        // only abort. Mark it so a later `commit()` fails clearly instead of racing the broker.
-        if (error.type === 'TRANSACTION_ABORTABLE') {
-          eosManager.markTransactionAbortable();
-        }
-
         logger.error(`${error.message}`, { retryCount, retryTime });
         if (error.retriable) throw error;
         bail(error);
         return collectResponse();
       }
-    });
+    };
+
+    return retrier(attempt, { signal })
+      .catch((error: unknown) => {
+        releaseUnackedSequences();
+        // Some partitions may already be written inside the transaction (and KIP-890's
+        // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
+        // client's abortable error state; a later `commit()` must not keep a partial send.
+        if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
+        throw error;
+      })
+      .finally(async () => {
+        if (gatedPartitions) await eosManager.releasePartitionGates(gatedPartitions);
+      });
   };
 }

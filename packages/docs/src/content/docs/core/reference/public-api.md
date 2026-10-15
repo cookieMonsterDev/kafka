@@ -14,20 +14,20 @@ there is no hand-maintained `types/index.d.ts`.
 
 | Export                                                                                | Kind                                                                                            | Page                                                       |
 | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `Kafka`                                                                               | `producer()` / `consumer()` / `shareConsumer()` / `admin()` / `logger()`                        | [Kafka client](./kafka/)                                   |
+| `Kafka`                                                                               | `producer()` / `consumer()` / `shareConsumer()` / `admin()` / `logger()`                        | [Kafka client](../kafka/)                                  |
 | `throughputPreset`                                                                    | sticky producer + consume-concurrency profile (linger/batch/in-flight are constructor defaults) | [Throughput](../../guides/throughput/)                     |
 | `Partitioners`                                                                        | `DefaultPartitioner` (murmur2 keyed routing), `LegacyPartitioner`, `StickyPartitioner`          | [Producer](../../guides/producer/#partitioners)            |
 | `PartitionAssigners`                                                                  | `roundRobin`, `range`, `sticky`, `cooperativeSticky`                                            | [Consumer](../../guides/consumer/#assigners-and-isolation) |
 | `AssignerProtocol`                                                                    | `MemberMetadata`, `MemberAssignment` encode/decode                                              |                                                            |
-| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                     | [Configuration](./configuration/)                          |
+| `logLevel`                                                                            | `NOTHING`, `ERROR`, `WARN`, `INFO`, `DEBUG`                                                     | [Configuration](../configuration/)                         |
 | `CompressionTypes`                                                                    | `None`, `GZIP`, `Snappy`, `LZ4`, `ZSTD`                                                         |                                                            |
 | `CompressionCodecs`                                                                   | Codec registry; GZIP, Snappy, LZ4, and ZSTD built in                                            |                                                            |
-| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                     | [Admin](./admin/)                                          |
-| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                        | [Admin](./admin/)                                          |
-| `ScramMechanisms`                                                                     | SCRAM                                                                                           | [Admin](./admin/)                                          |
-| `FeatureUpdateUpgradeTypes`                                                           | `UPGRADE`, `SAFE_DOWNGRADE`, `UNSAFE_DOWNGRADE`                                                 | [Admin](./admin/)                                          |
-| `SHARE_ACKNOWLEDGE_TYPE`, `SHARE_ACQUIRE_MODE`                                        | Share-group ack types and acquire modes                                                         | [Consumer](./consumer/#shareconsumer)                      |
-| `Kafka*` error classes                                                                | See [Errors](./errors/)                                                                         |                                                            |
+| `ConfigResourceTypes`, `ConfigSource`, `ConfigOperations`, `ConfigType`               | Config APIs                                                                                     | [Admin](../admin/)                                         |
+| `AclResourceTypes`, `AclOperationTypes`, `AclPermissionTypes`, `ResourcePatternTypes` | ACL APIs                                                                                        | [Admin](../admin/)                                         |
+| `ScramMechanisms`                                                                     | SCRAM                                                                                           | [Admin](../admin/)                                         |
+| `FeatureUpdateUpgradeTypes`                                                           | `UPGRADE`, `SAFE_DOWNGRADE`, `UNSAFE_DOWNGRADE`                                                 | [Admin](../admin/)                                         |
+| `SHARE_ACKNOWLEDGE_TYPE`, `SHARE_ACQUIRE_MODE`                                        | Share-group ack types and acquire modes                                                         | [Consumer](../consumer/#shareconsumer)                     |
+| `Kafka*` error classes                                                                | See [Errors](../errors/)                                                                        |                                                            |
 | `METRIC_NAMES`                                                                        | OpenTelemetry / KIP-714 metric name constants                                                   | [Observability](../../guides/observability/)               |
 
 `isRebalancing` and `isKafkaError` are not part of the public barrel.
@@ -45,10 +45,10 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `KafkaMetrics`, `KafkaMeter`, `METRIC_NAMES`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 `GssTokenStep`. Field-by-field:
-[Configuration](./configuration/),
-[Producer API](./producer/),
-[Consumer API](./consumer/),
-[Admin API](./admin/),
+[Configuration](../configuration/),
+[Producer API](../producer/),
+[Consumer API](../consumer/),
+[Admin API](../admin/),
 [Security](../../guides/security/).
 
 ## Extra APIs
@@ -83,5 +83,5 @@ or too-old APIs fail fast with a non-retriable error.
 `describeConfigs({ includeSynonyms: true })` is ignored on DescribeConfigs v0
 (Kafka 0.11); decoded entries have an empty `configSynonyms` array.
 
-See [Errors](./errors/) and
-[Compatibility](./compatibility/).
+See [Errors](../errors/) and
+[Compatibility](../compatibility/).

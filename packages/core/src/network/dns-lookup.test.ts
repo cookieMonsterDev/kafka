@@ -121,6 +121,34 @@ describe('network/dns-lookup', () => {
       vi.useRealTimers();
     });
 
+    it('starts the next address as soon as the current attempt fails (RFC 8305)', async () => {
+      vi.useFakeTimers();
+      try {
+        const connect = vi.fn((address: { address: string }) =>
+          address.address === '2001:db8::1' ? Promise.reject(new Error('refused')) : new Promise(() => undefined),
+        );
+
+        void connectHappyEyeballs(
+          [
+            { address: '2001:db8::1', family: 6 },
+            { address: '10.0.0.1', family: 4 },
+            { address: '2001:db8::2', family: 6 },
+          ],
+          connect,
+          250,
+        );
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(connect.mock.calls.map(([address]) => address.address)).toEqual(['2001:db8::1', '10.0.0.1']);
+        await vi.advanceTimersByTimeAsync(249);
+        expect(connect).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(connect).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rejects when every address fails', async () => {
       const connect = vi.fn().mockRejectedValue(new Error('refused'));
       await expect(

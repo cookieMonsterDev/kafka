@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { KafkaConnectionError } from '../errors';
 import { retrier } from './index';
 import { FAST_RETRY_DEFAULTS } from './test-defaults';
 
@@ -127,4 +128,40 @@ describe('retry/retrier', () => {
       expect(fn).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('stops retrying once the signal aborts, rejecting with its reason without waiting out the backoff', async () => {
+    vi.useFakeTimers();
+    try {
+      const retry = retrier({ retries: 10, initialRetryTime: 30_000, maxRetryTime: 30_000, factor: 0, multiplier: 1 });
+      const controller = new AbortController();
+      const fn = vi.fn(async () => {
+        throw new KafkaConnectionError('down');
+      });
+
+      const result = retry(fn, { signal: controller.signal });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the abort fires
+      const assertion = expect(result).rejects.toThrow('deadline');
+      await vi.advanceTimersByTimeAsync(100);
+      controller.abort(new Error('deadline'));
+      await assertion;
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(fn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets an in-flight attempt finish after the signal aborts, then rejects instead of retrying', async () => {
+    const retry = retrier(FAST_RETRY_DEFAULTS);
+    const controller = new AbortController();
+    const fn = vi.fn(async () => {
+      controller.abort(new Error('deadline'));
+      await Promise.resolve();
+      throw new KafkaConnectionError('down');
+    });
+
+    await expect(retry(fn, { signal: controller.signal })).rejects.toThrow('deadline');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 });

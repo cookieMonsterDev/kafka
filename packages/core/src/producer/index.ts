@@ -10,6 +10,7 @@ import type { CompressionType } from '../protocol/compression/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createEosManager, type EosManager } from './eos-manager/index';
+import { FENCED_PRODUCER_MESSAGE } from './eos-manager/transaction-state-machine';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
 import { createMessageProducer } from './message-producer';
 import { createNodeLatencyTracker } from './node-latency-tracker';
@@ -212,6 +213,7 @@ export function createProducer({
     if (!activeEosManager.isInitialized()) {
       await activeEosManager.initProducerId();
     }
+    await activeEosManager.bumpEpochIfRequested();
     activeEosManager.beginTransaction();
 
     const {
@@ -227,17 +229,28 @@ export function createProducer({
 
     const isActive = (): boolean => activeEosManager.isInTransaction() && !transactionDidEnd;
 
+    function unusableReason(): string {
+      if (activeEosManager.isFenced()) return FENCED_PRODUCER_MESSAGE;
+      if (transactionDidEnd) return 'Cannot continue to use transaction once ended';
+      return 'Cannot send or add offsets once the transaction is ending or can only be aborted';
+    }
+
     function transactionGuard<Args extends unknown[], R>(
       fn: (...args: Args) => Promise<R>,
+      isUsable: () => boolean = isActive,
     ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
-        if (!isActive()) {
-          return Promise.reject(new KafkaNonRetriableError('Cannot continue to use transaction once ended'));
+        if (!isUsable()) {
+          return Promise.reject(new KafkaNonRetriableError(unusableReason()));
         }
 
         return fn(...args);
       };
     }
+
+    // Ending stays callable after the transaction left TRANSACTING (abort-only, or a failed
+    // EndTxn to resend); the EOS manager's state machine decides which end is still legal.
+    const isNotEnded = (): boolean => !transactionDidEnd;
 
     return {
       sendBatch: transactionGuard(sendBatchTxn),
@@ -246,12 +259,12 @@ export function createProducer({
         await flushTxn();
         await activeEosManager.abort();
         transactionDidEnd = true;
-      }),
+      }, isNotEnded),
       commit: transactionGuard(async () => {
         await flushTxn();
         await activeEosManager.commit();
         transactionDidEnd = true;
-      }),
+      }, isNotEnded),
       sendOffsets: transactionGuard(
         async ({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => {
           await activeEosManager.sendOffsets({ consumerGroupId, topics });

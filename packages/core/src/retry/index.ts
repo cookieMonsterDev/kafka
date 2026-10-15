@@ -1,4 +1,5 @@
 import { KafkaNonRetriableError, KafkaNumberOfRetriesExceeded } from '../errors';
+import { abortError } from '../utils/abort';
 import { RETRY_DEFAULTS } from './defaults';
 
 /**
@@ -17,7 +18,14 @@ export type RetryOptions = Partial<RetryConfig>;
 
 export type Bail = (error?: Error) => void;
 export type Retryable<T> = (bail: Bail, retryCount: number, retryTime: number) => Promise<T>;
-export type Retrier = <T>(fn: Retryable<T>) => Promise<T>;
+export interface RetryRunOptions {
+  /**
+   * Stops the retry cycle once aborted: a pending backoff is cut short, an attempt already in
+   * flight is left to finish, and no further attempt starts. Rejects with the abort reason.
+   */
+  signal?: AbortSignal;
+}
+export type Retrier = <T>(fn: Retryable<T>, options?: RetryRunOptions) => Promise<T>;
 
 function random(min: number, max: number): number {
   return Math.random() * (max - min) + min;
@@ -43,9 +51,17 @@ function createRetriable<T>(
   resolve: (value: T) => void,
   reject: (reason: unknown) => void,
   fn: Retryable<T>,
+  signal: AbortSignal | undefined,
 ): (retryTime: number, retryCount?: number) => void {
   let aborted = false;
   const { factor, multiplier, maxRetryTime, retries } = configs;
+
+  const stopIfSignalAborted = (): boolean => {
+    if (!signal?.aborted) return false;
+    aborted = true;
+    reject(abortError(signal));
+    return true;
+  };
 
   const bail: Bail = (error) => {
     aborted = true;
@@ -62,12 +78,23 @@ function createRetriable<T>(
     const shouldRetry = retryCount < retries;
 
     const scheduleRetry = (): void => {
-      setTimeout(() => retry(nextRetryTime, retryCount + 1), retryTime);
+      const onAbort = (): void => {
+        clearTimeout(timer);
+        stopIfSignalAborted();
+      };
+      const timer = setTimeout(() => {
+        signal?.removeEventListener('abort', onAbort);
+        retry(nextRetryTime, retryCount + 1);
+      }, retryTime);
+      signal?.addEventListener('abort', onAbort, { once: true });
     };
+
+    if (stopIfSignalAborted()) return;
 
     fn(bail, retryCount, retryTime)
       .then(resolve)
       .catch((e: Error & { retriable?: boolean; cause?: unknown }) => {
+        if (stopIfSignalAborted()) return;
         if (isErrorRetriable(e)) {
           if (shouldRetry) {
             scheduleRetry();
@@ -84,10 +111,10 @@ function createRetriable<T>(
 }
 
 export function retrier(opts: RetryOptions = {}): Retrier {
-  return <T>(fn: Retryable<T>): Promise<T> =>
+  return <T>(fn: Retryable<T>, { signal }: RetryRunOptions = {}): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       const configs: RetryConfig = { ...RETRY_DEFAULTS, ...opts };
-      const start = createRetriable(configs, resolve, reject, fn);
+      const start = createRetriable(configs, resolve, reject, fn, signal);
       start(randomFromRetryTime(configs.factor, configs.initialRetryTime));
     });
 }

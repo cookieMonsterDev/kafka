@@ -134,4 +134,52 @@ describe('consumer/filter-aborted-messages', () => {
       expect.objectContaining({ offset: 5n }),
     ]);
   });
+
+  it('activates every aborted transaction that starts at or before a record', () => {
+    // The fetch starts after both transactions began, so the first record must open both.
+    const messages = [
+      message(10n, { batchContext: { producerId: 2n, inTransaction: true } }),
+      message(11n, { batchContext: { producerId: 1n, inTransaction: true } }),
+      message(12n, { batchContext: { producerId: 3n, inTransaction: true } }),
+    ];
+
+    expect(
+      filterAbortedMessages({
+        messages,
+        abortedTransactions: [
+          { producerId: 1n, firstOffset: 5n },
+          { producerId: 2n, firstOffset: 8n },
+        ],
+      }),
+    ).toStrictEqual([expect.objectContaining({ offset: 12n })]);
+  });
+
+  it('does not depend on the order of abortedTransactions', () => {
+    const messages = [
+      message(1n, { batchContext: { producerId: 1n, inTransaction: true } }),
+      message(2n, { batchContext: { producerId: 2n, inTransaction: true } }),
+    ];
+
+    expect(
+      filterAbortedMessages({
+        messages,
+        abortedTransactions: [
+          { producerId: 2n, firstOffset: 2n },
+          { producerId: 1n, firstOffset: 1n },
+        ],
+      }),
+    ).toStrictEqual([]);
+  });
+
+  it('does not treat a data record with a four-null-byte key as an abort marker', () => {
+    const messages = [
+      message(1n, { key: Buffer.from([0, 0, 0, 0]) }),
+      message(2n),
+      message(3n, { key: Buffer.from([0, 0, 0, 0]), isControlRecord: true }),
+    ];
+
+    expect(
+      filterAbortedMessages({ messages, abortedTransactions: [{ producerId: 103000n, firstOffset: 1n }] }),
+    ).toStrictEqual([expect.objectContaining({ offset: 3n })]);
+  });
 });

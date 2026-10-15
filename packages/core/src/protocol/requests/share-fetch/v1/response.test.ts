@@ -58,4 +58,47 @@ describe('protocol/requests/share-fetch/v1/response', () => {
     });
     await expect(shareFetchResponseV1.parse(data)).resolves.toEqual(data);
   });
+
+  it('returns partition-level fetch and acknowledgement errors instead of failing the whole fetch', async () => {
+    const partition = {
+      partitionIndex: 0,
+      errorCode: 0,
+      errorMessage: null,
+      acknowledgeErrorCode: 121, // INVALID_RECORD_STATE
+      acknowledgeErrorMessage: null,
+      currentLeader: { leaderId: 1, leaderEpoch: 5 },
+      records: [],
+      acquiredRecords: [],
+    };
+    const data = {
+      throttleTime: 0,
+      clientSideThrottleTime: 0,
+      errorCode: 0,
+      errorMessage: null,
+      acquisitionLockTimeoutMs: 30_000,
+      responses: [
+        {
+          topicId,
+          partitions: [partition, { ...partition, partitionIndex: 1, errorCode: 6, acknowledgeErrorCode: 0 }],
+        },
+      ],
+      nodeEndpoints: [],
+    };
+
+    await expect(shareFetchResponseV1.parse(data)).resolves.toEqual(data);
+  });
+
+  it('throws a top-level error', async () => {
+    await expect(
+      shareFetchResponseV1.parse({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 29, // TOPIC_AUTHORIZATION_FAILED
+        errorMessage: null,
+        acquisitionLockTimeoutMs: 0,
+        responses: [],
+        nodeEndpoints: [],
+      }),
+    ).rejects.toMatchObject({ type: 'TOPIC_AUTHORIZATION_FAILED' });
+  });
 });

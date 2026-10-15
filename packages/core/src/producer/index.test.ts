@@ -6,6 +6,7 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { NETWORK_REQUEST } from '../network/instrumentation-events';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createProducer } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -366,6 +367,83 @@ describe('producer', () => {
       await first.commit();
 
       await expect(producer.transaction()).resolves.toBeTruthy();
+    });
+
+    it('lets a commit whose EndTxn failed be retried', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue(undefined),
+      };
+      const producer = createProducer({
+        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).rejects.toThrow('connection lost');
+      await expect(txn.send({ topic: 't', messages: [] })).rejects.toThrow('can only be aborted');
+      await expect(txn.commit()).resolves.toBeUndefined();
+
+      expect(coordinator.endTxn).toHaveBeenCalledTimes(2);
+      await expect(producer.transaction()).resolves.toBeTruthy();
+    });
+
+    it('rejects every transaction call with a fenced error once EndTxn is fenced', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi
+          .fn()
+          .mockRejectedValue(createErrorFromCode(ERROR_CODES.find(({ type }) => type === 'PRODUCER_FENCED')!.code)),
+      };
+      const producer = createProducer({
+        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).rejects.toMatchObject({ type: 'PRODUCER_FENCED' });
+
+      const fenced = 'fenced by a newer instance';
+      await expect(txn.send({ topic: 't', messages: [] })).rejects.toThrow(fenced);
+      await expect(txn.commit()).rejects.toThrow(fenced);
+      await expect(txn.abort()).rejects.toThrow(fenced);
+      await expect(producer.transaction()).rejects.toThrow(fenced);
+    });
+
+    it('bumps the epoch before the next transaction when the bump after a V2 commit failed', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockResolvedValue(undefined),
+      };
+      const initProducerIdResponse = { producerId: 1000n, producerEpoch: 1 };
+      coordinator.initProducerId
+        .mockResolvedValueOnce(initProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce({ ...initProducerIdResponse, producerEpoch: 2 });
+      const cluster = fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) });
+      cluster.brokerPool.versions[API_KEYS.Produce].maxVersion = 12;
+      const producer = createProducer({
+        cluster: cluster as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).resolves.toBeUndefined();
+
+      await producer.transaction();
+      expect(coordinator.initProducerId).toHaveBeenCalledTimes(3);
     });
   });
 

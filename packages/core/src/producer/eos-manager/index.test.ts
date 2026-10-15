@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../../cluster/index';
-import { KafkaNonRetriableError } from '../../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
+import { createErrorFromCode, ERROR_CODES } from '../../protocol/error-codes';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createEosManager } from './index';
@@ -367,6 +368,124 @@ describe('producer/eosManager', () => {
       });
     });
 
+    it('retries EndTxn against a re-discovered coordinator on retriable errors', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(new KafkaProtocolError(createErrorFromCode(16))).mockResolvedValue(undefined);
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+        retry: { retries: 3, initialRetryTime: 1, maxRetryTime: 5 },
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      const lookupsBeforeCommit = cluster.findGroupCoordinator.mock.calls.length;
+      await eosManager.commit();
+
+      expect(broker.endTxn).toHaveBeenCalledTimes(2);
+      expect(cluster.findGroupCoordinator.mock.calls.length - lookupsBeforeCommit).toBe(2);
+      expect(eosManager.isInTransaction()).toBe(false);
+    });
+
+    it('lets commit be called again after EndTxn fails instead of sticking in COMMITTING', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue(undefined);
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      await expect(eosManager.commit()).rejects.toThrow('connection lost');
+      await expect(eosManager.abort()).rejects.toThrow('Cannot call "abort" in state "COMMITTING"');
+
+      await eosManager.commit();
+      expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: true }));
+      eosManager.beginTransaction();
+    });
+
+    function errorOfType(type: string): KafkaProtocolError {
+      return createErrorFromCode(ERROR_CODES.find((entry) => entry.type === type)!.code);
+    }
+
+    async function transactionWithPartition(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: fakeCluster(broker, { transactionV2 }) as unknown as Cluster,
+        transactional: true,
+        transactionalId,
+      });
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic: 'test-topic-1', partitions: [{ partition: 0 }] }]);
+      return eosManager;
+    }
+
+    it.each(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH'])(
+      'becomes unusable after EndTxn fails with %s instead of sticking in COMMITTING',
+      async (type) => {
+        const broker = fakeBroker();
+        broker.endTxn.mockRejectedValue(errorOfType(type));
+        const eosManager = await transactionWithPartition(broker);
+
+        await expect(eosManager.commit()).rejects.toMatchObject({ type });
+
+        const fatal = 'fenced by a newer instance';
+        await expect(eosManager.commit()).rejects.toThrow(fatal);
+        await expect(eosManager.abort()).rejects.toThrow(fatal);
+        await expect(eosManager.initProducerId()).rejects.toThrow(fatal);
+        expect(() => eosManager.beginTransaction()).toThrow(fatal);
+        expect(broker.endTxn).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it('becomes unusable when an abort is fenced', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValue(errorOfType('PRODUCER_FENCED'));
+      const eosManager = await transactionWithPartition(broker);
+
+      await expect(eosManager.abort()).rejects.toMatchObject({ type: 'PRODUCER_FENCED' });
+      await expect(eosManager.abort()).rejects.toThrow('fenced by a newer instance');
+    });
+
+    it('lets a commit rejected with INVALID_TXN_STATE be aborted', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(errorOfType('INVALID_TXN_STATE')).mockResolvedValue(undefined);
+      const eosManager = await transactionWithPartition(broker);
+
+      await expect(eosManager.commit()).rejects.toMatchObject({ type: 'INVALID_TXN_STATE' });
+      await expect(eosManager.commit()).rejects.toThrow('Cannot call "commit" in state "ABORTABLE"');
+      await eosManager.abort();
+
+      expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: false }));
+      expect(() => eosManager.beginTransaction()).not.toThrow();
+    });
+
+    it('reports a committed transaction V2 as committed when the epoch bump after it fails, bumping later', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = await transactionWithPartition(broker, { transactionV2: true });
+
+      await expect(eosManager.commit()).resolves.toBeUndefined();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+      expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+
+      await eosManager.bumpEpochIfRequested();
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
     it('does not send EndTxn when aborting/committing a transaction with no operations', async () => {
       const broker = fakeBroker();
       const cluster = fakeCluster(broker);
@@ -637,5 +756,170 @@ describe('producer/eosManager', () => {
 
     expect(eosManager.getSequence(topic, 0)).toBe(4);
     expect(eosManager.getSequence(topic, 1)).toBe(7);
+  });
+
+  it('keeps a queued Produce waiting on its partition gate past the lock timeout, until its signal aborts', async () => {
+    vi.useFakeTimers();
+    try {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      const controller = new AbortController();
+      let settled = false;
+      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 0 }], { signal: controller.signal });
+      waiting.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+
+      // A leader outage longer than the old 0xffff ms lock timeout must not fail queued sends.
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(settled).toBe(false);
+
+      controller.abort(new Error('delivery deadline'));
+      await expect(waiting).rejects.toThrow('delivery deadline');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  describe('epoch bump requests', () => {
+    it('bumps the epoch once on the next send after a request, then not again', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      await eosManager.initProducerId();
+      eosManager.updateSequence(topic, 0, 5);
+
+      await eosManager.bumpEpochIfRequested();
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      eosManager.requestEpochBump();
+      await Promise.all([eosManager.bumpEpochIfRequested(), eosManager.bumpEpochIfRequested()]);
+      await eosManager.bumpEpochIfRequested();
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(eosManager.getSequence(topic, 0)).toBe(0);
+    });
+
+    it('keeps the request when the bump fails so the next send tries again', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockRejectedValueOnce(new Error('coordinator down'))
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      await eosManager.initProducerId();
+
+      eosManager.requestEpochBump();
+      await expect(eosManager.bumpEpochIfRequested()).rejects.toThrow('coordinator down');
+      await eosManager.bumpEpochIfRequested();
+
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    function bumpingEosManager() {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
+      return { broker, eosManager };
+    }
+
+    function track(promise: Promise<void>): { settled: () => boolean } {
+      let settled = false;
+      promise.then(
+        () => (settled = true),
+        () => (settled = true),
+      );
+      return { settled: () => settled };
+    }
+
+    it('holds new sends back until the sends holding gates settle, then bumps once', async () => {
+      const { broker, eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      eosManager.requestEpochBump();
+      // Partition 1 is free, but its send must not start while partition 0's old-epoch send is in flight.
+      const second = eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
+      const third = eosManager.acquirePartitionGates([{ topic, partition: 2 }]);
+      const secondState = track(second);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(secondState.settled()).toBe(false);
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+      await Promise.all([second, third]);
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('does not let a send queued on a gate slip in ahead of the bump its holder requested', async () => {
+      const { eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+
+      let epochWhenAcquired: number | undefined;
+      const queued = eosManager
+        .acquirePartitionGates([{ topic, partition: 0 }])
+        .then(() => (epochWhenAcquired = eosManager.getProducerEpoch()));
+
+      eosManager.requestEpochBump();
+      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
+      await queued;
+
+      expect(epochWhenAcquired).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
+
+    it('gives up waiting for the drain when the send is aborted', async () => {
+      const { broker, eosManager } = bumpingEosManager();
+      await eosManager.initProducerId();
+      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
+      eosManager.requestEpochBump();
+
+      const controller = new AbortController();
+      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 1 }], { signal: controller.signal });
+      controller.abort(new Error('delivery deadline'));
+
+      await expect(waiting).rejects.toThrow('delivery deadline');
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+    });
+
+    it('defers a transactional bump until the transaction is aborted', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: fakeCluster(broker) as unknown as Cluster,
+        transactional: true,
+        transactionalId: 'transactional-id',
+      });
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+      await eosManager.addPartitionsToTransaction([{ topic, partitions: [{ partition: 0 }] }]);
+
+      eosManager.requestEpochBump();
+      eosManager.markTransactionAbortable();
+      await eosManager.bumpEpochIfRequested();
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+
+      await eosManager.abort();
+      expect(broker.endTxn).toHaveBeenCalledWith(
+        expect.objectContaining({ producerEpoch: mockInitProducerIdResponse.producerEpoch, transactionResult: false }),
+      );
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+    });
   });
 });

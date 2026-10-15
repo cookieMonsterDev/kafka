@@ -10,13 +10,13 @@ import type { OpenAdmin } from './port';
  * in `main()`, so a second, redundant discovery inside the constructor would both waste a
  * filesystem read and corrupt `configSource()`'s provenance.
  */
-export const openAdmin: OpenAdmin = async ({ brokers, clientId, env, config, adminConfig }) => {
+export const openAdmin: OpenAdmin = async ({ brokers, clientId, env, config, adminConfig, signal }) => {
   const { Kafka, fromEnv } = await import('@cookiemonsterdev/kafka-core');
   const envOverrides = fromEnv(env);
   const overrides = buildConnectionOverrides({ brokers, clientId }, envOverrides, config) as KafkaConfig;
   const kafka = Kafka.from(config.fileConfig ?? {}, overrides);
   const admin = kafka.admin(adminConfig);
-  await admin.connect();
+  await admin.connect({ signal });
   return admin;
 };
 

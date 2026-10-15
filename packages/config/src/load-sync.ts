@@ -4,7 +4,7 @@ import { extname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { defaultOnConfigDiagnostic, type OnConfigDiagnostic } from './diagnostics';
 import { KafkaConfigError, KafkaConfigRequiresAsyncError } from './errors';
-import { describeRescue, rethrowIfUnsupportedTypeScriptSyntax } from './load-errors';
+import { describeRescue, rethrowIfUnsupportedTypeScriptSyntax, withCauseMessage } from './load-errors';
 import {
   type AssertValidFileConfig,
   assertResolvedFileConfig,
@@ -30,10 +30,14 @@ function parseJson(path: string): unknown {
   try {
     return JSON.parse(raw);
   } catch (cause) {
-    throw new KafkaConfigError('ConfigLoadError', `Failed to parse kafka config file "${path}" as JSON`, {
-      path,
-      cause,
-    });
+    throw new KafkaConfigError(
+      'ConfigLoadError',
+      withCauseMessage(`Failed to parse kafka config file "${path}" as JSON`, cause),
+      {
+        path,
+        cause,
+      },
+    );
   }
 }
 
@@ -67,10 +71,14 @@ function requireDefaultExport(
 
     const rescue = describeRescue(error);
     if (rescue == null) {
-      throw new KafkaConfigError('ConfigLoadError', `Failed to load kafka config file "${path}"`, {
-        path,
-        cause: error,
-      });
+      throw new KafkaConfigError(
+        'ConfigLoadError',
+        withCauseMessage(`Failed to load kafka config file "${path}"`, error),
+        {
+          path,
+          cause: error,
+        },
+      );
     }
 
     if (!allowTransformFallback) {
@@ -107,7 +115,7 @@ function requireDefaultExport(
       rethrowIfUnsupportedTypeScriptSyntax(retryError, path);
       throw new KafkaConfigError(
         'ConfigLoadError',
-        `Failed to load kafka config file "${path}" even after the transform fallback`,
+        withCauseMessage(`Failed to load kafka config file "${path}" even after the transform fallback`, retryError),
         { path, cause: retryError },
       );
     }

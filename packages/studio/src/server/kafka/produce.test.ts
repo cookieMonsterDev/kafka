@@ -228,6 +228,25 @@ describe('BurstJobManager', () => {
     expect(callCount).toBeLessThan(1000);
   });
 
+  it('cancelAll() cancels every running job', async () => {
+    const producer = createFakeProducer({ send: async () => [metadata()] });
+    const manager = new BurstJobManager();
+    const request = { topic: 'orders', template: { value: 'v' }, count: 1000, ratePerSecond: 100 };
+    const jobs = [manager.start(producer, request), manager.start(producer, request)];
+    const finals = jobs.map(
+      (job) =>
+        new Promise((resolve) => {
+          job.onProgress((progress) => {
+            if (progress.status !== 'running') resolve(progress);
+          });
+        }),
+    );
+
+    manager.cancelAll();
+
+    for (const final of await Promise.all(finals)) expect(final).toMatchObject({ status: 'cancelled' });
+  });
+
   it('cancel() returns false for an unknown job', () => {
     const manager = new BurstJobManager();
     expect(manager.cancel('missing')).toBe(false);

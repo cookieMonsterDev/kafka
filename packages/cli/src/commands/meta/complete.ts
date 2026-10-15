@@ -20,6 +20,7 @@ export function createCompleteCommand(getCommands: () => readonly CommandSpec[])
     path: ['complete'],
     summary: 'List completion candidates for a partial command line (used by the shell scripts, not by hand)',
     hidden: true,
+    config: 'skip',
     positionals: [
       { name: 'words', variadic: true, brief: 'every word typed so far, including the one being completed' },
     ],

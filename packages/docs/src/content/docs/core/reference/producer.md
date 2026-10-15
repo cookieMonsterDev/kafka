@@ -27,7 +27,7 @@ interface Producer {
 Source: [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/index.ts).
 Types: [`producer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/types.ts).
 Guide: [Producer](../../guides/producer/). Config:
-[ProducerConfig](./configuration/#producerconfig).
+[ProducerConfig](../configuration/#producerconfig).
 Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
 
 ## `send` / `sendBatch`
@@ -67,6 +67,13 @@ interface Transaction {
 }
 ```
 
+A transaction whose `send` failed, or whose `commit()` the broker rejected,
+can only be aborted. If `commit()`/`abort()` fails without a broker answer
+(for example, the connection dropped), call it again. A producer fenced by a
+newer instance with the same `transactionalId` (`PRODUCER_FENCED` or
+`INVALID_PRODUCER_EPOCH`) rejects every further transaction call; create a new
+producer.
+
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.
 
 ## `listTopics` / `partitionsFor`
@@ -87,7 +94,7 @@ will describe). `partitionsFor(topic)` refreshes that topic’s metadata if stal
 ## `clientInstanceId`
 
 KIP-714 UUID assigned by the broker after connect when
-[`enableMetricsPush`](./configuration/#kafkaconfig) is on (the default) and the
+[`enableMetricsPush`](../configuration/#kafkaconfig) is on (the default) and the
 broker advertises GetTelemetrySubscriptions (Kafka 3.5+). `null` until that
 RPC completes, or when telemetry is off / unsupported.
 
@@ -99,4 +106,4 @@ const id = producer.clientInstanceId(); // Buffer | null
 For load, spread `throughputPreset().producer` into `kafka.producer()` (sticky
 partitioner and 32 MiB `bufferMemory`; linger/batch/in-flight are already
 constructor defaults). See
-[Throughput](../../guides/throughput/) and [Compatibility](./compatibility/).
+[Throughput](../../guides/throughput/) and [Compatibility](../compatibility/).

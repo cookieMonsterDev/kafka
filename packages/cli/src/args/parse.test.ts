@@ -29,6 +29,19 @@ describe('parseCommandArgs', () => {
     expect(() => parseCommandArgs(['--partitions', 'three'], flags)).toThrow(CliUsageError);
   });
 
+  it.each(['1.5', '0x10', '1e3', 'Infinity', '9007199254740993'])(
+    'rejects %s for a number flag, which is always an integer count or id',
+    (raw) => {
+      const flags: FlagSpec[] = [{ name: 'partitions', type: 'number', brief: '' }];
+      expect(() => parseCommandArgs(['--partitions', raw], flags)).toThrow(/--partitions expects an integer/);
+    },
+  );
+
+  it('accepts a negative integer for a number flag', () => {
+    const flags: FlagSpec[] = [{ name: 'producer-epoch', type: 'number', brief: '' }];
+    expect(parseCommandArgs(['--producer-epoch=-1'], flags).flags).toEqual({ 'producer-epoch': -1 });
+  });
+
   it('parses an enum flag', () => {
     const flags: FlagSpec[] = [{ name: 'time', type: 'enum', values: ['earliest', 'latest'], brief: '' }];
     expect(parseCommandArgs(['--time', 'earliest'], flags).flags).toEqual({ time: 'earliest' });

@@ -292,19 +292,25 @@ export class Decoder {
   }
 
   readTaggedFields(): Record<string, unknown> | null {
+    return this.forEachTaggedField(() => undefined) === 0 ? null : {};
+  }
+
+  /**
+   * Visits each tagged field with a decoder over its value and returns how many were read. Each
+   * field is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482); the size is raw, not compact N+1.
+   */
+  forEachTaggedField(visit: (tag: number, field: Decoder) => void): number {
     const numberOfTaggedFields = this.readUVarInt();
 
-    if (numberOfTaggedFields === 0) {
-      return null;
-    }
-
-    // Reads tag, field length, and then that many bytes for the field value, skipping over the tag.
     for (let i = 0; i < numberOfTaggedFields; i++) {
-      this.readUVarInt();
-      this.readUVarIntBytes();
+      const tag = this.readUVarInt();
+      const size = this.readUVarInt();
+      const field = this.slice(size);
+      this.forward(size);
+      visit(tag, field);
     }
 
-    return {};
+    return numberOfTaggedFields;
   }
 
   readVarLong(): bigint {

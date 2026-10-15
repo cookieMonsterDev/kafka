@@ -2,6 +2,7 @@ import { Broker } from '../broker/index';
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import {
   KafkaBrokerNotFound,
+  KafkaConnectionError,
   KafkaError,
   KafkaGroupCoordinatorNotFound,
   KafkaMetadataNotLoaded,
@@ -377,7 +378,7 @@ export class Cluster {
       if (
         error.name === 'KafkaBrokerNotFound' ||
         error.name === 'KafkaLockTimeout' ||
-        error.name === 'KafkaConnectionError'
+        e instanceof KafkaConnectionError
       ) {
         await this.refreshMetadata();
       }

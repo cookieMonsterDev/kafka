@@ -90,7 +90,7 @@ await admin.expireDelegationToken({ hmac: created.hmac, expiryTimePeriodMs: -1n 
 
 HMAC is `Buffer`; timestamps are `bigint`. Connect a producer or consumer
 with the same token by passing `tokenId` and `tokenHmac` on
-`scram-sha-256` / `scram-sha-512` — see [Security](./security/).
+`scram-sha-256` / `scram-sha-512` — see [Security](../security/).
 
 ## Transactions
 

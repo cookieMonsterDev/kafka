@@ -1,4 +1,6 @@
+import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { namespace } from '../instrumentation/event-type';
+import type { Logger } from '../loggers/index';
 
 const eventType = namespace('network');
 
@@ -42,4 +44,23 @@ export interface NetworkEventMap {
   [NETWORK_REQUEST]: NetworkRequestEvent;
   [NETWORK_REQUEST_TIMEOUT]: NetworkRequestTimeoutEvent;
   [NETWORK_REQUEST_QUEUE_SIZE]: NetworkRequestQueueSizeEvent;
+}
+
+/**
+ * Emits a network event, logging a throwing listener instead of propagating it: these events fire
+ * from inside the socket `data` handler and request queue, where a user listener's error would
+ * otherwise escape as an uncaught exception and leave the connection mid-frame.
+ */
+export function emitNetworkEvent<EventName extends keyof NetworkEventMap>(
+  emitter: InstrumentationEventEmitter<NetworkEventMap> | null | undefined,
+  logger: Logger,
+  eventName: EventName,
+  payload: NetworkEventMap[EventName],
+): void {
+  try {
+    emitter?.emit(eventName, payload);
+  } catch (e) {
+    const error = e as Error;
+    logger.error('Instrumentation listener failed', { eventName, error: error.message, stack: error.stack });
+  }
 }

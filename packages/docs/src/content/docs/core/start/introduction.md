@@ -21,8 +21,8 @@ This site documents the public API. The library lives in
 [`packages/core`](https://github.com/cookieMonsterDev/kafka/tree/develop/packages/core);
 this Astro site is `packages/docs`.
 
-Next: [Installation](./installation/),
-[Getting started](./getting-started/),
+Next: [Installation](../installation/),
+[Getting started](../getting-started/),
 [Kafka client](../../reference/kafka/),
 [Errors](../../guides/errors/),
 [Breaking changes](../../migration/breaking-changes/).

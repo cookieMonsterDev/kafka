@@ -27,6 +27,7 @@ function buildContext(overrides: Partial<ProfilesRouteContext> = {}): ProfilesRo
   return {
     connection,
     pool: fakePool(),
+    producers: { invalidate: vi.fn(async () => {}) },
     getActiveProfile: () => active,
     setActiveProfile: (profile) => {
       active = profile;
@@ -45,6 +46,7 @@ async function withServer<T>(context: ProfilesRouteContext, run: (baseUrl: strin
   try {
     return await run(`http://127.0.0.1:${String(port)}`);
   } finally {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
@@ -135,6 +137,7 @@ describe('registerProfileRoutes', () => {
     });
 
     expect(invalidate).toHaveBeenCalledWith('staging');
+    expect(context.producers.invalidate).toHaveBeenCalledWith('staging');
   });
 
   it('does not invalidate anything when re-selecting the already-active profile', async () => {
@@ -151,6 +154,7 @@ describe('registerProfileRoutes', () => {
     });
 
     expect(invalidate).not.toHaveBeenCalled();
+    expect(context.producers.invalidate).not.toHaveBeenCalled();
   });
 
   it('warms the new profile in the background after switching to it', async () => {

@@ -65,6 +65,18 @@ describe('loadConfigFileAsync', () => {
     expect(config).toEqual({ client: { brokers: ['async-factory:9092'] } });
   });
 
+  it("includes the JSON parser's own message when a .json config is malformed", async () => {
+    const path = join(FIXTURES, 'invalid-json', 'kafka.config.json');
+
+    await expect(loadConfigFileAsync(path)).rejects.toThrow(/as JSON: .*JSON/);
+  });
+
+  it("includes the module's own error message when importing the config throws", async () => {
+    await expect(loadConfigFileAsync(join(FIXTURES, 'throws', 'kafka.config.mjs'))).rejects.toThrow(
+      /Failed to load kafka config file ".*": config exploded/,
+    );
+  });
+
   // A path containing a space and "#" is covered by load-sync.test.ts (createRequire) and verified
   // directly against plain `import()` — Vite/vitest's own dynamic-import transform mishandles a
   // literal "#" in a file URL even when percent-encoded by pathToFileURL, which is a test-runner

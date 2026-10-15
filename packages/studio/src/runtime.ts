@@ -1,3 +1,5 @@
+import { exitCodeForSignal } from './exit-codes';
+
 /** Minimal writable stream contract — enough for `process.stdout`/`process.stderr`. */
 export interface RuntimeWriter {
   write(chunk: string): boolean;
@@ -43,12 +45,18 @@ export interface RuntimeProcessLike {
   readonly stderr: RuntimeWriter;
   cwd(): string;
   on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  exit(code: number): never;
 }
 
 export function createRuntime(proc: RuntimeProcessLike): Runtime {
   const controller = new AbortController();
-  proc.on('SIGINT', () => controller.abort('SIGINT'));
-  proc.on('SIGTERM', () => controller.abort('SIGTERM'));
+  // The first signal starts a graceful shutdown; a second one force-exits in case that hangs.
+  function onSignal(signal: 'SIGINT' | 'SIGTERM'): void {
+    if (controller.signal.aborted) proc.exit(exitCodeForSignal(signal));
+    controller.abort(signal);
+  }
+  proc.on('SIGINT', () => onSignal('SIGINT'));
+  proc.on('SIGTERM', () => onSignal('SIGTERM'));
 
   return {
     argv: proc.argv.slice(2),

@@ -5,6 +5,7 @@ import { EMPTY_RESOLVED_CLI_CONFIG } from './testing/create-command-context';
 
 const echoConfigRun = vi.fn(async () => 0);
 let capturedFormat: 'human' | 'json' | undefined;
+let releaseGraceful: (() => void) | undefined;
 
 const FIXTURE_COMMANDS: CommandSpec[] = [
   {
@@ -48,6 +49,22 @@ const FIXTURE_COMMANDS: CommandSpec[] = [
       return typeof flags.partitions === 'number' ? 0 : 1;
     }),
   },
+  {
+    path: ['hang'],
+    summary: 'never settles, like a command stuck waiting on a broker',
+    exitCodes: [0],
+    run: () => new Promise<number>(() => {}),
+  },
+  {
+    path: ['graceful'],
+    summary: 'shuts itself down on the signal, like studio',
+    exitCodes: [0],
+    handlesSignal: true,
+    run: () =>
+      new Promise<number>((resolve) => {
+        releaseGraceful = () => resolve(0);
+      }),
+  },
 ];
 
 vi.mock('./commands/index', () => ({ ALL_COMMANDS: FIXTURE_COMMANDS }));
@@ -56,7 +73,11 @@ const { dispatch } = await import('./dispatch');
 
 function fakeRuntime(
   argv: readonly string[],
-  overrides: { loadConfig?: Runtime['loadConfig']; env?: Record<string, string | undefined> } = {},
+  overrides: {
+    loadConfig?: Runtime['loadConfig'];
+    env?: Record<string, string | undefined>;
+    signal?: AbortSignal;
+  } = {},
 ) {
   const stdoutWrite = vi.fn((_chunk: string) => true);
   const stderrWrite = vi.fn((_chunk: string) => true);
@@ -69,6 +90,7 @@ function fakeRuntime(
     stdout: { write: stdoutWrite },
     stderr: { write: stderrWrite },
     loadConfig,
+    signal: overrides.signal ?? new AbortController().signal,
   } as unknown as Runtime;
   return { runtime, stdoutWrite, stderrWrite, loadConfig };
 }
@@ -210,6 +232,26 @@ describe('dispatch', () => {
       await dispatch(runtime);
 
       expect(capturedFormat).toBe('human');
+    });
+  });
+
+  describe('SIGINT/SIGTERM', () => {
+    it('stops waiting for a command once the signal aborts', async () => {
+      const controller = new AbortController();
+      const { runtime } = fakeRuntime(['hang'], { signal: controller.signal });
+      const result = dispatch(runtime);
+      controller.abort('SIGINT');
+      await expect(result).resolves.toBe(130);
+    });
+
+    it('keeps waiting for a command that handles the signal itself', async () => {
+      const controller = new AbortController();
+      const { runtime } = fakeRuntime(['graceful'], { signal: controller.signal });
+      const result = dispatch(runtime);
+      await vi.waitFor(() => expect(releaseGraceful).toBeDefined());
+      controller.abort('SIGINT');
+      releaseGraceful?.();
+      await expect(result).resolves.toBe(0);
     });
   });
 });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Broker } from '../broker/index';
-import { KafkaTopicMetadataNotLoaded } from '../errors';
+import { KafkaConnectionClosedError, KafkaTopicMetadataNotLoaded } from '../errors';
 import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
@@ -292,6 +292,17 @@ describe('cluster/Cluster', () => {
       const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
 
       await expect(cluster.findBroker({ nodeId: '1' })).rejects.toThrow('not found');
+      expect(refreshSpy).toHaveBeenCalledOnce();
+    });
+
+    it('refreshes metadata when the broker pool reports a KafkaConnectionError subclass', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster.brokerPool, 'findBroker').mockRejectedValue(
+        new KafkaConnectionClosedError('closed', { host: 'broker-1', port: 9092 }),
+      );
+      const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      await expect(cluster.findBroker({ nodeId: '1' })).rejects.toThrow('closed');
       expect(refreshSpy).toHaveBeenCalledOnce();
     });
 

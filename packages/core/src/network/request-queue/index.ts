@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { KafkaInvariantViolation } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import type { Logger } from '../../loggers/index';
-import { NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events';
+import { emitNetworkEvent, NETWORK_REQUEST_QUEUE_SIZE } from '../instrumentation-events';
 import type { NetworkEventMap } from '../instrumentation-events';
 import { SocketRequest } from './socket-request';
 import type { RequestEntry } from './socket-request';
@@ -76,7 +76,7 @@ export class RequestQueue extends EventEmitter {
   }
 
   #emitQueueSizeEvent(): void {
-    this.instrumentationEmitter?.emit(NETWORK_REQUEST_QUEUE_SIZE, {
+    emitNetworkEvent(this.instrumentationEmitter, this.logger, NETWORK_REQUEST_QUEUE_SIZE, {
       broker: this.broker,
       clientId: this.clientId,
       queueSize: this.pending.length,
@@ -108,6 +108,7 @@ export class RequestQueue extends EventEmitter {
       broker: this.broker,
       clientId: this.clientId,
       instrumentationEmitter: this.instrumentationEmitter,
+      logger: this.logger,
       requestTimeout,
       enforceRequestTimeout: this.enforceRequestTimeout,
       send: () => {
@@ -195,7 +196,8 @@ export class RequestQueue extends EventEmitter {
     this.#emitQueueSizeEvent();
   }
 
-  waitForPendingRequests(): Promise<void> {
+  /** Resolves once nothing is pending or in flight, or after `timeoutMs` when given, whichever is first. */
+  waitForPendingRequests(timeoutMs?: number): Promise<void> {
     return new Promise((resolve) => {
       if (this.pending.length === 0 && this.inflight.size === 0) {
         resolve();
@@ -209,7 +211,18 @@ export class RequestQueue extends EventEmitter {
         currentPendingQueueSize: this.pending.length,
       });
 
-      this.once(REQUEST_QUEUE_EMPTY, () => resolve());
+      const onEmpty = (): void => {
+        clearTimeout(timeoutId);
+        resolve();
+      };
+      const timeoutId =
+        timeoutMs == null
+          ? undefined
+          : setTimeout(() => {
+              this.removeListener(REQUEST_QUEUE_EMPTY, onEmpty);
+              resolve();
+            }, timeoutMs);
+      this.once(REQUEST_QUEUE_EMPTY, onEmpty);
     });
   }
 

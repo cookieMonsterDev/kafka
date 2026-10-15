@@ -497,7 +497,12 @@ export class Connection {
     this.#resetReceiveBuffer();
     this.#logDebug('disconnecting...');
 
-    await this.requestQueue.waitForPendingRequests();
+    await this.requestQueue.waitForPendingRequests(this.requestQueue.requestTimeout);
+    if (this.requestQueue.isBusy()) {
+      this.#rejectRequests(
+        new KafkaConnectionError('Connection closed before pending requests completed', { broker: this.broker }),
+      );
+    }
     this.requestQueue.destroy();
 
     if (this.#socket) {
@@ -604,7 +609,7 @@ export class Connection {
       await this.#authenticate();
     }
 
-    this.#failIfNotConnected();
+    this.#failIfNotAcceptingRequests();
 
     const expectResponse = !request.expectResponse || request.expectResponse();
 
@@ -627,7 +632,7 @@ export class Connection {
 
       return new Promise((resolve, reject) => {
         try {
-          this.#failIfNotConnected();
+          this.#failIfNotAcceptingRequests();
           const entry: RequestEntry = { apiKey, apiName, apiVersion, correlationId, resolve, reject };
 
           this.requestQueue.push({
@@ -693,6 +698,14 @@ export class Connection {
     if (!this.isConnected()) {
       throw new KafkaConnectionError('Not connected', { broker: `${this.host}:${this.port}` });
     }
+  }
+
+  /** `DISCONNECTING` still counts as connected so in-flight responses drain, but takes no new requests. */
+  #failIfNotAcceptingRequests(): void {
+    if (this.#connectionStatus === CONNECTION_STATUS.DISCONNECTING) {
+      throw new KafkaConnectionError('Connection is closing', { broker: this.broker });
+    }
+    this.#failIfNotConnected();
   }
 
   #touchActivity(): void {

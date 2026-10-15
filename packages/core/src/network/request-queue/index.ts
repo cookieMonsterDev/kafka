@@ -196,7 +196,8 @@ export class RequestQueue extends EventEmitter {
     this.#emitQueueSizeEvent();
   }
 
-  waitForPendingRequests(): Promise<void> {
+  /** Resolves once nothing is pending or in flight, or after `timeoutMs` when given, whichever is first. */
+  waitForPendingRequests(timeoutMs?: number): Promise<void> {
     return new Promise((resolve) => {
       if (this.pending.length === 0 && this.inflight.size === 0) {
         resolve();
@@ -210,7 +211,18 @@ export class RequestQueue extends EventEmitter {
         currentPendingQueueSize: this.pending.length,
       });
 
-      this.once(REQUEST_QUEUE_EMPTY, () => resolve());
+      const onEmpty = (): void => {
+        clearTimeout(timeoutId);
+        resolve();
+      };
+      const timeoutId =
+        timeoutMs == null
+          ? undefined
+          : setTimeout(() => {
+              this.removeListener(REQUEST_QUEUE_EMPTY, onEmpty);
+              resolve();
+            }, timeoutMs);
+      this.once(REQUEST_QUEUE_EMPTY, onEmpty);
     });
   }
 

@@ -269,6 +269,40 @@ describe('network/Connection', () => {
     });
   });
 
+  describe('disconnect while requests are in flight', () => {
+    const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+
+    it('rejects new sends once disconnecting', async () => {
+      const { connection } = await connectWithFakeSocket(createConnection, { requestTimeout: 50 });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const disconnecting = connection.disconnect();
+      await expect(connection.send({ request: metadataRequest(), response })).rejects.toThrow(KafkaConnectionError);
+
+      await expect(inFlight).rejects.toThrow();
+      await disconnecting;
+    });
+
+    it('bounds the wait for in-flight requests and rejects whatever is left', async () => {
+      const { connection } = await connectWithFakeSocket(createConnection, {
+        requestTimeout: 20,
+        enforceRequestTimeout: false,
+      });
+      const inFlight = connection.send({ request: metadataRequest(), response });
+      void inFlight.catch(() => {});
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const outcome = await Promise.race([
+        connection.disconnect().then(() => 'disconnected'),
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 500)),
+      ]);
+
+      expect(outcome).toBe('disconnected');
+      await expect(inFlight).rejects.toThrow(KafkaConnectionError);
+    });
+  });
+
   describe('post-connect socket errors', () => {
     it('rejects in-flight requests and disconnects when the socket errors after the handshake completes', async () => {
       const { connection, socket, destroy } = await connectWithFakeSocket(createConnection);

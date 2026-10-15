@@ -65,6 +65,8 @@ export interface EosManager {
   isInitialized: () => boolean;
   isTransactional: () => boolean;
   isInTransaction: () => boolean;
+  /** Fenced by a newer producer with the same transactionalId (`FATAL_ERROR`); nothing works anymore. */
+  isFenced: () => boolean;
   /**
    * Serialize Produce for these topic-partitions so sequences stay monotonic.
    * Distinct partitions may overlap; the same partition is exclusive (≤ 1 in-flight).
@@ -191,6 +193,10 @@ export function createEosManager({
 
   function isInTransaction(): boolean {
     return stateMachine.state() === TRANSACTION_STATES.TRANSACTING;
+  }
+
+  function isFenced(): boolean {
+    return stateMachine.state() === TRANSACTION_STATES.FATAL_ERROR;
   }
 
   async function initProducerId(): Promise<void> {
@@ -596,6 +602,7 @@ export function createEosManager({
       isInitialized,
       isTransactional,
       isInTransaction,
+      isFenced,
       acquirePartitionGates,
       releasePartitionGates,
       sendOffsets,

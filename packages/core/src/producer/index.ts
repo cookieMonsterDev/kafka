@@ -10,6 +10,7 @@ import type { CompressionType } from '../protocol/compression/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createEosManager, type EosManager } from './eos-manager/index';
+import { FENCED_PRODUCER_MESSAGE } from './eos-manager/transaction-state-machine';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
 import { createMessageProducer } from './message-producer';
 import { createNodeLatencyTracker } from './node-latency-tracker';
@@ -228,16 +229,19 @@ export function createProducer({
 
     const isActive = (): boolean => activeEosManager.isInTransaction() && !transactionDidEnd;
 
+    function unusableReason(): string {
+      if (activeEosManager.isFenced()) return FENCED_PRODUCER_MESSAGE;
+      if (transactionDidEnd) return 'Cannot continue to use transaction once ended';
+      return 'Cannot send or add offsets once the transaction is ending or can only be aborted';
+    }
+
     function transactionGuard<Args extends unknown[], R>(
       fn: (...args: Args) => Promise<R>,
       isUsable: () => boolean = isActive,
     ): (...args: Args) => Promise<R> {
       return (...args: Args) => {
         if (!isUsable()) {
-          const message = transactionDidEnd
-            ? 'Cannot continue to use transaction once ended'
-            : 'Cannot send or add offsets once the transaction is ending or can only be aborted';
-          return Promise.reject(new KafkaNonRetriableError(message));
+          return Promise.reject(new KafkaNonRetriableError(unusableReason()));
         }
 
         return fn(...args);

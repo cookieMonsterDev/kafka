@@ -439,7 +439,7 @@ describe('producer/eosManager', () => {
 
         await expect(eosManager.commit()).rejects.toMatchObject({ type });
 
-        const fatal = 'in state "FATAL_ERROR"';
+        const fatal = 'fenced by a newer instance';
         await expect(eosManager.commit()).rejects.toThrow(fatal);
         await expect(eosManager.abort()).rejects.toThrow(fatal);
         await expect(eosManager.initProducerId()).rejects.toThrow(fatal);
@@ -454,7 +454,7 @@ describe('producer/eosManager', () => {
       const eosManager = await transactionWithPartition(broker);
 
       await expect(eosManager.abort()).rejects.toMatchObject({ type: 'PRODUCER_FENCED' });
-      await expect(eosManager.abort()).rejects.toThrow('in state "FATAL_ERROR"');
+      await expect(eosManager.abort()).rejects.toThrow('fenced by a newer instance');
     });
 
     it('lets a commit rejected with INVALID_TXN_STATE be aborted', async () => {

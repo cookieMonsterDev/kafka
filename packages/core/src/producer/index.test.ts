@@ -6,6 +6,7 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { NETWORK_REQUEST } from '../network/instrumentation-events';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createProducer } from './index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -389,6 +390,32 @@ describe('producer', () => {
 
       expect(coordinator.endTxn).toHaveBeenCalledTimes(2);
       await expect(producer.transaction()).resolves.toBeTruthy();
+    });
+
+    it('rejects every transaction call with a fenced error once EndTxn is fenced', async () => {
+      const coordinator = {
+        ...fakeBroker(),
+        addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
+        txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi
+          .fn()
+          .mockRejectedValue(createErrorFromCode(ERROR_CODES.find(({ type }) => type === 'PRODUCER_FENCED')!.code)),
+      };
+      const producer = createProducer({
+        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        logger: silentLogger,
+        transactionalId: 'txn-id',
+      });
+
+      const txn = await producer.transaction();
+      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
+      await expect(txn.commit()).rejects.toMatchObject({ type: 'PRODUCER_FENCED' });
+
+      const fenced = 'fenced by a newer instance';
+      await expect(txn.send({ topic: 't', messages: [] })).rejects.toThrow(fenced);
+      await expect(txn.commit()).rejects.toThrow(fenced);
+      await expect(txn.abort()).rejects.toThrow(fenced);
+      await expect(producer.transaction()).rejects.toThrow(fenced);
     });
 
     it('bumps the epoch before the next transaction when the bump after a V2 commit failed', async () => {

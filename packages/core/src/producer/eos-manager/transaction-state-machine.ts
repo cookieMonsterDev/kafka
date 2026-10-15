@@ -27,6 +27,10 @@ const VALID_STATE_TRANSITIONS: Record<TransactionState, readonly TransactionStat
   [TRANSACTION_STATES.FATAL_ERROR]: [],
 };
 
+/** Every call and transition out of `FATAL_ERROR` rejects with this, instead of a generic state error. */
+export const FENCED_PRODUCER_MESSAGE =
+  'The producer was fenced by a newer instance with the same transactionalId; create a new producer';
+
 export interface TransitionEvent {
   from: TransactionState;
   to: TransactionState;
@@ -67,14 +71,19 @@ export class TransactionStateMachine extends EventEmitter {
     this.#logger.debug(`Transaction state transition ${this.#currentState} --> ${state}`);
 
     if (!VALID_STATE_TRANSITIONS[this.#currentState].includes(state)) {
-      throw new KafkaNonRetriableError(
-        `Transaction state exception: Invalid transition ${this.#currentState} --> ${state}`,
-      );
+      throw this.#stateError(`Invalid transition ${this.#currentState} --> ${state}`);
     }
 
     const from = this.#currentState;
     this.#currentState = state;
     this.emit('transition', { to: state, from } satisfies TransitionEvent);
+  }
+
+  #stateError(detail: string): KafkaNonRetriableError {
+    if (this.#currentState === TRANSACTION_STATES.FATAL_ERROR) {
+      return new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE);
+    }
+    return new KafkaNonRetriableError(`Transaction state exception: ${detail}`);
   }
 
   createGuarded<T extends object>(object: T, methodStateGuards: Partial<Record<keyof T, TransactionStateGuard>>): T {
@@ -94,9 +103,7 @@ export class TransactionStateMachine extends EventEmitter {
 
       guarded[key] = (...args: unknown[]): unknown => {
         if (!legalStates.includes(this.#currentState)) {
-          const error = new KafkaNonRetriableError(
-            `Transaction state exception: Cannot call "${key}" in state "${this.#currentState}"`,
-          );
+          const error = this.#stateError(`Cannot call "${key}" in state "${this.#currentState}"`);
           if (isAsync) return Promise.reject(error);
           throw error;
         }

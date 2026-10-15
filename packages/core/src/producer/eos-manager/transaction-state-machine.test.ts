@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
-import { TransactionStateMachine } from './transaction-state-machine';
+import { FENCED_PRODUCER_MESSAGE, TransactionStateMachine } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -55,7 +55,7 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     machine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
 
     for (const state of Object.values(TRANSACTION_STATES)) {
-      expect(() => machine.transitionTo(state)).toThrow('Invalid transition FATAL_ERROR');
+      expect(() => machine.transitionTo(state)).toThrow(FENCED_PRODUCER_MESSAGE);
     }
   });
 

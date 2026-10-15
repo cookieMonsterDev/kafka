@@ -123,6 +123,23 @@ describe('startStudio', () => {
     }
   });
 
+  it('stop() ends open SSE streams instead of waiting for the client to hang up', async () => {
+    const studio = await startStudio({ host: '127.0.0.1', port: 59_108, browser: 'none' }, fakeRuntime().runtime);
+    const client = new AbortController();
+    try {
+      const events = await fetch(new URL('/api/events', studio.url), {
+        headers: { 'x-kafka-studio-token': studio.token },
+        signal: client.signal,
+      });
+      expect(events.status).toBe(200);
+
+      const timedOut = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 2_000).unref());
+      await expect(Promise.race([studio.stop().then(() => 'stopped' as const), timedOut])).resolves.toBe('stopped');
+    } finally {
+      client.abort();
+    }
+  });
+
   it('requires an explicit port to be free, rather than silently picking another one', async () => {
     const first = await startStudio({ host: '127.0.0.1', port: 59_103, browser: 'none' }, fakeRuntime().runtime);
     try {
@@ -140,7 +157,8 @@ describe('startStudio', () => {
       res.end('<html>dev</html>');
       next();
     });
-    vi.doMock('vite', () => ({ createServer: vi.fn(async () => ({ middlewares })) }));
+    const close = vi.fn(async () => {});
+    vi.doMock('vite', () => ({ createServer: vi.fn(async () => ({ middlewares, close })) }));
     vi.resetModules();
 
     const { startStudio } = await import('./index');
@@ -155,6 +173,7 @@ describe('startStudio', () => {
       vi.doUnmock('vite');
       vi.resetModules();
     }
+    expect(close).toHaveBeenCalledOnce();
   });
 
   describe('the "studio" config-file section', () => {

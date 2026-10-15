@@ -6,9 +6,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
  * `devDependency`, and the published package must load fine without it (see {@link createStaticHandler}
  * for the production equivalent).
  */
-export async function createDevMiddleware(
-  webRoot: string,
-): Promise<(req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>> {
+export async function createDevMiddleware(webRoot: string): Promise<{
+  readonly middleware: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean>;
+  close(): Promise<void>;
+}> {
   const { createServer } = await import('vite');
   const vite = await createServer({
     root: webRoot,
@@ -16,13 +17,16 @@ export async function createDevMiddleware(
     appType: 'spa',
   });
 
-  return (req, res) =>
-    new Promise((resolve, reject) => {
-      vite.middlewares(req, res, (error?: unknown) => {
-        if (error) reject(error instanceof Error ? error : new Error('vite middleware failed'));
-        // Vite's own middleware always ends the response itself (including its SPA fallback to
-        // index.html), so reaching the `next()` callback with no error still counts as handled.
-        else resolve(true);
-      });
-    });
+  return {
+    middleware: (req, res) =>
+      new Promise((resolve, reject) => {
+        vite.middlewares(req, res, (error?: unknown) => {
+          if (error) reject(error instanceof Error ? error : new Error('vite middleware failed'));
+          // Vite's own middleware always ends the response itself (including its SPA fallback to
+          // index.html), so reaching the `next()` callback with no error still counts as handled.
+          else resolve(true);
+        });
+      }),
+    close: () => vite.close(),
+  };
 }

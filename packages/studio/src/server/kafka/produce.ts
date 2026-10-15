@@ -272,4 +272,8 @@ export class BurstJobManager {
     job.cancel();
     return true;
   }
+
+  cancelAll(): void {
+    for (const job of this.jobs.values()) job.cancel();
+  }
 }

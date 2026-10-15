@@ -12,6 +12,7 @@ function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): Runtime
     stdout: { write: vi.fn(() => true) },
     stderr: { write: vi.fn(() => true) },
     cwd: () => '/repo',
+    exit: vi.fn() as unknown as RuntimeProcessLike['exit'],
     on(event, listener) {
       const list = listeners.get(event) ?? [];
       list.push(listener);
@@ -71,5 +72,16 @@ describe('createRuntime', () => {
     proc.emit('SIGTERM');
     expect(runtime.signal.aborted).toBe(true);
     expect(runtime.signal.reason).toBe('SIGTERM');
+  });
+
+  it('force-exits on a second signal so a hung shutdown can still be interrupted', () => {
+    const exit = vi.fn();
+    const proc = createFakeProcess({ exit: exit as unknown as RuntimeProcessLike['exit'] });
+    createRuntime(proc);
+
+    proc.emit('SIGINT');
+    expect(exit).not.toHaveBeenCalled();
+    proc.emit('SIGTERM');
+    expect(exit).toHaveBeenCalledWith(143);
   });
 });

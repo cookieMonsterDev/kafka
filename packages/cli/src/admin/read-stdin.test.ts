@@ -1,23 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { createFakeStdin } from '../testing/create-fake-stdin';
 import { readStdinToEnd } from './read-stdin';
-
-function createFakeStdin() {
-  const dataListeners: ((chunk: string) => void)[] = [];
-  const endListeners: (() => void)[] = [];
-  return {
-    setEncoding: vi.fn(),
-    on: vi.fn((event: 'data' | 'end', listener: ((chunk: string) => void) | (() => void)) => {
-      if (event === 'data') dataListeners.push(listener);
-      else endListeners.push(listener as () => void);
-    }),
-    emitData(chunk: string) {
-      for (const listener of dataListeners) listener(chunk);
-    },
-    emitEnd() {
-      for (const listener of endListeners) listener();
-    },
-  };
-}
 
 describe('readStdinToEnd', () => {
   it('resolves the full input once stdin ends', async () => {

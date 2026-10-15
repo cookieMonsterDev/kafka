@@ -11,7 +11,7 @@ function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): Runtime
     cwd: () => '/work',
     stdout: { write: vi.fn(() => true), isTTY: false, columns: 80 },
     stderr: { write: vi.fn(() => true), isTTY: false, columns: 80 },
-    stdin: { isTTY: false, setEncoding: vi.fn(), on: vi.fn() },
+    stdin: { isTTY: false, setEncoding: vi.fn(), on: vi.fn(), removeListener: vi.fn(), pause: vi.fn() },
     on(event, listener) {
       const list = listeners.get(event) ?? [];
       list.push(listener);

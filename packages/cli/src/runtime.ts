@@ -12,9 +12,13 @@ export interface RuntimeWriter {
 /** Minimal readable stream contract — enough for `process.stdin`. */
 export interface RuntimeReader {
   readonly isTTY?: boolean;
+  readonly readableEnded?: boolean;
   setEncoding(encoding: BufferEncoding): unknown;
   on(event: 'data', listener: (chunk: string) => void): unknown;
   on(event: 'end', listener: () => void): unknown;
+  removeListener(event: 'data', listener: (chunk: string) => void): unknown;
+  removeListener(event: 'end', listener: () => void): unknown;
+  pause(): unknown;
 }
 
 export type { OpenAdmin, OpenAdminOptions } from './admin/port';

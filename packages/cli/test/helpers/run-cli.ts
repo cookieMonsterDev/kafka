@@ -31,7 +31,13 @@ export async function runCli(
         return true;
       },
     },
-    stdin: { isTTY: false, setEncoding: () => undefined, on: () => undefined },
+    stdin: {
+      isTTY: false,
+      setEncoding: () => undefined,
+      on: () => undefined,
+      removeListener: () => undefined,
+      pause: () => undefined,
+    },
     on: () => undefined,
   };
 

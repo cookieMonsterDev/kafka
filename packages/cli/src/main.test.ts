@@ -11,7 +11,7 @@ function createFakeRuntime(overrides: Partial<Runtime> = {}): Runtime {
     cwd: '/work',
     stdout: { write: vi.fn(() => true) },
     stderr: { write: vi.fn(() => true) },
-    stdin: { setEncoding: vi.fn(), on: vi.fn() },
+    stdin: { setEncoding: vi.fn(), on: vi.fn(), removeListener: vi.fn(), pause: vi.fn() },
     isTty: false,
     columns: 80,
     now: () => new Date('2026-01-01T00:00:00Z'),

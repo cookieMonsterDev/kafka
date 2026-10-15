@@ -132,9 +132,10 @@ kafka --version
 In short: deleting things asks for confirmation first, and a few especially risky deletes need an
 explicit `--force` on top of that.
 
-`topic delete` and `topic delete-records` refuse to run without confirmation: off a TTY (or under
-`CI=true`), that means passing `--yes`; on a TTY, an interactive `[y/N]` prompt (asked on stderr)
-does the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
+`topic delete` and `topic delete-records` refuse to run without confirmation: when stdin is not
+a TTY (piped input such as `yes | kafka topic delete …` included) or under `CI=true`, that means
+passing `--yes`; with a terminal on stdin, an interactive `[y/N]` prompt (asked on stderr) does
+the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
 requirement — but never the separate `--force` tier below, which no config setting can waive.
 
 <details>

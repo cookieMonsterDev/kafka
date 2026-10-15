@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { KafkaDeleteGroupsError, KafkaNumberOfRetriesExceeded } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode } from '../protocol/error-codes';
 import { createShareGroupsApi } from './share-groups';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -53,6 +54,26 @@ describe('admin/share-groups', () => {
       expect(first.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-a', 'share-b'] });
       expect(second.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-c'] });
       expect(result.groups.map(({ groupId }) => groupId)).toEqual(['share-a', 'share-b', 'share-c']);
+    });
+  });
+
+  describe('describeShareGroups coordinator retry', () => {
+    it('re-resolves the coordinator after NOT_COORDINATOR_FOR_GROUP', async () => {
+      const staleCoordinator = { nodeId: 1, shareGroupDescribe: vi.fn().mockRejectedValue(createErrorFromCode(16)) };
+      const currentCoordinator = {
+        nodeId: 2,
+        shareGroupDescribe: vi.fn().mockResolvedValue({ groups: [{ groupId: 'share-a', groupState: 'Stable' }] }),
+      };
+      const findGroupCoordinator = vi
+        .fn()
+        .mockResolvedValueOnce(staleCoordinator)
+        .mockResolvedValue(currentCoordinator);
+
+      const result = await makeApi({ findGroupCoordinator }, fastRetry).describeShareGroups(['share-a']);
+
+      expect(staleCoordinator.shareGroupDescribe).toHaveBeenCalledTimes(1);
+      expect(currentCoordinator.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-a'] });
+      expect(result.groups).toEqual([{ groupId: 'share-a', groupState: 'Stable' }]);
     });
   });
 

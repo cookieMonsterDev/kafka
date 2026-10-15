@@ -86,6 +86,45 @@ export function isBrokerConfig(type: number): boolean {
 }
 
 /**
+ * Batches a per-coordinator describe request for each group id. Coordinators are resolved inside
+ * the retrier so a retry after NOT_COORDINATOR_FOR_GROUP targets the group's current coordinator.
+ */
+export async function describeGroupsViaCoordinators<T>({
+  cluster,
+  retry,
+  groupIds,
+  describe,
+}: {
+  cluster: Cluster;
+  retry?: RetryOptions;
+  groupIds: readonly string[];
+  describe: (coordinator: Broker, groupIds: string[]) => Promise<{ groups: T[] }>;
+}): Promise<T[]> {
+  const responses = await retrier(retry)(async () => {
+    const coordinatorsForGroup = await Promise.all(
+      groupIds.map(async (groupId) => ({ groupId, coordinator: await cluster.findGroupCoordinator({ groupId }) })),
+    );
+
+    const groupsByCoordinator = new Map<string, { coordinator: Broker; groupIds: string[] }>();
+    for (const { groupId, coordinator } of coordinatorsForGroup) {
+      const key = String(coordinator.nodeId);
+      const existing = groupsByCoordinator.get(key);
+      if (existing) {
+        existing.groupIds.push(groupId);
+      } else {
+        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
+      }
+    }
+
+    return Promise.all(
+      [...groupsByCoordinator.values()].map(({ coordinator, groupIds: ids }) => describe(coordinator, ids)),
+    );
+  });
+
+  return responses.flatMap(({ groups }) => groups);
+}
+
+/**
  * Shared coordinator-resolution retry loop backing `deleteGroups`/`deleteShareGroups`: resolves
  * each remaining group id's coordinator, batches `DeleteGroups` per coordinator node, and retries
  * only the groups that came back with an error, until the retrier gives up or bails.

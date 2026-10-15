@@ -45,6 +45,24 @@ describe('admin/groups', () => {
     expect(result.groups.map(({ groupId }) => groupId)).toEqual(['g-a', 'g-b', 'g-c']);
   });
 
+  it.each([
+    ['describeGroups', 'describeGroups'],
+    ['describeConsumerGroups', 'consumerGroupDescribe'],
+  ] as const)('%s re-resolves the coordinator after NOT_COORDINATOR_FOR_GROUP', async (method, request) => {
+    const staleCoordinator = { nodeId: 1, [request]: vi.fn().mockRejectedValue(createErrorFromCode(16)) };
+    const currentCoordinator = {
+      nodeId: 2,
+      [request]: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g-a', groupState: 'Stable' }] }),
+    };
+    const findGroupCoordinator = vi.fn().mockResolvedValueOnce(staleCoordinator).mockResolvedValue(currentCoordinator);
+
+    const result = await makeApi({ findGroupCoordinator }, fastRetry)[method](['g-a']);
+
+    expect(staleCoordinator[request]).toHaveBeenCalledTimes(1);
+    expect(currentCoordinator[request]).toHaveBeenCalledWith({ groupIds: ['g-a'] });
+    expect(result.groups).toEqual([{ groupId: 'g-a', groupState: 'Stable' }]);
+  });
+
   it('returns immediately for an empty describeConsumerGroups list', async () => {
     const findGroupCoordinator = vi.fn();
     const cluster = { findGroupCoordinator } as unknown as Cluster;

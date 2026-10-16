@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
-import { KafkaAggregateError, KafkaNonRetriableError } from '../errors';
+import { KafkaAggregateError, KafkaDeleteTopicRecordsError, KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createErrorFromCode } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { RetryOptions } from '../retry/index';
 import { createTopicsApi } from './topics';
@@ -290,6 +291,40 @@ describe('admin/topics', () => {
       };
       await makeApi(cluster).deleteTopicRecords({ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] });
       expect(broker.deleteRecords).toHaveBeenCalledWith({
+        topics: [{ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] }],
+      });
+    });
+
+    it('re-resolves the partition leader when retrying NOT_LEADER_OR_FOLLOWER', async () => {
+      const oldLeader = {
+        deleteRecords: vi.fn().mockRejectedValue(
+          new KafkaDeleteTopicRecordsError({
+            partitions: [{ partition: 0, offset: 5n, error: createErrorFromCode(6) }],
+          }),
+        ),
+      };
+      const newLeader = { deleteRecords: vi.fn().mockResolvedValue(undefined) };
+      const cluster = {
+        findLeaderForPartitions: vi
+          .fn()
+          .mockReturnValueOnce({ '1': [0] })
+          .mockReturnValueOnce({ '1': [0] })
+          .mockReturnValue({ '2': [0] }),
+        findBroker: vi.fn(async ({ nodeId }: { nodeId: string }) => (nodeId === '1' ? oldLeader : newLeader)),
+        refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      };
+
+      await makeApi(cluster, {
+        retries: 1,
+        initialRetryTime: 1,
+        maxRetryTime: 20,
+        factor: 0,
+        multiplier: 1,
+      }).deleteTopicRecords({ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] });
+
+      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(oldLeader.deleteRecords).toHaveBeenCalledTimes(1);
+      expect(newLeader.deleteRecords).toHaveBeenCalledWith({
         topics: [{ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] }],
       });
     });

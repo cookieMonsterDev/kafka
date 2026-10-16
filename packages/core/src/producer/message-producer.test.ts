@@ -57,6 +57,8 @@ function fakeEosManager() {
     updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
+    requestEpochBump: vi.fn(),
+    bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
     acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
     releasePartitionGates: vi.fn().mockResolvedValue(undefined),
   } as unknown as EosManager;
@@ -407,6 +409,29 @@ describe('producer/messageProducer', () => {
       await vi.advanceTimersByTimeAsync(500);
       await assertion;
       // Only the first attempt had time to run before the deadline beat the retrier to it.
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops retrying and releases the partition gates once the deadline elapses', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
+      const eosManager = fakeEosManager();
+      const producer = createTestProducer(broker, {
+        eosManager,
+        retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
+        deliveryTimeoutMs: 500,
+      });
+
+      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+      expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
+
+      // The caller was told the send failed, so it must not keep retrying in the background.
+      await vi.advanceTimersByTimeAsync(20_000);
       expect(broker.produce).toHaveBeenCalledTimes(1);
     });
 

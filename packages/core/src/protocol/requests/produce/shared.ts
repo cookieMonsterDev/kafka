@@ -331,25 +331,17 @@ const produceNodeEndpointsArraySchema = compactArray(produceNodeEndpointSchema);
 
 /**
  * Reads a Produce partition's trailing tagged fields: CurrentLeader (tag 0, v10+, KIP-951).
- * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482) — not the
- * compact-bytes `N+1` framing `Decoder#readTaggedFields` uses for its blanket skip.
+ * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482).
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
 export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
   let currentLeader: LeaderIdAndEpoch | null = null;
-  const numberOfTaggedFields = decoder.readUVarInt();
-
-  for (let i = 0; i < numberOfTaggedFields; i++) {
-    const tag = decoder.readUVarInt();
-    const size = decoder.readUVarInt();
-    const fieldDecoder = decoder.slice(size);
-    decoder.forward(size);
-
+  decoder.forEachTaggedField((tag, fieldDecoder) => {
     if (tag === 0) {
       currentLeader = { leaderId: fieldDecoder.readInt32(), leaderEpoch: fieldDecoder.readInt32() };
     }
-  }
+  });
 
   return currentLeader;
 }
@@ -363,18 +355,11 @@ export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndE
  */
 export function readProduceResponseNodeEndpoints(decoder: Decoder): ProduceNodeEndpoint[] {
   let nodeEndpoints: ProduceNodeEndpoint[] = [];
-  const numberOfTaggedFields = decoder.readUVarInt();
-
-  for (let i = 0; i < numberOfTaggedFields; i++) {
-    const tag = decoder.readUVarInt();
-    const size = decoder.readUVarInt();
-    const fieldDecoder = decoder.slice(size);
-    decoder.forward(size);
-
+  decoder.forEachTaggedField((tag, fieldDecoder) => {
     if (tag === 0) {
       nodeEndpoints = produceNodeEndpointsArraySchema.read(fieldDecoder);
     }
-  }
+  });
 
   return nodeEndpoints;
 }

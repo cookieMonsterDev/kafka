@@ -279,9 +279,10 @@ describe('share-consumer/share-group', () => {
     const cluster = { findGroupCoordinator } as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger });
 
+    // Resolves rather than rethrowing, so the fetch loop can apply its own retry/crash policy.
     await expect(
       group.recoverFromFetch(Object.assign(new Error('moved'), { type: 'NOT_COORDINATOR_FOR_GROUP' })),
-    ).rejects.toThrow('moved');
+    ).resolves.toBeUndefined();
     expect(findGroupCoordinator).toHaveBeenCalledWith({ groupId: 'share-1' });
     expect(group.coordinator).toBe(coordinator);
   });

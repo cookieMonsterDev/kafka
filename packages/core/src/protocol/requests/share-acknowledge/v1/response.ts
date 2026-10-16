@@ -41,6 +41,7 @@ function decodePartition(decoder: Decoder): ShareAcknowledgePartitionResponseV1 
     leaderId: decoder.readInt32(),
     leaderEpoch: decoder.readInt32(),
   };
+  decoder.readTaggedFields(); // CurrentLeader
   decoder.readTaggedFields();
   return { partitionIndex, errorCode, errorMessage, currentLeader };
 }
@@ -88,10 +89,9 @@ export const shareAcknowledgeResponseV1: ResponseDefinition<ShareAcknowledgeResp
       nodeEndpoints,
     };
   },
+  // Partition error codes are per-partition acknowledgement results, left to the caller.
   parse: async (data) => {
     if (failure(data.errorCode)) throw createErrorFromCode(data.errorCode);
-    const failed = data.responses.flatMap(({ partitions }) => partitions).find(({ errorCode }) => failure(errorCode));
-    if (failed) throw createErrorFromCode(failed.errorCode);
     return data;
   },
 };

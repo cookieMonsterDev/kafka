@@ -329,8 +329,8 @@ export class KafkaLockTimeout extends KafkaTimeout {
 
 /**
  * `deliveryTimeoutMs` elapsed before a produce settled — end-to-end, across linger, buffer-memory
- * waits, and every retry, not any single RPC. Non-retriable: the point is to stop retrying once
- * the deadline is up, even if the underlying attempt is still in flight (it isn't cancelled).
+ * waits, and every retry, not any single RPC. Non-retriable: no retry starts once the deadline is
+ * up, though an attempt already in flight isn't cancelled.
  * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
  */
 export class KafkaDeliveryTimeoutError extends KafkaTimeout {

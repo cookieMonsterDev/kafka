@@ -19,6 +19,7 @@ import {
   int64,
   uint16,
   nullableArray,
+  nullPreservingArray,
   nullableString,
   nullableStruct,
   object,
@@ -90,6 +91,20 @@ describe('protocol/schema', () => {
     const withValues = new Encoder();
     nullableArray(string).write(withValues, ['a', 'b']);
     expect(nullableArray(string).read(new Decoder(withValues.buffer))).toEqual(['a', 'b']);
+  });
+
+  it('nullPreservingArray keeps null and empty distinct', () => {
+    const codec = nullPreservingArray(string);
+
+    const nullArray = new Encoder();
+    codec.write(nullArray, null);
+    expect(nullArray.buffer).toEqual(new Encoder().writeInt32(-1).buffer);
+    expect(codec.read(new Decoder(nullArray.buffer))).toBeNull();
+
+    const emptyArray = new Encoder();
+    codec.write(emptyArray, []);
+    expect(emptyArray.buffer).toEqual(new Encoder().writeInt32(0).buffer);
+    expect(codec.read(new Decoder(emptyArray.buffer))).toEqual([]);
   });
 
   it('throws when a non-nullable string field is null on the wire', () => {

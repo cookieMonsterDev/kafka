@@ -47,7 +47,7 @@ See
 whole fetch batch plus `resolveOffset` / `commitOffsetsIfNecessary`, and can
 process partitions in parallel. The run default for concurrency remains `1`.
 Spread `throughputPreset().consumer` into `run()` to set concurrency to `4`.
-See [Throughput](./throughput/). `consumer.stream()` is an async iterator over
+See [Throughput](../throughput/). `consumer.stream()` is an async iterator over
 batches; it cannot run alongside `run()`.
 
 ```ts

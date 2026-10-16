@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createRuntime, RuntimeExitCalledError, type RuntimeProcessLike } from './runtime';
+import { EMPTY_RESOLVED_CLI_CONFIG } from './testing/create-command-context';
+
+const { openAdminMock } = vi.hoisted(() => ({ openAdminMock: vi.fn(async () => ({})) }));
+vi.mock('./admin/open', () => ({ openAdmin: openAdminMock }));
 
 function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): RuntimeProcessLike & {
   emit(event: 'SIGINT' | 'SIGTERM'): void;
@@ -11,7 +15,8 @@ function createFakeProcess(overrides: Partial<RuntimeProcessLike> = {}): Runtime
     cwd: () => '/work',
     stdout: { write: vi.fn(() => true), isTTY: false, columns: 80 },
     stderr: { write: vi.fn(() => true), isTTY: false, columns: 80 },
-    stdin: { isTTY: false, setEncoding: vi.fn(), on: vi.fn() },
+    stdin: { isTTY: false, setEncoding: vi.fn(), on: vi.fn(), removeListener: vi.fn(), pause: vi.fn() },
+    exit: vi.fn() as unknown as RuntimeProcessLike['exit'],
     on(event, listener) {
       const list = listeners.get(event) ?? [];
       list.push(listener);
@@ -83,5 +88,23 @@ describe('createRuntime', () => {
     proc.emit('SIGTERM');
     expect(runtime.signal.aborted).toBe(true);
     expect(runtime.signal.reason).toBe('SIGTERM');
+  });
+
+  it('force-exits on a second signal so a hung shutdown can still be interrupted', () => {
+    const exit = vi.fn();
+    const proc = createFakeProcess({ exit: exit as unknown as RuntimeProcessLike['exit'] });
+    createRuntime(proc);
+
+    proc.emit('SIGINT');
+    expect(exit).not.toHaveBeenCalled();
+    proc.emit('SIGTERM');
+    expect(exit).toHaveBeenCalledWith(143);
+  });
+
+  it('passes its signal to openAdmin so an in-flight connect aborts on SIGINT/SIGTERM', async () => {
+    const runtime = createRuntime(createFakeProcess());
+    await runtime.openAdmin({ env: {}, config: EMPTY_RESOLVED_CLI_CONFIG });
+
+    expect(openAdminMock).toHaveBeenCalledWith(expect.objectContaining({ signal: runtime.signal }));
   });
 });

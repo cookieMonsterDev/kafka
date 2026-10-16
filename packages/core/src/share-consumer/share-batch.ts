@@ -20,7 +20,12 @@ export class ShareBatch {
   constructor(topic: string, { partition, messages, acquiredRecords }: ShareBatchPartitionData) {
     this.topic = topic;
     this.partition = partition;
-    this.messages = messages.filter((message) => !message.isControlRecord);
+    // ShareFetch returns whole record batches; only offsets inside an acquired range belong to this member.
+    this.messages = messages.filter(
+      ({ offset, isControlRecord }) =>
+        !isControlRecord &&
+        acquiredRecords.some(({ firstOffset, lastOffset }) => offset >= firstOffset && offset <= lastOffset),
+    );
     this.acquiredRecords = acquiredRecords;
   }
 

@@ -18,11 +18,11 @@ describe('protocol/requests/share-acknowledge/v1/response', () => {
       .writeUVarIntString(null)
       .writeInt32(1)
       .writeInt32(5)
-      .writeUVarInt(0)
-      .writeUVarInt(0)
-      .writeUVarInt(1)
-      .writeUVarInt(0)
-      .writeUVarInt(0).buffer;
+      .writeUVarInt(0) // current leader tagged fields
+      .writeUVarInt(0) // partition tagged fields
+      .writeUVarInt(0) // topic tagged fields
+      .writeUVarInt(1) // empty node endpoints
+      .writeUVarInt(0).buffer; // response tagged fields
 
     const data = await shareAcknowledgeResponseV1.decode(buffer);
     expect(data).toEqual({
@@ -45,6 +45,31 @@ describe('protocol/requests/share-acknowledge/v1/response', () => {
       ],
       nodeEndpoints: [],
     });
+    await expect(shareAcknowledgeResponseV1.parse(data)).resolves.toEqual(data);
+  });
+
+  it('returns per-partition acknowledgement errors instead of throwing', async () => {
+    const data = {
+      throttleTime: 0,
+      clientSideThrottleTime: 0,
+      errorCode: 0,
+      errorMessage: null,
+      responses: [
+        {
+          topicId,
+          partitions: [
+            {
+              partitionIndex: 0,
+              errorCode: 121, // INVALID_RECORD_STATE
+              errorMessage: null,
+              currentLeader: { leaderId: 1, leaderEpoch: 5 },
+            },
+          ],
+        },
+      ],
+      nodeEndpoints: [],
+    };
+
     await expect(shareAcknowledgeResponseV1.parse(data)).resolves.toEqual(data);
   });
 });

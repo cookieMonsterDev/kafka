@@ -4,6 +4,9 @@ import { parseCommandArgs } from './args/parse';
 import { ALL_COMMANDS } from './commands/index';
 import { runHelpCommand } from './commands/meta/help';
 import { runVersionCommand } from './commands/meta/version';
+import { EMPTY_RESOLVED_CLI_CONFIG, type ResolvedCliConfig } from './config/resolve';
+import { CliConfigError } from './errors/cli-config-error';
+import { EXIT_CODES } from './errors/exit-codes';
 import { mapKafkaError } from './errors/map-kafka-error';
 import { shouldUseColor } from './output/colors';
 import { createCommandOutput, resolveOutputFormat, type OutputFormat } from './output/format';
@@ -43,6 +46,33 @@ function attemptedPath(argv: readonly string[]): string[] {
     tokens.push(token);
   }
   return tokens;
+}
+
+/** Applies a command's {@link CommandSpec.config} mode to this invocation's config load. */
+async function loadConfigFor(
+  mode: NonNullable<CommandSpec['config']>,
+  load: () => Promise<ResolvedCliConfig>,
+): Promise<ResolvedCliConfig> {
+  if (mode === 'skip') return EMPTY_RESOLVED_CLI_CONFIG;
+  try {
+    return await load();
+  } catch (error) {
+    if (mode !== 'tolerate' || !(error instanceof CliConfigError)) throw error;
+    return { ...EMPTY_RESOLVED_CLI_CONFIG, loadError: error.message };
+  }
+}
+
+/**
+ * Settles with `run`, or with the interrupted code as soon as `signal` aborts — most core calls
+ * take no signal, so a command mid-request would otherwise outlive Ctrl-C until it finished.
+ */
+function abandonOnAbort(run: Promise<number>, signal: AbortSignal): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => resolve(EXIT_CODES.aborted);
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+    run.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 /**
@@ -108,16 +138,18 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       // command sees the same config for this invocation, and a command that never connects
       // (`profiles`, `admin methods`) still gets to read `cli:` section defaults. `--help`/
       // `--version` (both handled above) never reach this, so they never pay for it.
-      const config = await runtime.loadConfig({
-        configFlag: global.configFlag,
-        profileFlag: global.profileFlag,
-        onDiagnostic: (diagnostic) => {
-          const message = `[kafka] ${diagnostic.message}`;
-          if (diagnostic.level === 'warn') output.log.warn(message);
-          else output.log.info(message);
-        },
-        onWarn: (message) => output.log.warn(`[kafka] ${message}`),
-      });
+      const config = await loadConfigFor(command.config ?? 'load', () =>
+        runtime.loadConfig({
+          configFlag: global.configFlag,
+          profileFlag: global.profileFlag,
+          onDiagnostic: (diagnostic) => {
+            const message = `[kafka] ${diagnostic.message}`;
+            if (diagnostic.level === 'warn') output.log.warn(message);
+            else output.log.info(message);
+          },
+          onWarn: (message) => output.log.warn(`[kafka] ${message}`),
+        }),
+      );
 
       // `cli.output` is the lowest-precedence output-format source — only applied when nothing
       // above it (`--json`, `--format`, `KAFKA_OUTPUT`) already chose one, and rebuilt after
@@ -133,7 +165,8 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       }
 
       const parsed = parseCommandArgs(rest, command.flags ?? [], command.positionals ?? []);
-      return await command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output, config });
+      const run = command.run({ runtime, flags: parsed.flags, positionals: parsed.positionals, output, config });
+      return await (command.handlesSignal === true ? run : abandonOnAbort(run, runtime.signal));
     } catch (error) {
       const mapped = mapKafkaError(error);
       output.cliError(mapped);

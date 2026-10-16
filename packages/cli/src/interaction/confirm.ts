@@ -4,23 +4,37 @@ import type { Runtime } from '../runtime';
 const YES_PATTERN = /^y(es)?$/i;
 
 /** The slice of `Runtime` a confirmation prompt needs — narrow so it stays fake-able in tests. */
-export type ConfirmRuntime = Pick<Runtime, 'isTty' | 'env' | 'stdin' | 'stderr'>;
+export type ConfirmRuntime = Pick<Runtime, 'env' | 'stdin' | 'stderr'>;
 
+/** Only a terminal on stdin can answer the prompt — a stdout TTY says nothing about `yes | kafka …`. */
 function isNonInteractive(runtime: ConfirmRuntime): boolean {
-  return !runtime.isTty || runtime.env.CI === 'true';
+  return runtime.stdin.isTTY !== true || runtime.env.CI === 'true';
 }
 
-/** Reads one line from `stdin`, without pulling in `node:readline`'s stream-interface contract. */
+/**
+ * Reads one line from `stdin`, without pulling in `node:readline`'s stream-interface contract.
+ * Resolves empty (a "no") if stdin already ended, and detaches and pauses once answered so the
+ * stream no longer holds the event loop open.
+ */
 function readLine(stdin: Runtime['stdin']): Promise<string> {
+  if (stdin.readableEnded === true) return Promise.resolve('');
   return new Promise((resolve) => {
     let buffer = '';
-    stdin.setEncoding('utf8');
-    stdin.on('data', (chunk) => {
+    const finish = (answer: string) => {
+      stdin.removeListener('data', onData);
+      stdin.removeListener('end', onEnd);
+      stdin.pause();
+      resolve(answer);
+    };
+    const onData = (chunk: string) => {
       buffer += chunk;
       const newlineIndex = buffer.indexOf('\n');
-      if (newlineIndex !== -1) resolve(buffer.slice(0, newlineIndex));
-    });
-    stdin.on('end', () => resolve(buffer));
+      if (newlineIndex !== -1) finish(buffer.slice(0, newlineIndex));
+    };
+    const onEnd = () => finish(buffer);
+    stdin.setEncoding('utf8');
+    stdin.on('data', onData);
+    stdin.on('end', onEnd);
   });
 }
 
@@ -36,8 +50,8 @@ export interface ConfirmDestructiveInput {
 
 /**
  * Gates a destructive command behind either `--yes` or an interactive y/N prompt (asked on
- * stderr, per the CLI's stdout-is-data contract). Off a TTY, or under `CI=true`, there is no
- * prompt to answer, so `--yes` becomes mandatory. `cli.confirmDestructive: false` waives this
+ * stderr, per the CLI's stdout-is-data contract). When stdin is not a TTY, or under `CI=true`,
+ * there is no prompt to answer, so `--yes` becomes mandatory. `cli.confirmDestructive: false` waives this
  * tier entirely — but never the independent `--force` tier a command enforces itself via
  * {@link requireForce}, which this function knows nothing about.
  */

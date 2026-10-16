@@ -108,14 +108,39 @@ describe('protocol/Decoder', () => {
       const buffer = new Encoder()
         .writeUVarInt(1) // one tagged field
         .writeUVarInt(5) // tag
-        .writeUVarIntBytes(
-          Buffer.from([1, 2, 3]),
-        ) // value
-      .buffer;
+        .writeUVarInt(3) // raw size (KIP-482), not compact N+1
+        .writeBuffer(Buffer.from([1, 2, 3])).buffer;
 
       const decoder = new Decoder(buffer);
       expect(decoder.readTaggedFields()).toEqual({});
       expect(decoder.offset).toBe(buffer.length);
+    });
+  });
+
+  describe('forEachTaggedField', () => {
+    it('visits each tag with a decoder scoped to its raw-sized value', () => {
+      const buffer = new Encoder()
+        .writeUVarInt(2)
+        .writeUVarInt(0)
+        .writeUVarInt(4)
+        .writeInt32(42)
+        .writeUVarInt(3)
+        .writeUVarInt(1)
+        .writeInt8(7)
+        .writeInt8(9).buffer;
+
+      const decoder = new Decoder(buffer);
+      const seen: [number, number][] = [];
+      const count = decoder.forEachTaggedField((tag, field) => {
+        seen.push([tag, tag === 0 ? field.readInt32() : field.readInt8()]);
+      });
+
+      expect(count).toBe(2);
+      expect(seen).toEqual([
+        [0, 42],
+        [3, 7],
+      ]);
+      expect(decoder.readInt8()).toBe(9);
     });
   });
 

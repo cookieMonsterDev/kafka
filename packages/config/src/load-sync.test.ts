@@ -106,6 +106,13 @@ describe('loadConfigFileSync', () => {
     expect(() => loadConfigFileSync(path)).toThrow(
       expect.objectContaining({ tag: 'ConfigLoadError', path, cause: expect.anything() }),
     );
+    expect(() => loadConfigFileSync(path)).toThrow(/as JSON: .*JSON/);
+  });
+
+  it("includes the module's own error message when requiring the config throws", () => {
+    expect(() => loadConfigFileSync(join(FIXTURES, 'throws', 'kafka.config.mjs'))).toThrow(
+      /Failed to load kafka config file ".*": config exploded/,
+    );
   });
 
   describe('memoisation', () => {

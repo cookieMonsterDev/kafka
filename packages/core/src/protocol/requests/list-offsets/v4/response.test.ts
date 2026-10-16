@@ -1,18 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import v2ResponseFixture from '../fixtures/v2-response.json' with { type: 'json' };
+import { Encoder } from '../../../encoder';
 import { listOffsetsResponseV4 } from './response';
 
 describe('protocol/requests/list-offsets/v4/response', () => {
-  it('decodes the v2/v3 wire format with KIP-219 client-side throttle remap', async () => {
-    const data = await listOffsetsResponseV4.decode(Buffer.from(v2ResponseFixture.data));
-    expect(data.throttleTime).toBe(0);
-    expect(data.clientSideThrottleTime).toBe(0);
-    expect(data.responses).toHaveLength(1);
-    expect(data.responses[0]?.partitions[0]).toEqual({
-      partition: 0,
-      errorCode: 0,
-      timestamp: -1n,
-      offset: 1n,
+  it('decodes leaderEpoch (KIP-320) and remaps throttleTime to clientSideThrottleTime', async () => {
+    const raw = new Encoder()
+      .writeInt32(7)
+      .writeInt32(1)
+      .writeString('orders')
+      .writeInt32(2)
+      .writeInt32(0)
+      .writeInt16(0)
+      .writeInt64(-1n)
+      .writeInt64(10n)
+      .writeInt32(3)
+      .writeInt32(1)
+      .writeInt16(0)
+      .writeInt64(-1n)
+      .writeInt64(20n)
+      .writeInt32(4).buffer;
+
+    const data = await listOffsetsResponseV4.decode(raw);
+    expect(data).toEqual({
+      throttleTime: 0,
+      clientSideThrottleTime: 7,
+      responses: [
+        {
+          topic: 'orders',
+          partitions: [
+            { partition: 0, errorCode: 0, timestamp: -1n, offset: 10n, leaderEpoch: 3 },
+            { partition: 1, errorCode: 0, timestamp: -1n, offset: 20n, leaderEpoch: 4 },
+          ],
+        },
+      ],
     });
     await expect(listOffsetsResponseV4.parse(data)).resolves.toBe(data);
   });

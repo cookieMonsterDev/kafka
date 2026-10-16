@@ -2,11 +2,12 @@ import { supportsTransactionV2 } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
 import { INT_32_MAX_VALUE } from '../../constants';
-import { KafkaNonRetriableError } from '../../errors';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { retrier, type RetryOptions } from '../../retry/index';
-import { Lock } from '../../utils/lock';
+import { rejectOnAbort } from '../../utils/abort';
+import { Lock, type AcquireOptions } from '../../utils/lock';
 import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
 
@@ -30,6 +31,9 @@ const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set([
   'NOT_COORDINATOR_FOR_GROUP',
 ]);
 
+/** EndTxn errors meaning a newer producer took over this transactionalId (Java treats them as fatal). */
+const FENCED_PROTOCOL_ERRORS = new Set(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH']);
+
 export interface EosManagerTopicPartitions {
   topic: string;
   partitions: readonly { partition: number }[];
@@ -42,6 +46,16 @@ export interface EosManager {
   initProducerId: () => Promise<void>;
   getSequence: (topic: string, partition: number) => number;
   updateSequence: (topic: string, partition: number, increment: number) => void;
+  /**
+   * KIP-360: a failed send may have been written, so its sequences can neither be reused nor
+   * skipped. Start a new epoch (fresh sequences) before producing again. No-op until initialized.
+   */
+  requestEpochBump: () => void;
+  /**
+   * Runs a requested epoch bump once no send holds partition gates; deferred while a transaction
+   * is open (its end bumps instead). `acquirePartitionGates` runs it before any new send starts.
+   */
+  bumpEpochIfRequested: (options?: AcquireOptions) => Promise<void>;
   beginTransaction: () => void;
   addPartitionsToTransaction: (topicData: readonly EosManagerTopicPartitions[]) => Promise<void>;
   /** KIP-890: mark the current transaction abort-only after a `TRANSACTION_ABORTABLE` produce error. No-op outside an active transaction. */
@@ -51,11 +65,13 @@ export interface EosManager {
   isInitialized: () => boolean;
   isTransactional: () => boolean;
   isInTransaction: () => boolean;
+  /** Fenced by a newer producer with the same transactionalId (`FATAL_ERROR`); nothing works anymore. */
+  isFenced: () => boolean;
   /**
    * Serialize Produce for these topic-partitions so sequences stay monotonic.
    * Distinct partitions may overlap; the same partition is exclusive (≤ 1 in-flight).
    */
-  acquirePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
+  acquirePartitionGates: (partitions: readonly EosManagerPartition[], options?: AcquireOptions) => Promise<void>;
   releasePartitionGates: (partitions: readonly EosManagerPartition[]) => Promise<void>;
   sendOffsets: (options: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => Promise<void>;
 }
@@ -106,6 +122,8 @@ export function createEosManager({
    * monotonic on mixed-partition RPCs. Distinct partitions on one broker may overlap.
    * The broker's idempotent window is 5; we keep 1 in-flight per partition rather than
    * pipelining the same partition without a single sender thread (OutOfOrderSequence).
+   * A holder keeps its gate for its whole retry cycle, which may outlast any fixed lock timeout
+   * during a leader outage, so waiters have none: each is bounded by its own send's deadline signal.
    */
   const partitionGates = new Map<string, Lock>();
 
@@ -114,6 +132,12 @@ export function createEosManager({
 
   /** Whether consumer-group offsets have been added to the current transaction. */
   let hasOffsetsAddedToTransaction = false;
+
+  let epochBumpRequested = false;
+  let epochBump: Promise<void> | undefined;
+  /** Sends currently holding partition gates, i.e. with requests (and sequences) in flight. */
+  let gateHolders = 0;
+  const drainWaiters = new Set<() => void>();
 
   const stateMachine = new TransactionStateMachine({ logger });
   stateMachine.on('transition', ({ to }: TransitionEvent) => {
@@ -171,6 +195,10 @@ export function createEosManager({
     return stateMachine.state() === TRANSACTION_STATES.TRANSACTING;
   }
 
+  function isFenced(): boolean {
+    return stateMachine.state() === TRANSACTION_STATES.FATAL_ERROR;
+  }
+
   async function initProducerId(): Promise<void> {
     await initProducerIdLock.acquire();
     try {
@@ -192,6 +220,7 @@ export function createEosManager({
           producerId = result.producerId;
           producerEpoch = result.producerEpoch;
           producerSequence.clear();
+          epochBumpRequested = false;
           // Partition gates are left in place (not cleared): a gate is just a per-partition mutex,
           // and dropping it here would let a currently in-flight Produce - still holding the old
           // Lock object - get silently replaced by a fresh, already-unlocked one on its next
@@ -256,6 +285,32 @@ export function createEosManager({
     producerSequence.get(topic)!.set(partition, sequence);
   }
 
+  function requestEpochBump(): void {
+    if (isInitialized()) epochBumpRequested = true;
+  }
+
+  function isEpochBumpPending(): boolean {
+    return epochBumpRequested && stateMachine.state() === TRANSACTION_STATES.READY;
+  }
+
+  /**
+   * Like the Java client, bump only once in-flight sends drain: bumping under a send that is still
+   * retrying would resend its possibly-written batch with new sequences (a duplicate) and fence its
+   * old-epoch requests. New sends wait here first, so a steady load cannot starve the bump.
+   */
+  async function bumpEpochIfRequested({ signal }: AcquireOptions = {}): Promise<void> {
+    while (isEpochBumpPending()) {
+      if (gateHolders > 0) {
+        await rejectOnAbort(new Promise<void>((resolve) => drainWaiters.add(resolve)), signal);
+        continue;
+      }
+      epochBump ??= initProducerId().finally(() => {
+        epochBump = undefined;
+      });
+      await rejectOnAbort(epochBump, signal);
+    }
+  }
+
   function beginTransaction(): void {
     transactionalGuard();
     stateMachine.transitionTo(TRANSACTION_STATES.TRANSACTING);
@@ -313,7 +368,8 @@ export function createEosManager({
     nextState: typeof TRANSACTION_STATES.COMMITTING | typeof TRANSACTION_STATES.ABORTING,
   ): Promise<void> {
     transactionalGuard();
-    stateMachine.transitionTo(nextState);
+    // A previous attempt that failed leaves the machine in `nextState`, so the caller can resend EndTxn.
+    if (stateMachine.state() !== nextState) stateMachine.transitionTo(nextState);
 
     if (!isOngoing()) {
       logger.debug('No partitions or offsets registered, not sending EndTxn');
@@ -321,14 +377,49 @@ export function createEosManager({
       return;
     }
 
-    const broker = await findTransactionCoordinator();
-    await broker.endTxn({ producerId, producerEpoch, transactionalId: transactionalId!, transactionResult });
+    await retry(async (bail, retryCount, retryTime) => {
+      try {
+        // Looked up on every attempt so a moved coordinator (NOT_COORDINATOR, disconnect) is re-discovered.
+        const broker = await findTransactionCoordinator();
+        await broker.endTxn({ producerId, producerEpoch, transactionalId: transactionalId!, transactionResult });
+      } catch (e) {
+        const error = e as Error & { retriable?: boolean };
+        if (!error.retriable) {
+          bail(error);
+          return;
+        }
+        logger.debug('EndTxn failed, retrying', { error: error.message, transactionalId, retryCount, retryTime });
+        throw error;
+      }
+    }).catch((error: unknown) => {
+      // Anything but a broker rejection (exhausted retries, a lost connection) keeps `nextState` so
+      // the caller can resend EndTxn; a rejected commit can still be aborted.
+      if (error instanceof KafkaProtocolError && !error.retriable) {
+        if (FENCED_PROTOCOL_ERRORS.has(error.type ?? '')) {
+          logger.error('Producer was fenced by a newer instance; it cannot be used anymore', { transactionalId });
+          stateMachine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
+        } else if (transactionResult) {
+          stateMachine.transitionTo(TRANSACTION_STATES.ABORTABLE);
+        }
+      }
+      throw error;
+    });
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
     // fencing recovery), so the next transaction starts from a fresh epoch.
-    if (isTransactionV2Enabled()) {
-      await initProducerId();
+    if (isTransactionV2Enabled() || epochBumpRequested) {
+      // The transaction has already ended, so a failed bump must not fail it; the next transaction
+      // retries the bump before it begins.
+      try {
+        await initProducerId();
+      } catch (error) {
+        logger.warn('Failed to bump the producer epoch after ending the transaction; retrying later', {
+          error: (error as Error).message,
+          transactionalId,
+        });
+        epochBumpRequested = true;
+      }
     }
   }
 
@@ -366,40 +457,59 @@ export function createEosManager({
     const key = partitionGateKey(topic, partition);
     let lock = partitionGates.get(key);
     if (!lock) {
-      lock = new Lock({ timeout: 0xffff, description: `idempotent produce ${key}` });
+      lock = new Lock({ timeout: Number.POSITIVE_INFINITY, description: `idempotent produce ${key}` });
       partitionGates.set(key, lock);
     }
     return lock;
   }
 
-  async function acquirePartitionGates(partitions: readonly EosManagerPartition[]): Promise<void> {
+  async function acquirePartitionGates(
+    partitions: readonly EosManagerPartition[],
+    { signal }: AcquireOptions = {},
+  ): Promise<void> {
     if (!isInitialized()) return;
 
     const unique = uniqueSortedPartitions(partitions);
-    const acquired: EosManagerPartition[] = [];
-    try {
-      for (const entry of unique) {
-        await partitionLock(entry.topic, entry.partition).acquire();
-        acquired.push(entry);
+    for (;;) {
+      await bumpEpochIfRequested({ signal });
+
+      const acquired: EosManagerPartition[] = [];
+      try {
+        for (const entry of unique) {
+          await partitionLock(entry.topic, entry.partition).acquire({ signal });
+          acquired.push(entry);
+        }
+      } catch (error) {
+        await releaseLocks(acquired);
+        throw error;
       }
-    } catch (error) {
-      for (let i = acquired.length - 1; i >= 0; i--) {
-        const entry = acquired[i];
-        if (!entry) continue;
-        await partitionLock(entry.topic, entry.partition).release();
+
+      // A bump requested while this send was queued on a gate (by the send it waited for) must
+      // run before this one takes sequences that the bump would invalidate.
+      if (!isEpochBumpPending()) {
+        gateHolders += 1;
+        return;
       }
-      throw error;
+      await releaseLocks(acquired);
+    }
+  }
+
+  async function releaseLocks(partitions: readonly EosManagerPartition[]): Promise<void> {
+    for (let i = partitions.length - 1; i >= 0; i--) {
+      const entry = partitions[i];
+      if (!entry) continue;
+      await partitionLock(entry.topic, entry.partition).release();
     }
   }
 
   async function releasePartitionGates(partitions: readonly EosManagerPartition[]): Promise<void> {
     if (!isInitialized()) return;
 
-    const unique = uniqueSortedPartitions(partitions);
-    for (let i = unique.length - 1; i >= 0; i--) {
-      const entry = unique[i];
-      if (!entry) continue;
-      await partitionLock(entry.topic, entry.partition).release();
+    await releaseLocks(uniqueSortedPartitions(partitions));
+    gateHolders -= 1;
+    if (gateHolders === 0) {
+      for (const notify of drainWaiters) notify();
+      drainWaiters.clear();
     }
   }
 
@@ -482,6 +592,8 @@ export function createEosManager({
       initProducerId,
       getSequence,
       updateSequence,
+      requestEpochBump,
+      bumpEpochIfRequested,
       beginTransaction,
       addPartitionsToTransaction,
       markTransactionAbortable,
@@ -490,6 +602,7 @@ export function createEosManager({
       isInitialized,
       isTransactional,
       isInTransaction,
+      isFenced,
       acquirePartitionGates,
       releasePartitionGates,
       sendOffsets,
@@ -499,8 +612,10 @@ export function createEosManager({
       beginTransaction: { legalStates: [TRANSACTION_STATES.READY], async: false },
       addPartitionsToTransaction: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
       sendOffsets: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
-      commit: { legalStates: [TRANSACTION_STATES.TRANSACTING] },
-      abort: { legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.ABORTABLE] },
+      commit: { legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.COMMITTING] },
+      abort: {
+        legalStates: [TRANSACTION_STATES.TRANSACTING, TRANSACTION_STATES.ABORTABLE, TRANSACTION_STATES.ABORTING],
+      },
     },
   );
 }

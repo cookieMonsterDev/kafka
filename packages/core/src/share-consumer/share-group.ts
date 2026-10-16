@@ -241,7 +241,6 @@ export class ShareGroup {
     const type = (error as { type?: string }).type;
     if (type === 'NOT_COORDINATOR_FOR_GROUP' || type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
       this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
-      throw new KafkaError(error as Error);
     }
   }
 }

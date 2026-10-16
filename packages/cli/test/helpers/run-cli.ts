@@ -31,8 +31,17 @@ export async function runCli(
         return true;
       },
     },
-    stdin: { isTTY: false, setEncoding: () => undefined, on: () => undefined },
+    stdin: {
+      isTTY: false,
+      setEncoding: () => undefined,
+      on: () => undefined,
+      removeListener: () => undefined,
+      pause: () => undefined,
+    },
     on: () => undefined,
+    exit: (code: number) => {
+      throw new Error(`unexpected process.exit(${String(code)})`);
+    },
   };
 
   const code = await main(createRuntime(fakeProcess));

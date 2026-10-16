@@ -1,11 +1,6 @@
 import { dispatch } from './dispatch';
-import { EXIT_CODES } from './errors/exit-codes';
+import { exitCodeForSignal } from './errors/exit-codes';
 import type { Runtime } from './runtime';
-
-function exitCodeForSignal(reason: unknown): number {
-  if (reason === 'SIGTERM') return 143;
-  return EXIT_CODES.aborted;
-}
 
 /**
  * The whole program as a pure function of a {@link Runtime}: parse `argv`, route to a command,

@@ -1,8 +1,9 @@
 import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
 import type { EachMessageHandler } from '../consumer/types';
-import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
+import { KafkaError, KafkaNoBrokerAvailableError, type KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
+import { createErrorFromCode, failure, staleMetadata } from '../protocol/error-codes';
 import {
   SHARE_ACQUIRE_MODE,
   SHARE_SESSION_CLOSE_EPOCH,
@@ -10,6 +11,7 @@ import {
   type ShareAcquireMode,
   type ShareFetchAcknowledgementBatchInput,
   type ShareFetchForgottenTopicInput,
+  type ShareFetchResponseV1Body,
 } from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
@@ -23,6 +25,13 @@ const DEFAULT_MIN_BYTES = 1;
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 const DEFAULT_MAX_RECORDS = 500;
 const DEFAULT_BATCH_SIZE = 100;
+const FETCH_RETRY_BACKOFF_MS = 100;
+
+/** Retriable on its own, or a retriable error the fetch retrier gave up on (`KafkaNumberOfRetriesExceeded`). */
+function isRetriableFetchError(error: unknown): boolean {
+  if (!(error instanceof KafkaError)) return false;
+  return error.retriable || (error.cause instanceof KafkaError && error.cause.retriable);
+}
 
 interface PendingAck {
   topic: string;
@@ -98,6 +107,8 @@ export class ShareRunner {
   /** What each node's share session last had, so unassigned partitions can be forgotten (KIP-227-style). */
   #shareSessionPartitionsByNode = new Map<string, Map<string, Set<number>>>();
   #pendingAcks: PendingAck[] = [];
+  /** Set when a partition reported stale leadership; the next fetch forces a metadata refresh. */
+  #metadataRefreshNeeded = false;
 
   constructor({
     logger,
@@ -218,12 +229,15 @@ export class ShareRunner {
       } catch (error) {
         if (this.shuttingDown || !this.running) break;
         if (error instanceof KafkaNoBrokerAvailableError) {
-          await sleep(100);
+          await sleep(FETCH_RETRY_BACKOFF_MS);
           continue;
         }
         await this.#shareGroup.recoverFromFetch(error);
         if (this.shuttingDown || !this.running) break;
-        if (error instanceof KafkaError) continue;
+        if (isRetriableFetchError(error)) {
+          await sleep(FETCH_RETRY_BACKOFF_MS);
+          continue;
+        }
         await this.#onCrash(error as Error);
         this.running = false;
         return;
@@ -254,7 +268,12 @@ export class ShareRunner {
   }
 
   async #doFetchFromNode(nodeId: string): Promise<ShareBatch[]> {
-    await this.#shareGroup.cluster.refreshMetadataIfNecessary();
+    if (this.#metadataRefreshNeeded) {
+      await this.#shareGroup.cluster.refreshMetadata();
+      this.#metadataRefreshNeeded = false;
+    } else {
+      await this.#shareGroup.cluster.refreshMetadataIfNecessary();
+    }
     const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
     if (topicPartitions.length === 0) return [];
 
@@ -266,6 +285,9 @@ export class ShareRunner {
     const currentPartitions = new Map(topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)]));
     const forgottenTopics = this.#forgottenTopicsFor(previousPartitions, currentPartitions);
 
+    // An initial-epoch ShareFetch may not carry acknowledgements, and opening a new session
+    // releases whatever the previous one acquired, so acks still pending for it are dropped.
+    const isNewSession = shareSessionEpoch === SHARE_SESSION_INITIAL_EPOCH;
     const takenAcks: PendingAck[] = [];
     const topics = topicPartitions
       .map(({ topic, partitions }) => {
@@ -275,75 +297,127 @@ export class ShareRunner {
           topicId,
           partitions: partitions.map((partitionIndex) => {
             const acknowledgementBatches = this.#takeAcknowledgementBatchesFor(topic, partitionIndex, takenAcks);
-            return { partitionIndex, acknowledgementBatches };
+            return { partitionIndex, acknowledgementBatches: isNewSession ? [] : acknowledgementBatches };
           }),
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+    if (isNewSession) takenAcks.length = 0;
 
     if (topics.length === 0) {
       this.#pendingAcks.push(...takenAcks);
       return [];
     }
 
+    let attempts = 0;
+    let sentEpoch = shareSessionEpoch;
+    let response: ShareFetchResponseV1Body;
     try {
       const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-      const response = await this.#retrier(() =>
-        broker.shareFetch({
+      response = await this.#retrier(() => {
+        // A failed attempt may already have been applied (epoch bumped, acknowledgements
+        // recorded), so replaying it is ambiguous; retries open a fresh session without acks.
+        const isRetry = attempts++ > 0;
+        sentEpoch = isRetry ? SHARE_SESSION_INITIAL_EPOCH : shareSessionEpoch;
+        return broker.shareFetch({
           groupId: this.#shareGroup.groupId,
           memberId,
-          shareSessionEpoch,
+          shareSessionEpoch: sentEpoch,
           maxWaitMs: this.#maxWaitTimeInMs,
           minBytes: this.#minBytes,
           maxBytes: this.#maxBytes,
           maxRecords: this.#maxRecords,
           batchSize: this.#batchSize,
           shareAcquireMode: this.#shareAcquireMode,
-          isRenewAck: takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
-          topics,
-          forgottenTopics,
-        }),
-      );
-      this.#shareSessionEpochByNode.set(nodeId, shareSessionEpoch + 1);
-      this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
-
-      if (takenAcks.length > 0) {
-        this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
-          groupId: this.#shareGroup.groupId,
-          memberId,
-          nodeId,
-          topics: groupAcksByTopic(takenAcks),
+          isRenewAck: !isRetry && takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
+          topics: isRetry
+            ? topics.map(({ topicId, partitions }) => ({
+                topicId,
+                partitions: partitions.map(({ partitionIndex }) => ({ partitionIndex, acknowledgementBatches: [] })),
+              }))
+            : topics,
+          forgottenTopics: isRetry ? [] : forgottenTopics,
         });
-      }
-
-      const batches: ShareBatch[] = [];
-      for (const { topicId, partitions } of response.responses) {
-        const topic = await this.#resolveTopicName(topicId);
-        for (const partitionData of partitions) {
-          batches.push(
-            new ShareBatch(topic, {
-              partition: partitionData.partitionIndex,
-              messages: partitionData.records,
-              acquiredRecords: partitionData.acquiredRecords,
-            }),
-          );
-        }
-      }
-      return batches.filter((batch) => !this.#isStale(batch));
+      });
     } catch (error) {
-      this.#pendingAcks.push(...takenAcks);
-      // The session state we just tried to send may no longer match what the broker has -
-      // start the next fetch for this node with a fresh (epoch 0) session. `#retrier` wraps an
-      // exhausted-retries error in `KafkaNumberOfRetriesExceeded`, so the protocol error's `type`
-      // may only be reachable via `.cause`.
-      const errorLike = error as { type?: string; cause?: { type?: string } };
-      const type = errorLike.type ?? errorLike.cause?.type;
-      if (type === 'SHARE_SESSION_NOT_FOUND' || type === 'INVALID_SHARE_SESSION_EPOCH') {
-        this.#shareSessionEpochByNode.delete(nodeId);
-        this.#shareSessionPartitionsByNode.delete(nodeId);
+      if (attempts === 0) {
+        this.#pendingAcks.push(...takenAcks);
+        throw error;
       }
+      // Whether the broker applied any attempt is unknown, so the session state no longer matches
+      // what it has: start the next fetch for this node with a fresh (epoch 0) session. The
+      // acknowledgements taken for it cannot ride on that request and are dropped with the session.
+      this.#shareSessionEpochByNode.delete(nodeId);
+      this.#shareSessionPartitionsByNode.delete(nodeId);
       throw error;
     }
+
+    // The request succeeded, so the session advanced even if a partition below reports an error.
+    this.#shareSessionEpochByNode.set(nodeId, sentEpoch + 1);
+    this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
+
+    if (takenAcks.length > 0 && attempts === 1) {
+      this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
+        groupId: this.#shareGroup.groupId,
+        memberId,
+        nodeId,
+        topics: groupAcksByTopic(takenAcks),
+      });
+    }
+
+    const batches: ShareBatch[] = [];
+    let fatalError: KafkaProtocolError | undefined;
+    for (const { topicId, partitions } of response.responses) {
+      const topic = await this.#resolveTopicName(topicId);
+      for (const partitionData of partitions) {
+        const { partitionIndex: partition, errorCode, acknowledgeErrorCode } = partitionData;
+        if (failure(acknowledgeErrorCode)) this.#warnAcknowledgeFailure(topic, partition, acknowledgeErrorCode);
+        if (failure(errorCode)) {
+          fatalError ??= this.#handlePartitionFetchError(topic, partition, errorCode);
+          continue;
+        }
+        batches.push(
+          new ShareBatch(topic, {
+            partition,
+            messages: partitionData.records,
+            acquiredRecords: partitionData.acquiredRecords,
+          }),
+        );
+      }
+    }
+    if (fatalError) {
+      // Release what the healthy partitions acquired rather than leave it locked until it times out.
+      for (const batch of batches) this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      throw fatalError;
+    }
+    return batches.filter((batch) => !this.#isStale(batch));
+  }
+
+  /** Like Java's AcknowledgementCommitCallback: a failed acknowledgement is reported, not fatal. */
+  #warnAcknowledgeFailure(topic: string, partition: number, errorCode: number): void {
+    this.#logger.warn('Share acknowledgement failed', {
+      groupId: this.#shareGroup.groupId,
+      topic,
+      partition,
+      error: createErrorFromCode(errorCode).message,
+    });
+  }
+
+  /**
+   * A retriable error skips only this partition this round; anything else is returned for the
+   * caller to crash the consumer with once the rest of the response is handled.
+   */
+  #handlePartitionFetchError(topic: string, partition: number, errorCode: number): KafkaProtocolError | undefined {
+    const error = createErrorFromCode(errorCode, { topic, partition });
+    if (!error.retriable) return error;
+    if (staleMetadata(error)) this.#metadataRefreshNeeded = true;
+    this.#logger.warn('Share fetch failed for partition, retrying', {
+      groupId: this.#shareGroup.groupId,
+      topic,
+      partition,
+      error: error.message,
+    });
+    return undefined;
   }
 
   /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */
@@ -478,7 +552,7 @@ export class ShareRunner {
       try {
         const acksForNode = this.#acksForNode(nodeId);
         const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-        await broker.shareAcknowledge({
+        const response = await broker.shareAcknowledge({
           groupId: this.#shareGroup.groupId,
           memberId,
           shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,
@@ -493,6 +567,12 @@ export class ShareRunner {
             nodeId,
             topics: groupAcksByTopic(acksForNode),
           });
+        }
+        for (const { topicId, partitions } of response.responses) {
+          const topic = await this.#resolveTopicName(topicId);
+          for (const { partitionIndex, errorCode } of partitions) {
+            if (failure(errorCode)) this.#warnAcknowledgeFailure(topic, partitionIndex, errorCode);
+          }
         }
       } catch {
         // Closing is best-effort; leave() still runs after this.

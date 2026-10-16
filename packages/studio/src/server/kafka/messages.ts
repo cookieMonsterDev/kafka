@@ -178,17 +178,42 @@ export class SeenOffsetTracker {
 /** Safety valve against a hung read; every cursor targets an offset already on disk, so this should never trip. */
 const PAGE_READ_TIMEOUT_MS = 10_000;
 
+/**
+ * `true` once the partitions that sort first in the page (ascending for a seek read, descending
+ * for a tail read) are all finished and already hold `limit` messages — later partitions can no
+ * longer reach the page, so there is no point reading them.
+ */
+function pageIsFull(
+  partitionsInPageOrder: readonly number[],
+  pending: ReadonlySet<number>,
+  countByPartition: ReadonlyMap<number, number>,
+  limit: number,
+): boolean {
+  let total = 0;
+  for (const partition of partitionsInPageOrder) {
+    if (pending.has(partition)) return false;
+    total += countByPartition.get(partition) ?? 0;
+    if (total >= limit) return true;
+  }
+  return false;
+}
+
 async function collectMessages(
   consumer: PooledMessageConsumer,
   topic: string,
   cursors: readonly PartitionCursor[],
+  query: MessagesQuery,
 ): Promise<MessageRecord[]> {
   const highByPartition = new Map(cursors.map((cursor) => [cursor.partition, cursor.high]));
   const pending = new Set<number>();
   for (const cursor of cursors) if (cursor.start < cursor.high) pending.add(cursor.partition);
   if (pending.size === 0) return [];
 
+  const partitionsInPageOrder = cursors.map((cursor) => cursor.partition).sort((a, b) => a - b);
+  if (isTailRead(query)) partitionsInPageOrder.reverse();
+
   const collected: MessageRecord[] = [];
+  const countByPartition = new Map<number, number>();
   const seen = new SeenOffsetTracker();
   await consumer.connect();
   try {
@@ -199,13 +224,21 @@ async function collectMessages(
       const batches = await openAssignedStream(consumer, topic, assigned, { signal: controller.signal });
 
       for await (const batch of batches) {
+        let count = countByPartition.get(batch.partition) ?? 0;
         for (const message of batch.messages) {
-          if (seen.admit(batch.partition, message.offset)) collected.push(toMessageRecord(batch.partition, message));
+          if (count >= query.limit) break;
+          if (seen.admit(batch.partition, message.offset)) {
+            collected.push(toMessageRecord(batch.partition, message));
+            count++;
+          }
         }
+        countByPartition.set(batch.partition, count);
 
         const high = highByPartition.get(batch.partition);
-        if (high !== undefined && batch.lastOffset() + 1n >= high) pending.delete(batch.partition);
-        if (pending.size === 0) break;
+        if (count >= query.limit || (high !== undefined && batch.lastOffset() + 1n >= high)) {
+          pending.delete(batch.partition);
+        }
+        if (pending.size === 0 || pageIsFull(partitionsInPageOrder, pending, countByPartition, query.limit)) break;
       }
     } finally {
       clearTimeout(deadline);
@@ -236,7 +269,7 @@ export async function readMessagesPage(
   if (targets.length === 0) return { messages: [], ranges };
 
   const cursors = await resolveStartOffsets(admin, topic, query, targets);
-  const collected = await collectMessages(consumer, topic, cursors);
+  const collected = await collectMessages(consumer, topic, cursors, query);
 
   collected.sort(compareByPartitionOffset);
   const limited = isTailRead(query) ? collected.slice(-query.limit) : collected.slice(0, query.limit);

@@ -76,6 +76,7 @@ describe('consumer/runner', () => {
       resume: vi.fn(),
       hasSeekOffset: vi.fn().mockReturnValue(false),
       notifyPartitionsLost: vi.fn(async () => undefined),
+      position: vi.fn(() => null),
       ...overrides,
     } as unknown as ConsumerGroupHandle;
   }
@@ -180,6 +181,102 @@ describe('consumer/runner', () => {
     expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalled();
     expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
     expect(onCrash).not.toHaveBeenCalled();
+  });
+
+  it('drops a prefetched batch whose fetch offset the partition has already moved past', async () => {
+    let position = 0n;
+    let releasePrefetch: (() => void) | undefined;
+    const prefetched = new Promise<void>((resolve) => {
+      releasePrefetch = resolve;
+    });
+    const batchFromZero = () =>
+      new Batch(topicName, 0n, { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] });
+    const consumerGroup = fakeConsumerGroup({
+      getNodeIds: vi.fn(() => ['1']),
+      // The second fetch is issued while the first batch is in flight, so it still reads from 0
+      // and only returns once that batch has been processed.
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce([batchFromZero()])
+        .mockImplementationOnce(async () => {
+          await prefetched;
+          return [batchFromZero()];
+        })
+        .mockResolvedValue([]),
+      resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
+        position = offset + 1n;
+        if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+      }),
+      position: vi.fn(() => position),
+    });
+    const seenOffsets: bigint[] = [];
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async ({ message }) => {
+        seenOffsets.push(message.offset);
+      },
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+
+    await runner.start();
+    await waitFor(() => vi.mocked(consumerGroup.fetch).mock.calls.length > 3);
+
+    expect(seenOffsets).toEqual([0n, 1n]);
+  });
+
+  it('keeps a seek pending for a partition still being processed so the worker stops at it', async () => {
+    const pendingSeeks = new Set<string>();
+    const consumerGroup = fakeConsumerGroup({
+      getNodeIds: vi.fn(() => ['1']),
+      // Mirrors ConsumerGroup.fetch: applying (popping) every pending seek it is allowed to.
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce([
+          new Batch(topicName, 0n, {
+            partition,
+            highWatermark: 3n,
+            messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)],
+          }),
+        ])
+        .mockImplementation(
+          async (
+            _nodeId: string,
+            options?: { isProcessing?: (topic: string, partition: number) => boolean },
+          ): Promise<Batch[]> => {
+            if (!options?.isProcessing?.(topicName, partition)) pendingSeeks.clear();
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return [];
+          },
+        ),
+      hasSeekOffset: vi.fn(() => pendingSeeks.size > 0),
+    });
+    const seenOffsets: bigint[] = [];
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachMessage: async ({ message }) => {
+        seenOffsets.push(message.offset);
+        if (message.offset === 0n) {
+          pendingSeeks.add('seek');
+          const fetchCalls = vi.mocked(consumerGroup.fetch).mock.calls.length;
+          await waitFor(() => vi.mocked(consumerGroup.fetch).mock.calls.length > fetchCalls + 1);
+        }
+      },
+      concurrency: 1,
+      heartbeatInterval: 3000,
+    });
+
+    await runner.start();
+    // handleBatch ends with an auto-commit check once the batch has been fully processed.
+    await waitFor(() => vi.mocked(consumerGroup.commitOffsetsIfNecessary).mock.calls.length > 0);
+
+    expect(seenOffsets).toEqual([0n]);
   });
 
   it('allows providing offsets to commitOffsetsIfNecessary from eachBatch', async () => {
@@ -796,10 +893,11 @@ describe('consumer/runner', () => {
 
       await runner.fetch('1');
 
-      // `Runner#fetch` only ever forwards the node id: `maxRecords` never reaches the Fetch
-      // request, so the wire-level `maxBytes`/`maxBytesPerPartition` configured on the consumer
-      // group (owned by `ConsumerGroup`, not `Runner`) are never altered by it.
-      expect(consumerGroup.fetch).toHaveBeenCalledWith('1');
+      // `Runner#fetch` only forwards the node id (plus the in-flight partition check for seeks):
+      // `maxRecords` never reaches the Fetch request, so the wire-level `maxBytes`/
+      // `maxBytesPerPartition` configured on the consumer group (owned by `ConsumerGroup`, not
+      // `Runner`) are never altered by it.
+      expect(consumerGroup.fetch).toHaveBeenCalledWith('1', { isProcessing: expect.any(Function) });
       expect(consumerGroup.fetch).toHaveBeenCalledTimes(1);
     });
   });

@@ -1,5 +1,5 @@
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError, coerceNumber } from '../../args/coerce';
+import { CliUsageError, coerceInteger } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { isKafkaAggregateError } from '../../errors/is-kafka-aggregate-error';
@@ -72,7 +72,7 @@ export const clusterUpdateFeaturesCommand: CommandSpec = {
     const featureNames = Object.keys(featureFlags);
     const featureUpdates = featureNames.map((feature) => ({
       feature,
-      maxVersionLevel: coerceNumber(featureFlags[feature]!, 'feature'),
+      maxVersionLevel: coerceInteger(featureFlags[feature]!, 'feature'),
       upgradeType,
     }));
 

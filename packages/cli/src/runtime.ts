@@ -1,6 +1,7 @@
 import type { OnConfigDiagnostic } from '@cookiemonsterdev/kafka-config';
 import { openAdmin, type OpenAdmin } from './admin/open';
 import { resolveCliConfig, type ResolvedCliConfig } from './config/resolve';
+import { exitCodeForSignal } from './errors/exit-codes';
 
 /** Minimal writable stream contract — enough for `process.stdout`/`process.stderr`. */
 export interface RuntimeWriter {
@@ -12,9 +13,13 @@ export interface RuntimeWriter {
 /** Minimal readable stream contract — enough for `process.stdin`. */
 export interface RuntimeReader {
   readonly isTTY?: boolean;
+  readonly readableEnded?: boolean;
   setEncoding(encoding: BufferEncoding): unknown;
   on(event: 'data', listener: (chunk: string) => void): unknown;
   on(event: 'end', listener: () => void): unknown;
+  removeListener(event: 'data', listener: (chunk: string) => void): unknown;
+  removeListener(event: 'end', listener: () => void): unknown;
+  pause(): unknown;
 }
 
 export type { OpenAdmin, OpenAdminOptions } from './admin/port';
@@ -74,12 +79,18 @@ export interface RuntimeProcessLike {
   readonly stderr: RuntimeWriter;
   readonly stdin: RuntimeReader;
   on(event: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  exit(code: number): never;
 }
 
 export function createRuntime(proc: RuntimeProcessLike): Runtime {
   const controller = new AbortController();
-  proc.on('SIGINT', () => controller.abort('SIGINT'));
-  proc.on('SIGTERM', () => controller.abort('SIGTERM'));
+  // The first signal starts a graceful shutdown; a second one force-exits in case that hangs.
+  function onSignal(signal: 'SIGINT' | 'SIGTERM'): void {
+    if (controller.signal.aborted) proc.exit(exitCodeForSignal(signal));
+    controller.abort(signal);
+  }
+  proc.on('SIGINT', () => onSignal('SIGINT'));
+  proc.on('SIGTERM', () => onSignal('SIGTERM'));
 
   const cwd = proc.cwd();
 
@@ -96,7 +107,7 @@ export function createRuntime(proc: RuntimeProcessLike): Runtime {
     exit(code: number): never {
       throw new RuntimeExitCalledError(code);
     },
-    openAdmin,
+    openAdmin: (options) => openAdmin({ signal: controller.signal, ...options }),
     loadConfig: (options) => resolveCliConfig({ cwd, env: proc.env, ...options }),
     signal: controller.signal,
   };

@@ -84,6 +84,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   registerProfileRoutes(router, {
     connection,
     pool,
+    producers,
     getActiveProfile: () => activeProfile,
     setActiveProfile: (profile) => {
       activeProfile = profile;
@@ -103,8 +104,8 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   registerSettingsRoutes(router, { pool, getActiveProfile: () => activeProfile });
 
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
-  const fallback =
-    runtime.env.KAFKA_STUDIO_DEV === '1' ? await createDevMiddleware(webRoot) : createStaticHandler(webRoot);
+  const dev = runtime.env.KAFKA_STUDIO_DEV === '1' ? await createDevMiddleware(webRoot) : undefined;
+  const fallback = dev?.middleware ?? createStaticHandler(webRoot);
 
   const server = createStudioServer({ router, fallback, readOnly, auth: { host, port, token } });
 
@@ -119,7 +120,13 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   void openBrowser(urlWithToken, browser, { env: runtime.env, platform: runtime.platform });
 
   async function stop(): Promise<void> {
-    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    jobs.cancelAll();
+    const closed = new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    // `close()` alone waits for every open socket: SSE streams never end on their own, and idle
+    // keep-alive connections can linger until they time out.
+    server.closeAllConnections();
+    await closed;
+    await dev?.close();
     await pool.disposeAll();
     await producers.disposeAll();
   }

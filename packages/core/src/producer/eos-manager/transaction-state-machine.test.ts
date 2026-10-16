@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
-import { TransactionStateMachine } from './transaction-state-machine';
+import { FENCED_PRODUCER_MESSAGE, TransactionStateMachine } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -43,6 +43,20 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     machine.transitionTo(TRANSACTION_STATES.ABORTING);
     machine.transitionTo(TRANSACTION_STATES.READY);
     expect(machine.state()).toBe(TRANSACTION_STATES.READY);
+  });
+
+  it('lets a rejected commit go abort-only and a fenced end go fatal, with no way out of FATAL_ERROR', () => {
+    const machine = new TransactionStateMachine({
+      logger: silentLogger,
+      initialState: TRANSACTION_STATES.COMMITTING,
+    });
+    machine.transitionTo(TRANSACTION_STATES.ABORTABLE);
+    machine.transitionTo(TRANSACTION_STATES.ABORTING);
+    machine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
+
+    for (const state of Object.values(TRANSACTION_STATES)) {
+      expect(() => machine.transitionTo(state)).toThrow(FENCED_PRODUCER_MESSAGE);
+    }
   });
 
   it('emits a transition event with from/to on every successful transition', () => {

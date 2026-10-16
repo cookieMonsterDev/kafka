@@ -6,7 +6,7 @@ import type { DeleteShareGroupOffsetsResponseV0Body } from '../protocol/requests
 import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/requests/describe-share-group-offsets/v1/response';
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { deleteGroupsViaCoordinators, formatUnknown, protocolType } from './helpers';
+import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown, protocolType } from './helpers';
 import type {
   AlterShareGroupOffsetsOptions,
   DeleteShareGroupOffsetsOptions,
@@ -42,35 +42,14 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
     assertNonEmptyGroupIds(groupIds);
     if (groupIds.length === 0) return { groups: [] };
 
-    const coordinatorsForGroup = await Promise.all(
-      groupIds.map(async (groupId) => {
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        return { coordinator, groupId };
+    return {
+      groups: await describeGroupsViaCoordinators({
+        cluster,
+        retry,
+        groupIds,
+        describe: (coordinator, ids) => coordinator.shareGroupDescribe({ groupIds: ids }),
       }),
-    );
-
-    const groupsByCoordinator = new Map<
-      string,
-      { coordinator: (typeof coordinatorsForGroup)[number]['coordinator']; groupIds: string[] }
-    >();
-    for (const { coordinator, groupId } of coordinatorsForGroup) {
-      const key = String(coordinator.nodeId);
-      const existing = groupsByCoordinator.get(key);
-      if (existing) {
-        existing.groupIds.push(groupId);
-      } else {
-        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
-      }
-    }
-
-    const responses = await Promise.all(
-      [...groupsByCoordinator.values()].map(async ({ coordinator, groupIds: ids }) => {
-        const { groups } = await retrier(retry)(() => coordinator.shareGroupDescribe({ groupIds: ids }));
-        return groups;
-      }),
-    );
-
-    return { groups: responses.flat() };
+    };
   };
 
   const listShareGroupOffsets = async ({

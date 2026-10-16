@@ -1,6 +1,6 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError, coerceNumber } from '../../args/coerce';
+import { CliUsageError, coerceInteger } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
@@ -39,7 +39,7 @@ function parseSetFlags(raw: readonly string[]): SetEntry[] {
       throw new CliUsageError(`--set must be "topic:partition:offset", got "${entry}"`);
     }
     const [topic, partitionRaw, offsetRaw] = parts as [string, string, string];
-    const partition = coerceNumber(partitionRaw, 'set');
+    const partition = coerceInteger(partitionRaw, 'set');
     let offset: bigint;
     try {
       offset = BigInt(offsetRaw);

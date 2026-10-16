@@ -1,6 +1,7 @@
 import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
-import { NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
+import type { Logger } from '../../loggers/index';
+import { emitNetworkEvent, NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
 import type { NetworkEventMap } from '../instrumentation-events';
 
 export interface RequestEntry {
@@ -25,6 +26,8 @@ export interface SocketRequestOptions {
   send: () => void;
   timeout: () => void;
   instrumentationEmitter?: InstrumentationEventEmitter<NetworkEventMap> | null;
+  /** Receives errors thrown by instrumentation listeners, which are never propagated. */
+  logger: Logger;
 }
 
 /**
@@ -66,8 +69,8 @@ export class SocketRequest {
     this.#sendRequest = options.send;
     this.#timeoutHandler = options.timeout;
 
-    const emitter = options.instrumentationEmitter ?? null;
-    this.#emitEvent = (eventName, payload) => emitter?.emit(eventName, payload);
+    const { instrumentationEmitter, logger } = options;
+    this.#emitEvent = (eventName, payload) => emitNetworkEvent(instrumentationEmitter, logger, eventName, payload);
   }
 
   send(): void {

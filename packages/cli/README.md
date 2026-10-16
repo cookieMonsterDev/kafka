@@ -132,9 +132,10 @@ kafka --version
 In short: deleting things asks for confirmation first, and a few especially risky deletes need an
 explicit `--force` on top of that.
 
-`topic delete` and `topic delete-records` refuse to run without confirmation: off a TTY (or under
-`CI=true`), that means passing `--yes`; on a TTY, an interactive `[y/N]` prompt (asked on stderr)
-does the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
+`topic delete` and `topic delete-records` refuse to run without confirmation: when stdin is not
+a TTY (piped input such as `yes | kafka topic delete …` included) or under `CI=true`, that means
+passing `--yes`; with a terminal on stdin, an interactive `[y/N]` prompt (asked on stderr) does
+the same job. `cli.confirmDestructive: false` in the config file waives this prompt/`--yes`
 requirement — but never the separate `--force` tier below, which no config setting can waive.
 
 <details>
@@ -474,8 +475,10 @@ Every connecting command resolves its options from, highest precedence first: **
 flags → environment variables → the active `--profile` → the config file's `client` section →
 built-in defaults**. The config file is discovered by walking upward from the current directory
 looking for `kafka.config.{ts,mts,cts,js,mjs,cjs,json}` (or `.config/kafka.*`), stopping at the
-first `.git`, `pnpm-workspace.yaml`, or workspace `package.json` — override that with
-`--config-file <path>` or `KAFKA_CONFIG`.
+first `.git`, `pnpm-workspace.yaml`, or workspace `package.json`. It never searches a
+world-writable directory (such as `/tmp`) or one owned by another user (other than root) — not
+even the current directory — so running as root over a checkout owned by another uid (common in
+CI containers) finds no config. Override that with `--config-file <path>` or `KAFKA_CONFIG`.
 
 The file is loaded asynchronously, so a config that uses top-level `await` or exports an async
 factory works. There is no TypeScript transform rescue: an extensionless relative import, or
@@ -503,6 +506,10 @@ kafka --profile staging topic list
 kafka profiles          # lists every configured profile, marking the active one
 kafka doctor            # reports the config file path, active profile, and where every value came from
 ```
+
+`doctor` still runs when the config file fails to load (or `--profile` is unknown), reporting the
+error on a `config error` line; `init`, `completion`, and shell completion never read the config
+file, so they keep working while it is broken.
 
 The `cli:` section also accepts `output` (`"human"`/`"json"`, the lowest-precedence source for
 `--json`/`--format`/`KAFKA_OUTPUT`), `timeoutMs` (a last-resort default for the connection and

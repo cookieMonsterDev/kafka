@@ -16,9 +16,15 @@ describe('protocol/requests/describe-log-dirs/v0/request', () => {
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual(value);
   });
 
-  it('encodes an empty topics list as a null array (all log dirs)', async () => {
-    const encoder = await describeLogDirsRequestV0({ topics: [] }).encode();
+  it('encodes null topics as a null array (all log dirs)', async () => {
+    const encoder = await describeLogDirsRequestV0({ topics: null }).encode();
     expect(encoder.buffer).toEqual(new Encoder().writeInt32(-1).buffer);
+    expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual({ topics: null });
+  });
+
+  it('encodes an empty topics list as an empty array', async () => {
+    const encoder = await describeLogDirsRequestV0({ topics: [] }).encode();
+    expect(encoder.buffer).toEqual(new Encoder().writeInt32(0).buffer);
     expect(requestSchema.read(new Decoder(encoder.buffer))).toEqual({ topics: [] });
   });
 });

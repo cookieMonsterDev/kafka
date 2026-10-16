@@ -200,6 +200,11 @@ export interface ConsumerGroupOptions {
   assignedPartitions?: readonly TopicPartitions[];
 }
 
+export interface ConsumerGroupFetchOptions {
+  /** Partitions a worker is still handling; their pending seeks are not applied yet. */
+  isProcessing?: (topic: string, partition: number) => boolean;
+}
+
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
 export interface ConsumerGroupHandle {
   groupId: string | null;
@@ -208,7 +213,7 @@ export interface ConsumerGroupHandle {
   connect: () => Promise<void>;
   joinAndSync: () => Promise<void>;
   leave: () => Promise<void>;
-  fetch: (nodeId: string) => Promise<Batch[]>;
+  fetch: (nodeId: string, options?: ConsumerGroupFetchOptions) => Promise<Batch[]>;
   getNodeIds: () => string[];
   resolveOffset: (topicPartitionOffset: TopicPartitionOffset) => void;
   commitOffsets: (offsets?: Offsets) => Promise<void>;
@@ -667,6 +672,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       }
     }
 
+    const previousAssignment = this.assigned();
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
@@ -694,7 +700,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       return;
     }
 
-    this.offsetManager = new OffsetManager({
+    const previousOffsetManager = this.offsetManager;
+    const offsetManager = new OffsetManager({
       cluster: this.cluster,
       topicConfigurations: this.topicConfigurations,
       instrumentationEmitter: this.instrumentationEmitter,
@@ -709,6 +716,24 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       logger: this.logger,
       hooks: this.hooks,
     });
+
+    // A partition the same member held before and after this change (cooperative-sticky, KIP-848)
+    // was owned throughout, so its processed-but-uncommitted position is still valid. Lost
+    // partitions were already cleared from `assigned()` by `notifyPartitionsLost`, so they never
+    // carry over.
+    if (previousOffsetManager instanceof OffsetManager && previousOffsetManager.memberId === memberId) {
+      for (const { topic, partitions } of previousAssignment) {
+        const retained = memberAssignment[topic];
+        for (const partition of partitions) {
+          const resolved = previousOffsetManager.resolvedOffsets[topic]?.[partition];
+          if (resolved !== undefined && retained?.includes(partition)) {
+            (offsetManager.resolvedOffsets[topic] ??= {})[partition] = resolved;
+          }
+        }
+      }
+    }
+
+    this.offsetManager = offsetManager;
   }
 
   /**
@@ -835,6 +860,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body): Promise<void> {
     if (response.memberId) this.memberId = response.memberId;
     this.generationId = response.memberEpoch;
+    // The epoch can advance without a new assignment (so no new OffsetManager); commits must carry
+    // the current epoch or the broker rejects them with STALE_MEMBER_EPOCH.
+    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = response.memberEpoch;
     this.heartbeatIntervalMs = response.heartbeatIntervalMs;
     this.leaderId = null;
     this.groupProtocol = 'consumer';
@@ -1072,7 +1100,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     );
   }
 
-  async fetch(nodeId: string): Promise<Batch[]> {
+  async fetch(nodeId: string, { isProcessing }: ConsumerGroupFetchOptions = {}): Promise<Batch[]> {
     try {
       await this.cluster.refreshMetadataIfNecessary();
       this.checkForStaleAssignment();
@@ -1080,7 +1108,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       let topicPartitions = this.subscriptionState.assigned();
       topicPartitions = this.filterPartitionsByNode(nodeId, topicPartitions);
 
-      await this.seekOffsets(topicPartitions);
+      await this.seekOffsets(topicPartitions, isProcessing);
 
       const offsetManager = this.#requireOffsetManager();
       const committedOffsets = offsetManager.committedOffsets();
@@ -1467,11 +1495,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     }
   }
 
-  async seekOffsets(topicPartitions: readonly TopicPartitions[]): Promise<void> {
+  async seekOffsets(
+    topicPartitions: readonly TopicPartitions[],
+    isProcessing?: ConsumerGroupFetchOptions['isProcessing'],
+  ): Promise<void> {
     const offsetManager = this.#requireOffsetManager();
 
     for (const { topic, partitions } of topicPartitions) {
       for (const partition of partitions) {
+        if (isProcessing?.(topic, partition)) continue;
         const seekEntry = this.seekOffset.pop(topic, partition);
         if (!seekEntry) continue;
 

@@ -1,6 +1,7 @@
 import { KafkaLockTimeout } from '../errors';
 
 export interface LockOptions {
+  /** Max ms to wait in `acquire`; `Infinity` waits until released (or the caller's signal aborts). */
   timeout: number;
   description?: string;
 }
@@ -60,11 +61,13 @@ export class Lock {
 
       this.#waiting.add(tryToAcquire);
 
-      const timeoutId = setTimeout(() => {
-        const error = new KafkaLockTimeout(this.#timeoutMessage());
-        cleanup();
-        reject(error);
-      }, this.#timeout);
+      const timeoutId = Number.isFinite(this.#timeout)
+        ? setTimeout(() => {
+            const error = new KafkaLockTimeout(this.#timeoutMessage());
+            cleanup();
+            reject(error);
+          }, this.#timeout)
+        : undefined;
 
       if (signal) {
         onAbort = () => {

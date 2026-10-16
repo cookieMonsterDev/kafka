@@ -102,8 +102,8 @@ Full walkthrough: [Throughput](../../guides/throughput/).
 
 ## Implemented surface
 
-Method lists: [Producer API](./producer/), [Consumer API](./consumer/),
-[Admin API](./admin/). The notes below are version floors and protocol keys,
+Method lists: [Producer API](../producer/), [Consumer API](../consumer/),
+[Admin API](../admin/). The notes below are version floors and protocol keys,
 not a backlog.
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in

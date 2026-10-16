@@ -5,6 +5,7 @@ import type { Rendered } from '../output/format';
 import type { CliLogger } from '../output/logger';
 import type { Runtime } from '../runtime';
 
+/** `number` accepts only a decimal safe integer — every numeric flag is a count, id, port, or ms. */
 export type FlagType = 'string' | 'boolean' | 'number' | 'enum';
 
 export interface FlagSpec {
@@ -69,5 +70,16 @@ export interface CommandSpec {
    * rather than typed by a person.
    */
   readonly hidden?: boolean;
+  /**
+   * The command watches `runtime.signal` and shuts itself down on SIGINT/SIGTERM. Without this,
+   * dispatch stops waiting for a command as soon as the signal fires, so Ctrl-C always exits.
+   */
+  readonly handlesSignal?: boolean;
+  /**
+   * How dispatch resolves the config file before `run`. `'load'` (default) fails the command on a
+   * broken config; `'skip'` never reads one (completion, `init`), so it keeps working while the
+   * config is broken; `'tolerate'` runs with an empty config whose `loadError` says why (`doctor`).
+   */
+  readonly config?: 'load' | 'skip' | 'tolerate';
   readonly run: (context: CommandContext) => Promise<number>;
 }

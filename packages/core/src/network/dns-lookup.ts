@@ -90,8 +90,9 @@ export function sortHappyEyeballs(addresses: readonly ResolvedBrokerAddress[]): 
 }
 
 /**
- * Start connecting to each address, staggered by `delayMs`. The first success wins;
- * remaining attempts are ignored (callers must destroy unused sockets).
+ * Start connecting to each address, staggered by `delayMs`; a failed attempt starts the next
+ * address immediately (RFC 8305). The first success wins; remaining attempts are ignored
+ * (callers must destroy unused sockets).
  */
 export async function connectHappyEyeballs<T>(
   addresses: readonly ResolvedBrokerAddress[],
@@ -110,41 +111,36 @@ export async function connectHappyEyeballs<T>(
   return new Promise((resolve, reject) => {
     let settled = false;
     let pending = 0;
-    let started = 0;
-    let lastError: unknown;
-    const timers: NodeJS.Timeout[] = [];
+    let next = 0;
+    let timer: NodeJS.Timeout | undefined;
 
-    const finish = (error: unknown): void => {
-      if (settled) return;
-      if (pending !== 0 || started !== ordered.length) return;
-      settled = true;
-      for (const timer of timers) clearTimeout(timer);
-      reject(error instanceof Error ? error : new Error(String(error)));
-    };
-
-    const start = (index: number): void => {
-      const address = ordered[index];
+    const startNext = (): void => {
+      clearTimeout(timer);
+      const address = ordered[next];
       if (!address || settled) return;
-      started++;
+      next++;
       pending++;
+      if (next < ordered.length) timer = setTimeout(startNext, delayMs);
       void connect(address).then(
         (result) => {
           if (settled) return;
           settled = true;
-          for (const timer of timers) clearTimeout(timer);
+          clearTimeout(timer);
           resolve(result);
         },
         (error: unknown) => {
           pending--;
-          lastError = error;
-          finish(lastError);
+          if (next < ordered.length) {
+            startNext();
+            return;
+          }
+          if (settled || pending !== 0) return;
+          settled = true;
+          reject(error instanceof Error ? error : new Error(String(error)));
         },
       );
     };
 
-    start(0);
-    for (let i = 1; i < ordered.length; i++) {
-      timers.push(setTimeout(() => start(i), delayMs * i));
-    }
+    startNext();
   });
 }

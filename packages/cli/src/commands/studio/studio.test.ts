@@ -19,7 +19,7 @@ function fakeContext(overrides: { flags?: Record<string, unknown>; signal?: Abor
     cwd: '/work',
     stdout: { write: stdoutWrite },
     stderr: { write: stderrWrite },
-    stdin: { setEncoding: vi.fn(), on: vi.fn() },
+    stdin: { setEncoding: vi.fn(), on: vi.fn(), removeListener: vi.fn(), pause: vi.fn() },
     isTty: false,
     columns: 80,
     now: () => new Date(),

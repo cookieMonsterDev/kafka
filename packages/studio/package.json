@@ -20,7 +20,12 @@
     "studio",
     "ui",
     "admin",
-    "typescript"
+    "typescript",
+    "kafka-ui",
+    "kafka-gui",
+    "kafka-browser",
+    "web-ui",
+    "kafka-admin"
   ],
   "engines": {
     "node": ">=24.0.0",

@@ -19,7 +19,12 @@
     "apache-kafka",
     "cli",
     "admin",
-    "typescript"
+    "typescript",
+    "kafka-cli",
+    "kafka-admin",
+    "kafka-tools",
+    "command-line",
+    "kafkajs-alternative"
   ],
   "engines": {
     "node": ">=24.0.0",

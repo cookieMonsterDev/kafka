@@ -41,6 +41,7 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
     <title>{documentTitle}</title>
     <meta name="description" content={description ?? fallbackDescription} />
     <link rel="canonical" href={canonicalUrl} />
+    <link rel="sitemap" href={withBase('/sitemap.xml')} />
     <meta property="og:title" content={documentTitle} />
     <meta property="og:description" content={description ?? fallbackDescription} />
     <meta property="og:url" content={canonicalUrl} />

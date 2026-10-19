@@ -1,7 +1,7 @@
 {
   "name": "@cookiemonsterdev/kafka-core",
   "version": "2.5.1",
-  "description": "TypeScript Apache Kafka client for Node.js. Speaks the Kafka wire protocol directly.",
+  "description": "TypeScript Apache Kafka client for Node.js and Bun. A maintained kafkajs alternative that speaks the Kafka wire protocol directly.",
   "type": "module",
   "license": "MIT",
   "author": "Mykhailo Toporkov",
@@ -21,7 +21,18 @@
     "producer",
     "consumer",
     "admin",
-    "typescript"
+    "typescript",
+    "kafkajs",
+    "kafkajs-alternative",
+    "kafka-client",
+    "kafka-producer",
+    "kafka-consumer",
+    "kafka-admin",
+    "nodejs",
+    "bun",
+    "kraft",
+    "kip-848",
+    "share-groups"
   ],
   "engines": {
     "node": ">=24.0.0",

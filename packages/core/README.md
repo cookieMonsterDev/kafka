@@ -12,6 +12,10 @@ so it works against **Kafka 0.10 and up**. Offsets are `bigint` (Kafka offsets c
 JS `number` represents exactly), and its `.d.ts` types are generated from source rather than
 hand-maintained.
 
+A maintained alternative to [kafkajs](https://github.com/tulios/kafkajs), which has not shipped a
+release since 2023: the API keeps the same shape, so most code moves over with an import change.
+See [Migrating from kafkajs](https://cookiemonsterdev.github.io/kafka/docs/core/migration/from-kafkajs/).
+
 This package is the library at the center of the [kafka](https://github.com/cookieMonsterDev/kafka)
 workspace, published to npm as
 [`@cookiemonsterdev/kafka-core`](https://www.npmjs.com/package/@cookiemonsterdev/kafka-core).

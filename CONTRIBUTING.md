@@ -143,7 +143,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
 3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`). The [Security workflow](.github/workflows/security.yml) scans `pnpm-lock.yaml` with [OSV-Scanner](https://google.github.io/osv-scanner/) and fails on any known-vulnerable or malicious dependency. Fix it by upgrading; if that is not possible yet, add a reviewed entry with a `reason` and `ignoreUntil` date to [`osv-scanner.toml`](osv-scanner.toml).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.

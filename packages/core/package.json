@@ -1,6 +1,6 @@
 {
   "name": "@cookiemonsterdev/kafka-core",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "description": "TypeScript Apache Kafka client for Node.js and Bun. A maintained kafkajs alternative that speaks the Kafka wire protocol directly.",
   "type": "module",
   "license": "MIT",

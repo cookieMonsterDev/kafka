@@ -25,6 +25,7 @@
     "docs:generate:cli": "node scripts/generate-cli-docs.mjs",
     "docs:generate:cli:check": "node scripts/generate-cli-docs.mjs --check",
     "theme:check": "node scripts/check-theme-drift.mjs",
+    "skills:validate": "intent validate",
     "seo:indexnow": "node scripts/submit-search-index.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
@@ -40,6 +41,7 @@
     "@semantic-release/github": "^12.0.10",
     "@semantic-release/npm": "^13.2.0",
     "@semantic-release/release-notes-generator": "^14.1.1",
+    "@tanstack/intent": "^0.5.6",
     "@vitest/eslint-plugin": "^1.6.28",
     "eslint": "^10.13.0",
     "husky": "^9.1.7",

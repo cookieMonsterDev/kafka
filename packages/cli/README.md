@@ -55,6 +55,9 @@ bunx --bun kafka --version
 
 See [Bun](../docs/src/content/docs/core/reference/bun.md) for what else differs on Bun.
 
+The package also ships a `kafka-cli` skill for coding agents under `skills/`; see
+[Agent skills](../docs/src/content/docs/core/start/agent-skills.md).
+
 ## Try it
 
 Every command that connects takes `--brokers` directly — a single `localhost:9092`, or a

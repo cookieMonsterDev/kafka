@@ -19,7 +19,8 @@
     "config-loader",
     "typescript",
     "kafka",
-    "kafka-config"
+    "kafka-config",
+    "tanstack-intent"
   ],
   "engines": {
     "node": ">=24.0.0",
@@ -40,6 +41,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md"
   ],
   "scripts": {

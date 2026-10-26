@@ -24,7 +24,8 @@
     "kafka-admin",
     "kafka-tools",
     "command-line",
-    "kafkajs-alternative"
+    "kafkajs-alternative",
+    "tanstack-intent"
   ],
   "engines": {
     "node": ">=24.0.0",
@@ -48,6 +49,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md"
   ],
   "scripts": {

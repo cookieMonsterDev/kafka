@@ -10,6 +10,9 @@ export default tseslint.config(
       '**/coverage/**',
       '**/.astro/**',
       '**/node_modules/**',
+      // Gitignored agent tooling; .claude/worktrees holds full checkouts of the repo.
+      '.claude/**',
+      '.agents/**',
       'packages/docs/**',
       'scripts/**',
       'packages/core/test/fixtures/**',

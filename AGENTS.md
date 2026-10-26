@@ -44,6 +44,7 @@ or **N/A** with a one-line reason. Do not skip silently.
    - Workflow, commands, or package usage: the relevant package README and/or [CONTRIBUTING.md](CONTRIBUTING.md).
    - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
    - UI change in `packages/docs` (layout, component, or CSS): follow **Documentation site → Accessibility** in [CONTRIBUTING.md](CONTRIBUTING.md). Keyboard, names, focus, contrast, and `prefers-reduced-motion` are in scope for the PR, not a follow-up.
+   - Public API, defaults, CLI commands, or setup changes: update the agent skill whose `sources` list the changed doc page or file (`packages/<package>/skills/*/SKILL.md`), then run `pnpm skills:validate`. See **Agent skills** in [CONTRIBUTING.md](CONTRIBUTING.md).
 5. **Exports** — New public surface is re-exported from `packages/core/src/index.ts` only. Types come from `tsc --emitDeclarationOnly`.
 6. **Verification** — Run what the change needs from the repo root:
    - `pnpm lint`, `pnpm format:check`, `pnpm typecheck`

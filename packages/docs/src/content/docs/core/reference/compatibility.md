@@ -17,7 +17,7 @@ and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
 
 Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, and 4.3**.
 Default `KAFKA_VERSION` remains **4.0**. Compose files also exist for 4.1 and
-4.2 (`apache/kafka:4.1.2` / `4.2.1` / `4.3.1`); CI PRs run 4.3 and default-branch
+4.2 (`apache/kafka:4.1.2` / `4.2.2` / `4.3.2`); CI PRs run 4.3 and default-branch
 pushes run the full matrix.
 
 The client talks to **4.0 and 4.3** via overlap (Produce 3–13, Fetch 4–18,

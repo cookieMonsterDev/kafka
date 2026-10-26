@@ -41,7 +41,7 @@ is too old for a _used_ API throws `KafkaServerDoesNotSupportApiKey`.
 | Kafka 2.x     | RecordBatch                           | ZSTD from 2.1, rack-aware fetch from 2.2                                         |
 | Kafka 3.x     | RecordBatch, KRaft                    | Same client APIs as 2.x                                                          |
 | Kafka 4.0     | RecordBatch, KRaft only on the broker | Talks via overlap (Produce 3–13, Fetch 4–18)                                     |
-| Kafka 4.1–4.3 | RecordBatch, KRaft only on the broker | Compose files in tree (`apache/kafka:4.1.2` / `4.2.1` / `4.3.1`); CI PRs run 4.3 |
+| Kafka 4.1–4.3 | RecordBatch, KRaft only on the broker | Compose files in tree (`apache/kafka:4.1.2` / `4.2.2` / `4.3.2`); CI PRs run 4.3 |
 
 Integration tests cover 0.10, 0.11, 1.1, 2.4, 3.6, 4.0, and 4.3. Kafka 4.0
 brokers no longer run ZooKeeper. The client still encodes older Produce/Fetch

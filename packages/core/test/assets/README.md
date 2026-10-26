@@ -34,17 +34,17 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 `KAFKA_VERSION=0.11` uses `confluentinc/cp-kafka:3.3.3` (Kafka 0.11) plus ZooKeeper. Produce negotiates v3 and Fetch v5 (RecordBatch, headers, transactions). There is no `SaslAuthenticate` API — SASL uses handshake + raw bytes. CreatePartitions, DeleteGroups, and DescribeConfigs synonyms are absent. CreateTopics without an explicit `numPartitions` sends `-1` (broker default), which this broker rejects; tests pass a positive partition count.
 
-`KAFKA_VERSION=1.1` uses `confluentinc/cp-kafka:4.1.3` (Kafka 1.1). Produce negotiates v5 and Fetch v7 (incremental fetch sessions). SaslAuthenticate v0, CreatePartitions, DeleteGroups, and DescribeConfigs v1 synonyms are available. SaslAuthenticate `sessionLifetimeMs` arrives later (v1 / Kafka 2.0).
+`KAFKA_VERSION=1.1` uses `confluentinc/cp-kafka:4.1.4` (Kafka 1.1). Produce negotiates v5 and Fetch v7 (incremental fetch sessions). SaslAuthenticate v0, CreatePartitions, DeleteGroups, and DescribeConfigs v1 synonyms are available. SaslAuthenticate `sessionLifetimeMs` arrives later (v1 / Kafka 2.0).
 
-`KAFKA_VERSION=2.4` uses `confluentinc/cp-kafka:5.4.2` (Kafka 2.4) plus ZooKeeper. The image is amd64-only; Compose sets `platform: linux/amd64`. SCRAM users are registered after boot by `scripts/create-scram-credentials.sh`. SSL uses `certs/kafka.server.*-java8.p12` (OpenSSL 3 `-legacy`) because Java 8 cannot load the KRaft PKCS12 files. The authorizer is `kafka.security.auth.SimpleAclAuthorizer`. The 0.11 and 1.1 stacks share that cert/JAAS/authorizer setup.
+`KAFKA_VERSION=2.4` uses `confluentinc/cp-kafka:5.4.10` (Kafka 2.4) plus ZooKeeper. The image is amd64-only; Compose sets `platform: linux/amd64`. SCRAM users are registered after boot by `scripts/create-scram-credentials.sh`. SSL uses `certs/kafka.server.*-java8.p12` (OpenSSL 3 `-legacy`) because Java 8 cannot load the KRaft PKCS12 files. The authorizer is `kafka.security.auth.SimpleAclAuthorizer`. The 0.11 and 1.1 stacks share that cert/JAAS/authorizer setup.
 
-`KAFKA_VERSION=3.6` uses `apache/kafka:3.9.1`. Official `apache/kafka` images start at 3.7.0; 3.7.2 omits SCRAM credentials from `kafka-storage.sh format` ([KAFKA-17636](https://issues.apache.org/jira/browse/KAFKA-17636)). Combined broker/controller mode matches the 4.0 stack (`apache/kafka:4.0.0`).
+`KAFKA_VERSION=3.6` uses `apache/kafka:3.9.2`. Official `apache/kafka` images start at 3.7.0; 3.7.2 omits SCRAM credentials from `kafka-storage.sh format` ([KAFKA-17636](https://issues.apache.org/jira/browse/KAFKA-17636)). Combined broker/controller mode matches the 4.0 stack (`apache/kafka:4.0.2`).
 
 `KAFKA_VERSION=4.1` uses `apache/kafka:4.1.2` (KRaft combined broker/controller). Same 3-broker layout, ports, certs, JAAS, and `format-and-start.sh` as the 4.0 stack.
 
-`KAFKA_VERSION=4.2` uses `apache/kafka:4.2.1` (KRaft). Same layout as 4.0.
+`KAFKA_VERSION=4.2` uses `apache/kafka:4.2.2` (KRaft). Same layout as 4.0.
 
-`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.1` (KRaft). Same layout as 4.0. This is the current docs line; PRs include it in the integration matrix.
+`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.2` (KRaft). Same layout as 4.0. This is the current docs line; PRs include it in the integration matrix.
 
 OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
 

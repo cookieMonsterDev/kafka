@@ -31,3 +31,9 @@ minimumReleaseAge: 1440
 allowBuilds:
   esbuild: true
   kerberos: false
+# Reviewed exceptions for `pnpm audit` in the Security workflow (.github/workflows/security.yml).
+# Keep in sync with osv-scanner.toml, which holds each entry's reason and expiry date.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-vfj7-8cjw-p6xm
+    - GHSA-rj75-hqrm-r3gf

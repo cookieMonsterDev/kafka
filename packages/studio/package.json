@@ -25,7 +25,8 @@
     "kafka-gui",
     "kafka-browser",
     "web-ui",
-    "kafka-admin"
+    "kafka-admin",
+    "tanstack-intent"
   ],
   "engines": {
     "node": ">=24.0.0",
@@ -50,6 +51,7 @@
   "files": [
     "dist",
     "!dist/**/*.map",
+    "skills",
     "README.md"
   ],
   "scripts": {

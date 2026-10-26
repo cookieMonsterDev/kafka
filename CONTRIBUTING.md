@@ -229,6 +229,22 @@ pnpm --filter @cookiemonsterdev/kafka-docs dev
 
 How to add a page, shadcn/ui notes, and layout: [`packages/docs/README.md`](packages/docs/README.md).
 
+### Agent skills
+
+`@cookiemonsterdev/kafka-core`, `@cookiemonsterdev/kafka-cli`, `@cookiemonsterdev/kafka-studio`, and
+`@cookiemonsterdev/kafka-config` publish [Agent Skills](https://agentskills.io) from `packages/<package>/skills/<skill>/SKILL.md`,
+following the [TanStack Intent](https://tanstack.com/intent/latest) conventions (the
+`tanstack-intent` keyword and `skills` in each package's `files`). Each skill lists the doc pages
+and source files it is derived from under `sources`. When a change touches one of those, update
+the skill in the same PR. Keep a `SKILL.md` short and procedural (Setup → Core Patterns → Common
+Mistakes → Completion → References), and move detail into `references/*.md`.
+
+```sh
+pnpm skills:validate   # also runs in CI
+```
+
+The page users read is `packages/docs/src/content/docs/core/start/agent-skills.md`.
+
 ### Accessibility
 
 The docs site and the studio UI should both meet **WCAG 2.2 Level AA**. Treat that as in-scope

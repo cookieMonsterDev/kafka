@@ -8,7 +8,7 @@ name: kafka-studio-dev
 
 services:
   kafka:
-    image: apache/kafka:4.3.1
+    image: apache/kafka:4.3.2
     container_name: kafka-studio-dev
     ports:
       - '9092:9092'

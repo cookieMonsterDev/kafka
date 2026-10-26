@@ -4,7 +4,7 @@
 name: kafka-core-kraft-oauthbearer
 
 x-broker-common: &broker-common
-  image: apache/kafka:4.0.0
+  image: apache/kafka:4.0.2
   restart: unless-stopped
   entrypoint: ['/usr/local/bin/format-and-start.sh']
   volumes:

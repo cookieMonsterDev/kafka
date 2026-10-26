@@ -223,7 +223,7 @@ export function CreateTopicForm({ onSubmit, onCancel, pending = false }: CreateT
           Cancel
         </Button>
         <form.Subscribe selector={(state) => [state.canSubmit] as const}>
-          {([canSubmit]) => (
+          {([canSubmit]: readonly [boolean]) => (
             <Button type="submit" disabled={!canSubmit || pending}>
               {pending ? 'Creating…' : 'Create topic'}
             </Button>

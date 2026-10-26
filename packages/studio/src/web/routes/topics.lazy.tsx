@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type MouseEvent } from 'react';
 import { Layers, Plus, SearchX } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createLazyRoute, useNavigate } from '@tanstack/react-router';
@@ -36,7 +36,7 @@ const columns = columnHelper.columns([
           params={{ name: info.row.original.name }}
           title={info.getValue()}
           className="block truncate rounded-sm font-medium outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event: MouseEvent) => event.stopPropagation()}
         >
           {info.getValue()}
         </Link>

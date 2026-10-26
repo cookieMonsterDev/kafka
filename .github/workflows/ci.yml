@@ -82,6 +82,8 @@ jobs:
         run: pnpm docs:generate:cli:check
       - if: matrix.primary
         run: pnpm theme:check
+      - if: matrix.primary
+        run: pnpm skills:validate
 
   bun:
     name: Unit (Bun)

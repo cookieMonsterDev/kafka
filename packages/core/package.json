@@ -32,7 +32,8 @@
     "bun",
     "kraft",
     "kip-848",
-    "share-groups"
+    "share-groups",
+    "tanstack-intent"
   ],
   "engines": {
     "node": ">=24.0.0",
@@ -53,6 +54,7 @@
   },
   "files": [
     "dist",
+    "skills",
     "README.md"
   ],
   "scripts": {

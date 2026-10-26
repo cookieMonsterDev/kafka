@@ -114,6 +114,7 @@ To keep pre-2.0 key routing, pass `createPartitioner: Partitioners.LegacyPartiti
 | [Security](../docs/src/content/docs/core/guides/security.md)                    | TLS and SASL, including GSSAPI                   |
 | [Compatibility](../docs/src/content/docs/core/reference/compatibility.md)       | Defaults vs the Java client, missing APIs        |
 | [Breaking changes](../docs/src/content/docs/core/migration/breaking-changes.md) | Offsets, MessageSet, ZSTD, env vars              |
+| [Agent skills](../docs/src/content/docs/core/start/agent-skills.md)             | Coding-agent skills shipped in `skills/`         |
 
 Local site: `pnpm --filter @cookiemonsterdev/kafka-docs dev` → <http://localhost:4321>
 

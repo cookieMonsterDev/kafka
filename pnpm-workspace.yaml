@@ -6,10 +6,10 @@ packages:
 # Packages reference these with "typescript": "catalog:".
 catalog:
   typescript: ^7.0.2
-  astro: ^7.3.8
-  vite: ^8.3.4
-  vitest: ^5.0.4
-  '@vitest/coverage-v8': ^5.0.4
+  astro: ^7.4.2
+  vite: ^8.3.5
+  vitest: ^5.0.5
+  '@vitest/coverage-v8': ^5.0.5
   '@types/node': ^26.6.5
 
 # Link local packages into node_modules instead of fetching them from the registry.

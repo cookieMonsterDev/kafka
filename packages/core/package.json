@@ -89,14 +89,10 @@
     "snappyjs": "^0.7.0"
   },
   "peerDependencies": {
-    "@opentelemetry/api": "^1.9.0",
-    "kerberos": "*"
+    "@opentelemetry/api": "^1.9.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
-      "optional": true
-    },
-    "kerberos": {
       "optional": true
     }
   }

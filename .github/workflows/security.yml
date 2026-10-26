@@ -1,0 +1,55 @@
+# Scans pnpm-lock.yaml against OSV (https://osv.dev), which aggregates GitHub, npm and other
+# advisories plus the OpenSSF malicious-packages feed (MAL-* ids), so one pass catches both
+# vulnerable versions and known-malicious releases. Trivy was evaluated but its pnpm parser
+# only resolves a handful of this workspace's lockfile v9 entries.
+#
+# `pnpm audit` checks the same lockfile against the npm registry's advisory database.
+#
+# Any finding fails either job. Reviewed exceptions live in osv-scanner.toml, each with a reason
+# and an expiry, mirrored by GHSA id under auditConfig in pnpm-workspace.yaml. The weekly run
+# catches advisories published after the lockfile last changed.
+name: Security
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Dependency scan (OSV)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned by digest: a scanner runs with the repository checked out, so a retagged image
+      # must not change what runs here.
+      - name: Scan lockfile
+        run: |
+          docker run --rm -v "${GITHUB_WORKSPACE}:/src:ro" -w /src \
+            ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 \
+            scan source --config=osv-scanner.toml --lockfile=pnpm-lock.yaml
+
+  audit:
+    name: Dependency audit (pnpm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      # Audit reads only the lockfile, so dependencies are not installed. Reviewed exceptions
+      # live under auditConfig in pnpm-workspace.yaml.
+      - uses: pnpm/setup@v2
+        with:
+          runtime: node@26
+          install: false
+      - run: pnpm audit

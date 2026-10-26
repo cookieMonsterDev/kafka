@@ -1,0 +1,13 @@
+# Reviewed exceptions for the Security workflow (.github/workflows/security.yml).
+# Every entry needs a reason and an ignoreUntil date; the scan fails again once it passes,
+# forcing a re-review. Never ignore a MAL-* (malicious package) id.
+
+[[IgnoredVulns]]
+id = "GHSA-vfj7-8cjw-p6xm"
+ignoreUntil = 2027-01-20
+reason = "braces@3.0.3 via micromatch, only in release tooling (semantic-release); no patched version yet."
+
+[[IgnoredVulns]]
+id = "GHSA-rj75-hqrm-r3gf"
+ignoreUntil = 2027-01-20
+reason = "postcss-selector-parser@6.0.10 via @tailwindcss/typography, docs-site build only on trusted CSS; the fix is 7.x, which that plugin does not accept."

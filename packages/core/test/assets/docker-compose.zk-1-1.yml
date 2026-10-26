@@ -1,7 +1,7 @@
 # 3-broker Kafka 1.1 ZooKeeper cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
-# Image is Confluent 4.1.3 (Kafka 1.1). Host ports match the KRaft stacks: 9092/9095/9098
+# Image is Confluent 4.1.4 (Kafka 1.1). Host ports match the KRaft stacks: 9092/9095/9098
 # PLAINTEXT, 9093/9096/9099 SSL, 9094/9097/9100 SASL_SSL.
-# Confluent 4.1.3 is amd64-only; Apple Silicon needs qemu via platform: linux/amd64.
+# Confluent 4.1.4 is amd64-only; Apple Silicon needs qemu via platform: linux/amd64.
 # Fetch incremental sessions (v7), DeleteGroups, DescribeConfigs synonyms, CreatePartitions,
 # and SaslAuthenticate (v0, no sessionLifetimeMs). SCRAM users are created after start by
 # scripts/create-scram-credentials.sh.
@@ -9,7 +9,7 @@
 name: kafka-core-zk-1-1
 
 x-broker-common: &broker-common
-  image: confluentinc/cp-kafka:4.1.3
+  image: confluentinc/cp-kafka:4.1.4
   platform: linux/amd64
   restart: unless-stopped
   depends_on:
@@ -56,7 +56,7 @@ x-broker-common: &broker-common
 
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper:4.1.3
+    image: confluentinc/cp-zookeeper:4.1.4
     platform: linux/amd64
     hostname: zookeeper
     container_name: kafka-core-zk-1-1-zookeeper

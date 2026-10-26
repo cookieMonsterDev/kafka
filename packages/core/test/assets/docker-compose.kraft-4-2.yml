@@ -5,7 +5,7 @@
 name: kafka-core-kraft-4-2
 
 x-broker-common: &broker-common
-  image: apache/kafka:4.2.1
+  image: apache/kafka:4.2.2
   restart: unless-stopped
   entrypoint: ['/usr/local/bin/format-and-start.sh']
   volumes:

@@ -1,6 +1,6 @@
 # 3-broker Kafka 3.x KRaft cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
 # Official apache/kafka images start at 3.7.0; there is no 3.6.x tag.
-# 3.7.2 drops kafka-storage --add-scram records (KAFKA-17636); 3.9.1 is the
+# 3.7.2 drops kafka-storage --add-scram records (KAFKA-17636); 3.9.2 is the
 # latest 3.x image that boots combined broker/controller and keeps SCRAM.
 # Same host ports as docker-compose.kraft.yml. Reuse format-and-start.sh:
 # 3.9 Formatter accepts --cluster-id/--add-scram like 4.0 (no --standalone).
@@ -8,7 +8,7 @@
 name: kafka-core-kraft-3-6
 
 x-broker-common: &broker-common
-  image: apache/kafka:3.9.1
+  image: apache/kafka:3.9.2
   restart: unless-stopped
   entrypoint: ['/usr/local/bin/format-and-start.sh']
   volumes:

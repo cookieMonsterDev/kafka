@@ -63,11 +63,17 @@ const kafka = new Kafka({
 
 Without `gssProvider`, the client loads the optional [`kerberos`](https://www.npmjs.com/package/kerberos)
 package (`>=7`, Node 20+ prebuilds) and runs GSS token
-exchange plus RFC 4752 wrap. Install it next to the client:
+exchange plus RFC 4752 wrap. It is loaded at runtime only and is not declared in the client's
+`package.json`, so your package manager will not install it or check its version for you. Install
+it next to the client:
 
 ```sh
 npm install kerberos
 ```
+
+Under Yarn Plug'n'Play, also declare it for the client in `.yarnrc.yml`
+(`packageExtensions: { '@cookiemonsterdev/kafka-core@*': { dependencies: { kerberos: '>=7' } } }`),
+since Plug'n'Play only lets a package load what it declares.
 
 `keytab` / `krb5` are applied as `KRB5_CLIENT_KTNAME` / `KRB5_KTNAME` and
 `KRB5_CONFIG` for the duration of each GSS round (process-wide; do not run

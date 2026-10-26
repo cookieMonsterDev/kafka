@@ -23,12 +23,15 @@ const kafka = new Kafka({
 });
 ```
 
-Without `gssProvider`, the client loads the optional `kerberos` package (version 7 or newer).
-Install it next to the client:
+Without `gssProvider`, the client loads the optional `kerberos` package (version 7 or newer) at
+runtime. It is not declared in the client's `package.json`, so add it to the project yourself:
 
 ```sh
 npm install kerberos
 ```
+
+Under Yarn Plug'n'Play, also add a `packageExtensions` entry in `.yarnrc.yml` that gives
+`@cookiemonsterdev/kafka-core@*` a `kerberos: '>=7'` dependency; otherwise the client cannot load it.
 
 `keytab` and `krb5` are applied through process-wide environment variables during each GSS round.
 Do not run concurrent GSSAPI clients with different keytabs in one process. To drive GSS tokens

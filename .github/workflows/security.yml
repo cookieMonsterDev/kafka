@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v7
       # Audit reads only the lockfile, so dependencies are not installed. Reviewed exceptions
       # live under auditConfig in pnpm-workspace.yaml.
-      - uses: pnpm/setup@v2
+      - uses: pnpm/setup@v3
         with:
           runtime: node@26
           install: false

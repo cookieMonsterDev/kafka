@@ -11,3 +11,13 @@ reason = "braces@3.0.3 via micromatch, only in release tooling (semantic-release
 id = "GHSA-rj75-hqrm-r3gf"
 ignoreUntil = 2027-01-20
 reason = "postcss-selector-parser@6.0.10 via @tailwindcss/typography, docs-site build only on trusted CSS; the fix is 7.x, which that plugin does not accept."
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-02
+reason = "minimatch@3.1.5/10.2.6 via eslint, semantic-release and shadcn's ts-morph, dev and docs tooling only on trusted globs; needs optimizationLevel >= 2 (default 1); the fix is 11.x, which those consumers do not accept."
+
+[[IgnoredVulns]]
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-02-02
+reason = "deepmerge@4.3.1 via the shadcn CLI, docs and studio component tooling only on trusted registry data; no patched version yet."

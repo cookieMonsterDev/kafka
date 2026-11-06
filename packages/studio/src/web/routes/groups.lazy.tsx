@@ -1,3 +1,4 @@
+import { RadioGroup } from 'radix-ui';
 import { useMemo, useState } from 'react';
 import { SearchX, Users } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -25,23 +26,26 @@ const KIND_ROUTE: Record<GroupKind, '/groups/$groupId' | '/share-groups/$groupId
 
 function KindToggle({ kind, onChange }: { readonly kind: GroupKind; readonly onChange: (kind: GroupKind) => void }) {
   return (
-    <div role="radiogroup" aria-label="Group protocol" className="flex gap-1 rounded-lg border border-border p-1">
+    <RadioGroup.Root
+      value={kind}
+      onValueChange={(value) => onChange(value as GroupKind)}
+      orientation="horizontal"
+      aria-label="Group protocol"
+      className="flex flex-wrap gap-1 rounded-lg border border-border p-1"
+    >
       {(Object.keys(KIND_LABEL) as GroupKind[]).map((value) => (
-        <button
+        <RadioGroup.Item
           key={value}
-          type="button"
-          role="radio"
-          aria-checked={kind === value}
-          onClick={() => onChange(value)}
+          value={value}
           className={cn(
             'rounded-md px-3 py-1 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
             kind === value ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
           {KIND_LABEL[value]}
-        </button>
+        </RadioGroup.Item>
       ))}
-    </div>
+    </RadioGroup.Root>
   );
 }
 

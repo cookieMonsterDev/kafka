@@ -76,11 +76,11 @@ describe('console read dispatcher', () => {
 
   it('provides help locally', async () => {
     const fetch = mockResponse({});
-    await expect(runConsoleCommand('help')).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ command: 'topic list' })]),
-    );
-    await expect(runConsoleCommand('topic describe --help')).resolves.toEqual(
-      expect.objectContaining({ usage: 'topic describe <topic>' }),
+    const help = await runConsoleCommand('help');
+    expect(help).toEqual(expect.stringContaining('topic list'));
+    expect(help).toEqual(expect.stringContaining('Tab completes'));
+    await expect(runConsoleCommand('topic describe --help')).resolves.toBe(
+      'Usage: topic describe <topic>\nInspect partitions, offsets and configuration',
     );
     expect(fetch).not.toHaveBeenCalled();
   });

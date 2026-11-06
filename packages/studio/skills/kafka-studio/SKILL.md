@@ -79,7 +79,9 @@ docker compose -f docker-compose.dev.yml down -v   # tear down and drop data
 - Open **Console** and run `help`, `topic list`, `topic describe orders`, or `group offsets readers`.
 - Use `config describe --type topic orders` for topic config; append `--help` for usage.
 - Tab accepts command/resource suggestions. Escape dismisses them; arrows then recall history.
-- Enter runs. Escape then Tab, or Shift+Tab, leaves the editor.
+- Enter runs. Escape then Tab, or Shift+Tab, leaves the prompt. Ctrl+L clears terminal output.
+- The bottom prompt stays fixed; suggestions overlay the chronological transcript. Each command
+  has collapsible output and copy; the header copies or clears the full transcript.
 - Commands use the active connection. Only the listed inspection commands are supported, including
   in `--read-only` mode; shell execution, file paths, connection overrides and mutations are unavailable.
 - Results (latest 20) and unique history (latest 50) stay in memory and clear on navigation or profile switch.

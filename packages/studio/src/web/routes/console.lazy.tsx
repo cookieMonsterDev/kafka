@@ -2,13 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { createLazyRoute } from '@tanstack/react-router';
-import { Play, Terminal } from 'lucide-react';
+import { Check, CircleAlert, Copy, LoaderCircle, Play, Terminal, Trash2 } from 'lucide-react';
 import { PageLayout } from '../components/layout/page';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { ErrorState } from '../components/ui/error-state';
-import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { runConsoleCommand } from '../lib/console-api';
 import {
@@ -61,9 +58,12 @@ function ConsoleSession({ profile }: { readonly profile: string | null }) {
   const draft = useRef('');
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const followOutput = useRef(true);
   const running = useRef(false);
   const nextId = useRef(0);
-  const [pending, setPending] = useState(false);
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
+  const pending = pendingCommand !== null;
   const [results, setResults] = useState<ConsoleResult[]>([]);
   const [status, setStatus] = useState('Ready. Run help to see available commands.');
   const topics = useQuery({ queryKey: ['console', profile, 'topics'], queryFn: listTopics });
@@ -81,8 +81,26 @@ function ConsoleSession({ profile }: { readonly profile: string | null }) {
   const selected = suggestions[activeIndex];
 
   useEffect(() => {
-    suggestionsRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+    const list = suggestionsRef.current;
+    const option = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (list === null || option === undefined || option === null) return;
+    // Scroll only the menu: scrollIntoView can also move the transcript or the whole page.
+    if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+    else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
+    }
   }, [activeIndex, line, cursor, suggestionsOpen]);
+
+  useEffect(() => {
+    const transcript = transcriptRef.current;
+    if (transcript !== null && followOutput.current) transcript.scrollTop = transcript.scrollHeight;
+  }, [results, pendingCommand]);
+
+  function clearOutput(): void {
+    setResults([]);
+    setStatus('Terminal cleared.');
+    followOutput.current = true;
+  }
 
   function updateLine(value: string, position = value.length): void {
     setLine(value);
@@ -102,7 +120,9 @@ function ConsoleSession({ profile }: { readonly profile: string | null }) {
     const command = line.trim();
     if (command === '' || running.current) return;
     running.current = true;
-    setPending(true);
+    setPendingCommand(command);
+    followOutput.current = true;
+    updateLine('');
     setSuggestionsOpen(false);
     setHistory((previous) => [command, ...previous.filter((entry) => entry !== command)].slice(0, 50));
     setHistoryIndex(-1);
@@ -112,21 +132,27 @@ function ConsoleSession({ profile }: { readonly profile: string | null }) {
     let output: string;
     let failed = false;
     try {
-      output = JSON.stringify(await runConsoleCommand(command), null, 2) ?? 'null';
+      const response = await runConsoleCommand(command);
+      output = typeof response === 'string' ? response : (JSON.stringify(response, null, 2) ?? 'null');
     } catch (error) {
       failed = true;
       output = error instanceof Error ? error.message : String(error);
     }
     const durationMs = Math.round(performance.now() - started);
     const result = { id: nextId.current++, command, output, failed, durationMs };
-    setResults((previous) => [result, ...previous].slice(0, 20));
+    setResults((previous) => [...previous, result].slice(-20));
     setStatus(`${command} ${failed ? 'failed' : 'completed'} in ${String(durationMs)} ms.`);
-    updateLine('');
     running.current = false;
-    setPending(false);
+    setPendingCommand(null);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+      event.preventDefault();
+      clearOutput();
+      setSuggestionsOpen(false);
+      return;
+    }
     if (pending) return;
     if (event.key === 'Escape') {
       setSuggestionsOpen(false);
@@ -148,210 +174,253 @@ function ConsoleSession({ profile }: { readonly profile: string | null }) {
     }
   }
 
+  const resourceWarning =
+    topics.isError || groups.isError
+      ? 'Live name suggestions unavailable. Enter a topic or group name manually.'
+      : undefined;
+  const hint =
+    resourceWarning ?? (commandHelp === undefined ? 'Type help to explore commands.' : `Usage: ${commandHelp.usage}`);
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Terminal className="size-4 text-primary" aria-hidden="true" />
-        <span>
-          Connection: <strong>{profile ?? 'Direct connection'}</strong>
-        </span>
-        <Badge variant="outline">Read-only commands</Badge>
-      </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Kafka console</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Inspect Kafka with CLI-style commands using the active Studio connection.
-          </p>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void execute();
-            }}
-            className="flex flex-wrap gap-2"
+    <section
+      aria-label="Kafka terminal"
+      className="flex h-[clamp(24rem,calc(100dvh-9rem),52rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background"
+    >
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/20 px-4">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <Terminal className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <h2 className="shrink-0 font-medium">Kafka console</h2>
+          <span className="truncate text-muted-foreground" title={`Connection: ${profile ?? 'Direct connection'}`}>
+            {profile ?? 'Direct connection'}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="mr-2 hidden text-xs text-muted-foreground sm:inline">Read-only</span>
+          <TerminalCopyButton
+            label="Copy terminal transcript"
+            disabled={results.length === 0}
+            getText={() => results.map((result) => `> ${result.command}\n${result.output}`).join('\n\n')}
+          />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Clear terminal output"
+            title="Clear output (Ctrl+L)"
+            disabled={results.length === 0}
+            onClick={clearOutput}
           >
-            <label className="sr-only" htmlFor="console-command">
-              Kafka command
-            </label>
-            <Input
-              ref={inputRef}
-              id="console-command"
-              role="combobox"
-              aria-autocomplete="list"
-              aria-expanded={suggestions.length > 0}
-              aria-controls="console-suggestions"
-              aria-activedescendant={selected === undefined ? undefined : `console-suggestion-${String(activeIndex)}`}
-              aria-describedby="console-shortcuts"
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              readOnly={pending}
-              placeholder="topic describe orders"
-              className="h-10 min-w-48 flex-1 font-mono"
-              value={line}
-              onChange={(event) => {
-                updateLine(event.target.value, event.target.selectionStart ?? event.target.value.length);
-                setHistoryIndex(-1);
-                setSuggestionsOpen(true);
-              }}
-              onSelect={(event) => {
-                setCursor(event.currentTarget.selectionStart ?? line.length);
-                setActiveIndex(0);
-              }}
-              onFocus={() => setSuggestionsOpen(true)}
-              onBlur={() => setSuggestionsOpen(false)}
-              onKeyDown={onKeyDown}
-            />
-            <Button type="submit" disabled={pending || line.trim() === ''}>
-              <Play className="size-4" aria-hidden="true" />
-              {pending ? 'Running…' : 'Run'}
-            </Button>
-          </form>
-          <div
-            id="console-suggestions"
-            ref={suggestionsRef}
-            role="listbox"
-            aria-label="Command suggestions"
-            className={cn('max-h-60 overflow-y-auto', suggestions.length > 0 && 'rounded-lg border border-border p-1')}
-          >
-            {suggestions.map((suggestion, index) => (
-              <div
-                key={suggestion.label}
-                id={`console-suggestion-${String(index)}`}
-                role="option"
-                aria-selected={index === activeIndex}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => accept(suggestion)}
-                className={cn(
-                  'flex cursor-pointer flex-wrap justify-between gap-x-4 rounded-md px-3 py-2 text-sm',
-                  index === activeIndex ? 'bg-accent' : 'hover:bg-muted/50',
-                )}
-              >
-                <span className="break-all font-mono">{suggestion.label}</span>
-                <span className="text-muted-foreground">{suggestion.description}</span>
-              </div>
-            ))}
-          </div>
-          {commandHelp !== undefined && (
-            <p className="text-sm text-muted-foreground">
-              Usage: <code>{commandHelp.usage}</code> · {commandHelp.description}
-            </p>
-          )}
-          <p id="console-shortcuts" className="text-xs text-muted-foreground">
-            Tab accepts a suggestion. Escape dismisses suggestions, then ↑ / ↓ recalls history. Enter runs. Escape or
-            Shift+Tab lets you leave the editor.
-          </p>
-          {(topics.isError || groups.isError) && (
-            <p className="text-sm text-muted-foreground">
-              Live resource suggestions are unavailable for {topics.isError ? 'topics' : ''}
-              {topics.isError && groups.isError ? ' and ' : ''}
-              {groups.isError ? 'groups' : ''}. You can still type a name and run a command.
-            </p>
-          )}
-          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-            {status}
-          </p>
-        </CardContent>
-      </Card>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">
-          Results <span className="text-muted-foreground">({results.length}/20)</span>
-        </h2>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={pending || results.length === 0}
-          onClick={() => {
-            setResults([]);
-            setStatus('Results cleared.');
-          }}
-        >
-          Clear results
-        </Button>
+            <Trash2 aria-hidden="true" />
+          </Button>
+        </div>
       </div>
-      {results.map((result, index) => (
-        <ConsoleResultCard key={result.id} result={result} open={index === 0} />
-      ))}
-      {results.length === 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Start with a command</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {['help', 'cluster info', 'topic list', 'group list'].map((example) => (
-              <Button
-                key={example}
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  updateLine(example);
-                  setSuggestionsOpen(false);
-                  inputRef.current?.focus();
-                }}
-              >
-                {example}
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-      <details className="rounded-xl border border-border bg-card p-4">
-        <summary className="cursor-pointer rounded-sm text-sm font-medium focus-visible:ring-3 focus-visible:ring-ring/50">
-          Supported commands
-        </summary>
-        <ul className="mt-3 grid gap-3 md:grid-cols-2">
-          {CONSOLE_COMMANDS.map((command) => (
-            <li key={command.path}>
-              <code className="text-sm break-all">{command.usage}</code>
-              <p className="text-xs text-muted-foreground">{command.description}</p>
-            </li>
+      <div
+        ref={transcriptRef}
+        role="region"
+        aria-label="Terminal transcript"
+        tabIndex={0}
+        onScroll={(event) => {
+          const transcript = event.currentTarget;
+          followOutput.current = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 24;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto p-4 font-mono text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        <div className="mb-6 text-muted-foreground">
+          <p className="font-semibold text-foreground">Kafka Studio</p>
+          <p>Read-only console · {profile ?? 'Direct connection'}</p>
+          <p>
+            Run <code className="text-foreground">help</code> for commands. Tab completes commands and names.
+          </p>
+        </div>
+        <div className="flex flex-col gap-6">
+          {results.map((result) => (
+            <TerminalEntry key={result.id} result={result} />
           ))}
-        </ul>
-        <p className="mt-4 text-xs text-muted-foreground">
-          An optional kafka prefix and --help are supported. This console supports the listed inspection commands; shell
-          scripts, file arguments, connection overrides and mutations are unavailable. History and results stay in
-          memory for this page and clear when you leave or switch profiles.
+          {pendingCommand !== null && (
+            <div aria-busy="true">
+              <p className="break-all">
+                <span className="mr-2 text-primary" aria-hidden="true">
+                  ❯
+                </span>
+                {pendingCommand}
+              </p>
+              <p className="mt-1 flex items-center gap-2 text-muted-foreground">
+                <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                Running…
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="relative shrink-0 border-t border-border">
+        <div
+          id="console-suggestions"
+          ref={suggestionsRef}
+          role="listbox"
+          aria-label="Command suggestions"
+          hidden={suggestions.length === 0}
+          className="absolute right-3 bottom-full left-3 z-20 mb-2 max-h-52 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl"
+        >
+          {suggestions.map((suggestion, index) => (
+            <div
+              key={suggestion.label}
+              id={`console-suggestion-${String(index)}`}
+              role="option"
+              aria-selected={index === activeIndex}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => accept(suggestion)}
+              className={cn(
+                'flex cursor-pointer items-center justify-between gap-4 rounded-md px-3 py-2 text-sm',
+                index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50',
+              )}
+            >
+              <span className="min-w-0 font-mono whitespace-normal break-all">{suggestion.label}</span>
+              <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:block">
+                {suggestion.description}
+              </span>
+            </div>
+          ))}
+        </div>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void execute();
+          }}
+          className="flex h-14 items-center gap-3 px-4"
+        >
+          <span aria-hidden="true" className="font-mono text-primary">
+            ❯
+          </span>
+          <label className="sr-only" htmlFor="console-command">
+            Kafka command
+          </label>
+          <input
+            ref={inputRef}
+            id="console-command"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={suggestions.length > 0}
+            aria-controls="console-suggestions"
+            aria-activedescendant={selected === undefined ? undefined : `console-suggestion-${String(activeIndex)}`}
+            aria-describedby="console-shortcuts console-hint"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            readOnly={pending}
+            placeholder={pending ? 'Waiting for Kafka…' : 'Enter a command…'}
+            className="h-9 min-w-0 flex-1 rounded-sm bg-transparent px-1 font-mono text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            value={line}
+            onChange={(event) => {
+              updateLine(event.target.value, event.target.selectionStart ?? event.target.value.length);
+              setHistoryIndex(-1);
+              setSuggestionsOpen(event.target.value.trim().length > 0);
+            }}
+            onSelect={(event) => {
+              setCursor(event.currentTarget.selectionStart ?? line.length);
+              setActiveIndex(0);
+            }}
+            onFocus={() => setSuggestionsOpen(line.trim().length > 0 && !pending)}
+            onBlur={() => setSuggestionsOpen(false)}
+            onKeyDown={onKeyDown}
+          />
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Run command"
+            title="Run (Enter)"
+            disabled={pending || line.trim() === ''}
+          >
+            <Play aria-hidden="true" />
+          </Button>
+        </form>
+      </div>
+      <div className="flex h-9 shrink-0 items-center justify-between gap-4 border-t border-border bg-muted/20 px-4 text-xs text-muted-foreground">
+        <p id="console-hint" className="min-w-0 truncate" title={hint}>
+          {hint}
         </p>
+        <span aria-hidden="true" className="hidden shrink-0 sm:inline">
+          Tab complete · ↑↓ history · Ctrl+L clear
+        </span>
+      </div>
+      <p id="console-shortcuts" className="sr-only">
+        Enter runs. Tab accepts a suggestion. Escape dismisses suggestions, then arrows recall history. Escape then Tab,
+        or Shift+Tab, leaves the prompt. Control+L clears output.
+      </p>
+      <p role="status" aria-live="polite" className="sr-only">
+        {status}
+      </p>
+    </section>
+  );
+}
+
+function TerminalEntry({ result }: { readonly result: ConsoleResult }) {
+  return (
+    <div className="relative min-w-0 pr-9">
+      <details open>
+        <summary className="cursor-pointer rounded-sm break-all outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <span aria-hidden="true" className="mr-2 text-primary">
+            ❯
+          </span>
+          <span>{result.command}</span>
+          <span className={cn('ml-3 text-xs', result.failed ? 'text-destructive' : 'text-muted-foreground')}>
+            {result.failed ? 'Failed' : 'Completed'} · {result.durationMs} ms
+          </span>
+        </summary>
+        <pre
+          aria-label={`Output for ${result.command}`}
+          className={cn('mt-2 whitespace-pre-wrap break-all text-xs leading-6', result.failed && 'text-destructive')}
+        >
+          <code>{result.output}</code>
+        </pre>
       </details>
+      <TerminalCopyButton
+        label={`Copy output for ${result.command}`}
+        className="absolute top-0 right-0"
+        getText={() => result.output}
+      />
     </div>
   );
 }
 
-function ConsoleResultCard({ result, open }: { readonly result: ConsoleResult; readonly open: boolean }) {
-  const [copyStatus, setCopyStatus] = useState('Copy JSON');
+function TerminalCopyButton({
+  label,
+  getText,
+  disabled = false,
+  className,
+}: {
+  readonly label: string;
+  readonly getText: () => string;
+  readonly disabled?: boolean;
+  readonly className?: string;
+}) {
+  const [status, setStatus] = useState('');
   async function copy(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(result.output);
-      setCopyStatus('Copied');
+      await navigator.clipboard.writeText(getText());
+      setStatus('Copied.');
     } catch {
-      setCopyStatus('Copy failed');
+      setStatus('Could not copy.');
     }
   }
+  let Icon = Copy;
+  if (status === 'Copied.') Icon = Check;
+  else if (status !== '') Icon = CircleAlert;
   return (
-    <details open={open} className="rounded-xl border border-border bg-card p-4">
-      <summary className="cursor-pointer rounded-sm text-sm focus-visible:ring-3 focus-visible:ring-ring/50">
-        <code className="break-all">{result.command}</code>{' '}
-        <span className={result.failed ? 'text-destructive' : 'text-muted-foreground'}>
-          · {result.failed ? 'Failed' : 'Completed'} · {result.durationMs} ms
-        </span>
-      </summary>
-      <div className="mt-3 flex justify-end">
-        <Button variant="outline" size="sm" onClick={() => void copy()}>
-          {copyStatus}
-        </Button>
-      </div>
-      <span className="sr-only" aria-live="polite">
-        {copyStatus === 'Copy JSON' ? '' : copyStatus}
-      </span>
-      <pre
-        tabIndex={0}
-        aria-label={`Output for ${result.command}`}
-        className="mt-2 max-h-96 overflow-auto rounded-lg bg-muted/30 p-3 font-mono text-xs focus-visible:ring-3 focus-visible:ring-ring/50"
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className={className}
+        aria-label={label}
+        title={status || label}
+        disabled={disabled}
+        onClick={() => void copy()}
       >
-        <code>{result.output}</code>
-      </pre>
-    </details>
+        <Icon aria-hidden="true" />
+      </Button>
+      <span className="sr-only" aria-live="polite">
+        {status}
+      </span>
+    </>
   );
 }

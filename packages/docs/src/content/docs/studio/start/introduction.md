@@ -46,7 +46,12 @@ Quote group names containing spaces, for example `group describe "payments worke
 before names beginning with `--`, for example `group describe -- --reader`; autocomplete inserts
 this marker when needed. Double-quoted JSON escapes preserve tabs and other control characters.
 
-Results show expandable JSON with copy, duration, and success/error status. The page keeps up to
+The terminal shows commands in execution order with collapsible output beneath each command and
+a fixed prompt at the bottom. Suggestions overlay the transcript without moving the layout.
+`help` prints a readable command reference; Kafka results are JSON. Copy individual output or
+the whole transcript, and clear output with the header button or **Ctrl+L** from the prompt.
+Each command shows its duration and success/error status. Scrolling up pauses automatic following;
+returning to the bottom or running another command resumes it. The page keeps up to
 20 results and 50 unique history entries in memory; navigating away or switching profiles clears
 both. The console supports the listed inspection commands, including in `--read-only` mode.
 Shell execution, file arguments, connection overrides, arbitrary `admin call`, and mutations are

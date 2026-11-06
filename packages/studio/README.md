@@ -118,9 +118,13 @@ is accepted. Suggestions complete commands, `--type topic`, and live topic/group
 accepts the selected suggestion; **Escape** dismisses suggestions so **↑ / ↓** recalls history;
 **Enter** runs. **Escape**, then **Tab**, or **Shift+Tab** moves focus out of the editor.
 
-Results are expandable JSON with a copy button, duration, and an explicit success/error status.
+Commands and output appear in execution order inside a scrolling terminal, with the prompt fixed
+at the bottom. Suggestions float above the prompt without moving the layout. `help` prints a
+command reference; Kafka results are JSON. Each command has collapsible output, copy, duration,
+and a success/error status. The header copies the transcript or clears it; **Ctrl+L** also clears
+output from the prompt. Scrolling up pauses automatic following; returning to the bottom or running another command resumes it.
 The page retains the latest 20 results and 50 unique history entries in memory; leaving the page
-or switching profiles clears them. The connection profile is shown above the editor.
+or switching profiles clears them. The connection profile is shown in the terminal header.
 
 This is an inspection subset of the CLI: shell execution, file arguments, connection overrides,
 arbitrary `admin call`, and mutating commands are unavailable. It uses Studio's existing

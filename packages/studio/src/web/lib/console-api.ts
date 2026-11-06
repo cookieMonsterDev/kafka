@@ -7,10 +7,17 @@ import { getTopic, listTopics } from './topics-api';
 /** Dispatches only supported reads through Studio's authenticated API clients. */
 export async function runConsoleCommand(line: string): Promise<unknown> {
   const { command, resource, help } = parseConsoleCommand(line);
-  if (help) return { usage: command.usage, description: command.description };
+  if (help) return `Usage: ${command.usage}\n${command.description}`;
   switch (command.path) {
     case 'help':
-      return CONSOLE_COMMANDS.map(({ usage, description }) => ({ command: usage, description }));
+      return [
+        'Available commands',
+        '',
+        ...CONSOLE_COMMANDS.map(({ usage, description }) => `${usage.padEnd(44)} ${description}`),
+        '',
+        'Tab completes · Enter runs · Escape dismisses suggestions · ↑ / ↓ recalls history',
+        'Ctrl+L clears output · Shift+Tab leaves the prompt',
+      ].join('\n');
     case 'cluster info': {
       const status = await fetchClusterStatus();
       if (!status.connected)

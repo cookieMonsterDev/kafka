@@ -1,7 +1,5 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '../../lib/utils';
-
 interface PageLayoutProps {
   /** Control row directly under the top bar — filters, view switchers, page-level actions. */
   readonly toolbar?: ReactNode;
@@ -22,12 +20,12 @@ export function PageLayout({ toolbar, rail, railLabel, children }: PageLayoutPro
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {toolbar !== undefined && (
-        <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between border-b gap-3 p-4">
+        <div className="flex min-h-14 shrink-0 flex-wrap items-center justify-between border-b gap-3 p-4 lg:px-6">
           {toolbar}
         </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-1 xl:overflow-hidden">
-        <div className={cn('min-w-0 flex-1 overflow-y-auto p-4 scrollbar-gutter-stable lg:p-6 lg:pr-2.5')}>
+        <div className="min-w-0 flex-1 overflow-y-auto p-4 scrollbar-gutter-stable lg:p-6">
           <div className="mx-auto w-full max-w-[110rem]">{children}</div>
           {rail !== undefined && (
             <div className="mt-6 flex flex-col gap-4 xl:hidden">

@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import type { Socket } from 'node:net';
 import { generateSessionToken, hostSecurityWarning, withSessionTokenHash } from './server/auth';
 import { createStudioServer } from './server/create-server';
 import { createDevMiddleware } from './server/dev';
@@ -119,6 +120,12 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   const fallback = dev?.middleware ?? createStaticHandler(webRoot);
 
   const server = createStudioServer({ router, fallback, readOnly, auth: { host, port, token } });
+  // Bun can leave SSE sockets open after closeAllConnections(); own them explicitly on both runtimes.
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -136,7 +143,7 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
     const closed = new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     // `close()` alone waits for every open socket: SSE streams never end on their own, and idle
     // keep-alive connections can linger until they time out.
-    server.closeAllConnections();
+    for (const socket of sockets) socket.destroy();
     await closed;
     await dev?.close();
     await pool.disposeAll();

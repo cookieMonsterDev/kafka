@@ -127,11 +127,13 @@ describe('startStudio', () => {
     const studio = await startStudio({ host: '127.0.0.1', port: 59_108, browser: 'none' }, fakeRuntime().runtime);
     const client = new AbortController();
     try {
-      const events = await fetch(new URL('/api/events', studio.url), {
+      const url = new URL('/api/events', studio.url);
+      const request = {
         headers: { 'x-kafka-studio-token': studio.token },
         signal: client.signal,
-      });
-      expect(events.status).toBe(200);
+      };
+      const streams = await Promise.all([fetch(url, request), fetch(url, request)]);
+      expect(streams.map((stream) => stream.status)).toEqual([200, 200]);
 
       const timedOut = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 2_000).unref());
       await expect(Promise.race([studio.stop().then(() => 'stopped' as const), timedOut])).resolves.toBe('stopped');

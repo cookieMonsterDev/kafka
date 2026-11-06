@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildProduction } from '../helpers/production-build';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
 const INSTALLED_PACKAGE_DIR = 'node_modules/@cookiemonsterdev/kafka-studio';
@@ -38,24 +39,15 @@ describe('npm tarball', () => {
   let installDir: string;
   let binPath: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     // Self-contained: build into an isolated tree, never the package's own `dist/`, so this
     // suite's build cannot race a sibling suite still importing the real dist.
     const packSource = mkdtempSync(join(tmpdir(), 'kafka-studio-pack-source-'));
     try {
       const distDir = join(packSource, 'dist');
 
-      const { build } = await import('vite');
-      await build({
-        configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
-        logLevel: 'silent',
-        build: { outDir: distDir, emptyOutDir: true },
-      });
-      await build({
-        configFile: join(PACKAGE_ROOT, 'vite.web.config.ts'),
-        logLevel: 'silent',
-        build: { outDir: join(distDir, 'web'), emptyOutDir: true },
-      });
+      buildProduction('vite.config.ts', distDir);
+      buildProduction('vite.web.config.ts', join(distDir, 'web'));
       execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', distDir], {
         cwd: PACKAGE_ROOT,
       });

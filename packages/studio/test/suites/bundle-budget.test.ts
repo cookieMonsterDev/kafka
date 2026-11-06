@@ -5,8 +5,10 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildProduction } from '../helpers/production-build';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+const RUNNER_NODE_ENV = process.env.NODE_ENV;
 
 /**
  * An initial load has to compete with the CLI's own near-instant startup, and a lazy route chunk
@@ -63,25 +65,28 @@ describe('web bundle budget', () => {
   let outDir: string;
   let manifest: Manifest;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     outDir = mkdtempSync(join(tmpdir(), 'kafka-studio-bundle-budget-'));
-    const { build } = await import('vite');
-    await build({
-      configFile: join(PACKAGE_ROOT, 'vite.web.config.ts'),
-      mode: 'production',
-      // Vite's own `process.env.NODE_ENV` replacement prefers the *ambient* `process.env.NODE_ENV`
-      // over `mode` when the former is already set — and it is here, to `test`, by Vitest itself.
-      // Left alone, that ships React's development build (far bigger, and not what `pnpm build`
-      // actually produces), which is exactly the discrepancy this suite exists to catch elsewhere.
-      define: { 'process.env.NODE_ENV': '"production"' },
-      logLevel: 'silent',
-      build: { outDir, emptyOutDir: true, manifest: true },
-    });
+    buildProduction('vite.web.config.ts', outDir, { manifest: true });
     manifest = JSON.parse(readFileSync(join(outDir, '.vite/manifest.json'), 'utf8')) as Manifest;
   }, 60_000);
 
   afterAll(() => {
     if (outDir !== undefined) rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('measures production JSX without changing the test environment', () => {
+    expect(process.env.NODE_ENV).toBe(RUNNER_NODE_ENV);
+    const sources = Object.values(manifest)
+      .filter((chunk) => chunk.file.endsWith('.js'))
+      .flatMap((chunk) => {
+        const sourceMap = JSON.parse(readFileSync(join(outDir, `${chunk.file}.map`), 'utf8')) as {
+          sources: readonly string[];
+        };
+        return sourceMap.sources;
+      });
+    expect(sources.length).toBeGreaterThan(0);
+    expect(sources.filter((source) => source.includes('jsx-dev-runtime'))).toEqual([]);
   });
 
   it('keeps the initial JS (shell + first route) under budget', () => {
@@ -149,35 +154,14 @@ describe('published tarball budget', () => {
   let tarballPath: string;
   let packSource: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     // Self-contained build, mirroring tarball.test.ts's own isolated-build approach — this suite
     // cares about the resulting .tgz's byte size, not (again) its import safety.
     packSource = mkdtempSync(join(tmpdir(), 'kafka-studio-bundle-budget-pack-'));
     const distDir = join(packSource, 'dist');
 
-    const { build } = await import('vite');
-    await build({
-      configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
-      mode: 'production',
-      // Vite's own `process.env.NODE_ENV` replacement prefers the *ambient* `process.env.NODE_ENV`
-      // over `mode` when the former is already set — and it is here, to `test`, by Vitest itself.
-      // Left alone, that ships React's development build (far bigger, and not what `pnpm build`
-      // actually produces), which is exactly the discrepancy this suite exists to catch elsewhere.
-      define: { 'process.env.NODE_ENV': '"production"' },
-      logLevel: 'silent',
-      build: { outDir: distDir, emptyOutDir: true },
-    });
-    await build({
-      configFile: join(PACKAGE_ROOT, 'vite.web.config.ts'),
-      mode: 'production',
-      // Vite's own `process.env.NODE_ENV` replacement prefers the *ambient* `process.env.NODE_ENV`
-      // over `mode` when the former is already set — and it is here, to `test`, by Vitest itself.
-      // Left alone, that ships React's development build (far bigger, and not what `pnpm build`
-      // actually produces), which is exactly the discrepancy this suite exists to catch elsewhere.
-      define: { 'process.env.NODE_ENV': '"production"' },
-      logLevel: 'silent',
-      build: { outDir: join(distDir, 'web'), emptyOutDir: true },
-    });
+    buildProduction('vite.config.ts', distDir);
+    buildProduction('vite.web.config.ts', join(distDir, 'web'));
     execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', distDir], {
       cwd: PACKAGE_ROOT,
     });

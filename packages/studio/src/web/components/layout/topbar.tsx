@@ -123,7 +123,8 @@ export function Topbar() {
         <Button
           type="button"
           variant="outline"
-          size="icon-lg"
+          size="icon"
+          className="size-9"
           id="terminal-toggle"
           title="Terminal"
           aria-label="Toggle terminal"

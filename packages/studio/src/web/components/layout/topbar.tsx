@@ -56,8 +56,7 @@ export function Topbar() {
   const lastCrumbIndex = crumbs.length - 1;
 
   useEffect(() => {
-    // Mirrors the docs site's `Kafka | <package> | <title>` convention (`BaseLayout.astro`).
-    document.title = title === null ? 'Kafka | Studio' : `Kafka | Studio | ${title}`;
+    document.title = title === null ? 'Kafka Studio' : `Kafka Studio | ${title}`;
   }, [title]);
 
   return (

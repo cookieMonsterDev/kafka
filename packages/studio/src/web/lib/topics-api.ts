@@ -6,18 +6,13 @@ import type {
   TopicListResponse,
 } from '../../shared/contracts/topic';
 import { withAuthHeaders } from './auth';
+import { assertOk } from './api';
 
 export const topicQueryKeys = {
   all: ['topics'] as const,
   list: () => [...topicQueryKeys.all, 'list'] as const,
   detail: (name: string) => [...topicQueryKeys.all, 'detail', name] as const,
 };
-
-async function assertOk(res: Response, what: string): Promise<void> {
-  if (res.ok) return;
-  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-  throw new Error(body?.error?.message ?? `${what} failed with ${String(res.status)}`);
-}
 
 async function parseJsonOrThrow<T>(res: Response, what: string): Promise<T> {
   await assertOk(res, what);

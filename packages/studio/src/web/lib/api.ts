@@ -4,7 +4,7 @@
  * the same failure surfaced with a different sentence depending on which screen you were on.
  */
 
-import { withAuthHeaders } from './auth';
+import { rejectSession, withAuthHeaders } from './auth';
 
 interface ErrorEnvelope {
   readonly error?: { readonly message?: string };
@@ -12,6 +12,7 @@ interface ErrorEnvelope {
 
 export async function assertOk(res: Response, what: string): Promise<void> {
   if (res.ok) return;
+  if (res.status === 401) rejectSession();
   const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
   throw new Error(body?.error?.message ?? `${what} failed with ${String(res.status)}`);
 }

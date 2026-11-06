@@ -113,7 +113,7 @@ so none of this is optional:
   open) for the tab's lifetime, and strips it from the visible URL. Every `/api/*` request after
   that carries it as `x-kafka-studio-token` (or, for the SSE streams `EventSource` can't attach
   headers to, a `token` query param instead). A request with a missing or wrong token gets `401`.
-  A hard reload starts a fresh session — reopen the studio from the terminal's own printed URL.
+  A hard reload loses access from the tab — the recovery screen directs you to reopen the studio from the terminal's own printed URL.
 - **An Origin/Host allowlist.** The standard defense against DNS rebinding against a local dev
   server: a request naming a `Host` (or, when present, `Origin`) other than the address the
   server was actually told to bind is rejected with `403`, before the token is even checked.

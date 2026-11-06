@@ -20,6 +20,24 @@ and share groups; render a live topology board of cluster activity; and browse r
 client quota, and transaction state. Every session is authenticated, and `--read-only` is enforced
 by the server, not just hidden in the UI — see [Security](../../reference/api/#security).
 
+## Finding your way around
+
+The cluster overview shows topic, partition, and broker counts, plus **Studio uptime** (the age
+of the local server process, not the Kafka brokers). Quick actions lead to topics, the producer,
+and consumer groups.
+
+Open a topic and use **Browse messages** or **Produce** to carry that topic into the next screen.
+Configuration has a key filter and an **Overrides only** view; changing these filters keeps pending
+edits. Non-negative millisecond settings show a readable duration below the raw value. Negative
+sentinel values stay unchanged because their meaning depends on the setting.
+
+In Messages, **History** reads stored records and **Live** selects a stream of new records. Live is
+a mode selector, not a pause button; switch to History to stop tailing.
+
+If a reload or server restart leaves the tab without a valid token, Studio shows recovery steps.
+Open the full token-bearing URL from the terminal that launched it in a new tab. The token stays in memory
+only; retrying requests cannot restore it.
+
 ## Two ways to launch it
 
 - **`kafka studio`** — a command in [`@cookiemonsterdev/kafka-cli`](../../../cli/start/introduction/),

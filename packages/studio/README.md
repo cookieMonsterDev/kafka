@@ -29,6 +29,7 @@ instructions will follow.
 
 - [Local development](#local-development)
 - [Local Kafka with Docker](#local-kafka-with-docker)
+- [Kafka terminal](#kafka-terminal)
 - [Security](#security)
 - [Tests](#tests)
 - [Contributing](#contributing)
@@ -39,7 +40,7 @@ instructions will follow.
 From the workspace root:
 
 ```sh
-pnpm --filter @cookiemonsterdev/kafka-studio build
+pnpm --filter @cookiemonsterdev/kafka-studio... build
 node packages/studio/dist/bin.js
 ```
 
@@ -97,6 +98,46 @@ This compose file is for manual, local use only — it is not part of `pnpm test
 `pnpm test:integration` for this package. `pnpm test:integration` instead brings up its own broker
 from [`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/` (see
 [Tests](#tests) below), reusing those compose files rather than shipping a second copy of them.
+
+## Kafka terminal
+
+Use **Terminal** in the top bar to open a resizable shell below any page. Drag its top edge (or
+focus the separator and use arrow keys) to resize it. The header expands it to fill the workspace,
+restores it to the dock, minimizes it, or ends the session. Navigation and minimizing keep the
+session, history and scrollback; ending the session or switching profiles starts a fresh shell.
+The sidebar's **Terminal** entry and existing `/console` links open the expanded shell.
+
+The prompt follows output like a normal terminal. Enter runs; Tab completes CLI commands, flags,
+allowed values and live topic/group names; arrows edit or recall history. **Ctrl+C** interrupts a
+foreground command, **Ctrl+L** or `clear` clears the display, and **Shift+Tab** leaves terminal
+focus. `exit` ends the session. Select text and use your platform's copy shortcut.
+
+The shell embeds `@cookiemonsterdev/kafka-cli`'s parser, command registry, help, human tables,
+JSON output and confirmation checks. Studio bundles that code, so the standalone Studio needs no
+separate CLI installation. Commands use the active Studio profile:
+
+```sh
+help
+topic list
+topic create orders --partitions 3 --replication-factor 1
+config describe --type topic orders
+group offsets payments-worker
+produce orders --key order-1 --value '{"id":1}'
+consume orders --limit 10
+consume orders --tail
+```
+
+A leading `kafka` is optional. Append `--help` for a command's arguments, or `--json` for JSON
+output. Destructive CLI commands retain their interactive confirmation and independent `--force`
+requirements. Studio adds `produce` (single sends or batches up to 1000) and `consume` (bounded
+reads or live tails), using the same producer and message readers as the UI.
+
+`--read-only` applies to the shell too: the server guards actual Admin calls, including `admin
+call`, and refuses produce. Connection overrides, host-file arguments, credential stdin flags,
+and local CLI commands such as `init` and `studio` are unavailable in this Kafka shell. These
+constraints keep it scoped to the selected cluster; it does not run an operating-system shell.
+Disconnected sessions expire after five minutes; each process allows at most eight sessions and
+retains up to 512 KiB of recent output per session for stream reconnection.
 
 ## Security
 

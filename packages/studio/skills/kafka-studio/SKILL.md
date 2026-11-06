@@ -43,6 +43,9 @@ kafka studio
 
 It prints a `localhost` URL with a per-session token in the hash and opens a browser.
 
+From the monorepo, build Studio and its workspace dependencies with
+`pnpm --filter @cookiemonsterdev/kafka-studio... build`, then run `node packages/studio/dist/bin.js`.
+
 ## Core Patterns
 
 ### Choose the cluster
@@ -73,6 +76,20 @@ docker compose -f docker-compose.dev.yml down -v   # tear down and drop data
 - **Studio uptime** describes the local process, not broker uptime.
 - If the session recovery screen appears after a reload or restart, open the full URL printed
   in the launching terminal in a new tab. Retry cannot recover an in-memory token.
+
+### Use the docked terminal
+
+- Open **Terminal** in the top bar; drag the separator or use its arrow keys to resize. Expand,
+  restore, minimize or end the session with its header controls.
+- Run `help`, `topic list`, `topic create orders --partitions 3`, or `group offsets readers`.
+  Commands use the embedded CLI and active Studio profile; `--help` and `--json` behave like CLI.
+- `produce orders --value '{"id":1}'` sends a message. `consume orders --limit 10` reads stored
+  records; `consume orders --tail` follows new ones until Ctrl+C.
+- Tab completes, arrows edit/recall history, Ctrl+C interrupts, Ctrl+L or `clear` clears the display,
+  Shift+Tab leaves focus, and `exit` ends the session. Destructive commands retain CLI confirmation.
+- Navigation and minimizing retain the session. Changing profiles or ending it starts a new shell.
+- Server-side read-only mode denies writes and produce. Host-file and connection flags, local
+  CLI commands, OS commands and pipelines are unavailable.
 
 ### Launch flags
 

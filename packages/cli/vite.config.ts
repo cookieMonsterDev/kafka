@@ -5,18 +5,14 @@ export default defineConfig({
     target: 'node24',
     sourcemap: true,
     minify: false,
-    // Bundled to a single file, unlike core/kafka-config's preserveModules build: the CLI's own
-    // code should cost one cheap parse on every invocation, including --help/--version, and core
-    // (kept external below) is meant to be await-imported only inside commands that connect.
-    lib: { entry: { index: 'src/index.ts', bin: 'src/bin.ts' }, formats: ['es'] },
+    // Entry points share the CLI engine. Core stays external and is imported lazily by commands
+    // that connect; embedded hosts can supply their own connection without loading it here.
+    lib: { entry: { index: 'src/index.ts', bin: 'src/bin.ts', embedded: 'src/embedded.ts' }, formats: ['es'] },
     rollupOptions: {
       external: [
         /^node:/,
         '@cookiemonsterdev/kafka-core',
         '@cookiemonsterdev/kafka-config',
-        // A `devDependency`, imported only for its types (`import type`) plus a runtime-only
-        // dynamic import behind a non-literal specifier in `commands/studio/studio.ts` — it must
-        // never be pulled into the published tarball (see check-publishable-deps.mjs).
         '@cookiemonsterdev/kafka-studio',
       ],
       output: {

@@ -86,10 +86,10 @@ function abandonOnAbort(run: Promise<number>, signal: AbortSignal): Promise<numb
  * human/stderr for that one report, since the very flag that failed is what would have chosen
  * otherwise.
  */
-export async function dispatch(runtime: Runtime): Promise<number> {
+export async function dispatch(runtime: Runtime, commands: readonly CommandSpec[] = ALL_COMMANDS): Promise<number> {
   try {
-    const registry = REGISTRY;
-    const groups = GROUPS;
+    const registry = commands === ALL_COMMANDS ? REGISTRY : createRegistry(commands);
+    const groups = commands === ALL_COMMANDS ? GROUPS : commandGroups(registry);
     const { global, rest: withoutGlobalFlags } = extractGlobalFlags(runtime.argv);
 
     if (global.version || withoutGlobalFlags[0] === 'version') {
@@ -125,12 +125,12 @@ export async function dispatch(runtime: Runtime): Promise<number> {
       candidatePath.length === 0 || registry.has(candidatePath.join(' ')) || groups.has(candidatePath.join(' '));
 
     if (wantsHelp || !isKnownPath) {
-      return runHelpCommand(runtime, ALL_COMMANDS, groups, candidatePath, HELP_OPTIONS);
+      return runHelpCommand(runtime, commands, groups, candidatePath, HELP_OPTIONS);
     }
 
     const command = registry.get(path.join(' '));
     if (command === undefined) {
-      return runHelpCommand(runtime, ALL_COMMANDS, groups, candidatePath, HELP_OPTIONS);
+      return runHelpCommand(runtime, commands, groups, candidatePath, HELP_OPTIONS);
     }
 
     try {

@@ -41,6 +41,55 @@ async function statusOf(response: Response): Promise<{ status: number; body: str
   return { status: response.status, body: await response.clone().text() };
 }
 
+async function openShell(studio: StudioHandle) {
+  const response = await api(studio, 'POST', '/api/terminal/sessions');
+  expect(response.status).toBe(201);
+  const { id } = (await response.json()) as { id: string };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  const events = await fetch(`${studio.url}api/terminal/sessions/${id}/events`, {
+    headers: { 'x-kafka-studio-token': studio.token },
+    signal: controller.signal,
+  });
+  const reader = events.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
+  if (reader === undefined) throw new Error('No shell output stream');
+  const terminalReader = reader;
+  let output = '';
+  let pending = '';
+  const decoder = new TextDecoder();
+  async function until(fragment: string, start = 0): Promise<void> {
+    while (!output.slice(start).includes(fragment)) {
+      const chunk = await terminalReader.read();
+      if (chunk.done) throw new Error(`Shell closed before ${fragment}`);
+      pending += decoder.decode(chunk.value, { stream: true });
+      let boundary = pending.indexOf('\n\n');
+      while (boundary >= 0) {
+        const frame = pending.slice(0, boundary);
+        pending = pending.slice(boundary + 2);
+        const data = frame.split('\n').find((line) => line.startsWith('data: '));
+        if (data !== undefined) output += (JSON.parse(data.slice(6)) as { data?: string }).data ?? '';
+        boundary = pending.indexOf('\n\n');
+      }
+    }
+  }
+  await until(':~$ ');
+  return {
+    async run(line: string, marker: string) {
+      const start = output.length;
+      const sent = await api(studio, 'POST', `/api/terminal/sessions/${id}/input`, { data: `${line}\r` });
+      expect(sent.status).toBe(200);
+      await until(marker, start);
+      await until(':~$ ', output.indexOf(marker, start));
+      return output.slice(start);
+    },
+    async close() {
+      clearTimeout(timer);
+      controller.abort();
+      await api(studio, 'DELETE', `/api/terminal/sessions/${id}`);
+    },
+  };
+}
+
 /**
  * Runs the studio's own HTTP server (via the library entry point, `startStudio` — the same one
  * `src/index.test.ts` exercises against a fake connection) against a real broker started by
@@ -148,6 +197,42 @@ describe('studio server against a real broker', () => {
     expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
     const { groups } = (await result.json()) as { groups: unknown[] };
     expect(Array.isArray(groups)).toBe(true);
+  });
+
+  it('runs the embedded CLI and Studio message helpers through the terminal', async () => {
+    const shell = await openShell(studio);
+    const topic = `${TOPIC}-shell`;
+    try {
+      const created = await shell.run(
+        `topic create ${topic} --partitions 1 --replication-factor 1 --json`,
+        '"ok":true',
+      );
+      expect(created).toContain(topic);
+      const produced = await shell.run(`produce ${topic} --value terminal-message --json`, '"results":');
+      expect(produced).toContain('"offset":');
+      const consumed = await shell.run(`consume ${topic} --from earliest --limit 10 --json`, '"messages":');
+      expect(consumed).toContain(Buffer.from('terminal-message').toString('base64'));
+      const listed = await shell.run('topic list --json', '"topics":');
+      expect(listed).toContain(topic);
+    } finally {
+      await shell.close();
+      await api(studio, 'DELETE', `/api/topics/${topic}`);
+    }
+  });
+
+  it('enforces read-only mode on terminal mutations against a real broker', async () => {
+    const readonly = await startStudio({ browser: 'none', readOnly: true }, testRuntime());
+    const shell = await openShell(readonly);
+    const topic = `${TOPIC}-forbidden`;
+    try {
+      const output = await shell.run(`topic create ${topic} --partitions 1`, 'read-only mode');
+      expect(output).toContain('exit 5');
+      const topics = await api(readonly, 'GET', '/api/topics');
+      expect(await topics.text()).not.toContain(topic);
+    } finally {
+      await shell.close();
+      await readonly.stop();
+    }
   });
 
   it('deletes the topic', async () => {

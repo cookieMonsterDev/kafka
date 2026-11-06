@@ -1,5 +1,14 @@
 import { platform } from 'node:os';
-import type * as StudioModule from '@cookiemonsterdev/kafka-studio';
+import type { Runtime } from '../../runtime';
+
+interface StudioModule {
+  startStudio(
+    options: { port?: number; host?: string; browser?: string; readOnly?: boolean },
+    runtime: Pick<Runtime, 'argv' | 'cwd' | 'env' | 'stdout' | 'stderr' | 'now' | 'exit' | 'signal'> & {
+      platform: string;
+    },
+  ): Promise<{ stop(): Promise<void> }>;
+}
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
 
@@ -41,8 +50,7 @@ export const studioCommand: CommandSpec = {
     { name: 'read-only', type: 'boolean', brief: 'reject mutating API requests with 403' },
   ],
   examples: ['studio', 'studio --read-only', 'studio --port 5757 --browser none'],
-  // Runtime resolution keeps the studio out of this package's own dependency set (tarball size, no
-  // publish-order coupling) — see `@cookiemonsterdev/kafka-studio`'s own package layout notes.
+  // Studio resolves at runtime so the CLI can also be used without the UI installed.
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
   async run({ runtime, flags }) {
     if (typeof flags.port === 'number' && !Number.isInteger(flags.port)) {
@@ -50,15 +58,11 @@ export const studioCommand: CommandSpec = {
       return EXIT_CODES.usage;
     }
 
-    let studio: typeof StudioModule;
+    let studio: StudioModule;
     try {
-      // A non-literal specifier: `@cookiemonsterdev/kafka-studio` is a devDependency of this
-      // package (types only, via the `import type` above) and never a runtime one, so a literal
-      // `import('@cookiemonsterdev/kafka-studio')` here would make Rollup try to resolve and bundle
-      // it at build time — and fail, since it isn't installed as a real dependency. A variable
-      // specifier is opaque to bundlers, leaving a genuine runtime `import()` that only resolves
-      // (or doesn't) the moment this command actually runs.
-      studio = (await import(STUDIO_PACKAGE)) as typeof StudioModule;
+      // Leave resolution to runtime: Studio depends on the embedded CLI, so a static dependency
+      // in the reverse direction would create a workspace and publish dependency cycle.
+      studio = (await import(STUDIO_PACKAGE)) as StudioModule;
     } catch (error) {
       if (!isModuleNotFoundError(error)) throw error;
       runtime.stderr.write(

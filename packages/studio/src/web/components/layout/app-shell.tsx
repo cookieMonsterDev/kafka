@@ -1,8 +1,13 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react';
 import { TooltipProvider } from '../ui/tooltip';
 import { MobileNavSheet } from './mobile-nav-sheet';
 import { Sidebar } from './sidebar';
+import { useTerminal } from '../terminal/terminal-context';
 import { Topbar } from './topbar';
+
+const TerminalDock = lazy(() =>
+  import('../terminal/terminal-dock').then((module) => ({ default: module.TerminalDock })),
+);
 
 /** Versioned localStorage key for the desktop/tablet sidebar's expanded-vs-icon-only choice. */
 const SIDEBAR_STORAGE_KEY = 'kafka-studio-sidebar:v1';
@@ -70,6 +75,7 @@ export interface AppShellProps {
  * state.
  */
 export function AppShell({ children }: AppShellProps) {
+  const { mode, mounted } = useTerminal();
   const isMobile = !useMediaQuery(NOT_MOBILE_QUERY);
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
@@ -126,8 +132,29 @@ export function AppShell({ children }: AppShellProps) {
           <MobileNavSheet />
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <Topbar />
-            <main tabIndex={-1} id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-              {children}
+            <main tabIndex={-1} id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <div
+                hidden={mode === 'expanded'}
+                className="min-h-0 flex-1 flex-col overflow-y-auto"
+                style={{ display: mode === 'expanded' ? 'none' : 'flex' }}
+              >
+                {children}
+              </div>
+              {mounted && (
+                <Suspense
+                  fallback={
+                    <p
+                      role="status"
+                      className="shrink-0 p-3 text-sm text-muted-foreground"
+                      style={{ height: mode === 'expanded' ? '100%' : '42%' }}
+                    >
+                      Opening terminal…
+                    </p>
+                  }
+                >
+                  <TerminalDock />
+                </Suspense>
+              )}
             </main>
           </div>
         </div>

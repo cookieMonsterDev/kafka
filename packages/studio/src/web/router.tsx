@@ -1,11 +1,12 @@
 import { createRouter } from '@tanstack/react-router';
 import { boardRoute } from './routes/board';
 import { clusterRoute } from './routes/cluster';
+import { consoleRoute } from './routes/console';
 import { groupDetailRoute } from './routes/group-detail';
 import { groupsRoute } from './routes/groups';
 import { messagesRoute } from './routes/messages';
 import { producerRoute } from './routes/producer';
-import { rootRoute } from './routes/root';
+import { rootRoute, PageError } from './routes/root';
 import { settingsRoute } from './routes/settings';
 import { shareGroupDetailRoute } from './routes/share-group-detail';
 import { topicDetailRoute } from './routes/topic-detail';
@@ -13,6 +14,7 @@ import { topicsRoute } from './routes/topics';
 
 const routeTree = rootRoute.addChildren([
   clusterRoute,
+  consoleRoute,
   topicsRoute,
   topicDetailRoute,
   producerRoute,
@@ -24,7 +26,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, defaultErrorComponent: PageError });
 
 declare module '@tanstack/react-router' {
   interface Register {

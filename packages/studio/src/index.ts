@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import type { Socket } from 'node:net';
 import { generateSessionToken, hostSecurityWarning, withSessionTokenHash } from './server/auth';
 import { createStudioServer } from './server/create-server';
 import { createDevMiddleware } from './server/dev';
@@ -17,6 +18,7 @@ import { registerMessageRoutes } from './server/routes/messages';
 import { registerProduceRoutes } from './server/routes/produce';
 import { registerProfileRoutes } from './server/routes/profiles';
 import { registerSettingsRoutes } from './server/routes/settings';
+import { registerTerminalRoutes } from './server/routes/terminal';
 import { registerTopicRoutes } from './server/routes/topics';
 import { Router } from './server/router';
 import { createStaticHandler } from './server/static';
@@ -103,11 +105,27 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   registerEventRoutes(router, { events });
   registerSettingsRoutes(router, { pool, getActiveProfile: () => activeProfile });
 
+  const terminals = registerTerminalRoutes(router, {
+    connection,
+    pool,
+    readOnly,
+    producers,
+    consumerFactory: messageConsumers,
+    events,
+    getActiveProfile: () => activeProfile,
+  });
+
   const webRoot = fileURLToPath(new URL('./web/', import.meta.url));
   const dev = runtime.env.KAFKA_STUDIO_DEV === '1' ? await createDevMiddleware(webRoot) : undefined;
   const fallback = dev?.middleware ?? createStaticHandler(webRoot);
 
   const server = createStudioServer({ router, fallback, readOnly, auth: { host, port, token } });
+  // Bun can leave SSE sockets open after closeAllConnections(); own them explicitly on both runtimes.
+  const sockets = new Set<Socket>();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -120,11 +138,12 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   void openBrowser(urlWithToken, browser, { env: runtime.env, platform: runtime.platform });
 
   async function stop(): Promise<void> {
+    terminals.dispose();
     jobs.cancelAll();
     const closed = new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     // `close()` alone waits for every open socket: SSE streams never end on their own, and idle
     // keep-alive connections can linger until they time out.
-    server.closeAllConnections();
+    for (const socket of sockets) socket.destroy();
     await closed;
     await dev?.close();
     await pool.disposeAll();

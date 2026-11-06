@@ -65,6 +65,15 @@ KAFKA_BROKERS=localhost:9092 kafka-studio
 docker compose -f docker-compose.dev.yml down -v   # tear down and drop data
 ```
 
+### Browse and recover a session
+
+- From a topic, use **Browse messages** or **Produce** to preselect it on the next page.
+- Filter configuration by key or choose **Overrides only**; pending edits survive filter changes.
+- **Live** selects the new-message stream; switch to **History** to stop it.
+- **Studio uptime** describes the local process, not broker uptime.
+- If the session recovery screen appears after a reload or restart, open the full URL printed
+  in the launching terminal in a new tab. Retry cannot recover an in-memory token.
+
 ### Launch flags
 
 ```sh

@@ -22,7 +22,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       {isError ? (
         // Compact destructive chip — `ErrorState`'s own layout is a centered full-section block.
         <div
@@ -40,7 +40,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
         </div>
       ) : (
         <Select value={value ?? undefined} onValueChange={onChange} disabled={disabled || isPending}>
-          <SelectTrigger className="w-56" aria-label="Topic">
+          <SelectTrigger className="w-56 max-w-full" aria-label="Topic">
             <SelectValue placeholder={isPending ? 'Loading topics…' : 'Select a topic'} />
           </SelectTrigger>
           <SelectContent>

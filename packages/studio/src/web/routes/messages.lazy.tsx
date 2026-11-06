@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Download, Inbox, Pause, Play } from 'lucide-react';
+import { Download, Inbox, Play } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { createLazyRoute } from '@tanstack/react-router';
 import type { MessageRecord } from '../../shared/contracts/message';
@@ -93,11 +93,8 @@ function MessagesPage() {
       <MessageDetailRail topic={topic} message={selected} decoder={filters.decoder} />
     ) : undefined;
 
-  // Kept to the controls that always fit on one line — the toolbar slot is a fixed-height row
-  // (`PageLayout`), so anything that wraps onto a second line would overlap the content below it.
-  // The rest (partition/decoder/search) is a second, ordinary-flow row inside the page content.
   const toolbar = (
-    <div className="flex w-full min-w-0 items-center gap-2">
+    <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
       <TopicPicker
         value={topic}
         onChange={(next) => {
@@ -122,11 +119,7 @@ function MessagesPage() {
           onClick={() => setMode('live')}
           aria-pressed={mode === 'live'}
         >
-          {mode === 'live' ? (
-            <Pause className="size-4" aria-hidden="true" />
-          ) : (
-            <Play className="size-4" aria-hidden="true" />
-          )}
+          <Play className="size-4" aria-hidden="true" />
           Live
         </Button>
       </div>

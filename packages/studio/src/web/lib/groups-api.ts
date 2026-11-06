@@ -11,6 +11,7 @@ import type {
   ShareGroupListResponse,
 } from '../../shared/contracts/group';
 import { withAuthHeaders } from './auth';
+import { assertOk } from './api';
 
 export const groupQueryKeys = {
   all: ['groups'] as const,
@@ -23,12 +24,6 @@ export const shareGroupQueryKeys = {
   list: () => [...shareGroupQueryKeys.all, 'list'] as const,
   detail: (groupId: string) => [...shareGroupQueryKeys.all, 'detail', groupId] as const,
 };
-
-async function assertOk(res: Response, what: string): Promise<void> {
-  if (res.ok) return;
-  const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-  throw new Error(body?.error?.message ?? `${what} failed with ${String(res.status)}`);
-}
 
 async function parseJsonOrThrow<T>(res: Response, what: string): Promise<T> {
   await assertOk(res, what);

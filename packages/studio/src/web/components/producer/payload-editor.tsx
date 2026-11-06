@@ -164,10 +164,11 @@ export function PayloadEditor({ value, onChange, disabled = false }: PayloadEdit
           onBlur={() => setTouchedError(payloadEditorValueError(value))}
           className="min-h-40 font-mono text-xs"
           aria-invalid={displayedError !== null}
+          aria-describedby={displayedError !== null ? `${valueId}-error` : undefined}
           spellCheck={false}
         />
         {displayedError !== null && (
-          <p className="text-sm text-destructive" role="alert">
+          <p id={`${valueId}-error`} className="text-sm text-destructive" role="alert">
             {displayedError}
           </p>
         )}

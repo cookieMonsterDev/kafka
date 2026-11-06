@@ -126,7 +126,7 @@ export function AppShell({ children }: AppShellProps) {
           <MobileNavSheet />
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <Topbar />
-            <main id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+            <main tabIndex={-1} id="main-content" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
               {children}
             </main>
           </div>

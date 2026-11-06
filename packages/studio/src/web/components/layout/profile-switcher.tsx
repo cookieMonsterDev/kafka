@@ -2,17 +2,9 @@ import { Server } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-import { apiGet, apiSend, clusterQueryKey } from '../../lib/api';
+import { apiSend, clusterQueryKey } from '../../lib/api';
+import { fetchProfiles, profilesQueryKey, type ProfilesResponse } from '../../lib/profiles-api';
 import { cn } from '../../lib/utils';
-
-interface ProfilesResponse {
-  readonly active: string | null;
-  readonly profiles: Readonly<Record<string, unknown>>;
-}
-
-const profilesQueryKey = ['profiles'] as const;
-
-const fetchProfiles = (): Promise<ProfilesResponse> => apiGet<ProfilesResponse>('/api/profiles');
 
 const setActiveProfile = (profile: string | null): Promise<ProfilesResponse> =>
   apiSend<ProfilesResponse>('POST', '/api/profiles/active', { profile });

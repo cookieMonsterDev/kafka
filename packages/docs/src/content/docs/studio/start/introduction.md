@@ -34,6 +34,24 @@ sentinel values stay unchanged because their meaning depends on the setting.
 In Messages, **History** reads stored records and **Live** selects a stream of new records. Live is
 a mode selector, not a pause button; switch to History to stop tailing.
 
+The **Console** page runs read-only CLI-style commands against the active connection, such as
+`topic list`, `topic describe orders`, `topic offsets orders`, `group offsets payments-worker`,
+and `config describe --type topic orders`. Run `help` for the supported commands (including cluster,
+ACL, quota, and transaction inspection), or append `--help` for usage. A leading `kafka` is optional.
+
+Suggestions include commands, flags, allowed values, and live topic/group names. **Tab** accepts
+one; **↑ / ↓** selects suggestions. **Escape** dismisses suggestions, after which **↑ / ↓** recalls
+command history. **Enter** runs. Use **Escape**, then **Tab**, or **Shift+Tab** to leave the editor.
+Quote group names containing spaces, for example `group describe "payments worker"`. Use `--`
+before names beginning with `--`, for example `group describe -- --reader`; autocomplete inserts
+this marker when needed. Double-quoted JSON escapes preserve tabs and other control characters.
+
+Results show expandable JSON with copy, duration, and success/error status. The page keeps up to
+20 results and 50 unique history entries in memory; navigating away or switching profiles clears
+both. The console supports the listed inspection commands, including in `--read-only` mode.
+Shell execution, file arguments, connection overrides, arbitrary `admin call`, and mutations are
+unavailable.
+
 If a reload or server restart leaves the tab without a valid token, Studio shows recovery steps.
 Open the full token-bearing URL from the terminal that launched it in a new tab. The token stays in memory
 only; retrying requests cannot restore it.

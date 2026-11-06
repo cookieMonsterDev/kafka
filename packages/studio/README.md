@@ -29,6 +29,7 @@ instructions will follow.
 
 - [Local development](#local-development)
 - [Local Kafka with Docker](#local-kafka-with-docker)
+- [Kafka console](#kafka-console)
 - [Security](#security)
 - [Tests](#tests)
 - [Contributing](#contributing)
@@ -97,6 +98,33 @@ This compose file is for manual, local use only — it is not part of `pnpm test
 `pnpm test:integration` for this package. `pnpm test:integration` instead brings up its own broker
 from [`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/` (see
 [Tests](#tests) below), reusing those compose files rather than shipping a second copy of them.
+
+## Kafka console
+
+Open **Console** in the sidebar (or the command palette) to run read-only inspection commands
+with the active Studio connection. For example:
+
+```sh
+topic list
+topic describe orders
+topic offsets orders
+config describe --type topic orders
+group list
+group offsets payments-worker
+```
+
+Run `help` for the full list, or append `--help` for command usage. The optional `kafka` prefix
+is accepted. Suggestions complete commands, `--type topic`, and live topic/group names. **Tab**
+accepts the selected suggestion; **Escape** dismisses suggestions so **↑ / ↓** recalls history;
+**Enter** runs. **Escape**, then **Tab**, or **Shift+Tab** moves focus out of the editor.
+
+Results are expandable JSON with a copy button, duration, and an explicit success/error status.
+The page retains the latest 20 results and 50 unique history entries in memory; leaving the page
+or switching profiles clears them. The connection profile is shown above the editor.
+
+This is an inspection subset of the CLI: shell execution, file arguments, connection overrides,
+arbitrary `admin call`, and mutating commands are unavailable. It uses Studio's existing
+authenticated read APIs and works with `--read-only`.
 
 ## Security
 

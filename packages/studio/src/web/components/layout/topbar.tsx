@@ -21,6 +21,7 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
   if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
   if (pathname === '/board') return { title: 'Board', crumbs: [{ label: 'Board' }] };
   if (pathname === '/groups') return { title: 'Consumer groups', crumbs: [{ label: 'Consumer groups' }] };
+  if (pathname === '/console') return { title: 'Console', crumbs: [{ label: 'Console' }] };
   if (pathname === '/settings') return { title: 'Settings', crumbs: [{ label: 'Settings' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));

@@ -1,6 +1,7 @@
 import { createRouter } from '@tanstack/react-router';
 import { boardRoute } from './routes/board';
 import { clusterRoute } from './routes/cluster';
+import { consoleRoute } from './routes/console';
 import { groupDetailRoute } from './routes/group-detail';
 import { groupsRoute } from './routes/groups';
 import { messagesRoute } from './routes/messages';
@@ -13,6 +14,7 @@ import { topicsRoute } from './routes/topics';
 
 const routeTree = rootRoute.addChildren([
   clusterRoute,
+  consoleRoute,
   topicsRoute,
   topicDetailRoute,
   producerRoute,

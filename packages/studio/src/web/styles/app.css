@@ -1,5 +1,11 @@
 @import './theme.css';
 
+#root {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+}
+
 :where([tabindex]):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: -2px;

@@ -95,7 +95,10 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@cookiemonsterdev/kafka-cli": "workspace:*"
   },
   "dependencies": {
     "@cookiemonsterdev/kafka-config": "^1.1.0",

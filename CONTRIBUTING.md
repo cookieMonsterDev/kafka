@@ -196,8 +196,8 @@ pnpm --filter @cookiemonsterdev/kafka-core test
 ```
 
 CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
-locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, studio,
-and cli in that order, then run:
+locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, cli,
+and studio in that order, then run:
 
 ```sh
 pnpm test:bun                # every package's unit suite under `bun --bun`

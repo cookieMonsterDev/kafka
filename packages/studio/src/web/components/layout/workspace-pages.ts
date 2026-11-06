@@ -28,6 +28,6 @@ export const WORKSPACE_PAGES: readonly WorkspacePage[] = [
   { label: 'Messages', icon: MessageSquare, to: '/messages' },
   { label: 'Board', icon: Workflow, to: '/board' },
   { label: 'Consumer groups', icon: Users, to: '/groups' },
-  { label: 'Console', icon: Terminal, to: '/console' },
+  { label: 'Terminal', icon: Terminal, to: '/console' },
   { label: 'Settings', icon: Settings, to: '/settings' },
 ];

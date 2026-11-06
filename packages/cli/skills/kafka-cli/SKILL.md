@@ -14,6 +14,7 @@ metadata:
   library: '@cookiemonsterdev/kafka-cli'
   library_version: '1.10.1'
 sources:
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/integrations/embedding.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/start/installation.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/start/getting-started.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/guides/configuration.md'
@@ -127,6 +128,16 @@ jq '.results[] | select(.ok == false)' result.json
 
 Exit codes: `0` ok, `1` failed, `2` usage, `3` config error, `4` partial batch failure,
 `5` aborted/unconfirmed, `6` unsupported by the broker, `7` authentication failed.
+
+### Embed commands in a host
+
+- Import `runEmbeddedCli`, `completeEmbeddedCli`, `embeddedCliConfig` and `EmbeddedCliRuntime`
+  from `@cookiemonsterdev/kafka-cli/embedded`.
+- Supply host-owned config, stdio, an abort signal and fresh connected Admin clients; commands
+  disconnect those clients. Use `readOnly: true` to guard actual Admin calls.
+- For additional host commands, enforce read-only on operations that bypass `runtime.openAdmin`.
+- Local launch/file commands and connection/file/credential-stdin flags are unavailable. See the
+  embedding integration guide for the full runtime and cancellation contract.
 
 ## Common Mistakes
 

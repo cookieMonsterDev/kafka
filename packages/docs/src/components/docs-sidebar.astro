@@ -1,61 +1,62 @@
 ---
-import { getCollection } from 'astro:content'
-import { docsPackageFromPathname, groupDocs, hrefFor, isCurrentPath, navLabel } from '@/lib/docs'
-import { cn } from '@/lib/utils'
-
+import { getCollection } from 'astro:content';
+import { docsNavPackages, docsPackageFromPathname } from '@/lib/docs';
+import DocsNavItem from '@/components/docs-nav-item.astro';
 interface Props {
-  class?: string
+  class?: string;
+  id?: string;
 }
-
-const pathname = Astro.url.pathname
-const groups = groupDocs(await getCollection('docs'), docsPackageFromPathname(pathname))
+const pathname = Astro.url.pathname;
+const active = docsNavPackages(await getCollection('docs')).find((pkg) => pkg.id === docsPackageFromPathname(pathname));
+const id = Astro.props.id ?? 'desktop';
 ---
 
-<nav class={cn('min-w-0 text-sm', Astro.props.class)} aria-label="Documentation">
-  {
-    groups.map((group) => (
-      <details open class="group/section mb-2 min-w-0">
-        <summary class="text-muted-foreground hover:text-foreground flex cursor-pointer list-none items-center justify-between gap-2 rounded-md px-3 py-2 text-[0.6875rem] font-medium tracking-widest uppercase [&::-webkit-details-marker]:hidden">
-          {group.label}
-          <svg
-            class="size-3.5 shrink-0 transition-transform group-open/section:rotate-180"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <path d="m6 9 6 6 6-6"></path>
-          </svg>
-        </summary>
-        <ul class="flex flex-col gap-0.5 pb-3">
-          {group.entries.map((entry) => {
-            const href = hrefFor(entry)
-            const current = isCurrentPath(href, pathname)
-            return (
-              <li>
-                <a
-                  href={href}
-                  aria-current={current ? 'page' : undefined}
-                  class={cn(
-                    // The accent rail matches the studio's workspace nav, so the two products
-                    // read as one system. Colour is never the only cue: the rail and the weight
-                    // carry the current page too.
-                    'relative block min-w-0 rounded-md px-3 py-1.5 wrap-break-word transition-colors',
-                    'before:absolute before:top-1/2 before:left-0 before:h-4 before:w-[3px] before:-translate-y-1/2 before:rounded-r-full before:bg-primary before:opacity-0',
-                    current
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium before:opacity-100'
-                      : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
-                  )}
-                >
-                  {navLabel(entry)}
+<nav class:list={['docs-navigation min-w-0 text-sm', Astro.props.class]} aria-label="Documentation">
+  {active?.id === 'cli' && (
+    <div class="mb-4 px-1" data-command-filter data-requires-js>
+      <label for={`${id}-command-filter`} class="mb-1 block text-xs font-medium">
+        Filter commands
+      </label>
+      <input
+        id={`${id}-command-filter`}
+        type="search"
+        class="w-full min-h-10 rounded-md border border-border bg-background px-2"
+        placeholder="e.g. offsets"
+      />
+      <p class="sr-only" aria-live="polite" data-filter-status></p>
+    </div>
+  )}
+  {active?.groups.map((group) => (
+    <details open class="mb-2 min-w-0" data-nav-section>
+      <summary class="text-muted-foreground min-h-9 cursor-pointer rounded-md px-3 py-2 text-xs font-medium tracking-wide uppercase">
+        {group.label}
+        <svg
+          class="accordion-chevron"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6"></path>
+        </svg>
+      </summary>
+      <ul class="flex flex-col gap-0.5 pb-3">
+        {group.entries.map((entry) => (
+          <>
+            {entry.children && (
+              <li data-all-commands>
+                <a class="block min-h-9 px-3 py-1.5 text-muted-foreground" href={entry.href}>
+                  All commands
                 </a>
               </li>
-            )
-          })}
-        </ul>
-      </details>
-    ))
-  }
+            )}
+            <DocsNavItem entry={entry} pathname={pathname} />
+          </>
+        ))}
+      </ul>
+    </details>
+  ))}
 </nav>

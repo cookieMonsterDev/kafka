@@ -1,0 +1,51 @@
+---
+import { isCurrentPath, type DocsNavEntry } from '@/lib/docs';
+interface Props {
+  entry: DocsNavEntry;
+  pathname: string;
+}
+const { entry, pathname } = Astro.props;
+const current = isCurrentPath(entry.href, pathname);
+const containsCurrent = (item: DocsNavEntry): boolean =>
+  isCurrentPath(item.href, pathname) || (item.children?.some(containsCurrent) ?? false);
+---
+
+<li data-nav-item data-nav-label={entry.label}>
+  {entry.children ? (
+    <details data-command-group open={containsCurrent(entry)}>
+      <summary class="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-3 py-1.5 font-medium">
+        {entry.label}
+        <svg
+          class="accordion-chevron"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m6 9 6 6 6-6"></path>
+        </svg>
+      </summary>
+      <ul class="ml-3 border-l border-border pl-1">
+        {entry.children.map((child) => (
+          <Astro.self entry={child} pathname={pathname} />
+        ))}
+      </ul>
+    </details>
+  ) : (
+    <a
+      href={entry.href}
+      aria-current={current ? 'page' : undefined}
+      class:list={[
+        'block min-h-9 rounded-md px-3 py-1.5 wrap-break-word transition-colors',
+        current
+          ? 'border-l-2 border-primary bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+          : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+      ]}
+    >
+      {entry.label}
+    </a>
+  )}
+</li>

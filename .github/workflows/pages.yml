@@ -7,6 +7,10 @@ on:
       - 'packages/docs/**'
       - 'packages/core/src/**'
       - 'packages/core/package.json'
+      - 'packages/*/skills/**'
+      - 'packages/cli/package.json'
+      - 'packages/config/package.json'
+      - 'packages/studio/package.json'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
   workflow_call:

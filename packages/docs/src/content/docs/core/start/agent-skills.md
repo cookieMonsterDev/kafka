@@ -47,3 +47,20 @@ You can also point your agent at a skill file directly, for example
 
 Skills are written from this documentation and checked in CI. If a skill gives wrong guidance, please
 [open an issue](https://github.com/cookieMonsterDev/kafka/issues).
+
+## Read website copies
+
+These copies describe the versions currently deployed on this site. For an older dependency,
+use its installed npm skill files. Supporting reference files are published alongside each skill.
+
+- [Core routing skill](../../../../agent-skills/core/skills/kafka-core/SKILL.md)
+- [Core setup](../../../../agent-skills/core/skills/kafka-core-setup/SKILL.md)
+- [Producer](../../../../agent-skills/core/skills/kafka-core-producer/SKILL.md)
+- [Consumer](../../../../agent-skills/core/skills/kafka-core-consumer/SKILL.md)
+- [Admin](../../../../agent-skills/core/skills/kafka-core-admin/SKILL.md)
+- [KafkaJS migration](../../../../agent-skills/core/skills/kafka-core-migrate-from-kafkajs/SKILL.md)
+- [CLI](../../../../agent-skills/cli/skills/kafka-cli/SKILL.md)
+- [Config](../../../../agent-skills/config/skills/kafka-config/SKILL.md)
+- [Studio](../../../../agent-skills/studio/skills/kafka-studio/SKILL.md)
+
+See [Documentation access](../documentation-access/) for machine indexes and historical sources.

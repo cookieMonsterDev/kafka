@@ -1,15 +1,29 @@
 ---
-import { getCollection } from 'astro:content'
-import { PackageSwitcherSelect } from '@/components/package-switcher-select'
-import { docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
+import { getCollection } from 'astro:content';
+import { PackageSwitcherSelect } from '@/components/package-switcher-select';
+import { docsNavPackages, docsPackageFromPathname } from '@/lib/docs';
 
 interface Props {
-  class?: string
+  class?: string;
 }
 
-const pathname = Astro.url.pathname
-const current = docsPackageFromPathname(pathname)
-const packages = docsNavPackages(await getCollection('docs'))
+const pathname = Astro.url.pathname;
+const current = docsPackageFromPathname(pathname);
+const packages = docsNavPackages(await getCollection('docs'));
 ---
 
 <PackageSwitcherSelect client:load className={Astro.props.class} packages={packages} value={current} />
+
+<noscript>
+  <nav aria-label="Packages" class="mb-4">
+    <ul class="flex flex-wrap gap-3 text-sm">
+      {packages.map((pkg) => (
+        <li>
+          <a href={pkg.href} aria-current={pkg.id === current ? 'true' : undefined}>
+            {pkg.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+</noscript>

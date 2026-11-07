@@ -49,3 +49,5 @@ versions when a 0.10–3.x broker advertises them. Constructor defaults, the
 implemented producer/consumer/admin surface, and APIs that are not
 implemented, are listed under [Compatibility](../../reference/compatibility/).
 How to run the integration matrix: [Testing](../../guides/testing/).
+
+For common operational tasks, use [Task recipes](../../guides/recipes/) and [Troubleshooting](../../guides/troubleshooting/).

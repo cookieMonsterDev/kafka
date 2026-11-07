@@ -15,3 +15,7 @@ skills-lock.json
 .agents
 .claude
 
+
+# Browser verification artifacts
+packages/docs/test-results/
+packages/docs/playwright-report/

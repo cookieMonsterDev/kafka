@@ -12,6 +12,8 @@ export type SearchDoc = {
   section: DocsSection;
   sectionLabel: string;
   headings: SearchHeading[];
+  package: string;
+  body: string;
 };
 
 export type SearchHit = {
@@ -21,34 +23,8 @@ export type SearchHit = {
   section: DocsSection;
   sectionLabel: string;
   heading?: string;
+  package: string;
 };
-
-export function slugifyHeading(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\p{Letter}\p{Number}\s-]/gu, '')
-    .trim()
-    .replace(/\s+/g, '-');
-}
-
-export function extractHeadings(body: string): SearchHeading[] {
-  const headings: SearchHeading[] = [];
-  for (const match of body.matchAll(/^#{2,3}\s+(.+)$/gm)) {
-    const raw = match[1];
-    if (raw == null) {
-      continue;
-    }
-    const text = raw
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/[*_`]/g, '')
-      .trim();
-    if (text.length === 0) {
-      continue;
-    }
-    headings.push({ text, slug: slugifyHeading(text) });
-  }
-  return headings;
-}
 
 export function filterSearch(docs: SearchDoc[], query: string): SearchHit[] {
   const tokens = query
@@ -74,6 +50,7 @@ export function filterSearch(docs: SearchDoc[], query: string): SearchHit[] {
 
 function toHit(doc: SearchDoc, heading?: SearchHeading): SearchHit {
   return {
+    package: doc.package,
     href: heading == null ? doc.href : `${doc.href}#${heading.slug}`,
     title: doc.title,
     description: doc.description,
@@ -111,6 +88,7 @@ function scoreDoc(doc: SearchDoc, tokens: string[]): { hit: SearchHit; score: nu
         heading ??= candidate;
       }
     }
+    if (doc.body.toLowerCase().includes(token)) tokenScore = Math.max(tokenScore, 5);
     if (tokenScore === 0) {
       return null;
     }

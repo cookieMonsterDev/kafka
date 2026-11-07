@@ -11,7 +11,7 @@ metadata:
     guarantee, commits offsets correctly, and survives rebalances and shutdown.
   type: sub-skill
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 requires:
   - kafka-core
   - kafka-core-setup
@@ -20,6 +20,11 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/consumer.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/throughput.md'
   - 'cookieMonsterDev/kafka:packages/core/src/consumer/types.ts'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/consumer-processing.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/consumer-offsets.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/consumer-rebalances.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/share-consumers.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/recipes.md'
 ---
 
 # kafka-core consumer
@@ -180,3 +185,7 @@ groups, read [consumer modes](references/modes.md).
 
 - [Consumer modes](references/modes.md): read when using assign mode, KIP-848, partition
   assigners, consumer hooks, or share groups (`kafka.shareConsumer`).
+
+## Documentation workflow
+
+Use the focused processing, offsets, rebalance, and share-consumer guides for advanced work. A duration-based reset policy is for a group without a usable commit; it does not override an existing commit. Keep external side effects idempotent.

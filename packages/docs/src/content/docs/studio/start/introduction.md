@@ -92,3 +92,5 @@ including a one-command Docker broker for trying it locally.
 
 Next: [Installation](../installation/), [Running it against a broker](../../guides/local-development/),
 [API reference](../../reference/api/).
+
+Try the [visual walkthrough](../getting-started/) to connect, produce, and browse records.

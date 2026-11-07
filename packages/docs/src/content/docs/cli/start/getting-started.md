@@ -25,7 +25,7 @@ kafka topic list   # --brokers no longer needed
 ```
 
 `kafka doctor` reports which config file (if any) was discovered, where each of its values came
-from, and whether the connection actually works — the first thing to reach for when a command
+from, and whether broker settings resolve locally — the first thing to reach for when a command
 connects to the wrong cluster or fails to connect at all.
 
 ```sh

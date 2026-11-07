@@ -61,7 +61,7 @@ kafka profiles          # lists every configured profile, marking the active one
 ## Diagnosing what got resolved
 
 `kafka doctor` reports the config file path (if any), the active profile, whether the connection
-actually works, and — when `Kafka`'s own `configSource()` is available — where each value came
+settings resolve locally, and — when `Kafka`'s own `configSource()` is available — where each value came
 from:
 
 ```sh

@@ -12,7 +12,7 @@ metadata:
     browse topics, tail and produce messages, and inspect groups without writing code.
   type: lifecycle
   library: '@cookiemonsterdev/kafka-studio'
-  library_version: '1.2.1'
+  library_version: '1.3.0'
 sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/debugger.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/reference/api.md'
@@ -20,6 +20,7 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/installation.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/local-development.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/commands/studio.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/getting-started.md'
 ---
 
 # kafka-studio
@@ -141,3 +142,7 @@ otherwise runs it on Node.js.
 ## References
 
 - Studio docs and HTTP API: https://cookiemonsterdev.github.io/kafka/docs/studio/start/introduction/
+
+## Documentation workflow
+
+Follow the first-topic walkthrough to connect, produce valid JSON, and inspect message history. Configure brokers through KAFKA_BROKERS or a config profile; kafka-studio has no --brokers flag. Never include the session token in screenshots or shared URLs.

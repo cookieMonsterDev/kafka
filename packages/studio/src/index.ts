@@ -20,6 +20,8 @@ import { registerProfileRoutes } from './server/routes/profiles';
 import { registerSettingsRoutes } from './server/routes/settings';
 import { registerTerminalRoutes } from './server/routes/terminal';
 import { registerTopicRoutes } from './server/routes/topics';
+import { registerDebugRoutes } from './server/routes/debug';
+import { StudioSchemaRegistry } from './server/kafka/schema-registry';
 import { Router } from './server/router';
 import { createStaticHandler } from './server/static';
 import { readStudioSection } from './server/studio-config';
@@ -81,6 +83,14 @@ export async function startStudio(options: StudioOptions, runtime: Runtime): Pro
   let activeProfile: string | null = null;
 
   const router = new Router();
+  registerDebugRoutes(router, {
+    pool,
+    producers,
+    consumerFactory: messageConsumers,
+    connection,
+    registry: new StudioSchemaRegistry(connection),
+    getActiveProfile: () => activeProfile,
+  });
   registerHealthRoutes(router, { version, readOnly, host, port, startedAt });
   registerClusterRoutes(router, { pool, getActiveProfile: () => activeProfile });
   registerProfileRoutes(router, {

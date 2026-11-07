@@ -99,6 +99,21 @@ This compose file is for manual, local use only — it is not part of `pnpm test
 from [`@cookiemonsterdev/kafka-core`](../core/README.md#tests)'s `test/assets/` (see
 [Tests](#tests) below), reusing those compose files rather than shipping a second copy of them.
 
+## Debugger
+
+Open **Debugger** for bounded JSON/header searches, saved searches, correlation timelines,
+rate-limited binary replay and dead-letter recovery, compacted state/history, key partition
+inspection, Schema Registry codecs, repeatable scenarios, and profile configuration/schema
+comparison. Consumer-group pages collect session lag diagnostics. Schema support uses the
+pure-JavaScript `@kafkajs/confluent-schema-registry` and `protobufjs` runtime dependencies. See the
+[debugger guide](../docs/src/content/docs/studio/guides/debugger.md) for limits and configuration.
+
+Export a scenario from the UI and run it without starting a web server:
+
+```sh
+kafka-studio --scenario kafka-scenario.json --profile staging
+```
+
 ## Kafka terminal
 
 Use **Terminal** in the top bar to open a resizable shell below any page. Drag its top edge (or

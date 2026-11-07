@@ -98,10 +98,18 @@
     "zod": "^4.6.7",
     "@xterm/xterm": "^6.0.0",
     "@xterm/addon-fit": "^0.11.0",
-    "@cookiemonsterdev/kafka-cli": "workspace:*"
+    "@cookiemonsterdev/kafka-cli": "workspace:*",
+    "@base-ui/react": "^1.9.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
+    "date-fns": "^4.4.0",
+    "happy-dom": "^21.0.4",
+    "react-day-picker": "^10.0.2"
   },
   "dependencies": {
     "@cookiemonsterdev/kafka-config": "^1.1.0",
-    "@cookiemonsterdev/kafka-core": "^2.4.0"
+    "@cookiemonsterdev/kafka-core": "^2.4.0",
+    "@kafkajs/confluent-schema-registry": "^4.1.0",
+    "protobufjs": "^8.8.1"
   }
 }

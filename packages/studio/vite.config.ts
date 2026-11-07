@@ -14,7 +14,14 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: [/^node:/, '@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config', 'vite'],
+      external: [
+        /^node:/,
+        '@cookiemonsterdev/kafka-core',
+        '@cookiemonsterdev/kafka-config',
+        '@kafkajs/confluent-schema-registry',
+        'protobufjs',
+        'vite',
+      ],
       output: {
         entryFileNames: '[name].js',
       },

@@ -235,6 +235,53 @@ describe('studio server against a real broker', () => {
     }
   });
 
+  it('scans and replays binary records through debugger streams', async () => {
+    const scan = await api(studio, 'POST', '/api/debug/scan', {
+      topics: [TOPIC],
+      predicates: [{ field: 'key', operator: 'eq', value: 'order-1' }],
+    });
+    expect(scan.status).toBe(200);
+    const events = await scan.text();
+    expect(events).toContain('event: result');
+    expect(events).toContain(Buffer.from('hello studio').toString('base64'));
+    const replay = await api(studio, 'POST', '/api/debug/replay', {
+      topic: TOPIC,
+      records: [{ key: '/w==', value: null, headers: { repeated: ['YQ==', null, 'Yg=='] } }],
+    });
+    const replayEvents = await replay.text();
+    expect(replayEvents).toContain('"status":"sent"');
+    const verify = await api(studio, 'POST', '/api/debug/scan', {
+      topics: [TOPIC],
+      predicates: [{ field: 'value', operator: 'eq', value: null }],
+    });
+    expect(await verify.text()).toContain('"repeated":["YQ==",null,"Yg=="]');
+  });
+
+  it('runs an exported scenario and inspects key partitioning without changing offsets', async () => {
+    const scenario = await api(studio, 'POST', '/api/debug/scenario', {
+      version: 1,
+      name: 'loopback',
+      steps: [
+        { kind: 'produce', topic: TOPIC, key: '{{id}}', value: '{"run":"{{id}}"}' },
+        {
+          kind: 'expect',
+          topic: TOPIC,
+          predicates: [{ field: 'value.run', operator: 'eq', value: '{{id}}' }],
+          timeoutMs: 10000,
+        },
+      ],
+    });
+    const events = await scenario.text();
+    expect(events).toContain('event: result');
+    expect(events.match(/"status":"passed"/g)?.length).toBe(4);
+    const partition = await api(studio, 'POST', '/api/debug/partition', {
+      topic: TOPIC,
+      key: 'order-1',
+      partitioner: 'default',
+    });
+    expect(await partition.json()).toMatchObject({ partition: expect.any(Number), partitionCount: 2 });
+  });
+
   it('deletes the topic', async () => {
     const result = await api(studio, 'DELETE', `/api/topics/${TOPIC}`);
     expect(await statusOf(result)).toEqual({ status: 204, body: expect.any(String) });

@@ -1,3 +1,4 @@
+import { DateTimePicker } from '../ui/date-time-picker';
 import { useMemo, useState } from 'react';
 import type { GroupOffsetResetTarget, GroupPartitionLag } from '../../../shared/contracts/group';
 import { Button } from '../ui/button';
@@ -117,11 +118,11 @@ export function ResetOffsetsDialog({ open, onOpenChange, partitionLag, pending, 
               <label className="text-sm font-medium" htmlFor="reset-timestamp">
                 Timestamp
               </label>
-              <Input
+              <DateTimePicker
                 id="reset-timestamp"
-                type="datetime-local"
+                label="Reset offset timestamp"
                 value={timestamp}
-                onChange={(event) => setTimestamp(event.target.value)}
+                onChange={setTimestamp}
               />
             </div>
           )}

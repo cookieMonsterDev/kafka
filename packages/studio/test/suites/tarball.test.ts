@@ -11,7 +11,10 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
 const INSTALLED_PACKAGE_DIR = 'node_modules/@cookiemonsterdev/kafka-studio';
 
 const RELATIVE_OR_NODE_IMPORT_PATTERN = /^(?:\.\.?\/|node:)/;
-const DECLARED_DEPENDENCIES = ['@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config'];
+const DECLARED_DEPENDENCIES = Object.keys(
+  (JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { dependencies: Record<string, string> })
+    .dependencies,
+);
 // `vite` is a devDependency, deliberately excluded from `dependencies` (see vite.config.ts) — it
 // must only ever reach a dynamic `import('vite')` (server/dev.ts, gated behind
 // KAFKA_STUDIO_DEV=1), never a static import that Node would resolve eagerly on every install.

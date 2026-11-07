@@ -14,6 +14,8 @@ metadata:
   library: '@cookiemonsterdev/kafka-studio'
   library_version: '1.2.1'
 sources:
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/debugger.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/reference/api.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/introduction.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/installation.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/local-development.md'
@@ -90,6 +92,23 @@ docker compose -f docker-compose.dev.yml down -v   # tear down and drop data
 - Navigation and minimizing retain the session. Changing profiles or ending it starts a new shell.
 - Server-side read-only mode denies writes and produce. Host-file and connection flags, local
   CLI commands, OS commands and pipelines are unavailable.
+
+### Debug event flows
+
+- Date-time fields use a calendar popover with hour/minute selectors; **Now**, **Clear**, and **Done**
+  keep values in local time.
+- Open **Debugger** for bounded field/header searches and cross-topic correlation. Check scan
+  coverage before treating no matches or compacted state as complete. Search predicates use
+  JSON literals joined by `AND`; offsets/timestamps are quoted decimal strings.
+- Stage selected records for replay; inspect destination, bytes, and rate. Replay preserves
+  tombstones and repeated headers. Cancellation cannot undo writes; uncertain sends need inspection.
+- Configure `studio.schemaRegistries.default` or a matching named-profile entry for Avro, JSON
+  Schema, and Protobuf codecs. Protobuf JSON accepts exact decimal-string int64 values and enum names.
+  Credentials stay server-side. No automatic schema registration.
+- Export scenarios and use standalone `kafka-studio --scenario file.json --profile staging`.
+  Exit 0 means pass, 1 means failure. These flags do not work in the embedded terminal or CLI wrapper.
+- Use **Compare** to read config/schema differences without switching profiles. Group pages
+  collect bounded session lag history; offset rates do not prove application processing.
 
 ### Launch flags
 

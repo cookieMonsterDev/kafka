@@ -34,6 +34,13 @@ sentinel values stay unchanged because their meaning depends on the setting.
 In Messages, **History** reads stored records and **Live** selects a stream of new records. Live is
 a mode selector, not a pause button; switch to History to stop tailing.
 
+## Debugging event flows
+
+Open **Debugger** to search JSON fields and headers across topics, correlate events, replay
+selected records, inspect compacted state and key distribution, use Schema Registry codecs,
+run/export scenarios, and compare profiles. Group pages collect session lag diagnostics.
+Read [Debug event flows](../../guides/debugger/) for coverage limits and setup.
+
 ## Terminal alongside the UI
 
 Use **Terminal** in the top bar to open the Kafka shell below any page. Its header can expand it

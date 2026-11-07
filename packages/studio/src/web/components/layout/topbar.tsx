@@ -20,6 +20,7 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
   if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
+  if (pathname === '/debug') return { title: 'Debugger', crumbs: [{ label: 'Debugger' }] };
   if (pathname === '/board') return { title: 'Board', crumbs: [{ label: 'Board' }] };
   if (pathname === '/groups') return { title: 'Consumer groups', crumbs: [{ label: 'Consumer groups' }] };
   if (pathname === '/console') return { title: 'Console', crumbs: [{ label: 'Console' }] };

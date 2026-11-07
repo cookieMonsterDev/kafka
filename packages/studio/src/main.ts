@@ -2,6 +2,7 @@ import { StudioUsageError, parseStudioArgs, usageText } from './args';
 import { EXIT_CODES, exitCodeForSignal } from './exit-codes';
 import { startStudio } from './index';
 import type { Runtime } from './runtime';
+import { runScenarioFile } from './scenario-cli';
 import { readOwnVersion } from './version';
 
 function waitForAbort(signal: AbortSignal): Promise<void> {
@@ -38,6 +39,15 @@ export async function main(runtime: Runtime): Promise<number> {
     return EXIT_CODES.ok;
   }
 
+  if (options.scenario !== undefined) {
+    try {
+      const code = await runScenarioFile(options.scenario, options.profile ?? null, runtime);
+      return runtime.signal.aborted ? exitCodeForSignal(runtime.signal.reason) : code;
+    } catch (error) {
+      runtime.stderr.write(`kafka-studio: ${error instanceof Error ? error.message : 'Scenario failed'}\n`);
+      return runtime.signal.aborted ? exitCodeForSignal(runtime.signal.reason) : 1;
+    }
+  }
   const studio = await startStudio(options, runtime);
   await waitForAbort(runtime.signal);
   await studio.stop();

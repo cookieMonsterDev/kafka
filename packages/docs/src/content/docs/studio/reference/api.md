@@ -97,3 +97,39 @@ none of this is optional:
   and message production on the server. Neither path relies on hiding UI controls.
 
 Next: [Running it against a broker](../../guides/local-development/).
+
+## Debugger operations
+
+All routes use the session token and Origin/Host allowlist described above. POST streams use
+fetch-based SSE with the token header, rather than EventSource, and cancel on response closure.
+Each operation captures the active profile once. Four streamed operations can run concurrently.
+
+- `POST /api/debug/scan` accepts `topics`, optional `predicates` (`field`, `operator`, `value`),
+  `startTime`/`endTime` in milliseconds, `maxRecords` (1–10,000; default 1,000), and `maxResults`
+  (1–1,000; default 200). Emits `progress`, then `result` containing base64 `records`, `scanned`,
+  `matched`, `coverage`, `complete`, and a stop `reason`. Each coverage entry includes topic,
+  partition, start, captured end, next offset, and completion. Scan results also carry
+  `headerValues` to preserve repeated/null headers; ordinary `headers` remain last-value views.
+- `POST /api/debug/replay` accepts `topic`, up to 100 `records` with base64/null key/value/header
+  bytes, and `ratePerSecond` (1–100; default 10). Emits a `record` result for each attempted send,
+  then `done`. Each result identifies its index and `sent`/`failed` status. Writes require
+  writable mode. Delivery failures can be uncertain; stopping does not roll back writes.
+- `POST /api/debug/scenario` accepts a version-1 scenario and emits `step` results then a final
+  `result` with the run ID. Writes require writable mode. See the [debugger guide](../../guides/debugger/#repeatable-scenarios).
+- `POST /api/debug/partition` accepts `topic`, UTF-8 `key`, and `partitioner` (`default` or
+  `legacy`); returns `partition` and `partitionCount`.
+- `POST /api/debug/compare` accepts `topic`, `left`, and `right` (configured profile names or
+  `null` for the unnamed connection). Returns non-sensitive config `differences` and schema
+  snapshots/status for each environment without changing the active profile. Available schema
+  snapshots include `references`, `referencedSchemas`, and `referencesComplete`; unresolved or
+  over-limit reference graphs are reported as unavailable.
+- `GET /api/debug/schemas` lists subjects. Add `subject` to list versions, and `version`
+  (number or `latest`) to fetch a schema.
+- `POST /api/debug/schemas/decode` accepts base64 `value` and returns its decoded `value`.
+- `POST /api/debug/schemas/encode` accepts schema `id`, JSON `value`, and optional Protobuf
+  `messageType`; returns validated Confluent-framed base64 `value`. It does not produce events.
+
+Scan, partition lookup, comparison, schema lookup, encoding, and decoding remain available in
+read-only mode. Streaming failures use `operation-error` with a message. A disconnected stream
+without a terminal `result`/`done` must not be treated as successful. Bounds, configuration,
+and byte-preservation details are documented in the [debugger guide](../../guides/debugger/).

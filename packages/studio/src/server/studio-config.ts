@@ -12,7 +12,14 @@ export interface StudioFileConfig {
   readonly maxTail?: number;
 }
 
-const KNOWN_KEYS: ReadonlySet<string> = new Set(['port', 'host', 'openBrowser', 'readOnly', 'maxTail']);
+const KNOWN_KEYS: ReadonlySet<string> = new Set([
+  'port',
+  'host',
+  'openBrowser',
+  'readOnly',
+  'maxTail',
+  'schemaRegistries',
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

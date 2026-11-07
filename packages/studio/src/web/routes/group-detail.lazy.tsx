@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createLazyRoute, useNavigate } from '@tanstack/react-router';
 import type { GroupOffsetResetTarget } from '../../shared/contracts/group';
 import { PageLayout } from '../components/layout/page';
+import { LagDiagnostics } from '../components/groups/lag-diagnostics';
 import { ResetOffsetsDialog } from '../components/groups/reset-dialog';
 import { Button } from '../components/ui/button';
 import { ConfirmDialog } from '../components/ui/confirm-dialog';
@@ -61,6 +62,7 @@ function GroupDetailPage() {
 
         {data && (
           <>
+            <LagDiagnostics groupId={groupId} />
             <div className="rounded-xl border border-border bg-card p-4 text-card-foreground">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold">State: {data.state}</h2>

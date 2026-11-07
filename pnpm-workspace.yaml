@@ -26,6 +26,7 @@ engineStrict: true
 minimumReleaseAge: 1440
 # esbuild ships a platform-specific binary and needs its install script to run.
 allowBuilds:
+  protobufjs: false
   esbuild: true
 # Reviewed exceptions for `pnpm audit` in the Security workflow (.github/workflows/security.yml).
 # Keep in sync with osv-scanner.toml, which holds each entry's reason and expiry date.

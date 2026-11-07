@@ -16,7 +16,12 @@ export interface SseStream {
  * whichever side ends the connection first — the client navigating away (`req` emits `close`) or a
  * route calling {@link SseStream.close} itself once it has nothing more to send.
  */
-export function openSseStream(req: IncomingMessage, res: ServerResponse, onClose: () => void): SseStream {
+export function openSseStream(
+  req: IncomingMessage,
+  res: ServerResponse,
+  onClose: () => void,
+  closeOnResponse = false,
+): SseStream {
   res.writeHead(200, {
     'content-type': 'text/event-stream',
     'cache-control': 'no-store',
@@ -40,7 +45,9 @@ export function openSseStream(req: IncomingMessage, res: ServerResponse, onClose
     onClose();
   }
 
-  req.on('close', close);
+  // POST bodies finish before their stream starts; response closure signals a disconnect there.
+  if (closeOnResponse) res.on('close', close);
+  else req.on('close', close);
 
   return {
     send(event, data) {

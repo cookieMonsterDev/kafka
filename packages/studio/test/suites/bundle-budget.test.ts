@@ -33,7 +33,9 @@ const RUNNER_NODE_ENV = process.env.NODE_ENV;
 const INITIAL_JS_BUDGET_BYTES = 168 * 1024;
 const INITIAL_CSS_BUDGET_BYTES = 20 * 1024;
 const LAZY_ROUTE_CHUNK_BUDGET_BYTES = 60 * 1024;
-const TARBALL_BUDGET_BYTES = 1.5 * 1024 * 1024;
+// Calendar/date-time controls and Base UI selects raise the measured archive to ~1.53 MiB.
+// Keep initial JS/CSS and individual lazy-route budgets unchanged; allow this intentional asset growth.
+const TARBALL_BUDGET_BYTES = 1.6 * 1024 * 1024;
 
 interface ManifestChunk {
   readonly file: string;

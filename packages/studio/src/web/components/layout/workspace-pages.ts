@@ -1,5 +1,6 @@
 import {
   Layers,
+  Bug,
   MessageSquare,
   Send,
   Server,
@@ -26,6 +27,7 @@ export const WORKSPACE_PAGES: readonly WorkspacePage[] = [
   { label: 'Topics', icon: Layers, to: '/topics' },
   { label: 'Producer', icon: Send, to: '/producer' },
   { label: 'Messages', icon: MessageSquare, to: '/messages' },
+  { label: 'Debugger', icon: Bug, to: '/debug' },
   { label: 'Board', icon: Workflow, to: '/board' },
   { label: 'Consumer groups', icon: Users, to: '/groups' },
   { label: 'Terminal', icon: Terminal, to: '/console' },

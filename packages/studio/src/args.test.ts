@@ -59,3 +59,16 @@ describe('usageText', () => {
     }
   });
 });
+
+describe('headless scenario flags', () => {
+  it('accepts a scenario file and configured profile', () => {
+    expect(parseStudioArgs(['--scenario', 'flow.json', '--profile', 'staging'])).toMatchObject({
+      scenario: 'flow.json',
+      profile: 'staging',
+    });
+  });
+  it('rejects a standalone profile and read-only scenario execution', () => {
+    expect(() => parseStudioArgs(['--profile', 'production'])).toThrow('--profile requires --scenario');
+    expect(() => parseStudioArgs(['--scenario', 'flow.json', '--read-only'])).toThrow('cannot run with --read-only');
+  });
+});

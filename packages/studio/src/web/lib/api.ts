@@ -4,7 +4,7 @@
  * the same failure surfaced with a different sentence depending on which screen you were on.
  */
 
-import { withAuthHeaders } from './auth';
+import { rejectSession, withAuthHeaders } from './auth';
 
 interface ErrorEnvelope {
   readonly error?: { readonly message?: string };
@@ -12,19 +12,30 @@ interface ErrorEnvelope {
 
 export async function assertOk(res: Response, what: string): Promise<void> {
   if (res.ok) return;
+  if (res.status === 401) rejectSession();
   const body = (await res.json().catch(() => null)) as ErrorEnvelope | null;
   throw new Error(body?.error?.message ?? `${what} failed with ${String(res.status)}`);
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: withAuthHeaders() });
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, { headers: withAuthHeaders(), signal });
   await assertOk(res, `GET ${path}`);
   return (await res.json()) as T;
 }
 
-export async function apiSend<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
+export async function apiSend<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const headers = withAuthHeaders(body === undefined ? undefined : { 'content-type': 'application/json' });
-  const res = await fetch(path, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const res = await fetch(path, {
+    method,
+    headers,
+    signal,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
   await assertOk(res, `${method} ${path}`);
   return (await res.json()) as T;
 }

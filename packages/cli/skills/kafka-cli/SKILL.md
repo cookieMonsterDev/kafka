@@ -12,14 +12,17 @@ metadata:
     flags for destructive commands, and machine-readable output for scripts.
   type: core
   library: '@cookiemonsterdev/kafka-cli'
-  library_version: '1.10.1'
+  library_version: '1.11.0'
 sources:
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/integrations/embedding.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/start/installation.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/start/getting-started.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/guides/configuration.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/guides/output-and-scripting.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/commands.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/exit-codes.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/global-options.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/recipes.md'
 ---
 
 # kafka-cli
@@ -128,6 +131,16 @@ jq '.results[] | select(.ok == false)' result.json
 Exit codes: `0` ok, `1` failed, `2` usage, `3` config error, `4` partial batch failure,
 `5` aborted/unconfirmed, `6` unsupported by the broker, `7` authentication failed.
 
+### Embed commands in a host
+
+- Import `runEmbeddedCli`, `completeEmbeddedCli`, `embeddedCliConfig` and `EmbeddedCliRuntime`
+  from `@cookiemonsterdev/kafka-cli/embedded`.
+- Supply host-owned config, stdio, an abort signal and fresh connected Admin clients; commands
+  disconnect those clients. Use `readOnly: true` to guard actual Admin calls.
+- For additional host commands, enforce read-only on operations that bypass `runtime.openAdmin`.
+- Local launch/file commands and connection/file/credential-stdin flags are unavailable. See the
+  embedding integration guide for the full runtime and cancellation contract.
+
 ## Common Mistakes
 
 - **CRITICAL — Running a destructive command against the wrong cluster.** A config file from a
@@ -154,3 +167,7 @@ Exit codes: `0` ok, `1` failed, `2` usage, `3` config error, `4` partial batch f
 
 - Command reference (one page per command):
   https://cookiemonsterdev.github.io/kafka/docs/cli/reference/commands/
+
+## Documentation workflow
+
+Use the generated nested command reference to locate operations and the global-options page for shared flags. Confirm profile resolution with doctor, inspect exit codes, and preview group resets before supplying --execute.

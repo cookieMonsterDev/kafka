@@ -11,18 +11,19 @@ export default defineConfig({
   site: 'https://cookiemonsterdev.github.io',
   base: githubPages ? '/kafka' : '/',
 
-  redirects: {
-    '/docs': '/docs/core/start/introduction',
-    '/docs/core': '/docs/core/start/introduction',
-    '/docs/introduction': '/docs/core/start/introduction',
-    '/docs/getting-started': '/docs/core/start/getting-started',
-    '/docs/compatibility': '/docs/core/reference/compatibility',
-    '/docs/public-api': '/docs/core/reference/public-api',
-    '/docs/migration': '/docs/core/migration/breaking-changes',
-  },
+  redirects: Object.fromEntries(
+    Object.entries({
+      '/docs': '/docs/core/start/introduction',
+      '/docs/core': '/docs/core/start/introduction',
+      '/docs/introduction': '/docs/core/start/introduction',
+      '/docs/getting-started': '/docs/core/start/getting-started',
+      '/docs/compatibility': '/docs/core/reference/compatibility',
+      '/docs/public-api': '/docs/core/reference/public-api',
+      '/docs/migration': '/docs/core/migration/breaking-changes',
+    }).map(([from, to]) => [from, `${githubPages ? '/kafka' : ''}${to}`]),
+  ),
 
-  // Single-theme: the site is dark-only, so Shiki emits its colours inline and global.css needs
-  // no `--shiki-dark*` override block.
+  // Match the dark-only docs palette.
   markdown: {
     shikiConfig: {
       theme: 'github-dark',

@@ -11,7 +11,7 @@ metadata:
     batching behavior, and handles the producer-specific failure modes.
   type: sub-skill
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 requires:
   - kafka-core
   - kafka-core-setup
@@ -21,6 +21,8 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/throughput.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/compatibility.md'
   - 'cookieMonsterDev/kafka:packages/core/src/producer/index.ts'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/production-readiness.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/recipes.md'
 ---
 
 # kafka-core producer
@@ -161,3 +163,7 @@ For producer `hooks` (`onSend`, `onAck`), partitioner choices, and `AbortSignal`
 
 - [Producer options](references/options.md): read when configuring hooks, partitioners,
   `maxRequestSize`, or cancellation with `AbortSignal`.
+
+## Documentation workflow
+
+After internal retries fail, preserve the error for the caller. A delivery timeout does not establish that the broker rejected a record; retain a durable event id before deciding whether an application retry is safe.

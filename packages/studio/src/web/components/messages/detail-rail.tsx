@@ -29,13 +29,18 @@ function CopyButton({ text, label }: { readonly text: string; readonly label: st
   }
 
   return (
-    <Button type="button" variant="ghost" size="icon-xs" aria-label={label} onClick={() => void handleCopy()}>
-      {copied ? (
-        <Check className="size-3.5 text-primary" aria-hidden="true" />
-      ) : (
-        <Copy className="size-3.5" aria-hidden="true" />
-      )}
-    </Button>
+    <>
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={label} onClick={() => void handleCopy()}>
+        {copied ? (
+          <Check className="size-3.5 text-primary" aria-hidden="true" />
+        ) : (
+          <Copy className="size-3.5" aria-hidden="true" />
+        )}
+      </Button>
+      <span role="status" className="sr-only">
+        {copied ? `${label}: copied to clipboard` : ''}
+      </span>
+    </>
   );
 }
 
@@ -77,7 +82,12 @@ export function MessageDetailRail({ topic, message, decoder }: MessageDetailRail
           <span className="text-sm font-medium">Key</span>
           <CopyButton text={key === null ? 'null' : key.text} label="Copy key" />
         </div>
-        <pre className="max-h-32 overflow-auto rounded-lg border border-border bg-muted/30 p-2 font-mono text-xs break-all whitespace-pre-wrap">
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Message key"
+          className="max-h-32 overflow-auto rounded-lg border border-border bg-muted/30 p-2 font-mono text-xs break-all whitespace-pre-wrap"
+        >
           {key === null ? 'null' : key.text}
         </pre>
         {key?.error !== undefined && <p className="text-xs text-muted-foreground">{key.error}</p>}
@@ -88,7 +98,12 @@ export function MessageDetailRail({ topic, message, decoder }: MessageDetailRail
           <span className="text-sm font-medium">Value</span>
           <CopyButton text={value === null ? 'null' : value.text} label="Copy value" />
         </div>
-        <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/30 p-2 font-mono text-xs break-all whitespace-pre-wrap">
+        <pre
+          tabIndex={0}
+          role="region"
+          aria-label="Message value"
+          className="max-h-64 overflow-auto rounded-lg border border-border bg-muted/30 p-2 font-mono text-xs break-all whitespace-pre-wrap"
+        >
           {value === null ? 'null' : value.text}
         </pre>
         {value?.error !== undefined && <p className="text-xs text-muted-foreground">{value.error}</p>}

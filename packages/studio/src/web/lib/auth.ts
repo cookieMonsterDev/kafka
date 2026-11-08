@@ -32,6 +32,23 @@ function bootstrapFromLocation(): string | null {
 }
 
 const sessionToken = bootstrapFromLocation();
+let sessionRejected = false;
+const sessionListeners = new Set<() => void>();
+
+export function isSessionExpired(): boolean {
+  return !sessionToken || sessionRejected;
+}
+
+export function subscribeToSession(listener: () => void): () => void {
+  sessionListeners.add(listener);
+  return () => sessionListeners.delete(listener);
+}
+
+export function rejectSession(): void {
+  if (sessionRejected) return;
+  sessionRejected = true;
+  for (const listener of sessionListeners) listener();
+}
 
 export function getSessionToken(): string | null {
   return sessionToken;

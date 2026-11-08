@@ -35,7 +35,20 @@ pnpm test          # unit tests only (never starts Docker)
 pnpm clean         # build output and node_modules (re-run pnpm install after)
 ```
 
-CI's `typecheck` step excludes `@cookiemonsterdev/kafka-docs` — its `astro check` fails under the current TypeScript catalog pin (a known, pre-existing issue). `pnpm typecheck` from the repo root still runs it, so check docs locally before relying on CI for it.
+Docs use the `docs-check` named TypeScript catalog because the current `astro check`
+requires TypeScript 6; runtime packages use the shared TypeScript 7 catalog. Both are
+checked in CI. Docs browser checks run separately from unit tests:
+
+```sh
+GITHUB_PAGES=1 pnpm --filter @cookiemonsterdev/kafka-docs... build
+pnpm docs:check
+pnpm --filter @cookiemonsterdev/kafka-docs exec playwright install chromium
+pnpm --filter @cookiemonsterdev/kafka-docs test:browser
+```
+
+The docs job checks internal links and anchors, runnable-example drift, keyboard navigation,
+mobile focus containment, reflow, and automated accessibility in the dark theme.
+Manual screen-reader and zoom checks remain part of UI review.
 
 `pnpm -r` walks the workspace graph, so `@cookiemonsterdev/kafka-core` compiles before `@cookiemonsterdev/kafka-docs` imports it.
 
@@ -196,8 +209,8 @@ pnpm --filter @cookiemonsterdev/kafka-core test
 ```
 
 CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
-locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, studio,
-and cli in that order, then run:
+locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, cli,
+and studio in that order, then run:
 
 ```sh
 pnpm test:bun                # every package's unit suite under `bun --bun`

@@ -6,11 +6,16 @@ packages:
 # Packages reference these with "typescript": "catalog:".
 catalog:
   typescript: ^7.0.2
-  astro: ^7.4.2
+  astro: ^7.4.4
   vite: ^8.3.5
   vitest: ^5.0.5
   '@vitest/coverage-v8': ^5.0.5
-  '@types/node': ^26.6.5
+  '@types/node': ^26.6.6
+
+# Astro's current checker requires TypeScript 6; runtime packages retain the main catalog.
+catalogs:
+  docs-check:
+    typescript: ^6.0.0
 
 # Link local packages into node_modules instead of fetching them from the registry.
 linkWorkspacePackages: true
@@ -26,6 +31,7 @@ engineStrict: true
 minimumReleaseAge: 1440
 # esbuild ships a platform-specific binary and needs its install script to run.
 allowBuilds:
+  protobufjs: false
   esbuild: true
 # Reviewed exceptions for `pnpm audit` in the Security workflow (.github/workflows/security.yml).
 # Keep in sync with osv-scanner.toml, which holds each entry's reason and expiry date.
@@ -33,3 +39,5 @@ auditConfig:
   ignoreGhsas:
     - GHSA-vfj7-8cjw-p6xm
     - GHSA-rj75-hqrm-r3gf
+    - GHSA-g3hv-75wg-m249
+    - GHSA-gcqx-w48m-w2h4

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import type { AlterTopicConfigsRequest, TopicConfigEntry } from '../../../shared/contracts/topic';
+import { formatConfigDuration } from '../../lib/topic-config-display';
 import { validateTopicConfigValue } from '../../lib/topic-config-schema';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -19,10 +20,19 @@ type PendingEdits = Record<string, string | null>;
  * left open with unsaved edits can't drift out from under the operator.
  */
 export function ConfigEditor({ configs, onSave, pending = false }: ConfigEditorProps) {
+  const durationId = useId();
+  const [search, setSearch] = useState('');
+  const [overridesOnly, setOverridesOnly] = useState(false);
   const [edits, setEdits] = useState<PendingEdits>({});
 
   const dirtyCount = Object.keys(edits).length;
   const sorted = useMemo(() => configs.toSorted((a, b) => a.name.localeCompare(b.name)), [configs]);
+
+  const visible = sorted.filter(
+    (entry) =>
+      entry.name.toLowerCase().includes(search.trim().toLowerCase()) &&
+      (!overridesOnly || !entry.isDefault || edits[entry.name] !== undefined),
+  );
 
   /** Only a queued `set` is validated — a queued `unset` reverts to the broker default, which needs no check. */
   function rowError(name: string): string | null {
@@ -69,7 +79,35 @@ export function ConfigEditor({ configs, onSave, pending = false }: ConfigEditorP
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="w-full sm:max-w-xs">
+          <span className="sr-only">Filter configuration keys</span>
+          <Input
+            type="search"
+            placeholder="Filter configuration keys…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <label className="flex min-h-8 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={overridesOnly}
+            onChange={(event) => setOverridesOnly(event.target.checked)}
+            className="size-4 accent-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          />
+          Overrides only
+        </label>
+        <p role="status" className="text-xs text-muted-foreground">
+          {visible.length} of {configs.length} settings
+        </p>
+      </div>
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Topic configuration, scroll horizontally for more columns"
+        className="overflow-x-auto rounded-xl border border-border"
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -88,9 +126,18 @@ export function ConfigEditor({ configs, onSave, pending = false }: ConfigEditorP
             </tr>
           </thead>
           <tbody>
-            {sorted.map((entry) => {
+            {visible.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  No settings match these filters. Clear the search or turn off Overrides only.
+                </td>
+              </tr>
+            )}
+            {visible.map((entry) => {
               const isUnsetQueued = edits[entry.name] === null;
               const error = rowError(entry.name);
+              const duration = formatConfigDuration(entry.name, currentValue(entry));
+              const hintId = `${durationId}-${entry.name}`;
               return (
                 <tr key={entry.name} className="border-b border-border last:border-0">
                   <td className="px-3 py-2 font-mono text-xs">{entry.name}</td>
@@ -102,7 +149,13 @@ export function ConfigEditor({ configs, onSave, pending = false }: ConfigEditorP
                       placeholder={isUnsetQueued ? 'reverting to default…' : undefined}
                       onChange={(event) => setValue(entry.name, event.target.value)}
                       aria-invalid={error !== null}
+                      aria-describedby={duration === null ? undefined : hintId}
                     />
+                    {duration !== null && (
+                      <p id={hintId} className="mt-1 text-xs text-muted-foreground">
+                        {duration}
+                      </p>
+                    )}
                     {error !== null && (
                       <p className="mt-1 text-xs text-destructive" role="alert">
                         {error}

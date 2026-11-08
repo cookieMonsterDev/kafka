@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
-import { Trash2 } from 'lucide-react';
+import { Inbox, Send, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createLazyRoute, useNavigate } from '@tanstack/react-router';
+import { Link, createLazyRoute, useNavigate } from '@tanstack/react-router';
 import { PageLayout } from '../components/layout/page';
 import { ConfigEditor } from '../components/topics/config-editor';
 import { Button } from '../components/ui/button';
@@ -90,7 +90,24 @@ function TopicDetailPage() {
   });
 
   return (
-    <PageLayout>
+    <PageLayout
+      toolbar={
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link to="/messages" search={{ topic: name }}>
+              <Inbox className="size-4" aria-hidden="true" />
+              Browse messages
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to="/producer" search={{ topic: name }}>
+              <Send className="size-4" aria-hidden="true" />
+              Produce
+            </Link>
+          </Button>
+        </div>
+      }
+    >
       <section aria-label={`Topic ${name}`} className="flex flex-col gap-6">
         {isPending && (
           <div className="flex flex-col gap-6" role="status" aria-busy="true">

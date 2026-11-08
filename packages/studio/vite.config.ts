@@ -9,9 +9,19 @@ export default defineConfig({
     // invocation, with core/config kept external so they resolve to the workspace's own copies.
     // `vite` is external too — `server/dev.ts` only imports it lazily, behind KAFKA_STUDIO_DEV,
     // and it must never be pulled into the published tarball (it's a devDependency).
-    lib: { entry: { index: 'src/index.ts', bin: 'src/bin.ts' }, formats: ['es'] },
+    lib: {
+      entry: { index: 'src/index.ts', bin: 'src/bin.ts', 'readline-worker': 'src/server/terminal/readline-worker.ts' },
+      formats: ['es'],
+    },
     rollupOptions: {
-      external: [/^node:/, '@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config', 'vite'],
+      external: [
+        /^node:/,
+        '@cookiemonsterdev/kafka-core',
+        '@cookiemonsterdev/kafka-config',
+        '@kafkajs/confluent-schema-registry',
+        'protobufjs',
+        'vite',
+      ],
       output: {
         entryFileNames: '[name].js',
       },

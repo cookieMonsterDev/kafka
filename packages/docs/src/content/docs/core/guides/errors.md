@@ -16,8 +16,11 @@ try {
   } else if (error instanceof KafkaNonRetriableError) {
     throw error;
   } else if (error instanceof KafkaError && error.retriable) {
-    // client will usually retry this already
+    // The internal retry budget has been exhausted. Record the failure.
+    console.error('Send failed after retries', error);
   }
+  // Preserve failure for the caller; do not report a successful send.
+  throw error;
 }
 ```
 

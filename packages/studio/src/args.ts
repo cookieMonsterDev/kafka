@@ -3,6 +3,8 @@ import { parseArgs } from 'node:util';
 export class StudioUsageError extends Error {}
 
 export interface StudioArgs {
+  readonly scenario?: string;
+  readonly profile?: string;
   readonly port?: number;
   readonly host?: string;
   /** `undefined` defers to `BROWSER`/the platform default; `'none'` disables opening entirely. */
@@ -27,6 +29,8 @@ export function parseStudioArgs(argv: readonly string[]): StudioArgs {
     raw = parseArgs({
       args: argv,
       options: {
+        scenario: { type: 'string' },
+        profile: { type: 'string' },
         port: { type: 'string', short: 'p' },
         host: { type: 'string' },
         browser: { type: 'string' },
@@ -43,6 +47,8 @@ export function parseStudioArgs(argv: readonly string[]): StudioArgs {
   }
 
   const values = raw.values as {
+    scenario?: string;
+    profile?: string;
     port?: string;
     host?: string;
     browser?: string;
@@ -53,7 +59,13 @@ export function parseStudioArgs(argv: readonly string[]): StudioArgs {
   };
   const browser = values.browser ?? (values['no-browser'] === true ? 'none' : undefined);
 
+  if (values.profile !== undefined && values.scenario === undefined)
+    throw new StudioUsageError('--profile requires --scenario');
+  if (values.scenario !== undefined && values['read-only'] === true)
+    throw new StudioUsageError('--scenario produces events and cannot run with --read-only');
   return {
+    ...(values.scenario !== undefined ? { scenario: values.scenario } : {}),
+    ...(values.profile !== undefined ? { profile: values.profile } : {}),
     ...(values.port !== undefined ? { port: coercePort(values.port) } : {}),
     ...(values.host !== undefined ? { host: values.host } : {}),
     ...(browser !== undefined ? { browser } : {}),
@@ -69,6 +81,8 @@ export function usageText(): string {
 Launches a local web UI for inspecting and driving a Kafka cluster.
 
 Options:
+      --scenario <file> run an exported scenario headlessly and exit (0 pass, 1 fail)
+      --profile <name>  configured profile for --scenario
   -p, --port <number>   port to listen on (default: first free port in 5757-5807)
       --host <address>  address to bind (default: 127.0.0.1)
       --browser <cmd>   browser command to open, or "none" to disable

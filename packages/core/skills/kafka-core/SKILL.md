@@ -12,12 +12,15 @@ metadata:
     the setup, producer, consumer, admin, and kafkajs-migration skills.
   type: core
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/start/introduction.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/start/getting-started.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/errors.md'
   - 'cookieMonsterDev/kafka:packages/core/src/index.ts'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/start/documentation-access.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/troubleshooting.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/production-readiness.md'
 ---
 
 # kafka-core
@@ -71,8 +74,9 @@ try {
   } else if (error instanceof KafkaNonRetriableError) {
     throw error;
   } else if (error instanceof KafkaError && error.retriable) {
-    // The client already retried this (5 attempts by default).
+    // The client already retried; preserve the final failure.
   }
+  throw error;
 }
 ```
 
@@ -91,3 +95,7 @@ try {
 
 - Full API docs: https://cookiemonsterdev.github.io/kafka/docs/core/start/introduction/
 - Exact signatures for the installed version: `node_modules/@cookiemonsterdev/kafka-core/dist/index.d.ts`.
+
+## Documentation workflow
+
+Match the installed package version before using the latest website. Read `docs-index.json` for versions and the source revision, or use the bundled skills. Use the troubleshooting and production-readiness guides before proposing operational changes.

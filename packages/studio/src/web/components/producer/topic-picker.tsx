@@ -22,7 +22,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
       {isError ? (
         // Compact destructive chip — `ErrorState`'s own layout is a centered full-section block.
         <div
@@ -31,7 +31,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
         >
           <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
           {/* Fixed cap, not flex-shrink: this sits several toolbar ancestors deep, and truncation needs every one of them at `min-width: 0`. */}
-          <span className="max-w-[22rem] truncate sm:max-w-[32rem]">
+          <span className="max-w-88 truncate sm:max-w-lg">
             Could not load topics: {errorMessage(error) ?? 'unknown error'}
           </span>
           <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => void refetch()}>
@@ -40,7 +40,7 @@ export function TopicPicker({ value, onChange, disabled = false }: TopicPickerPr
         </div>
       ) : (
         <Select value={value ?? undefined} onValueChange={onChange} disabled={disabled || isPending}>
-          <SelectTrigger className="w-56" aria-label="Topic">
+          <SelectTrigger className="w-56 max-w-full" aria-label="Topic">
             <SelectValue placeholder={isPending ? 'Loading topics…' : 'Select a topic'} />
           </SelectTrigger>
           <SelectContent>

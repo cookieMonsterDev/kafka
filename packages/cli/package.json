@@ -45,6 +45,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./embedded": {
+      "types": "./dist/embedded.d.ts",
+      "default": "./dist/embedded.js"
     }
   },
   "files": [
@@ -65,7 +69,6 @@
     "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "@cookiemonsterdev/kafka-studio": "workspace:*",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "eslint": "^10.13.0",

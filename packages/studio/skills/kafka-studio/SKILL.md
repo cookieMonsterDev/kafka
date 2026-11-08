@@ -12,12 +12,15 @@ metadata:
     browse topics, tail and produce messages, and inspect groups without writing code.
   type: lifecycle
   library: '@cookiemonsterdev/kafka-studio'
-  library_version: '1.2.1'
+  library_version: '1.3.0'
 sources:
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/debugger.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/reference/api.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/introduction.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/installation.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/guides/local-development.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/commands/studio.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/studio/start/getting-started.md'
 ---
 
 # kafka-studio
@@ -43,6 +46,9 @@ kafka studio
 
 It prints a `localhost` URL with a per-session token in the hash and opens a browser.
 
+From the monorepo, build Studio and its workspace dependencies with
+`pnpm --filter @cookiemonsterdev/kafka-studio... build`, then run `node packages/studio/dist/bin.js`.
+
 ## Core Patterns
 
 ### Choose the cluster
@@ -64,6 +70,46 @@ docker compose -f docker-compose.dev.yml ps        # wait for healthy
 KAFKA_BROKERS=localhost:9092 kafka-studio
 docker compose -f docker-compose.dev.yml down -v   # tear down and drop data
 ```
+
+### Browse and recover a session
+
+- From a topic, use **Browse messages** or **Produce** to preselect it on the next page.
+- Filter configuration by key or choose **Overrides only**; pending edits survive filter changes.
+- **Live** selects the new-message stream; switch to **History** to stop it.
+- **Studio uptime** describes the local process, not broker uptime.
+- If the session recovery screen appears after a reload or restart, open the full URL printed
+  in the launching terminal in a new tab. Retry cannot recover an in-memory token.
+
+### Use the docked terminal
+
+- Open **Terminal** in the top bar; drag the separator or use its arrow keys to resize. Expand,
+  restore, minimize or end the session with its header controls.
+- Run `help`, `topic list`, `topic create orders --partitions 3`, or `group offsets readers`.
+  Commands use the embedded CLI and active Studio profile; `--help` and `--json` behave like CLI.
+- `produce orders --value '{"id":1}'` sends a message. `consume orders --limit 10` reads stored
+  records; `consume orders --tail` follows new ones until Ctrl+C.
+- Tab completes, arrows edit/recall history, Ctrl+C interrupts, Ctrl+L or `clear` clears the display,
+  Shift+Tab leaves focus, and `exit` ends the session. Destructive commands retain CLI confirmation.
+- Navigation and minimizing retain the session. Changing profiles or ending it starts a new shell.
+- Server-side read-only mode denies writes and produce. Host-file and connection flags, local
+  CLI commands, OS commands and pipelines are unavailable.
+
+### Debug event flows
+
+- Date-time fields use a calendar popover with hour/minute selectors; **Now**, **Clear**, and **Done**
+  keep values in local time.
+- Open **Debugger** for bounded field/header searches and cross-topic correlation. Check scan
+  coverage before treating no matches or compacted state as complete. Search predicates use
+  JSON literals joined by `AND`; offsets/timestamps are quoted decimal strings.
+- Stage selected records for replay; inspect destination, bytes, and rate. Replay preserves
+  tombstones and repeated headers. Cancellation cannot undo writes; uncertain sends need inspection.
+- Configure `studio.schemaRegistries.default` or a matching named-profile entry for Avro, JSON
+  Schema, and Protobuf codecs. Protobuf JSON accepts exact decimal-string int64 values and enum names.
+  Credentials stay server-side. No automatic schema registration.
+- Export scenarios and use standalone `kafka-studio --scenario file.json --profile staging`.
+  Exit 0 means pass, 1 means failure. These flags do not work in the embedded terminal or CLI wrapper.
+- Use **Compare** to read config/schema differences without switching profiles. Group pages
+  collect bounded session lag history; offset rates do not prove application processing.
 
 ### Launch flags
 
@@ -96,3 +142,7 @@ otherwise runs it on Node.js.
 ## References
 
 - Studio docs and HTTP API: https://cookiemonsterdev.github.io/kafka/docs/studio/start/introduction/
+
+## Documentation workflow
+
+Follow the first-topic walkthrough to connect, produce valid JSON, and inspect message history. Configure brokers through KAFKA_BROKERS or a config profile; kafka-studio has no --brokers flag. Never include the session token in screenshots or shared URLs.

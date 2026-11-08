@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
-import { Menu, PanelLeft, RefreshCw } from 'lucide-react';
+import { Menu, PanelLeft, RefreshCw, Terminal } from 'lucide-react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from '@tanstack/react-router';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
 import { cn } from '../../lib/utils';
 import { useAppShell } from './app-shell';
+import { useTerminal } from '../terminal/terminal-context';
 import { CommandPalette } from './command-palette';
 
 interface Crumb {
@@ -19,8 +20,10 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
   if (pathname === '/topics') return { title: 'Topics', crumbs: [{ label: 'Topics' }] };
   if (pathname === '/producer') return { title: 'Producer', crumbs: [{ label: 'Producer' }] };
   if (pathname === '/messages') return { title: 'Messages', crumbs: [{ label: 'Messages' }] };
+  if (pathname === '/debug') return { title: 'Debugger', crumbs: [{ label: 'Debugger' }] };
   if (pathname === '/board') return { title: 'Board', crumbs: [{ label: 'Board' }] };
   if (pathname === '/groups') return { title: 'Consumer groups', crumbs: [{ label: 'Consumer groups' }] };
+  if (pathname === '/console') return { title: 'Console', crumbs: [{ label: 'Console' }] };
   if (pathname === '/settings') return { title: 'Settings', crumbs: [{ label: 'Settings' }] };
   if (pathname.startsWith('/topics/')) {
     const name = decodeURIComponent(pathname.slice('/topics/'.length));
@@ -47,6 +50,7 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
  * pages, not a filter over any one list — which is why it's a `⌘K` dialog, not a text field.
  */
 export function Topbar() {
+  const { toggle: toggleTerminal, mode: terminalMode } = useTerminal();
   const { isMobile, collapsed, toggleCollapsed, openMobileNav } = useAppShell();
   const pathname = useLocation({ select: (location) => location.pathname });
   const queryClient = useQueryClient();
@@ -55,8 +59,7 @@ export function Topbar() {
   const lastCrumbIndex = crumbs.length - 1;
 
   useEffect(() => {
-    // Mirrors the docs site's `Kafka | <package> | <title>` convention (`BaseLayout.astro`).
-    document.title = title === null ? 'Kafka | Studio' : `Kafka | Studio | ${title}`;
+    document.title = title === null ? 'Kafka Studio' : `Kafka Studio | ${title}`;
   }, [title]);
 
   return (
@@ -118,6 +121,20 @@ export function Topbar() {
         </nav>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="size-9"
+          id="terminal-toggle"
+          title="Terminal"
+          aria-label="Toggle terminal"
+          aria-expanded={terminalMode !== 'hidden'}
+          aria-controls="terminal-panel"
+          onClick={toggleTerminal}
+        >
+          <Terminal className="size-4" aria-hidden="true" />
+        </Button>
         <CommandPalette />
         <Button
           type="button"

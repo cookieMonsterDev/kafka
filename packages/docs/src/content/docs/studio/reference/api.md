@@ -54,6 +54,31 @@ web UI decodes them per the viewer's chosen decoder. Sending a message accepts p
 `key`/`value` directly — `value: null` is Kafka's tombstone, an explicit delete marker rather than
 "no value".
 
+## Terminal sessions
+
+The terminal uses the same token and origin/host checks as the rest of the API. It is an
+interactive Kafka shell backed by `kafka-cli`, not a host shell.
+
+- `POST /api/terminal/sessions` creates a session and returns `{ id, profile, readOnly }`.
+- `GET /api/terminal/sessions/:id/events` is SSE. `output` events carry `{ data }` with terminal
+  text/ANSI sequences; `exit` ends the session. A reconnect resets the terminal and replays the
+  bounded recent output, avoiding duplicate display.
+- `POST /api/terminal/sessions/:id/input` accepts `{ data }` (up to 8192 characters per request).
+  Input is ordered and interpreted by the line editor. A command line is limited to 32768 characters.
+- `POST /api/terminal/sessions/:id/resize` accepts `{ columns }` between 20 and 500.
+- `DELETE /api/terminal/sessions/:id` ends the session and interrupts active work.
+
+There are at most eight sessions per process. A session with no attached stream expires after
+five minutes, and reconnect replay retains at most 512 KiB of recent output. Minimized terminals
+keep their stream and session. Unknown/expired sessions return `404`; input from a session tied
+to a previously active profile returns `409`. Profile changes start a fresh browser terminal.
+
+Session-control POST/DELETE routes remain available in read-only mode. The embedded CLI guards
+actual Admin calls on the server, including `admin call`; the Studio `produce` helper separately
+checks read-only mode. A rejected command writes a CLI error and nonzero exit status to terminal
+output. CLI confirmations and force requirements still apply in writable sessions. Shell
+execution, file arguments and connection overrides are unavailable.
+
 ## Security
 
 A local server that can speak to a possibly-production Kafka cluster is a real attack surface, so
@@ -67,7 +92,44 @@ none of this is optional:
 - **An Origin/Host allowlist**, rejecting a request naming a `Host` (or `Origin`) other than the
   address the server was told to bind — the standard defense against DNS rebinding against a local
   dev server.
-- **`--read-only`, enforced server-side.** A mutating request is rejected with `403` regardless of
-  what the client sent, not merely hidden behind disabled buttons in the UI.
+- **`--read-only`, enforced server-side.** Mutating REST operations are rejected with `403`.
+  Terminal session controls remain available, but command execution checks actual Admin calls
+  and message production on the server. Neither path relies on hiding UI controls.
 
 Next: [Running it against a broker](../../guides/local-development/).
+
+## Debugger operations
+
+All routes use the session token and Origin/Host allowlist described above. POST streams use
+fetch-based SSE with the token header, rather than EventSource, and cancel on response closure.
+Each operation captures the active profile once. Four streamed operations can run concurrently.
+
+- `POST /api/debug/scan` accepts `topics`, optional `predicates` (`field`, `operator`, `value`),
+  `startTime`/`endTime` in milliseconds, `maxRecords` (1–10,000; default 1,000), and `maxResults`
+  (1–1,000; default 200). Emits `progress`, then `result` containing base64 `records`, `scanned`,
+  `matched`, `coverage`, `complete`, and a stop `reason`. Each coverage entry includes topic,
+  partition, start, captured end, next offset, and completion. Scan results also carry
+  `headerValues` to preserve repeated/null headers; ordinary `headers` remain last-value views.
+- `POST /api/debug/replay` accepts `topic`, up to 100 `records` with base64/null key/value/header
+  bytes, and `ratePerSecond` (1–100; default 10). Emits a `record` result for each attempted send,
+  then `done`. Each result identifies its index and `sent`/`failed` status. Writes require
+  writable mode. Delivery failures can be uncertain; stopping does not roll back writes.
+- `POST /api/debug/scenario` accepts a version-1 scenario and emits `step` results then a final
+  `result` with the run ID. Writes require writable mode. See the [debugger guide](../../guides/debugger/#repeatable-scenarios).
+- `POST /api/debug/partition` accepts `topic`, UTF-8 `key`, and `partitioner` (`default` or
+  `legacy`); returns `partition` and `partitionCount`.
+- `POST /api/debug/compare` accepts `topic`, `left`, and `right` (configured profile names or
+  `null` for the unnamed connection). Returns non-sensitive config `differences` and schema
+  snapshots/status for each environment without changing the active profile. Available schema
+  snapshots include `references`, `referencedSchemas`, and `referencesComplete`; unresolved or
+  over-limit reference graphs are reported as unavailable.
+- `GET /api/debug/schemas` lists subjects. Add `subject` to list versions, and `version`
+  (number or `latest`) to fetch a schema.
+- `POST /api/debug/schemas/decode` accepts base64 `value` and returns its decoded `value`.
+- `POST /api/debug/schemas/encode` accepts schema `id`, JSON `value`, and optional Protobuf
+  `messageType`; returns validated Confluent-framed base64 `value`. It does not produce events.
+
+Scan, partition lookup, comparison, schema lookup, encoding, and decoding remain available in
+read-only mode. Streaming failures use `operation-error` with a message. A disconnected stream
+without a terminal `result`/`done` must not be treated as successful. Bounds, configuration,
+and byte-preservation details are documented in the [debugger guide](../../guides/debugger/).

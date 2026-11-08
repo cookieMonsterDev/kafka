@@ -2,6 +2,7 @@ import { CircleAlert, Layers, Plug } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createLazyRoute } from '@tanstack/react-router';
 import { PageLayout } from '../components/layout/page';
+import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { EmptyState } from '../components/ui/empty-state';
@@ -108,7 +109,18 @@ function ClusterOverview() {
   return (
     <PageLayout railLabel="Cluster details" rail={<TopicsRail />}>
       <div className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <nav aria-label="Cluster actions" className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link to="/topics">Browse topics</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/producer">Produce a message</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/groups">Consumer groups</Link>
+          </Button>
+        </nav>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat
             label="Topics"
             value={topics.data === undefined ? '—' : String(topics.data.topics.length)}
@@ -120,7 +132,12 @@ function ClusterOverview() {
             pending={topics.isPending}
           />
           <Stat
-            label="Uptime"
+            label="Brokers"
+            value={cluster.data?.connected === true ? String(cluster.data.brokerCount) : '—'}
+            pending={cluster.isPending}
+          />
+          <Stat
+            label="Studio uptime"
             value={health.data === undefined ? '—' : formatUptime(health.data.uptimeSeconds)}
             pending={health.isPending}
           />
@@ -155,7 +172,7 @@ function ClusterOverview() {
                 className="py-6"
                 icon={Plug}
                 title="Not connected to a Kafka cluster"
-                description="The studio server is running, but no broker connection is configured yet. Connection profiles arrive in a later update."
+                description="Configure KAFKA_BROKERS or a kafka.config connection profile, then restart Studio. If profiles are configured, choose one in the sidebar."
               />
             )}
           </CardContent>

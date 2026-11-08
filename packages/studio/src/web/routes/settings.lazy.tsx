@@ -1,3 +1,4 @@
+import { RadioGroup } from 'radix-ui';
 import { useState } from 'react';
 import { ArrowLeftRight, Gauge, ShieldCheck } from 'lucide-react';
 import { createLazyRoute } from '@tanstack/react-router';
@@ -18,23 +19,26 @@ const TAB_ICON: Record<Tab, typeof ShieldCheck> = { acls: ShieldCheck, quotas: G
 
 function TabToggle({ tab, onChange }: { readonly tab: Tab; readonly onChange: (tab: Tab) => void }) {
   return (
-    <div role="radiogroup" aria-label="Settings section" className="flex gap-1 rounded-lg border border-border p-1">
+    <RadioGroup.Root
+      value={tab}
+      onValueChange={(value) => onChange(value as Tab)}
+      orientation="horizontal"
+      aria-label="Settings section"
+      className="flex flex-wrap gap-1 rounded-lg border border-border p-1"
+    >
       {(Object.keys(TAB_LABEL) as Tab[]).map((value) => (
-        <button
+        <RadioGroup.Item
           key={value}
-          type="button"
-          role="radio"
-          aria-checked={tab === value}
-          onClick={() => onChange(value)}
+          value={value}
           className={cn(
             'rounded-md px-3 py-1 text-sm outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/50',
             tab === value ? 'bg-accent font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
           )}
         >
           {TAB_LABEL[value]}
-        </button>
+        </RadioGroup.Item>
       ))}
-    </div>
+    </RadioGroup.Root>
   );
 }
 

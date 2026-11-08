@@ -28,7 +28,8 @@
     "skills:validate": "intent validate",
     "seo:indexnow": "node scripts/submit-search-index.mjs",
     "release": "node scripts/run-semantic-release.mjs",
-    "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
+    "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
@@ -50,6 +51,7 @@
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.5",
-    "typescript-eslint": "^8.72.0"
+    "typescript-eslint": "^8.72.1",
+    "@cookiemonsterdev/kafka-studio": "workspace:*"
   }
 }

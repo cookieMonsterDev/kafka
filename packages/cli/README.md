@@ -31,6 +31,7 @@ map to the `kafka` equivalent.
 - [Configuration](#configuration)
 - [Output](#output)
 - [Exit codes](#exit-codes)
+- [Embedding](#embedding)
 - [Development](#development)
 
 ## Install
@@ -550,6 +551,13 @@ color; `FORCE_COLOR` forces it even off a TTY.
 | `70`  | internal bug — please report it     |
 | `130` | interrupted (`SIGINT`)              |
 | `143` | terminated (`SIGTERM`)              |
+
+## Embedding
+
+Hosts can use `@cookiemonsterdev/kafka-cli/embedded` to share the CLI's parser, help, command
+registry, completion and output formatting. Studio bundles this entry point into its server.
+See [Embedding the CLI](../docs/src/content/docs/cli/integrations/embedding.md) for the runtime
+contract, host restrictions and read-only enforcement.
 
 ## Development
 

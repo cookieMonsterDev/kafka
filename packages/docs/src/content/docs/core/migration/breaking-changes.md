@@ -1,13 +1,13 @@
 ---
-title: Breaking changes
+title: Client differences
 description: Offsets as bigint, MessageSet, built-in ZSTD, and environment variables
 order: 1
 section: migration
 ---
 
 `@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for
-Node.js that speaks the Kafka wire protocol directly. This page lists the
-differences that break copy-paste from other Node clients. Constructor
+Node.js that speaks the Kafka wire protocol directly. This page lists persistent compatibility differences from other Node clients.
+For upgrades between releases, follow [Upgrade guidance](../upgrading/). Constructor
 defaults are tabulated under [Compatibility](../../reference/compatibility/).
 
 ## Offsets are `bigint`

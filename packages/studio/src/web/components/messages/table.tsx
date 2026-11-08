@@ -50,91 +50,107 @@ export function MessagesTable({ mode, filtered, decoder, selectedKey, onSelectKe
         </p>
       )}
       <div
+        ref={scrollRef}
         tabIndex={0}
         role="region"
         aria-label="Messages table, scroll horizontally for more columns"
-        className="overflow-x-auto"
+        className="max-h-[60vh] scroll-pt-10 overflow-auto"
       >
         <div className="min-w-2xl">
-          <table className="w-full table-fixed text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40 text-left text-xs font-medium text-muted-foreground">
-                <th scope="col" className="w-20 px-3 py-2">
+          <table aria-label="Messages" aria-rowcount={filtered.length + 1} role="table" className="grid w-full text-sm">
+            <thead role="rowgroup" className="sticky top-0 z-10 grid bg-card">
+              <tr
+                role="row"
+                className="flex border-b border-border bg-muted/40 text-left text-xs font-medium text-muted-foreground"
+              >
+                <th role="columnheader" scope="col" className="w-20 shrink-0 px-3 py-2">
                   Partition
                 </th>
-                <th scope="col" className="w-24 px-3 py-2">
+                <th role="columnheader" scope="col" className="w-24 shrink-0 px-3 py-2">
                   Offset
                 </th>
-                <th scope="col" className="w-44 px-3 py-2">
+                <th role="columnheader" scope="col" className="w-44 shrink-0 px-3 py-2">
                   Timestamp
                 </th>
-                <th scope="col" className="w-1/4 px-3 py-2">
+                <th role="columnheader" scope="col" className="w-1/4 shrink-0 px-3 py-2">
                   Key
                 </th>
-                <th scope="col" className="px-3 py-2">
+                <th role="columnheader" scope="col" className="flex-1 px-3 py-2">
                   Value
                 </th>
               </tr>
             </thead>
-          </table>
-          <div ref={scrollRef} className="max-h-[60vh] overflow-y-auto">
-            {filtered.length === 0 ? (
-              <EmptyState
-                icon={Inbox}
-                title={mode === 'live' ? 'Waiting for messages…' : 'No messages found'}
-                description={
-                  mode === 'live'
-                    ? 'New messages produced to this topic will appear here.'
-                    : 'Nothing matched, or this topic has no messages yet.'
-                }
-              />
-            ) : (
-              <table className="w-full table-fixed text-sm">
-                <tbody
-                  style={{ height: `${String(virtualizer.getTotalSize())}px`, position: 'relative', display: 'block' }}
-                >
-                  {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const message = filtered[virtualRow.index];
-                    if (message === undefined) return null;
-                    const key = messageKey(message);
-                    const decodedKey = message.key === null ? 'null' : decodeMessageField(message.key, decoder).text;
-                    const decodedValue =
-                      message.value === null ? 'null' : decodeMessageField(message.value, decoder).text;
-                    return (
-                      <tr
-                        key={key}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          minHeight: `${String(ROW_HEIGHT_PX)}px`,
-                          transform: `translateY(${String(virtualRow.start)}px)`,
-                        }}
-                        tabIndex={0}
-                        aria-selected={key === selectedKey}
-                        className="flex cursor-pointer items-center border-b border-border last:border-0 outline-none hover:bg-muted/40 aria-selected:bg-accent focus-visible:bg-muted/40"
-                        onClick={() => toggleSelected(key)}
-                        onKeyDown={(event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return;
-                          event.preventDefault();
+            <tbody
+              role="rowgroup"
+              style={{ height: `${String(virtualizer.getTotalSize())}px`, position: 'relative', display: 'block' }}
+            >
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const message = filtered[virtualRow.index];
+                if (message === undefined) return null;
+                const key = messageKey(message);
+                const decodedKey = message.key === null ? 'null' : decodeMessageField(message.key, decoder).text;
+                const decodedValue = message.value === null ? 'null' : decodeMessageField(message.value, decoder).text;
+                return (
+                  <tr
+                    role="row"
+                    key={key}
+                    data-index={virtualRow.index}
+                    ref={virtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      minHeight: `${String(ROW_HEIGHT_PX)}px`,
+                      transform: `translateY(${String(virtualRow.start)}px)`,
+                    }}
+                    aria-rowindex={virtualRow.index + 2}
+                    data-selected={key === selectedKey}
+                    className="flex cursor-pointer items-center border-b border-border last:border-0 hover:bg-muted/40 data-[selected=true]:bg-accent focus-within:bg-muted/40"
+                    onClick={() => toggleSelected(key)}
+                  >
+                    <td role="cell" className="w-20 shrink-0 px-3 py-1.5">
+                      {message.partition}
+                    </td>
+                    <td role="cell" className="w-24 shrink-0 px-3 py-1.5 tabular-nums">
+                      <button
+                        type="button"
+                        aria-label={`Show message at partition ${String(message.partition)}, offset ${message.offset}`}
+                        aria-pressed={key === selectedKey}
+                        className="min-h-6 min-w-6 rounded px-1 underline underline-offset-2"
+                        onClick={(event) => {
+                          event.stopPropagation();
                           toggleSelected(key);
                         }}
                       >
-                        <td className="w-20 px-3 py-1.5">{message.partition}</td>
-                        <td className="w-24 px-3 py-1.5 tabular-nums">{message.offset}</td>
-                        <td className="w-44 px-3 py-1.5 text-muted-foreground">{formatTimestamp(message.timestamp)}</td>
-                        <td className="w-1/4 min-w-0 truncate px-3 py-1.5 font-mono text-xs">{decodedKey}</td>
-                        <td className="min-w-0 flex-1 truncate px-3 py-1.5 font-mono text-xs">{decodedValue}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+                        {message.offset}
+                      </button>
+                    </td>
+                    <td role="cell" className="w-44 shrink-0 px-3 py-1.5 text-muted-foreground">
+                      {formatTimestamp(message.timestamp)}
+                    </td>
+                    <td role="cell" className="w-1/4 shrink-0 min-w-0 truncate px-3 py-1.5 font-mono text-xs">
+                      {decodedKey}
+                    </td>
+                    <td role="cell" className="min-w-0 flex-1 truncate px-3 py-1.5 font-mono text-xs">
+                      {decodedValue}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filtered.length === 0 && (
+            <EmptyState
+              icon={Inbox}
+              title={mode === 'live' ? 'Waiting for messages…' : 'No messages found'}
+              description={
+                mode === 'live'
+                  ? 'New messages produced to this topic will appear here.'
+                  : 'Nothing matched, or this topic has no messages yet.'
+              }
+            />
+          )}
         </div>
       </div>
     </div>

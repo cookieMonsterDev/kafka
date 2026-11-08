@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react';
 import type { StudioEvent } from '../../shared/contracts/event';
 import type { MessageRecord } from '../../shared/contracts/message';
 import { withAuthQuery } from './auth';
+import { fetchHealth } from './api';
 import type { RingBuffer } from './ring-buffer';
+
+/** EventSource hides HTTP status codes; a health read distinguishes expired auth from a reconnect blip. */
+function checkStreamSession(): void {
+  void fetchHealth().catch(() => {
+    // A network failure leaves reconnection to EventSource; HTTP 401 is handled by the shared API client.
+  });
+}
 
 /**
  * Subscribes to a named SSE event on `url` and keeps the most recently received payload. Pass
@@ -19,6 +27,7 @@ export function useEventSource<T>(url: string | null, eventName = 'message'): { 
 
     // `EventSource` cannot set custom headers, so the session token rides along as a query param.
     const source = new EventSource(withAuthQuery(url));
+    source.addEventListener('error', checkStreamSession);
     const handleMessage = (event: MessageEvent<string>): void => {
       try {
         setData(JSON.parse(event.data) as T);
@@ -30,6 +39,7 @@ export function useEventSource<T>(url: string | null, eventName = 'message'): { 
     source.addEventListener(eventName, handleMessage);
 
     return () => {
+      source.removeEventListener('error', checkStreamSession);
       source.removeEventListener(eventName, handleMessage);
       source.close();
     };
@@ -67,6 +77,7 @@ export function useMessageTail(url: string | null, options: UseMessageTailOption
     if (url === null) return;
 
     const source = new EventSource(withAuthQuery(url));
+    source.addEventListener('error', checkStreamSession);
 
     const handleMessage = (event: MessageEvent<string>): void => {
       try {
@@ -105,6 +116,7 @@ export function useMessageTail(url: string | null, options: UseMessageTailOption
     source.addEventListener('tail-error', handleServerError);
 
     return () => {
+      source.removeEventListener('error', checkStreamSession);
       source.removeEventListener('message', handleMessage);
       source.removeEventListener('gap', handleGap);
       source.removeEventListener('tail-error', handleServerError);
@@ -129,6 +141,7 @@ export function useActivityFeed(buffer: RingBuffer<StudioEvent>): { readonly con
   useEffect(() => {
     setConnected(false);
     const source = new EventSource(withAuthQuery('/api/events'));
+    source.addEventListener('error', checkStreamSession);
     const handleActivity = (event: MessageEvent<string>): void => {
       try {
         buffer.push(JSON.parse(event.data) as StudioEvent);
@@ -141,6 +154,7 @@ export function useActivityFeed(buffer: RingBuffer<StudioEvent>): { readonly con
     source.addEventListener('error', () => setConnected(false));
 
     return () => {
+      source.removeEventListener('error', checkStreamSession);
       source.removeEventListener('activity', handleActivity);
       source.close();
     };

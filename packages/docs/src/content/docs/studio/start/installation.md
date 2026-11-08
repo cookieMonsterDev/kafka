@@ -52,7 +52,7 @@ what else differs on Bun.
 Building from source instead of installing a release:
 
 ```sh
-pnpm --filter @cookiemonsterdev/kafka-studio build
+pnpm --filter @cookiemonsterdev/kafka-studio... build
 node packages/studio/dist/bin.js
 ```
 

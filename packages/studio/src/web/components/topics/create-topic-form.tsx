@@ -93,10 +93,11 @@ export function CreateTopicForm({ onSubmit, onCancel, pending = false }: CreateT
               onBlur={field.handleBlur}
               onChange={(event) => field.handleChange(event.target.value)}
               aria-invalid={field.state.meta.errors.length > 0}
+              aria-describedby={field.state.meta.errors.length > 0 ? `${field.name}-error` : undefined}
               autoFocus
             />
             {field.state.meta.errors.length > 0 && (
-              <p className="text-sm text-destructive" role="alert">
+              <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
                 {fieldErrorMessage(field.state.meta.errors)}
               </p>
             )}
@@ -122,9 +123,10 @@ export function CreateTopicForm({ onSubmit, onCancel, pending = false }: CreateT
                 onChange={(event) => field.handleChange(event.target.value)}
                 placeholder="broker default"
                 aria-invalid={field.state.meta.errors.length > 0}
+                aria-describedby={field.state.meta.errors.length > 0 ? `${field.name}-error` : undefined}
               />
               {field.state.meta.errors.length > 0 && (
-                <p className="text-sm text-destructive" role="alert">
+                <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
                   {fieldErrorMessage(field.state.meta.errors)}
                 </p>
               )}
@@ -149,9 +151,10 @@ export function CreateTopicForm({ onSubmit, onCancel, pending = false }: CreateT
                 onChange={(event) => field.handleChange(event.target.value)}
                 placeholder="broker default"
                 aria-invalid={field.state.meta.errors.length > 0}
+                aria-describedby={field.state.meta.errors.length > 0 ? `${field.name}-error` : undefined}
               />
               {field.state.meta.errors.length > 0 && (
-                <p className="text-sm text-destructive" role="alert">
+                <p id={`${field.name}-error`} className="text-sm text-destructive" role="alert">
                   {fieldErrorMessage(field.state.meta.errors)}
                 </p>
               )}

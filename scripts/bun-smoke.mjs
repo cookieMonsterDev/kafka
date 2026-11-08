@@ -5,7 +5,7 @@
 // `node:` API, a worker that never lets the process exit). This loads that output exactly the way
 // a consumer would.
 //
-// Needs every package built first, in order: config, core, studio, cli.
+// Needs every package built first, in order: config, core, cli, studio.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

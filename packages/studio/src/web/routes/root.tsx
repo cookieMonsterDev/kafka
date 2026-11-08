@@ -1,5 +1,6 @@
 import { FileQuestion } from 'lucide-react';
 import { Link, Outlet, createRootRoute } from '@tanstack/react-router';
+import { TerminalProvider } from '../components/terminal/terminal-context';
 import { AppShell } from '../components/layout/app-shell';
 import { Button } from '../components/ui/button';
 import { EmptyState } from '../components/ui/empty-state';
@@ -9,14 +10,14 @@ export const rootRoute = createRootRoute({
   component: RootLayout,
   // A render crash inside a route would otherwise take the whole SPA down to a blank page. The
   // shell stays mounted, so the sidebar and top bar remain usable to navigate away.
-  errorComponent: RouteError,
+  errorComponent: PageError,
   notFoundComponent: RouteNotFound,
 });
 
-function RouteError({ error, reset }: { readonly error: unknown; readonly reset: () => void }) {
+export function PageError({ error, reset }: { readonly error: unknown; readonly reset: () => void }) {
   return (
     <ErrorState
-      className="p-6"
+      className="min-h-0 flex-1 justify-center p-6"
       title="This page failed to render"
       error={error}
       onRetry={reset}
@@ -28,7 +29,7 @@ function RouteError({ error, reset }: { readonly error: unknown; readonly reset:
 function RouteNotFound() {
   return (
     <EmptyState
-      className="p-6"
+      className="min-h-0 flex-1 justify-center p-6"
       icon={FileQuestion}
       title="Page not found"
       description="That route does not exist in the studio."
@@ -43,8 +44,10 @@ function RouteNotFound() {
 
 function RootLayout() {
   return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
+    <TerminalProvider>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </TerminalProvider>
   );
 }

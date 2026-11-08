@@ -5,6 +5,7 @@ import { RouterProvider } from '@tanstack/react-router';
 import { Toaster, toastError } from './components/ui/toast';
 import { dismissSplash } from './lib/splash';
 import { router } from './router';
+import { SessionBoundary } from './components/layout/session-boundary';
 import './styles/app.css';
 
 const queryClient = new QueryClient({
@@ -33,8 +34,10 @@ if (root) {
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-        <Toaster />
+        <SessionBoundary>
+          <RouterProvider router={router} />
+          <Toaster />
+        </SessionBoundary>
       </QueryClientProvider>
     </StrictMode>,
   );

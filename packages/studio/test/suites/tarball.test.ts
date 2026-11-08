@@ -1,15 +1,20 @@
+import type * as StudioModule from '../../src/index';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildProduction } from '../helpers/production-build';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
 const INSTALLED_PACKAGE_DIR = 'node_modules/@cookiemonsterdev/kafka-studio';
 
 const RELATIVE_OR_NODE_IMPORT_PATTERN = /^(?:\.\.?\/|node:)/;
-const DECLARED_DEPENDENCIES = ['@cookiemonsterdev/kafka-core', '@cookiemonsterdev/kafka-config'];
+const DECLARED_DEPENDENCIES = Object.keys(
+  (JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { dependencies: Record<string, string> })
+    .dependencies,
+);
 // `vite` is a devDependency, deliberately excluded from `dependencies` (see vite.config.ts) — it
 // must only ever reach a dynamic `import('vite')` (server/dev.ts, gated behind
 // KAFKA_STUDIO_DEV=1), never a static import that Node would resolve eagerly on every install.
@@ -37,24 +42,15 @@ describe('npm tarball', () => {
   let installDir: string;
   let binPath: string;
 
-  beforeAll(async () => {
+  beforeAll(() => {
     // Self-contained: build into an isolated tree, never the package's own `dist/`, so this
     // suite's build cannot race a sibling suite still importing the real dist.
     const packSource = mkdtempSync(join(tmpdir(), 'kafka-studio-pack-source-'));
     try {
       const distDir = join(packSource, 'dist');
 
-      const { build } = await import('vite');
-      await build({
-        configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
-        logLevel: 'silent',
-        build: { outDir: distDir, emptyOutDir: true },
-      });
-      await build({
-        configFile: join(PACKAGE_ROOT, 'vite.web.config.ts'),
-        logLevel: 'silent',
-        build: { outDir: join(distDir, 'web'), emptyOutDir: true },
-      });
+      buildProduction('vite.config.ts', distDir);
+      buildProduction('vite.web.config.ts', join(distDir, 'web'));
       execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', distDir], {
         cwd: PACKAGE_ROOT,
       });
@@ -128,6 +124,58 @@ describe('npm tarball', () => {
   it('runs kafka-studio --version from the installed bin', () => {
     const output = execFileSync('node', [binPath, '--version'], { encoding: 'utf8' });
     expect(output.trim()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('runs the embedded shell and packaged line-editor worker without a CLI install', async () => {
+    const moduleUrl = pathToFileURL(join(installDir, INSTALLED_PACKAGE_DIR, 'dist/index.js')).href;
+    const { startStudio } = (await import(moduleUrl)) as typeof StudioModule;
+    const studio = await startStudio(
+      { browser: 'none', readOnly: true },
+      {
+        argv: [],
+        env: {},
+        cwd: '/nonexistent-studio-tarball',
+        platform: 'linux',
+        stdout: { write: () => true },
+        stderr: { write: () => true },
+        now: () => new Date(),
+        exit: () => {
+          throw new Error('No process exit expected');
+        },
+        signal: new AbortController().signal,
+      },
+    );
+    const headers = { 'x-kafka-studio-token': studio.token, 'content-type': 'application/json' };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const created = await fetch(`${studio.url}api/terminal/sessions`, { method: 'POST', headers });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const events = await fetch(`${studio.url}api/terminal/sessions/${id}/events`, {
+        headers,
+        signal: controller.signal,
+      });
+      const reader = events.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
+      if (reader === undefined) throw new Error('Missing terminal stream');
+      await fetch(`${studio.url}api/terminal/sessions/${id}/input`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ data: 'help\r' }),
+      });
+      let output = '';
+      while (!output.includes('Usage:')) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        output += new TextDecoder().decode(chunk.value);
+      }
+      expect(output).toContain('Usage:');
+      expect(output).not.toContain('Line editor failed');
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+      await studio.stop();
+    }
   });
 
   it('runs kafka-studio --help from the installed bin', () => {

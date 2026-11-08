@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,12 @@ type PackageSwitcherSelectProps = {
 
 export function PackageSwitcherSelect({ packages, value, className, onPackageChange }: PackageSwitcherSelectProps) {
   const labelId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalContainer(rootRef.current?.closest('dialog') ?? null);
+  }, []);
   const active = packages.find((pkg) => pkg.id === value) ?? packages[0];
   if (active == null) {
     return null;
@@ -37,7 +43,7 @@ export function PackageSwitcherSelect({ packages, value, className, onPackageCha
   }
 
   return (
-    <div className={cn(className)}>
+    <div ref={rootRef} className={cn(className)}>
       <p id={labelId} className="text-muted-foreground mb-2 px-1 text-xs font-medium tracking-wide uppercase">
         Package
       </p>
@@ -53,7 +59,12 @@ export function PackageSwitcherSelect({ packages, value, className, onPackageCha
             <span className="text-muted-foreground text-xs leading-snug">{active.blurb}</span>
           </span>
         </SelectTrigger>
-        <SelectContent position="popper" align="start" className="w-(--radix-select-trigger-width)">
+        <SelectContent
+          portalContainer={portalContainer}
+          position="popper"
+          align="start"
+          className="w-(--radix-select-trigger-width)"
+        >
           {packages.map((pkg) => (
             <SelectItem
               key={pkg.id}

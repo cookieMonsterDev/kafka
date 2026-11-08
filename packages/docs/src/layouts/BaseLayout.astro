@@ -1,49 +1,42 @@
 ---
-import '@/styles/global.css'
-import { getCollection } from 'astro:content'
-import { Beer, Hamburger } from 'lucide-react'
-import { CopyCode } from '@/components/copy-code'
-import { DocsMobileNav } from '@/components/docs-mobile-nav'
-import { DocsSearch } from '@/components/docs-search'
-import { buttonVariants } from '@/components/ui/button'
-import { withBase } from '@/lib/base'
-import { DOCS_PACKAGE_META, docsNavPackages, docsPackageFromPathname } from '@/lib/docs'
-import { getSearchIndex } from '@/lib/search-index'
-import { cn } from '@/lib/utils'
-
+import '@/styles/global.css';
+import { Hamburger, Beer } from 'lucide-react';
+import { CopyCode } from '@/components/copy-code';
+import { DocsSearch } from '@/components/docs-search';
+import DocsSidebar from '@/components/docs-sidebar.astro';
+import PackageSwitcher from '@/components/package-switcher.astro';
+import { withBase } from '@/lib/base';
+import { DOCS_PACKAGE_META, docsPackageFromPathname } from '@/lib/docs';
 interface Props {
-  title?: string | undefined
-  description?: string | undefined
-  docs?: boolean
+  title?: string;
+  description?: string;
+  docs?: boolean;
+  markdownUrl?: string;
 }
-
-const { title, description, docs = false } = Astro.props
-const canonicalUrl = Astro.url.href
-const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
-const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
-const searchIndex = await getSearchIndex()
-const pathname = Astro.url.pathname
-const navPackages = docsNavPackages(await getCollection('docs'))
-const currentPackage = docsPackageFromPathname(pathname)
-const currentPackageLabel = DOCS_PACKAGE_META[currentPackage].label
-const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kafka | ${currentPackageLabel}`
+const { title, description, docs = false, markdownUrl } = Astro.props;
+const canonicalUrl = new URL(Astro.url.pathname.replace(/\/(404|500)\/?$/, '/$1.html'), Astro.site ?? Astro.url).href;
+const currentPackage = docsPackageFromPathname(Astro.url.pathname);
+const documentTitle = title
+  ? `${title} | Kafka ${DOCS_PACKAGE_META[currentPackage].label}`
+  : 'Kafka — Core, CLI, Config and Studio';
+const summary = description ?? 'TypeScript Kafka tools: build applications, administer clusters, and explore messages.';
+const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href;
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <!-- The site is dark-only, so there is no theme to resolve before first paint. This hex is the
-         sRGB mirror of `--background` in src/styles/global.css; keep the two in sync by hand. -->
-    <meta name="theme-color" content="#070b09" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>{documentTitle}</title>
-    <meta name="description" content={description ?? fallbackDescription} />
+    <meta name="description" content={summary} />
     <link rel="canonical" href={canonicalUrl} />
     <link rel="sitemap" href={withBase('/sitemap.xml')} />
+    <link rel="describedby" href={withBase('/llms.txt')} type="text/plain" />
+    {markdownUrl && <link rel="alternate" type="text/markdown" href={markdownUrl} />}
     <meta property="og:title" content={documentTitle} />
-    <meta property="og:description" content={description ?? fallbackDescription} />
+    <meta property="og:description" content={summary} />
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:type" content="website" />
@@ -51,144 +44,98 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
     <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
     <link rel="icon" href={withBase('/favicon.ico')} sizes="48x48" />
     <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />
+    {/* Reveal JavaScript-only controls before first paint so they do not shift the layout. */}
+    <script is:inline>
+      document.documentElement.classList.add('js');
+    </script>
   </head>
   <body
-    class={cn(
+    class:list={[
       'bg-background text-foreground min-h-screen font-sans antialiased',
       docs && 'lg:flex lg:h-dvh lg:flex-col lg:overflow-hidden',
-    )}
+    ]}
   >
-    <a
-      href="#main-content"
-      class="bg-background text-foreground focus-visible:ring-ring sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-60 focus-visible:rounded-md focus-visible:px-3 focus-visible:py-2 focus-visible:ring-3"
-    >
+    <a href="#main-content" class="skip-link">
       Skip to content
     </a>
-    <input
-      type="checkbox"
-      id="docs-nav"
-      class="sr-only"
-      aria-label={docs ? 'Open documentation menu' : 'Open menu'}
-      aria-controls="docs-mobile-nav"
-      aria-expanded="false"
-    />
     <header
-      class="border-border bg-background/95 sticky top-0 isolate z-50 h-(--header-height) shrink-0 border-b pt-[env(safe-area-inset-top)] backdrop-blur"
+      id="site-header"
+      class="border-border bg-background sticky top-0 z-30 h-(--header-height) shrink-0 border-b"
     >
       <nav
-        class="grid h-full w-full grid-cols-3 items-center pr-[max(1rem,env(safe-area-inset-right))] pl-[max(1rem,env(safe-area-inset-left))] lg:flex lg:justify-between lg:gap-3 lg:px-6"
+        class="grid h-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4 lg:flex lg:justify-between lg:px-6"
         aria-label="Site"
       >
-        <div class="flex min-w-0 items-center justify-self-start">
-          <label
-            for="docs-nav"
-            class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'shrink-0 lg:hidden')}
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            id="docs-menu-open"
+            class="flex size-11 items-center justify-center rounded-lg hover:bg-muted lg:hidden"
+            aria-label="Open documentation menu"
+            aria-haspopup="dialog"
+            aria-controls="docs-mobile-nav"
+            aria-expanded="false"
+            data-requires-js
           >
-            <Hamburger className="docs-nav-menu size-6" aria-hidden="true" />
-            <Beer className="docs-nav-close size-6" aria-hidden="true" />
-          </label>
-
-          <div id="docs-brand" class="hidden min-w-0 items-center gap-3 lg:flex">
-            <a href={withBase('/')} class="flex min-w-0 items-center gap-2.5 no-underline">
-              {/* Same accent tile as the studio sidebar, so the two surfaces share one brand. */}
-              <span
-                class="border-primary/25 bg-primary/12 flex size-9 shrink-0 items-center justify-center rounded-lg border"
-              >
-                <img src={withBase('/logo-mark.svg')} alt="" width="22" height="22" class="size-5.5" />
-              </span>
-              <span class="text-foreground text-xl font-semibold tracking-tight" translate="no">Kafka</span>
-            </a>
-          </div>
+            <Hamburger className="size-6" aria-hidden="true" />
+          </button>
+          <a
+            href={withBase('/')}
+            data-home-link
+            class="hidden items-center gap-2 rounded-md text-lg font-semibold no-underline lg:flex"
+            translate="no"
+          >
+            <img src={withBase('/logo-mark.svg')} alt="" width="24" height="24" />
+            Kafka
+          </a>
         </div>
-
-        <a
-          id="docs-mobile-brand"
-          href={withBase('/')}
-          class="focus-visible:ring-ring justify-self-center rounded-md no-underline outline-none focus-visible:ring-3 lg:hidden"
-          aria-label="Kafka"
-          translate="no"
-        >
-          <img src={withBase('/logo-icon.svg')} alt="" width="36" height="36" class="size-9" />
-        </a>
-
-        <div class="relative z-50 flex items-center justify-end justify-self-end gap-1.5">
-          <div role="search">
-            <DocsSearch client:load index={searchIndex} />
+        <div class="contents lg:flex lg:min-w-0 lg:items-center lg:gap-2">
+          <div role="search" class="min-w-0" data-requires-js>
+            <DocsSearch client:load indexUrl={withBase('/search-index.json')} currentPackage={currentPackage} />
           </div>
-          <div id="docs-header-actions" class="relative z-50 flex items-center gap-1.5">
-            <a
-              href="https://github.com/cookieMonsterDev/kafka"
-              class={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'max-lg:hidden')}
-              aria-label="GitHub repository"
-              rel="noopener noreferrer"
-            >
-              <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path
-                  d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
-                ></path>
-              </svg>
-            </a>
-          </div>
+
+          <a
+            href="https://github.com/cookieMonsterDev/kafka"
+            class="col-start-3 flex size-11 items-center justify-center rounded-lg hover:bg-muted"
+            aria-label="GitHub repository"
+          >
+            <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path>
+            </svg>
+          </a>
         </div>
       </nav>
     </header>
-
+    <noscript>
+      <aside class="border-b border-border p-4 lg:hidden">
+        <nav aria-label="Packages">
+          <ul class="mb-4 flex flex-wrap gap-4">
+            {['core', 'config', 'cli', 'studio'].map((pkg) => (
+              <li>
+                <a href={withBase(`/docs/${pkg}/start/introduction/`)}>{pkg}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <DocsSidebar id="fallback" />
+      </aside>
+    </noscript>
     <CopyCode client:load />
-    <script is:inline>
-      ;(function () {
-        var timers = new WeakMap()
-        function mark(el) {
-          el.setAttribute('data-scrolling', '')
-          var prev = timers.get(el)
-          if (prev) window.clearTimeout(prev)
-          timers.set(
-            el,
-            window.setTimeout(function () {
-              el.removeAttribute('data-scrolling')
-              timers.delete(el)
-            }, 200),
-          )
-        }
-        document.addEventListener(
-          'scroll',
-          function (event) {
-            var target = event.target
-            if (target === document || target === document.documentElement || target === document.body) {
-              mark(document.documentElement)
-              return
-            }
-            if (target instanceof Element) mark(target)
-          },
-          { capture: true, passive: true },
-        )
-      })()
-    </script>
-
-    <label
-      for="docs-nav"
-      class="docs-nav-overlay bg-background/70 fixed top-(--header-height) right-0 bottom-0 left-0 z-40 cursor-pointer backdrop-blur-sm"
-      aria-hidden="true"
-    ></label>
-    <div
-      id="docs-mobile-nav"
-      class="docs-nav-drawer bg-sidebar border-sidebar-border fixed top-(--header-height) right-0 bottom-0 left-0 z-40 flex w-full flex-col overflow-hidden border-r px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-      role="dialog"
-      aria-modal="true"
-      aria-label={docs ? 'Documentation' : 'Menu'}
-    >
-      <DocsMobileNav
-        client:load
-        packages={navPackages}
-        currentPackage={currentPackage}
-        currentPath={pathname}
-      >
+    <dialog id="docs-mobile-nav" class="docs-menu-dialog" aria-labelledby="docs-menu-title">
+      <div class="docs-menu-header bg-background border-b border-border grid h-(--header-height) shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-4">
         <button
           type="button"
-          id="docs-mobile-search"
-          class="border-border bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 mb-6 flex h-11 w-full shrink-0 items-center gap-2.5 rounded-lg border px-3.5 text-[0.9375rem] transition-colors outline-none focus-visible:ring-3"
+          id="docs-menu-close"
+          aria-label="Close documentation menu"
+          class="flex size-11 items-center justify-center rounded-lg hover:bg-muted"
+        >
+          <Beer className="size-6" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          id="docs-menu-search"
           aria-label="Search documentation"
-          aria-haspopup="dialog"
-          aria-keyshortcuts="Control+K Meta+K"
+          class="border-border bg-muted/60 text-muted-foreground flex h-11 min-w-0 items-center gap-2 rounded-lg border px-3 text-sm"
         >
           <svg
             class="size-5 shrink-0"
@@ -196,105 +143,127 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
             fill="none"
             stroke="currentColor"
             stroke-width="2"
-            stroke-linecap="round"
             aria-hidden="true"
           >
             <circle cx="11" cy="11" r="7"></circle>
             <path d="m20 20-3-3"></path>
           </svg>
-          <span class="min-w-0 flex-1 truncate text-left">Search documentation…</span>
+          <span class="truncate">Search documentation…</span>
         </button>
-      </DocsMobileNav>
-      <div class="border-border mt-2 shrink-0 border-t pt-2">
         <a
           href="https://github.com/cookieMonsterDev/kafka"
-          class="text-muted-foreground hover:text-foreground hover:bg-sidebar-accent focus-visible:ring-ring flex min-h-11 items-center rounded-md px-2 text-sm no-underline transition-colors outline-none focus-visible:ring-3"
-          rel="noopener noreferrer"
+          class="flex size-11 items-center justify-center rounded-lg hover:bg-muted"
+          aria-label="GitHub repository"
         >
-          GitHub
+          <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path>
+          </svg>
         </a>
+        <h2 id="docs-menu-title" class="sr-only">
+          Documentation
+        </h2>
       </div>
-    </div>
-    <script is:inline>
-      ;(function () {
-        var nav = document.getElementById('docs-nav')
-        var drawer = document.getElementById('docs-mobile-nav')
-        var content = document.getElementById('docs-content')
-        var mobileSearch = document.getElementById('docs-mobile-search')
-        if (!(nav instanceof HTMLInputElement) || drawer == null) return
-
-        var openLabel = nav.getAttribute('aria-label') || 'Open menu'
-        var closeLabel = openLabel.replace(/^Open /, 'Close ')
-
-        var searchOpen = false
-
-        function focusable(root) {
-          return Array.prototype.slice.call(
-            root.querySelectorAll(
-              'a[href], button:not([disabled]), input:not([disabled]), summary, textarea, select, [tabindex]:not([tabindex="-1"])',
-            ),
-          )
-        }
-
-        function sync() {
-          var open = nav.checked
-          nav.setAttribute('aria-expanded', open ? 'true' : 'false')
-          nav.setAttribute('aria-label', open ? closeLabel : openLabel)
-          if (open) drawer.removeAttribute('aria-hidden')
-          else drawer.setAttribute('aria-hidden', 'true')
-          if (content) content.toggleAttribute('inert', open)
-          if (open && !searchOpen) {
-            var first = focusable(drawer)[0]
-            if (first) first.focus()
-          }
-        }
-
-        nav.addEventListener('change', sync)
-        sync()
-        if (mobileSearch) {
-          mobileSearch.addEventListener('click', function () {
-            window.dispatchEvent(new Event('docs-search-open'))
-          })
-        }
-        window.addEventListener('docs-search-open', function () {
-          searchOpen = true
-        })
-        window.addEventListener('docs-search-close', function () {
-          searchOpen = false
-          if (nav.checked && mobileSearch) mobileSearch.focus()
-        })
-        document.addEventListener('keydown', function (event) {
-          if (!nav.checked || searchOpen) return
-          if (document.querySelector('[data-slot="select-content"][data-state="open"]')) return
-          if (event.key === 'Escape') {
-            nav.checked = false
-            nav.dispatchEvent(new Event('change'))
-            nav.focus()
-            return
-          }
-          if (event.key !== 'Tab') return
-          var drawerItems = focusable(drawer)
-          var first = nav
-          var last = drawerItems[drawerItems.length - 1] || nav
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault()
-            last.focus()
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault()
-            first.focus()
-          }
-        })
-      })()
-    </script>
-
+      <div class="docs-menu-panel bg-sidebar min-h-0 flex-1 overflow-y-auto px-4 pt-6 pb-8">
+        <PackageSwitcher class="mb-5" />
+        <DocsSidebar id="mobile" />
+      </div>
+    </dialog>
     <div
       id="docs-content"
-      class={cn(
+      class:list={[
         !docs && 'contents',
         docs && 'max-lg:contents lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden',
-      )}
+      ]}
     >
       <slot />
     </div>
+
+    <script>
+      const opener = document.querySelector<HTMLButtonElement>('#docs-menu-open');
+      const menu = document.querySelector<HTMLDialogElement>('#docs-mobile-nav');
+      const close = document.querySelector<HTMLButtonElement>('#docs-menu-close');
+      const menuSearch = document.querySelector<HTMLButtonElement>('#docs-menu-search');
+      menuSearch?.addEventListener('click', () =>
+        window.dispatchEvent(new CustomEvent('docs-search-open', { detail: menuSearch })),
+      );
+      if (opener && menu && close) {
+        opener.addEventListener('click', () => {
+          menu.showModal();
+          opener.setAttribute('aria-expanded', 'true');
+        });
+        let closeTimer: ReturnType<typeof setTimeout> | undefined;
+
+        function closeMenu() {
+          if (!menu?.open || menu.hasAttribute('data-closing')) return;
+          if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            menu.close();
+            return;
+          }
+          menu.setAttribute('data-closing', '');
+          closeTimer = setTimeout(() => menu.close(), 200);
+        }
+
+        close.addEventListener('click', closeMenu);
+        menu.addEventListener('cancel', (event) => {
+          event.preventDefault();
+          closeMenu();
+        });
+        menu.addEventListener('close', () => {
+          clearTimeout(closeTimer);
+          menu.removeAttribute('data-closing');
+          opener.setAttribute('aria-expanded', 'false');
+          if (opener.getClientRects().length) opener.focus();
+        });
+        window.addEventListener('pageshow', (event) => {
+          if (event.persisted && menu.open) menu.close();
+        });
+        const desktop = matchMedia('(min-width: 1024px)');
+        desktop.addEventListener('change', () => {
+          if (desktop.matches && menu.open) menu.close();
+        });
+      }
+    </script>
+    {/* Lives here rather than in docs-sidebar.astro: Astro emits a component script at its first
+        render, and the first sidebar is the <noscript> fallback, where scripts never run. */}
+    <script>
+      document.querySelectorAll<HTMLElement>('.docs-navigation').forEach((nav) => {
+        const filter = nav.querySelector<HTMLElement>('[data-command-filter]');
+        const input = filter?.querySelector('input');
+        if (!filter || !input) return;
+        const initial = new Map<HTMLDetailsElement, boolean>();
+        nav.querySelectorAll<HTMLDetailsElement>('details').forEach((details) => initial.set(details, details.open));
+        input.addEventListener('input', () => {
+          const query = input.value.trim().toLowerCase();
+          let matches = 0;
+          const items = [...nav.querySelectorAll<HTMLElement>('[data-nav-item]')].reverse();
+          items.forEach((item) => {
+            const children = [...item.querySelectorAll<HTMLElement>('[data-nav-item]')];
+            const isCommandItem =
+              item.closest('[data-command-group]') != null || item.querySelector('[data-command-group]') != null;
+            const labels: string[] = [item.dataset.navLabel ?? ''];
+            let parent = item.parentElement?.closest<HTMLElement>('[data-nav-item]');
+            while (parent) {
+              labels.push(parent.dataset.navLabel ?? '');
+              parent = parent.parentElement?.closest<HTMLElement>('[data-nav-item]') ?? null;
+            }
+            const matchesOwnPath = labels.join(' ').toLowerCase().includes(query);
+            item.hidden =
+              query.length > 0 && isCommandItem && !matchesOwnPath && !children.some((child) => !child.hidden);
+            if (isCommandItem && !item.hidden && children.length === 0) matches++;
+            const details = item.querySelector<HTMLDetailsElement>(':scope > details');
+            if (details) details.open = query.length > 0 ? !item.hidden : (initial.get(details) ?? false);
+          });
+          nav.querySelectorAll<HTMLElement>('[data-all-commands]').forEach((item) => {
+            item.hidden = query.length > 0;
+          });
+          nav.querySelectorAll<HTMLDetailsElement>('[data-nav-section]').forEach((details) => {
+            if (query) details.open = true;
+            else details.open = initial.get(details) ?? true;
+          });
+          const status = nav.querySelector('[data-filter-status]');
+          if (status) status.textContent = query ? `${matches} matching commands` : '';
+        });
+      });
+    </script>
   </body>
 </html>

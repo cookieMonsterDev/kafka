@@ -12,7 +12,7 @@ metadata:
     flags for destructive commands, and machine-readable output for scripts.
   type: core
   library: '@cookiemonsterdev/kafka-cli'
-  library_version: '1.10.1'
+  library_version: '1.11.0'
 sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/integrations/embedding.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/start/installation.md'
@@ -21,6 +21,8 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/guides/output-and-scripting.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/commands.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/exit-codes.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/cli/reference/global-options.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/recipes.md'
 ---
 
 # kafka-cli
@@ -165,3 +167,7 @@ Exit codes: `0` ok, `1` failed, `2` usage, `3` config error, `4` partial batch f
 
 - Command reference (one page per command):
   https://cookiemonsterdev.github.io/kafka/docs/cli/reference/commands/
+
+## Documentation workflow
+
+Use the generated nested command reference to locate operations and the global-options page for shared flags. Confirm profile resolution with doctor, inspect exit codes, and preview group resets before supplying --execute.

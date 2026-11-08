@@ -31,3 +31,5 @@ it as its own package means a fix or improvement reaches every consumer through 
 bump, instead of requiring a new release of each package that happens to use it.
 
 Next: [API reference](../../reference/api/).
+
+Next practical step: [Getting started](../getting-started/).

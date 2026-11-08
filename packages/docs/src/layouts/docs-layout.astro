@@ -1,124 +1,197 @@
 ---
-import type { MarkdownHeading } from 'astro'
-import BaseLayout from '@/layouts/BaseLayout.astro'
-import DocsSidebar from '@/components/docs-sidebar.astro'
-import PackageSwitcher from '@/components/package-switcher.astro'
-import TableOfContents from '@/components/table-of-contents.astro'
-import PrevNext from '@/components/prev-next.astro'
+import type { MarkdownHeading } from 'astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import DocsSidebar from '@/components/docs-sidebar.astro';
+import PackageSwitcher from '@/components/package-switcher.astro';
+import TableOfContents from '@/components/table-of-contents.astro';
+import PrevNext from '@/components/prev-next.astro';
+import { docsPackageFromPathname } from '@/lib/docs';
 
 interface Props {
-  title: string
-  description?: string | undefined
-  headings: MarkdownHeading[]
-  prev?: { href: string; label: string } | undefined
-  next?: { href: string; label: string } | undefined
+  title: string;
+  description?: string | undefined;
+  markdownUrl: string;
+  headings: MarkdownHeading[];
+  prev?: { href: string; label: string } | undefined;
+  next?: { href: string; label: string } | undefined;
 }
 
-const { title, description, headings, prev, next } = Astro.props
-const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3)
+const { title, description, headings, prev, next, markdownUrl } = Astro.props;
+const currentPackage = docsPackageFromPathname(Astro.url.pathname);
+const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
 ---
 
-<BaseLayout title={title} description={description} docs>
+<BaseLayout title={title} description={description} markdownUrl={markdownUrl} docs>
   <div class="flex w-full lg:min-h-0 lg:flex-1 lg:overflow-hidden">
     <aside
+      id="docs-sidebar"
       class="bg-sidebar hidden w-60 max-w-60 min-w-0 shrink-0 flex-col overflow-hidden px-3 py-8 lg:flex lg:min-h-0"
     >
       <PackageSwitcher class="mb-6 shrink-0" />
-      <div class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable">
+      <div
+        id="docs-sidebar-scroll"
+        data-package={currentPackage}
+        class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable"
+      >
         <DocsSidebar />
       </div>
     </aside>
+    {/* Runs before first paint: restores the sidebar's expanded groups and scroll position
+        from the previous page of the same package, then keeps the current page in view. */}
+    <script is:inline>
+      (function () {
+        var scroller = document.getElementById('docs-sidebar-scroll');
+        if (!scroller) return;
+        var storageKey = 'docs-sidebar:' + scroller.dataset.package;
+        var groups = scroller.querySelectorAll('details[data-command-group], details[data-nav-section]');
 
-    <div
-      id="docs-scroll"
-      class="min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain"
-    >
+        function groupKey(details) {
+          var labels = [];
+          var item = details.closest('[data-nav-item]');
+          while (item) {
+            labels.unshift(item.dataset.navLabel);
+            item = item.parentElement.closest('[data-nav-item]');
+          }
+          if (labels.length > 0) return 'item:' + labels.join('/');
+          return 'section:' + details.querySelector('summary').textContent.trim();
+        }
+
+        var saved = null;
+        try {
+          saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null');
+        } catch (error) {
+          saved = null;
+        }
+        if (saved && Array.isArray(saved.openGroups)) {
+          var openGroups = new Set(saved.openGroups);
+          groups.forEach(function (details) {
+            // Groups the server opened contain the current page and stay open.
+            if (openGroups.has(groupKey(details))) details.open = true;
+            else if (!details.querySelector('[aria-current="page"]')) details.open = false;
+          });
+          scroller.scrollTop = saved.scrollTop || 0;
+        }
+
+        var current = scroller.querySelector('[aria-current="page"]');
+        if (current) {
+          var viewport = scroller.getBoundingClientRect();
+          var link = current.getBoundingClientRect();
+          if (link.top < viewport.top || link.bottom > viewport.bottom) {
+            scroller.scrollTop += link.top - viewport.top - (viewport.height - link.height) / 2;
+          }
+        }
+
+        window.addEventListener('pagehide', function () {
+          var filter = scroller.querySelector('[data-command-filter] input');
+          if (filter && filter.value.trim()) {
+            // A filtered list has a different layout; start the next page from the current link.
+            try {
+              sessionStorage.removeItem(storageKey);
+            } catch (error) {}
+            return;
+          }
+          var state = {
+            scrollTop: scroller.scrollTop,
+            openGroups: Array.prototype.filter
+              .call(groups, function (details) {
+                return details.open;
+              })
+              .map(groupKey),
+          };
+          try {
+            sessionStorage.setItem(storageKey, JSON.stringify(state));
+          } catch (error) {
+            // Storage can be unavailable in private modes; the sidebar then starts fresh.
+          }
+        });
+      })();
+    </script>
+
+    <div id="docs-scroll" class="min-w-0 flex-1 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
       {/* Padding on an inner wrapper so lg scrollport includes space below prev/next */}
       <div class="flex w-full min-w-0 justify-center pb-12 lg:pb-16">
-        <main id="main-content" tabindex="-1" class="w-full min-w-0 max-w-3xl px-6 pt-10 2xl:max-w-6xl">
-          {
-            tocHeadings.length > 0 && (
-              <details class="border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">
-                <summary class="focus-visible:ring-ring flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
-                  On this page
-                  <svg
-                    class="text-muted-foreground size-3.5 shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    aria-hidden="true"
-                  >
-                    <path d="m6 9 6 6 6-6"></path>
-                  </svg>
-                </summary>
-                <div class="pt-3 pb-2">
-                  <TableOfContents headings={headings} showHeading={false} />
-                </div>
-              </details>
-            )
-          }
+        <main id="main-content" tabindex="-1" class="w-full min-w-0 max-w-4xl px-4 sm:px-6 pt-8">
+          {tocHeadings.length > 0 && (
+            <details class="docs-disclosure border-border mb-8 rounded-lg border px-4 py-2 xl:hidden">
+              <summary class="focus-visible:ring-ring flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 [&::-webkit-details-marker]:hidden">
+                On this page
+                <svg
+                  class="accordion-chevron text-muted-foreground size-3.5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="m6 9 6 6 6-6"></path>
+                </svg>
+              </summary>
+              <div class="pt-3 pb-2">
+                <TableOfContents headings={headings} showHeading={false} />
+              </div>
+            </details>
+          )}
           <slot />
           <PrevNext prev={prev} next={next} />
         </main>
 
-        <aside
-          class="sticky top-0 hidden max-h-[calc(100dvh-var(--header-height))] w-52 shrink-0 self-start overflow-y-auto py-8 pr-6 xl:block"
-        >
+        <aside class="sticky top-0 hidden max-h-[calc(100dvh-var(--header-height))] w-52 shrink-0 self-start overflow-y-auto py-8 pr-6 xl:block">
           <TableOfContents headings={headings} />
         </aside>
       </div>
     </div>
   </div>
   <script is:inline>
-    ;(function () {
-      var headingNodes = document.querySelectorAll('.prose h2[id], .prose h3[id]')
-      var links = document.querySelectorAll('nav[aria-label="On this page"] a')
-      if (headingNodes.length === 0 || links.length === 0) return
+    (function () {
+      var headingNodes = document.querySelectorAll('.prose h2[id], .prose h3[id]');
+      var links = document.querySelectorAll('nav[aria-label="On this page"] a');
+      if (headingNodes.length === 0 || links.length === 0) return;
 
-      var scrollRoot = document.getElementById('docs-scroll')
-      var wide = window.matchMedia('(min-width: 1024px)')
+      var scrollRoot = document.getElementById('docs-scroll');
+      var wide = window.matchMedia('(min-width: 1024px)');
 
       function setCurrent(id) {
         links.forEach(function (link) {
-          var hash = decodeURIComponent(link.hash.slice(1))
-          if (hash === id) link.setAttribute('aria-current', 'location')
-          else link.removeAttribute('aria-current')
-        })
+          var hash = decodeURIComponent(link.hash.slice(1));
+          if (hash === id) link.setAttribute('aria-current', 'location');
+          else link.removeAttribute('aria-current');
+        });
       }
 
       function closestHeading() {
-        var root = wide.matches && scrollRoot ? scrollRoot : null
-        var top = root ? root.getBoundingClientRect().top : 0
-        var current = headingNodes[0]
+        var root = wide.matches && scrollRoot ? scrollRoot : null;
+        var top = root ? root.getBoundingClientRect().top : 0;
+        var current = headingNodes[0];
         headingNodes.forEach(function (heading) {
-          if (heading.getBoundingClientRect().top - top <= 96) current = heading
-        })
-        if (current && current.id) setCurrent(current.id)
+          if (heading.getBoundingClientRect().top - top <= 96) current = heading;
+        });
+        if (current && current.id) setCurrent(current.id);
       }
 
-      var observer = new IntersectionObserver(
-        function () {
-          closestHeading()
-        },
-        {
+      var observer;
+      function observeHeadings() {
+        if (observer) observer.disconnect();
+        observer = new IntersectionObserver(closestHeading, {
           root: wide.matches && scrollRoot ? scrollRoot : null,
           rootMargin: '0px 0px -70% 0px',
           threshold: [0, 1],
-        },
-      )
-      headingNodes.forEach(function (heading) {
-        observer.observe(heading)
-      })
-      closestHeading()
+        });
+        headingNodes.forEach(function (heading) {
+          observer.observe(heading);
+        });
+        closestHeading();
+      }
+      wide.addEventListener('change', observeHeadings);
+      observeHeadings();
+      closestHeading();
 
       document.querySelectorAll('details a[href^="#"]').forEach(function (link) {
         link.addEventListener('click', function () {
-          var details = link.closest('details')
-          if (details) details.open = false
-        })
-      })
-    })()
+          var details = link.closest('details');
+          if (details) details.open = false;
+        });
+      });
+    })();
   </script>
 </BaseLayout>

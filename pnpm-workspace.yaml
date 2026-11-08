@@ -12,6 +12,11 @@ catalog:
   '@vitest/coverage-v8': ^5.0.5
   '@types/node': ^26.6.6
 
+# Astro's current checker requires TypeScript 6; runtime packages retain the main catalog.
+catalogs:
+  docs-check:
+    typescript: ^6.0.0
+
 # Link local packages into node_modules instead of fetching them from the registry.
 linkWorkspacePackages: true
 # Write `workspace:^` when adding a local package as a dependency.

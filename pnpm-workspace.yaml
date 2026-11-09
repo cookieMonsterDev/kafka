@@ -29,6 +29,11 @@ engineStrict: true
 # explicitly also turns on minimumReleaseAgeStrict, so install fails
 # instead of falling back to a too-new release.
 minimumReleaseAge: 1440
+# astro2tsx omits its runtime dependency; match its pinned @emnapi/core until upstream fixes it.
+packageExtensions:
+  '@astrojs/astro2tsx@0.1.3':
+    dependencies:
+      '@emnapi/runtime': 1.11.3
 # esbuild ships a platform-specific binary and needs its install script to run.
 allowBuilds:
   protobufjs: false

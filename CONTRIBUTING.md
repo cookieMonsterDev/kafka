@@ -135,6 +135,11 @@ Keep the description short. One concern per branch.
 - One logical change per commit
 - No co-author during committing
 
+Commitlint ignores Dependabot's generated `build(deps)` / `build(deps-dev)` npm
+group-update messages (`bump the npm-production` / `npm-development group across …`),
+whose subjects can exceed 72 characters. Regular dependency commits still follow
+the rules above.
+
 ```
 feat(core): add fetch request v4 encoder
 fix(network): retry when the connection pool is exhausted

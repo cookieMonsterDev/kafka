@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { ProfileClientPool } from './profile-client-pool';
 import type { Message, Producer } from '@cookiemonsterdev/kafka-core';
 import type {
   BurstJobStatus,
@@ -14,63 +15,10 @@ export type PooledProducer = Pick<Producer, 'connect' | 'disconnect' | 'send'>;
 /** Everything {@link ProducerPool} needs to build a fresh, unconnected producer for one profile. */
 export type ProducerClientFactory = (profileName: string | null) => { producer(): PooledProducer };
 
-const DEFAULT_KEY = '__default__';
-
-function keyFor(profileName: string | null): string {
-  return profileName ?? DEFAULT_KEY;
-}
-
-/**
- * Caches one connected producer per profile — mirrors {@link AdminPool} (`../kafka/admin-pool`) for
- * the same reason: switching views in the UI shouldn't pay a fresh TCP handshake and metadata fetch
- * on every send, only the first send against a profile the studio hasn't produced to yet.
- */
-export class ProducerPool {
-  private readonly createClient: ProducerClientFactory;
-  private readonly pooled = new Map<string, Promise<PooledProducer>>();
-
+/** A profile-scoped pool retaining the producer's typed capabilities. */
+export class ProducerPool extends ProfileClientPool<PooledProducer> {
   constructor(createClient: ProducerClientFactory) {
-    this.createClient = createClient;
-  }
-
-  get(profileName: string | null): Promise<PooledProducer> {
-    const key = keyFor(profileName);
-    const existing = this.pooled.get(key);
-    if (existing !== undefined) return existing;
-
-    const connecting = this.connect(profileName);
-    this.pooled.set(key, connecting);
-    void connecting.catch(() => this.pooled.delete(key));
-    return connecting;
-  }
-
-  private async connect(profileName: string | null): Promise<PooledProducer> {
-    const producer = this.createClient(profileName).producer();
-    await producer.connect();
-    return producer;
-  }
-
-  /** Disconnects and forgets the pooled producer for one profile, if any — a no-op when nothing was pooled for it. */
-  async invalidate(profileName: string | null): Promise<void> {
-    const key = keyFor(profileName);
-    const pending = this.pooled.get(key);
-    this.pooled.delete(key);
-    if (pending === undefined) return;
-
-    const producer = await pending.catch(() => null);
-    await producer?.disconnect();
-  }
-
-  /** Disconnects every pooled producer — called once, on server shutdown. */
-  async disposeAll(): Promise<void> {
-    const pending = [...this.pooled.values()];
-    this.pooled.clear();
-    await Promise.all(
-      pending.map(async (entry) => {
-        const producer = await entry.catch(() => null);
-        await producer?.disconnect();
-      }),
-    );
+    super((profile) => createClient(profile).producer());
   }
 }
 

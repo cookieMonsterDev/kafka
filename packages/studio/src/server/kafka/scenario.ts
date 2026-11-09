@@ -3,7 +3,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { DebugScenario, ScenarioStepResult } from '../../shared/contracts/debug';
 import { matchesPredicates } from '../../shared/message-query';
 import type { PooledAdmin } from './admin-pool';
-import { openAssignedStream, toMessageRecord, type MessageConsumerFactory } from './messages';
+import { readAssignedMessages } from './assigned-consumer';
+import { toMessageRecord, type MessageConsumerFactory } from './messages';
 import type { PooledProducer } from './produce';
 import { searchableRecord } from './scan';
 
@@ -54,32 +55,27 @@ export async function runScenario(
           ...entry,
           value: typeof entry.value === 'string' ? substitute(entry.value) : entry.value,
         }));
-        try {
-          await consumer.connect();
-          const batches = await openAssignedStream(consumer, step.topic, starts.get(step.topic) ?? [], {
-            signal: combined,
-          });
-          for await (const batch of batches) {
-            combined.throwIfAborted();
-            const start = starts.get(step.topic)?.find((entry) => entry.partition === batch.partition)?.offset;
-            if (
-              batch.messages.some(
-                (message) =>
-                  start !== undefined &&
-                  message.offset >= start &&
-                  matchesPredicates(
-                    searchableRecord({ topic: step.topic, ...toMessageRecord(batch.partition, message) }),
-                    predicates,
-                  ),
-              )
-            ) {
-              matched = true;
-              break;
-            }
-            combined.throwIfAborted();
+        const batches = readAssignedMessages(consumer, step.topic, starts.get(step.topic) ?? [], {
+          signal: combined,
+        });
+        for await (const batch of batches) {
+          combined.throwIfAborted();
+          const start = starts.get(step.topic)?.find((entry) => entry.partition === batch.partition)?.offset;
+          if (
+            batch.messages.some(
+              (message) =>
+                start !== undefined &&
+                message.offset >= start &&
+                matchesPredicates(
+                  searchableRecord({ topic: step.topic, ...toMessageRecord(batch.partition, message) }),
+                  predicates,
+                ),
+            )
+          ) {
+            matched = true;
+            break;
           }
-        } finally {
-          await consumer.disconnect();
+          combined.throwIfAborted();
         }
         if (!matched) throw new Error('No matching event before the expectation deadline');
       }

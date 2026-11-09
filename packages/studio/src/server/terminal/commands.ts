@@ -155,22 +155,12 @@ export function studioTerminalCommands(context: {
             runtime.signal,
           );
         } else {
-          const abort = () => {
-            void consumer.disconnect().catch(() => {});
-          };
-          runtime.signal.addEventListener('abort', abort, { once: true });
-          try {
-            runtime.signal.throwIfAborted();
-            const result = await readMessagesPage(admin, consumer, { topic, query: query.data });
-            output.write({
-              human: () =>
-                result.messages.map((message) => JSON.stringify(decodedMessage(message))).join('\n') || '(no messages)',
-              json: () => JSON.stringify(result),
-            });
-          } finally {
-            runtime.signal.removeEventListener('abort', abort);
-            await consumer.disconnect();
-          }
+          const result = await readMessagesPage(admin, consumer, { topic, query: query.data, signal: runtime.signal });
+          output.write({
+            human: () =>
+              result.messages.map((message) => JSON.stringify(decodedMessage(message))).join('\n') || '(no messages)',
+            json: () => JSON.stringify(result),
+          });
         }
         return 0;
       },

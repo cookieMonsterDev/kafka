@@ -19,7 +19,7 @@ import { scanMessages } from '../kafka/scan';
 import { runScenario } from '../kafka/scenario';
 import type { StudioSchemaRegistry, RegistrySchema } from '../kafka/schema-registry';
 import type { Router } from '../router';
-import { openSseStream } from '../sse';
+import { DebugOperations } from '../debug-operation';
 
 export interface DebugRouteContext {
   readonly pool: AdminPool;
@@ -50,14 +50,7 @@ async function topicSnapshot(admin: PooledAdmin, topic: string): Promise<Map<str
 
 /** All long operations capture their profile once and stop when the response connection closes. */
 export function registerDebugRoutes(router: Router, context: DebugRouteContext): void {
-  let activeOperations = 0;
-  const reserve = (): (() => void) => {
-    if (activeOperations >= 4) throw new Error('Four debugger operations are already running; cancel one first');
-    activeOperations++;
-    return () => {
-      activeOperations--;
-    };
-  };
+  const operations = new DebugOperations(() => context.getActiveProfile());
   router.post(
     '/api/debug/scan',
     async (req, res) => {
@@ -66,32 +59,22 @@ export function registerDebugRoutes(router: Router, context: DebugRouteContext):
         sendError(res, 400, 'bad_request', 'Invalid scan request', parsed.error.issues);
         return;
       }
-      const release = reserve();
-      const profile = context.getActiveProfile();
-      const controller = new AbortController();
-      const stream = openSseStream(req, res, () => controller.abort(), true);
-      try {
-        const admin = await context.pool.get(profile);
-        const result = await scanMessages(
-          admin,
-          context.consumerFactory,
-          profile,
-          parsed.data,
-          controller.signal,
-          (progress) =>
+      await operations.run(
+        req,
+        res,
+        async ({ profile, signal, stream }) => {
+          const admin = await context.pool.get(profile);
+          const result = await scanMessages(admin, context.consumerFactory, profile, parsed.data, signal, (progress) =>
             stream.send('progress', {
               scanned: progress.scanned,
               matched: progress.matched,
               coverage: progress.coverage,
             }),
-        );
-        stream.send('result', result);
-      } catch (error) {
-        stream.send('operation-error', { message: error instanceof Error ? error.message : 'Scan failed' });
-      } finally {
-        release();
-        stream.close();
-      }
+          );
+          stream.send('result', result);
+        },
+        { failureMessage: 'Scan failed' },
+      );
     },
     { allowInReadOnly: true },
   );
@@ -102,51 +85,47 @@ export function registerDebugRoutes(router: Router, context: DebugRouteContext):
       sendError(res, 400, 'bad_request', 'Invalid replay request', parsed.error.issues);
       return;
     }
-    const release = reserve();
-    const profile = context.getActiveProfile();
-    const controller = new AbortController();
-    const stream = openSseStream(req, res, () => controller.abort(), true);
-    try {
-      const producer = await context.producers.get(profile);
-      for (const [index, record] of parsed.data.records.entries()) {
-        controller.signal.throwIfAborted();
-        let result: ReplayResult;
-        try {
-          await producer.send({
-            topic: parsed.data.topic,
-            messages: [
-              {
-                key: decodeBytes(record.key),
-                value: decodeBytes(record.value),
-                headers: Object.fromEntries(
-                  Object.entries(record.headers).map(([key, value]) => [
-                    key,
-                    Array.isArray(value) ? value.map(decodeBytes) : decodeBytes(value),
-                  ]),
-                ),
-              },
-            ],
-            signal: controller.signal,
-          });
-          result = { index, status: 'sent' };
-        } catch (error) {
-          result = {
-            index,
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Send failed; delivery may be uncertain',
-          };
+    await operations.run(
+      req,
+      res,
+      async ({ profile, signal, stream }) => {
+        const producer = await context.producers.get(profile);
+        for (const [index, record] of parsed.data.records.entries()) {
+          signal.throwIfAborted();
+          let result: ReplayResult;
+          try {
+            await producer.send({
+              topic: parsed.data.topic,
+              messages: [
+                {
+                  key: decodeBytes(record.key),
+                  value: decodeBytes(record.value),
+                  headers: Object.fromEntries(
+                    Object.entries(record.headers).map(([key, value]) => [
+                      key,
+                      Array.isArray(value) ? value.map(decodeBytes) : decodeBytes(value),
+                    ]),
+                  ),
+                },
+              ],
+              signal,
+            });
+            result = { index, status: 'sent' };
+          } catch (error) {
+            result = {
+              index,
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Send failed; delivery may be uncertain',
+            };
+          }
+          stream.send('record', result);
+          if (index + 1 < parsed.data.records.length)
+            await delay(1000 / parsed.data.ratePerSecond, undefined, { signal });
         }
-        stream.send('record', result);
-        if (index + 1 < parsed.data.records.length)
-          await delay(1000 / parsed.data.ratePerSecond, undefined, { signal: controller.signal });
-      }
-      stream.send('done', {});
-    } catch (error) {
-      stream.send('operation-error', { message: error instanceof Error ? error.message : 'Replay stopped' });
-    } finally {
-      release();
-      stream.close();
-    }
+        stream.send('done', {});
+      },
+      { failureMessage: 'Replay stopped' },
+    );
   });
 
   router.post('/api/debug/scenario', async (req, res) => {
@@ -155,23 +134,24 @@ export function registerDebugRoutes(router: Router, context: DebugRouteContext):
       sendError(res, 400, 'bad_request', 'Invalid scenario', parsed.error.issues);
       return;
     }
-    const release = reserve();
-    const profile = context.getActiveProfile();
-    const controller = new AbortController();
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]);
-    const stream = openSseStream(req, res, () => controller.abort(), true);
-    try {
-      const [admin, producer] = await Promise.all([context.pool.get(profile), context.producers.get(profile)]);
-      const result = await runScenario(parsed.data, admin, producer, context.consumerFactory, profile, signal, (step) =>
-        stream.send('step', step),
-      );
-      stream.send('result', result);
-    } catch (error) {
-      stream.send('operation-error', { message: error instanceof Error ? error.message : 'Scenario stopped' });
-    } finally {
-      release();
-      stream.close();
-    }
+    await operations.run(
+      req,
+      res,
+      async ({ profile, signal, stream }) => {
+        const [admin, producer] = await Promise.all([context.pool.get(profile), context.producers.get(profile)]);
+        const result = await runScenario(
+          parsed.data,
+          admin,
+          producer,
+          context.consumerFactory,
+          profile,
+          signal,
+          (step) => stream.send('step', step),
+        );
+        stream.send('result', result);
+      },
+      { failureMessage: 'Scenario stopped', timeoutMs: 120000 },
+    );
   });
 
   const compareSchema = z.object({ topic: topicNameSchema, left: z.string().nullable(), right: z.string().nullable() });

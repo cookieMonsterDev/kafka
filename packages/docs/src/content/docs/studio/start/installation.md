@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install @cookiemonsterdev/kafka-studio, standalone or through the CLI
+description: Install @cookiemonsterdev/kafka-studio from npm, through the CLI, or as a standalone binary
 order: 2
 section: start
 ---
@@ -46,6 +46,24 @@ After `bun add -g @cookiemonsterdev/kafka-studio`, run `bunx --bun kafka-studio`
 `kafka-studio` directly still uses Node.js. `kafka studio` runs the studio in the CLI's own process,
 so it uses whichever runtime the CLI was started with. See [Bun](../../../core/reference/bun/) for
 what else differs on Bun.
+
+## Standalone binary
+
+Each [studio release](https://github.com/cookieMonsterDev/kafka/releases?q=studio-v&expanded=true)
+also attaches a single-file `kafka-studio` executable that bundles Bun and the web UI, for machines
+without Node.js or Bun. Download the asset for your platform (for example
+`kafka-studio-linux-x64`) and `kafka-studio-SHA256SUMS`, then verify, rename, and run it:
+
+```sh
+sha256sum -c --ignore-missing kafka-studio-SHA256SUMS
+mv kafka-studio-linux-x64 kafka-studio
+chmod +x kafka-studio
+./kafka-studio
+```
+
+Use this binary rather than `kafka studio` from the standalone `kafka` binary, which can't load the
+studio. Read [Standalone binaries](../../../core/reference/bun/#standalone-binaries) for the
+platforms and the other differences from the npm package, including the macOS quarantine step.
 
 ## From this monorepo
 

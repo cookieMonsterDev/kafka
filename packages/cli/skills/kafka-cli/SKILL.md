@@ -41,7 +41,10 @@ npm install --save-dev @cookiemonsterdev/kafka-cli              # per project
 npm install -g @cookiemonsterdev/kafka-cli                      # global `kafka` binary
 ```
 
-Use the project-local binary (`npx kafka …`) when the CLI is a dev dependency.
+Use the project-local binary (`npx kafka …`) when the CLI is a dev dependency. Where neither
+runtime is installed, each CLI GitHub release also attaches a standalone `kafka-<os>-<arch>`
+executable that bundles Bun; it differs from the npm package in a few ways. Details:
+https://cookiemonsterdev.github.io/kafka/docs/cli/start/installation/#standalone-binary
 
 ## Core Patterns
 

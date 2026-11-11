@@ -323,3 +323,21 @@ jobs:
         with:
           name: docs-browser-results
           path: packages/docs/test-results/
+
+  binaries:
+    name: Standalone binaries (Bun)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The release workflow compiles `kafka` and `kafka-studio` for every target; this host build
+    # catches a change that breaks them (an asset or worker the executable cannot find) earlier.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node-pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+      - run: pnpm --filter "@cookiemonsterdev/kafka-studio..." build
+      - run: node scripts/build-binaries.mjs cli
+      - run: node scripts/build-binaries.mjs studio
+      - run: node scripts/smoke-binaries.mjs cli dist/binaries
+      - run: node scripts/smoke-binaries.mjs studio dist/binaries

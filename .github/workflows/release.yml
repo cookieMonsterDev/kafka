@@ -1,5 +1,6 @@
 # Chained semantic-release on master, walking RELEASE_PACKAGES in order. workflow_dispatch can
-# force a package or dry-run.
+# force a package or dry-run. After npm publishing, the binaries-* jobs attach standalone `kafka`
+# and `kafka-studio` executables to the cli and studio GitHub releases this run created.
 name: Release
 
 on:
@@ -144,3 +145,134 @@ jobs:
           else
             echo "A master → develop PR is already open"
           fi
+
+  # Finds the cli/studio releases this run tagged that have no binaries attached yet. A tag that
+  # does not descend from this run's commit belongs to an earlier run; re-run a failed binaries job
+  # from that earlier run instead.
+  binaries-plan:
+    name: Plan binaries
+    needs: [release]
+    if: >-
+      always() &&
+      inputs.dry_run != true &&
+      needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      releases: ${{ steps.plan.outputs.releases }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: plan
+        name: List releases that need binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin master
+          releases='[]'
+          for package in cli studio; do
+            version=$(git show "origin/master:packages/${package}/package.json" | jq -r .version)
+            tag="${package}-v${version}"
+            if ! git rev-parse -q --verify "refs/tags/${tag}" >/dev/null ||
+              ! git merge-base --is-ancestor "$GITHUB_SHA" "$tag"; then
+              continue
+            fi
+            if [[ "$(gh release view "$tag" --json assets --jq '.assets | length')" != '0' ]]; then
+              continue
+            fi
+            releases=$(jq -c --arg package "$package" --arg tag "$tag" '. + [{package: $package, tag: $tag}]' <<<"$releases")
+          done
+          echo "releases=${releases}" >> "$GITHUB_OUTPUT"
+
+  # Cross-compiles every target from the released tag; binaries-smoke runs each on its own platform.
+  binaries-build:
+    name: Build ${{ matrix.release.package }} binaries
+    needs: [binaries-plan]
+    # `!cancelled()` plus each direct parent's result, here and below: the implicit `success()` also
+    # looks at `release`, which fails when a later package fails after cli or studio was published.
+    if: >-
+      !cancelled() &&
+      needs.binaries-plan.result == 'success' &&
+      needs.binaries-plan.outputs.releases != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        release: ${{ fromJSON(needs.binaries-plan.outputs.releases) }}
+    env:
+      PACKAGE: ${{ matrix.release.package }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.release.tag }}
+      - uses: ./.github/actions/setup-node-pnpm
+      # The executables embed this Bun; the same version CI's binaries job builds and tests with.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+      - run: pnpm --filter "@cookiemonsterdev/kafka-${PACKAGE}..." build
+      - run: node scripts/build-binaries.mjs "$PACKAGE" --target all --outdir binaries
+      - uses: actions/upload-artifact@v7
+        with:
+          name: binaries-${{ matrix.release.package }}
+          path: binaries/
+          if-no-files-found: error
+
+  binaries-smoke:
+    name: Smoke ${{ matrix.release.package }} on ${{ matrix.platform.target }}
+    needs: [binaries-plan, binaries-build]
+    if: ${{ !cancelled() && needs.binaries-build.result == 'success' }}
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJSON(needs.binaries-plan.outputs.releases) }}
+        # Every target in scripts/build-binaries.mjs's BINARY_TARGETS, on a runner that can run it.
+        platform:
+          - { runner: ubuntu-latest, target: bun-linux-x64 }
+          - { runner: ubuntu-24.04-arm, target: bun-linux-arm64 }
+          - { runner: macos-latest, target: bun-darwin-arm64 }
+          - { runner: windows-latest, target: bun-windows-x64 }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.release.tag }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries-${{ matrix.release.package }}
+          path: binaries
+      - run: node scripts/smoke-binaries.mjs ${{ matrix.release.package }} binaries
+
+  binaries-publish:
+    name: Attach ${{ matrix.release.package }} binaries
+    needs: [binaries-plan, binaries-smoke]
+    if: ${{ !cancelled() && needs.binaries-smoke.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        release: ${{ fromJSON(needs.binaries-plan.outputs.releases) }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: binaries-${{ matrix.release.package }}
+          path: binaries
+      - name: Upload the binaries and their checksums to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.release.tag }}
+        run: gh release upload "$TAG" binaries/* --repo "$GITHUB_REPOSITORY"

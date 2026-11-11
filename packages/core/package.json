@@ -68,6 +68,7 @@
     "test:integration": "vitest run --project integration",
     "test:watch": "vitest --project unit",
     "bench": "node bench/load-ts.mjs",
+    "bench:bun": "bun bench/run.ts",
     "coverage": "vitest run --coverage",
     "test:cluster:up": "bash scripts/compose-up.sh",
     "test:cluster:down": "bash scripts/compose-down.sh",

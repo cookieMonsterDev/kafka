@@ -5,6 +5,8 @@ import { benchEncoderBufferPool } from './encoder-buffer-pool';
 import { benchLazyRecordDecode } from './lazy-record-decode';
 import { benchProduceLinger } from './produce-linger';
 import { benchConsumeHandlers } from './consume-handlers';
+import { benchCrc32c } from './crc32c';
+import { benchCompressionZlib } from './compression-zlib';
 
 export async function main(): Promise<void> {
   console.log('kafka-core microbenches (local, not CI-gated)');
@@ -23,6 +25,10 @@ export async function main(): Promise<void> {
   await benchProduceLinger();
   console.log('');
   await benchConsumeHandlers();
+  console.log('');
+  await benchCrc32c();
+  console.log('');
+  await benchCompressionZlib();
 }
 
 const isDirect = process.argv[1] !== undefined && process.argv[1].includes('bench/run');

@@ -1,4 +1,4 @@
-import type { Batch, Consumer, KafkaMessage } from '@cookiemonsterdev/kafka-core';
+import type { Consumer, KafkaMessage } from '@cookiemonsterdev/kafka-core';
 import type {
   MessageRecord,
   MessagesPageResponse,
@@ -6,63 +6,9 @@ import type {
   PartitionRange,
 } from '../../shared/contracts/message';
 import type { PooledAdmin } from './admin-pool';
+import { readAssignedMessages } from './assigned-consumer';
 
 export type PooledMessageConsumer = Pick<Consumer, 'connect' | 'disconnect' | 'assign' | 'seek' | 'stream'>;
-
-/**
- * Starts `consumer.stream()` and returns it safe to seek against right away: `Consumer.seek()`
- * throws until the consumer's group/assignment state exists, and that state is only created once
- * the stream's first item is requested — requesting (not awaiting) it here forces that setup to
- * happen synchronously instead of on the caller's first `for await` tick. `return()` is forwarded
- * to the underlying generator so an early `break` still runs its cleanup; skipping that leaves the
- * consumer running and `disconnect()` hangs.
- */
-export function startMessageStream(
-  consumer: PooledMessageConsumer,
-  config?: { readonly signal?: AbortSignal },
-): AsyncIterable<Batch> {
-  const iterator = consumer.stream(config);
-  const first = iterator.next();
-  let firstConsumed = false;
-
-  return {
-    [Symbol.asyncIterator](): AsyncIterator<Batch> {
-      return {
-        next: (): Promise<IteratorResult<Batch>> => {
-          if (firstConsumed) return iterator.next();
-          firstConsumed = true;
-          return first;
-        },
-        return: (value?: unknown): Promise<IteratorResult<Batch>> =>
-          iterator.return ? iterator.return(value) : Promise.resolve({ done: true, value: undefined }),
-      };
-    },
-  };
-}
-
-export interface AssignedCursor {
-  readonly partition: number;
-  readonly offset: bigint;
-}
-
-/**
- * Assigns `consumer` the given partitions and seeks each to its starting offset — assign, start
- * the stream, then seek, the only order {@link startMessageStream} allows. Shared by the bounded
- * page read and the live tail. The caller still owns `consumer.connect()`/`disconnect()`.
- */
-export async function openAssignedStream(
-  consumer: PooledMessageConsumer,
-  topic: string,
-  cursors: readonly AssignedCursor[],
-  config?: { readonly signal?: AbortSignal },
-): Promise<AsyncIterable<Batch>> {
-  await consumer.assign(cursors.map((cursor) => ({ topic, partition: cursor.partition })));
-  const batches = startMessageStream(consumer, config);
-  for (const cursor of cursors) {
-    consumer.seek({ topic, partition: cursor.partition, offset: cursor.offset });
-  }
-  return batches;
-}
 
 /** Builds a fresh, unconnected consumer for one profile. Unlike {@link PooledAdmin}, these are never pooled — each request or SSE connection assigns its own partitions and disconnects when done. */
 export type MessageConsumerFactory = (profileName: string | null) => { consumer(): PooledMessageConsumer };
@@ -203,6 +149,7 @@ async function collectMessages(
   topic: string,
   cursors: readonly PartitionCursor[],
   query: MessagesQuery,
+  signal?: AbortSignal,
 ): Promise<MessageRecord[]> {
   const highByPartition = new Map(cursors.map((cursor) => [cursor.partition, cursor.high]));
   const pending = new Set<number>();
@@ -215,36 +162,30 @@ async function collectMessages(
   const collected: MessageRecord[] = [];
   const countByPartition = new Map<number, number>();
   const seen = new SeenOffsetTracker();
-  await consumer.connect();
+  const controller = new AbortController();
+  const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal]);
+  const deadline = setTimeout(() => controller.abort(), PAGE_READ_TIMEOUT_MS);
   try {
-    const controller = new AbortController();
-    const deadline = setTimeout(() => controller.abort(), PAGE_READ_TIMEOUT_MS);
-    try {
-      const assigned = cursors.map((cursor) => ({ partition: cursor.partition, offset: cursor.start }));
-      const batches = await openAssignedStream(consumer, topic, assigned, { signal: controller.signal });
-
-      for await (const batch of batches) {
-        let count = countByPartition.get(batch.partition) ?? 0;
-        for (const message of batch.messages) {
-          if (count >= query.limit) break;
-          if (seen.admit(batch.partition, message.offset)) {
-            collected.push(toMessageRecord(batch.partition, message));
-            count++;
-          }
+    const assigned = cursors.map((cursor) => ({ partition: cursor.partition, offset: cursor.start }));
+    for await (const batch of readAssignedMessages(consumer, topic, assigned, { signal: combined })) {
+      let count = countByPartition.get(batch.partition) ?? 0;
+      for (const message of batch.messages) {
+        if (count >= query.limit) break;
+        if (seen.admit(batch.partition, message.offset)) {
+          collected.push(toMessageRecord(batch.partition, message));
+          count++;
         }
-        countByPartition.set(batch.partition, count);
-
-        const high = highByPartition.get(batch.partition);
-        if (count >= query.limit || (high !== undefined && batch.lastOffset() + 1n >= high)) {
-          pending.delete(batch.partition);
-        }
-        if (pending.size === 0 || pageIsFull(partitionsInPageOrder, pending, countByPartition, query.limit)) break;
       }
-    } finally {
-      clearTimeout(deadline);
+      countByPartition.set(batch.partition, count);
+
+      const high = highByPartition.get(batch.partition);
+      if (count >= query.limit || (high !== undefined && batch.lastOffset() + 1n >= high)) {
+        pending.delete(batch.partition);
+      }
+      if (pending.size === 0 || pageIsFull(partitionsInPageOrder, pending, countByPartition, query.limit)) break;
     }
   } finally {
-    await consumer.disconnect();
+    clearTimeout(deadline);
   }
   return collected;
 }
@@ -252,6 +193,7 @@ async function collectMessages(
 export interface ReadMessagesPageInput {
   readonly topic: string;
   readonly query: MessagesQuery;
+  readonly signal?: AbortSignal;
 }
 
 /** A bounded snapshot read: seeks a short-lived consumer to a computed offset per partition and collects up to `query.limit` messages, then disconnects. Always terminates, unlike the live tail (`./tail`). */
@@ -260,7 +202,8 @@ export async function readMessagesPage(
   consumer: PooledMessageConsumer,
   input: ReadMessagesPageInput,
 ): Promise<MessagesPageResponse> {
-  const { topic, query } = input;
+  const { topic, query, signal } = input;
+  signal?.throwIfAborted();
   const allOffsets = await admin.fetchTopicOffsets(topic);
   const ranges = allOffsets.map((offset) => toRange(offset.partition, offset.low, offset.high));
 
@@ -269,7 +212,7 @@ export async function readMessagesPage(
   if (targets.length === 0) return { messages: [], ranges };
 
   const cursors = await resolveStartOffsets(admin, topic, query, targets);
-  const collected = await collectMessages(consumer, topic, cursors, query);
+  const collected = await collectMessages(consumer, topic, cursors, query, signal);
 
   collected.sort(compareByPartitionOffset);
   const limited = isTailRead(query) ? collected.slice(-query.limit) : collected.slice(0, query.limit);

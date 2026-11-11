@@ -1,7 +1,8 @@
+import { readAssignedMessages } from './assigned-consumer';
 import type { MessageRecord } from '../../shared/contracts/message';
 import type { SseStream } from '../sse';
 import type { PooledAdmin } from './admin-pool';
-import { openAssignedStream, SeenOffsetTracker, toMessageRecord, type PooledMessageConsumer } from './messages';
+import { SeenOffsetTracker, toMessageRecord, type PooledMessageConsumer } from './messages';
 
 export interface TailFrame {
   readonly message: MessageRecord;
@@ -90,25 +91,19 @@ export async function runTail(
   const queue = new BoundedTailQueue(maxBuffered);
   const seen = new SeenOffsetTracker();
 
-  await consumer.connect();
-  try {
-    const assigned = targets.map((offset) => ({ partition: offset.partition, offset: offset.high }));
-    const batches = await openAssignedStream(consumer, topic, assigned, { signal });
+  const assigned = targets.map((offset) => ({ partition: offset.partition, offset: offset.high }));
 
-    for await (const batch of batches) {
-      for (const message of batch.messages) {
-        if (seen.admit(batch.partition, message.offset)) queue.push(toMessageRecord(batch.partition, message));
-      }
-
-      let frame = queue.shift();
-      while (frame !== undefined && !signal.aborted) {
-        stream.send('message', frame.message);
-        if (frame.droppedBefore > 0) stream.send('gap', { dropped: frame.droppedBefore });
-        if (queue.size > 0) await sleep(delayMs, signal);
-        frame = queue.shift();
-      }
+  for await (const batch of readAssignedMessages(consumer, topic, assigned, { signal })) {
+    for (const message of batch.messages) {
+      if (seen.admit(batch.partition, message.offset)) queue.push(toMessageRecord(batch.partition, message));
     }
-  } finally {
-    await consumer.disconnect();
+
+    let frame = queue.shift();
+    while (frame !== undefined && !signal.aborted) {
+      stream.send('message', frame.message);
+      if (frame.droppedBefore > 0) stream.send('gap', { dropped: frame.droppedBefore });
+      if (queue.size > 0) await sleep(delayMs, signal);
+      frame = queue.shift();
+    }
   }
 }

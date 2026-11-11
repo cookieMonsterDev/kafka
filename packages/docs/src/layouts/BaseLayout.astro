@@ -19,7 +19,7 @@ interface Props {
 
 const { title, description, docs = false } = Astro.props
 const canonicalUrl = Astro.url.href
-const ogImage = new URL(withBase('/logo-512.png'), Astro.site ?? Astro.url).href
+const ogImage = new URL(withBase('/og-image.png'), Astro.site ?? Astro.url).href
 const fallbackDescription = 'TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.'
 const searchIndex = await getSearchIndex()
 const pathname = Astro.url.pathname
@@ -47,7 +47,11 @@ const documentTitle = title ? `Kafka | ${currentPackageLabel} | ${title}` : `Kaf
     <meta property="og:url" content={canonicalUrl} />
     <meta property="og:image" content={ogImage} />
     <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Kafka — the TypeScript Kafka client for Node.js" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
     <link rel="icon" href={withBase('/favicon.svg')} type="image/svg+xml" />
     <link rel="icon" href={withBase('/favicon.ico')} sizes="48x48" />
     <link rel="apple-touch-icon" href={withBase('/apple-touch-icon.png')} />

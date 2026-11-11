@@ -41,6 +41,26 @@ export function CopyCode() {
     }
 
     function copyFrom(button: HTMLElement) {
+      if (button.hasAttribute('data-copy-page')) {
+        const url = button.getAttribute('data-copy-page');
+        if (url == null) return;
+        const markdown = fetch(url).then(async (response) => {
+          if (!response.ok) throw new Error('Page unavailable');
+          return response.text();
+        });
+        // Safari drops the click's clipboard permission across an awaited fetch, so the
+        // pending text goes to ClipboardItem while the gesture is still active.
+        const written =
+          typeof ClipboardItem === 'undefined'
+            ? markdown.then((text) => navigator.clipboard.writeText(text))
+            : navigator.clipboard.write([
+                new ClipboardItem({ 'text/plain': markdown.then((text) => new Blob([text], { type: 'text/plain' })) }),
+              ]);
+        void written
+          .then(() => markCopied(button))
+          .catch(() => setStatus('Copy failed. Open View Markdown to copy manually.'));
+        return;
+      }
       const text = textFrom(button);
       if (text.length === 0) {
         return;
@@ -60,7 +80,7 @@ export function CopyCode() {
       if (!(target instanceof Element)) {
         return;
       }
-      const trigger = target.closest<HTMLElement>('.copy-command, .copy-btn');
+      const trigger = target.closest<HTMLElement>('.copy-command, .copy-btn, [data-copy-page]');
       if (trigger == null) {
         return;
       }
@@ -95,14 +115,23 @@ export function CopyCode() {
         if (el.tagName === 'PRE' && !el.hasAttribute('aria-label')) {
           el.setAttribute('aria-label', 'Code sample');
         }
+      } else {
+        el.removeAttribute('tabindex');
       }
     }
 
-    document.querySelectorAll('pre.astro-code, .prose table').forEach(markOverflow);
+    const overflowElements = document.querySelectorAll('pre.astro-code, .prose table');
+    const observer = new ResizeObserver(() => overflowElements.forEach(markOverflow));
+    overflowElements.forEach((el) => {
+      markOverflow(el);
+      observer.observe(el);
+    });
+    document.fonts.ready.then(() => overflowElements.forEach(markOverflow)).catch(() => {});
 
     document.addEventListener('click', onClick);
     return () => {
       window.clearTimeout(timer);
+      observer.disconnect();
       document.removeEventListener('click', onClick);
       wraps.forEach((wrap) => {
         const pre = wrap.querySelector('pre.astro-code');

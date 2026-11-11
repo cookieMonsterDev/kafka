@@ -12,10 +12,11 @@ metadata:
     that fail under Node's type-stripping TypeScript support.
   type: core
   library: '@cookiemonsterdev/kafka-config'
-  library_version: '1.2.1'
+  library_version: '1.3.0'
 sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/config/start/introduction.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/config/reference/api.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/config/start/getting-started.md'
 ---
 
 # kafka-config
@@ -140,3 +141,7 @@ try {
 - `discoverConfigFile` returns the intended path from each entry point's working directory.
 - `loadConfigFileAsync` returns the expected object, and an invalid file fails with a
   `KafkaConfigError` whose `tag` and message name the problem.
+
+## Documentation workflow
+
+Prefer the standalone getting-started example when wiring a new loader. Validate after merging as well as after loading; the first mergeConfigLayers argument wins, undefined is absent, and nested objects replace atomically unless opted into shallow merging.

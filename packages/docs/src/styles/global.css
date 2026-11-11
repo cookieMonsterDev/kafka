@@ -56,8 +56,8 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Dark-only. There is no `.dark` class and no light palette — see the READMEs. Keep this block
-   byte-identical to the one in packages/studio (scripts/check-theme-drift.mjs enforces it). */
+/* Dark-only: there is no `.dark` class or light palette. Keep this block byte-identical to
+   packages/studio/src/web/styles/theme.css; scripts/check-theme-drift.mjs enforces it. */
 :root {
   --background: oklch(0.145 0.008 160);
   --foreground: oklch(0.965 0.004 160);
@@ -426,82 +426,6 @@ pre.astro-code,
   );
 }
 
-.docs-nav-close {
-  display: none;
-}
-
-.docs-nav-overlay,
-.docs-nav-drawer {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  .docs-nav-overlay {
-    display: none;
-  }
-
-  .docs-nav-drawer {
-    display: flex;
-    flex-direction: column;
-    pointer-events: none;
-    visibility: hidden;
-    overflow: hidden;
-    overscroll-behavior: contain;
-    transform: translateX(-100%);
-    transition:
-      transform 200ms ease,
-      visibility 200ms ease;
-    padding-left: max(1rem, env(safe-area-inset-left));
-  }
-
-  .docs-nav-drawer > astro-island {
-    display: flex;
-    flex: 1 1 0%;
-    min-height: 0;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .docs-nav-pane {
-    flex: 1 1 0%;
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  #docs-nav:checked ~ .docs-nav-overlay {
-    display: block;
-  }
-
-  #docs-nav:checked ~ .docs-nav-drawer {
-    pointer-events: auto;
-    visibility: visible;
-    transform: translateX(0);
-  }
-
-  #docs-nav:checked ~ header .docs-nav-menu {
-    display: none;
-  }
-
-  #docs-nav:checked ~ header .docs-nav-close {
-    display: block;
-  }
-
-  #docs-nav:focus-visible ~ header [for='docs-nav'] {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
-
-  html:has(#docs-nav:checked) {
-    overflow: hidden;
-  }
-
-  #docs-nav:checked ~ header {
-    pointer-events: auto;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -548,4 +472,178 @@ pre.astro-code,
 .docs-search-dialog::backdrop {
   background: color-mix(in oklch, var(--background) 72%, transparent);
   backdrop-filter: blur(4px);
+}
+
+[hidden] {
+  display: none !important;
+}
+:where(button, input, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.75rem;
+  background: var(--background);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+html:not(.js) [data-requires-js] {
+  display: none !important;
+}
+/* Without JavaScript the mobile menu and search are unavailable, so keep a way home. */
+html:not(.js) [data-home-link] {
+  display: flex;
+}
+
+/* Cross-fade between documentation pages; the header and desktop sidebar keep their
+   own snapshots so only the content changes. Browsers without support navigate normally. */
+@view-transition {
+  navigation: auto;
+}
+#site-header {
+  view-transition-name: site-header;
+}
+/* The open mobile menu covers the header; a separate header snapshot would flash above it. */
+html:has(.docs-menu-dialog[open]) #site-header {
+  view-transition-name: none;
+}
+#docs-sidebar {
+  view-transition-name: docs-sidebar;
+}
+::view-transition-group(*) {
+  animation-duration: 150ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
+
+.docs-menu-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--background);
+  color: var(--foreground);
+  overflow: hidden;
+}
+.docs-menu-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.docs-menu-dialog::backdrop {
+  background: #0008;
+}
+.docs-menu-dialog[open] .docs-menu-panel {
+  animation: docs-menu-enter 200ms ease both;
+}
+.docs-menu-dialog[data-closing] .docs-menu-panel {
+  animation: docs-menu-exit 200ms ease both;
+}
+html:has(.docs-menu-dialog[open]) {
+  overflow: hidden;
+}
+@keyframes docs-menu-enter {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+@keyframes docs-menu-exit {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-menu-dialog[open] .docs-menu-panel {
+    animation: none;
+  }
+}
+.prose :where(p, ul, ol, blockquote) {
+  max-width: 72ch;
+}
+.command-index li {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) 2fr;
+  gap: 0.75rem;
+  margin-block: 0.35rem;
+}
+.command-index ul {
+  list-style: none;
+  padding-left: 0;
+  max-width: none;
+}
+.command-index li::marker {
+  content: '';
+}
+@media (max-width: 639px) {
+  .command-index li {
+    display: block;
+  }
+}
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid CanvasText !important;
+  }
+}
+
+/* Native disclosure semantics with the same trigger and chevron treatment as shadcn Accordion. */
+.docs-navigation summary,
+.docs-disclosure summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  list-style: none;
+  border-radius: var(--radius-sm);
+}
+:is(.docs-navigation, .docs-disclosure) summary::-webkit-details-marker {
+  display: none;
+}
+:is(.docs-navigation, .docs-disclosure) summary .accordion-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  transition: transform 200ms;
+}
+:is(.docs-navigation details, details.docs-disclosure)[open] > summary .accordion-chevron {
+  transform: rotate(180deg);
+}
+:is(.docs-navigation, .docs-disclosure) summary:hover {
+  color: var(--foreground);
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.docs-navigation, .docs-disclosure) summary .accordion-chevron {
+    transition: none;
+  }
+}
+
+.docs-search-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.docs-search-dialog > :not([role='listbox']) {
+  flex-shrink: 0;
+}
+.docs-search-dialog > [role='listbox'] {
+  min-height: 0;
+  flex: 1 1 auto;
 }

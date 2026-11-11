@@ -11,13 +11,14 @@ metadata:
     mechanical checklist followed by a verification pass.
   type: lifecycle
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 requires:
   - kafka-core
 sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/migration/from-kafkajs.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/migration/breaking-changes.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/compatibility.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/migration/upgrading.md'
 ---
 
 # Migrate from kafkajs
@@ -118,3 +119,7 @@ to `read_committed` isolation.
 
 - Migration guide: https://cookiemonsterdev.github.io/kafka/docs/core/migration/from-kafkajs/
 - Remaining differences: https://cookiemonsterdev.github.io/kafka/docs/core/migration/breaking-changes/
+
+## Documentation workflow
+
+Distinguish replacing KafkaJS from upgrading an existing kafka-core release. Read intervening package release notes and the upgrade guide; rehearse partitioner and group-protocol changes before mixed-version rollout.

@@ -59,12 +59,8 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-cli build
       - run: pnpm --filter @cookiemonsterdev/kafka-studio build
-      # docs is excluded: `astro check` (packages/docs's typecheck script) fails under the
-      # TypeScript 7.0.2 catalog pin — it dropped the programmatic API astro-language-server
-      # needs (https://github.com/withastro/roadmap/discussions/1321). Pre-existing, tracked
-      # as a follow-up; `pnpm typecheck` from the repo root still runs it for local dev.
       - if: matrix.primary
-        run: pnpm --filter '!@cookiemonsterdev/kafka-docs' typecheck
+        run: pnpm typecheck
       # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. The CLI's shell-completion
       # suite spawns both to verify what it actually generates, not just its syntax — see
       # packages/cli/src/completion/scripts.test.ts.
@@ -269,3 +265,23 @@ jobs:
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
+
+  docs:
+    name: Documentation accessibility and links
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Build with the GitHub Pages base
+        env:
+          GITHUB_PAGES: '1'
+        run: pnpm --filter @cookiemonsterdev/kafka-docs... build
+      - run: pnpm docs:check
+      - run: pnpm --filter @cookiemonsterdev/kafka-docs exec playwright install --with-deps chromium
+      - run: pnpm --filter @cookiemonsterdev/kafka-docs test:browser
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: docs-browser-results
+          path: packages/docs/test-results/

@@ -28,7 +28,8 @@
     "skills:validate": "intent validate",
     "seo:indexnow": "node scripts/submit-search-index.mjs",
     "release": "node scripts/run-semantic-release.mjs",
-    "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run"
+    "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run",
+    "docs:check": "node scripts/check-docs.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

@@ -1,16 +1,15 @@
 ---
-import BaseLayout from '@/layouts/BaseLayout.astro'
-import CopyButton from '@/components/copy-button.astro'
-import { buttonVariants } from '@/components/ui/button'
-import { withBase } from '@/lib/base'
-import { cn } from '@/lib/utils'
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import CopyButton from '@/components/copy-button.astro';
+import { buttonVariants } from '@/components/ui/button';
+import { withBase } from '@/lib/base';
+import { DOCS_PACKAGE_META, DOCS_PACKAGES } from '@/lib/docs';
+import { cn } from '@/lib/utils';
 
-const install = 'npm install @cookiemonsterdev/kafka-core'
+const install = 'npm install @cookiemonsterdev/kafka-core';
 ---
 
-<BaseLayout
-  description="TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source."
->
+<BaseLayout description="TypeScript Kafka client for Node.js — Kafka 0.10+, types generated from source.">
   <main
     id="main-content"
     tabindex="-1"
@@ -23,10 +22,7 @@ const install = 'npm install @cookiemonsterdev/kafka-core'
       Talk to brokers from Kafka 0.10 onward. Produce, consume, and administer.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-      <a
-        href={withBase('/docs/core/start/getting-started/')}
-        class={cn(buttonVariants({ size: 'lg' }), 'h-11 px-5')}
-      >
+      <a href={withBase('/docs/core/start/getting-started/')} class={cn(buttonVariants({ size: 'lg' }), 'h-11 px-5')}>
         Get started
       </a>
       <a
@@ -43,5 +39,36 @@ const install = 'npm install @cookiemonsterdev/kafka-core'
     >
       {install}
     </CopyButton>
+    <section class="mx-auto mt-12 w-full max-w-4xl text-left" aria-labelledby="choose-tool">
+      <h2 id="choose-tool" class="mb-4 text-xl font-semibold">
+        Choose your starting point
+      </h2>
+      <ul class="grid gap-3 sm:grid-cols-2">
+        {DOCS_PACKAGES.map((pkg) => (
+          <li class="rounded-lg border border-border p-5">
+            <h3 class="font-semibold">
+              <a class="underline underline-offset-4" href={withBase(`/docs/${pkg}/start/introduction/`)}>
+                {DOCS_PACKAGE_META[pkg].label} — {DOCS_PACKAGE_META[pkg].blurb}
+              </a>
+            </h3>
+            <p class="mt-2 text-sm text-muted-foreground">
+              {
+                {
+                  core: 'Build producers, consumers and administration into your application.',
+                  cli: 'Inspect and administer a cluster from the terminal or a script.',
+                  config: 'Discover, validate and merge application configuration.',
+                  studio: 'Browse records, produce messages and investigate event flows.',
+                }[pkg]
+              }
+            </p>
+          </li>
+        ))}
+      </ul>
+      <p class="mt-5 text-sm text-muted-foreground">
+        <a class="underline" href={withBase('/docs/core/start/documentation-access/')}>
+          Markdown, machine indexes and agent skills
+        </a>
+      </p>
+    </section>
   </main>
 </BaseLayout>

@@ -1,0 +1,658 @@
+{
+  "token expire": {
+    "source": "packages/cli/src/commands/token/expire.ts",
+    "defaults": "Without --expiry-time-period-ms, expires the token immediately.",
+    "output": {
+      "json": {
+        "expiryTimestamp": "1700000000000"
+      }
+    },
+    "effect": "Invalidates token access, immediately by default. Confirm dependent clients have replacement credentials; renewal may not recover an expired token."
+  },
+  "token renew": {
+    "source": "packages/cli/src/commands/token/renew.ts",
+    "defaults": "An omitted extension period is delegated to the broker/client default; the maximum lifetime still bounds renewal.",
+    "output": {
+      "json": {
+        "expiryTimestamp": "1700000000000"
+      }
+    },
+    "effect": "Extends bearer-token validity up to its maximum lifetime. Confirm the token identity and credential handling before renewal."
+  },
+  "token create": {
+    "source": "packages/cli/src/commands/token/create.ts",
+    "defaults": "Token HMAC is redacted unless --show-secrets is supplied. Lifetime bounds are broker-dependent.",
+    "output": {
+      "json": {
+        "tokenId": "example-token",
+        "hmac": "[REDACTED]"
+      }
+    },
+    "effect": "Creates bearer credentials. --show-secrets exposes the HMAC; keep it out of logs and screenshots and store it securely."
+  },
+  "token list": {
+    "source": "packages/cli/src/commands/token/list.ts",
+    "defaults": "No owner filter means all visible tokens. Token HMACs are redacted unless --show-secrets is supplied.",
+    "output": {
+      "json": {
+        "tokens": []
+      }
+    }
+  },
+  "studio": {
+    "source": "packages/cli/src/commands/studio/studio.ts",
+    "defaults": "Starts the local Studio server; install the Studio package alongside the CLI. Bind/port/browser defaults are documented by kafka-studio --help.",
+    "output": {
+      "text": "Kafka Studio: http://127.0.0.1:5757/#<session-token>"
+    }
+  },
+  "cluster unregister-broker": {
+    "source": "packages/cli/src/commands/cluster/unregister-broker.ts",
+    "defaults": "Unregisters the explicitly named broker; it does not move replicas for you.",
+    "output": {
+      "json": {
+        "brokerId": 2,
+        "ok": true
+      }
+    },
+    "effect": "Removes the broker registration; it does not migrate replicas or safely decommission the host by itself. Complete reassignment and verify cluster health first."
+  },
+  "cluster info": {
+    "source": "packages/cli/src/commands/cluster/info.ts",
+    "defaults": "Describes the selected cluster; broker ids and addresses depend on its metadata.",
+    "output": {
+      "json": {
+        "brokers": [
+          {
+            "nodeId": 1,
+            "host": "localhost",
+            "port": 9092
+          }
+        ],
+        "controller": 1,
+        "clusterId": "demo"
+      }
+    }
+  },
+  "cluster update-features": {
+    "source": "packages/cli/src/commands/cluster/update-features.ts",
+    "defaults": "Upgrade type defaults to upgrade. Use explicit downgrade modes only after checking broker compatibility.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Changes finalized feature versions. Downgrades may be rejected or unsafe for existing metadata. Confirm the supported feature range and rollback constraints first."
+  },
+  "cluster log-dirs": {
+    "source": "packages/cli/src/commands/cluster/log-dirs.ts",
+    "defaults": "Queries the requested broker ids; result sizes and partitions are cluster-specific.",
+    "output": {
+      "json": {
+        "brokers": []
+      }
+    }
+  },
+  "cluster raft-voter add": {
+    "source": "packages/cli/src/commands/cluster/raft-voter-add.ts",
+    "defaults": "Use --dry-run to inspect the requested voter and listeners before changing quorum membership.",
+    "output": {
+      "json": {
+        "voterId": 2,
+        "ok": true
+      }
+    },
+    "effect": "Changes the metadata quorum. Verify voter identity/listeners and quorum health; a dry run does not prove the new voter can participate."
+  },
+  "cluster quorum": {
+    "source": "packages/cli/src/commands/cluster/quorum.ts",
+    "defaults": "Reads metadata quorum state; requires a broker supporting the quorum API.",
+    "output": {
+      "json": {
+        "topics": []
+      }
+    }
+  },
+  "cluster features": {
+    "source": "packages/cli/src/commands/cluster/features.ts",
+    "defaults": "Reads supported/finalized feature metadata; unsupported broker APIs fail explicitly.",
+    "output": {
+      "json": {
+        "supportedFeatures": [],
+        "finalizedFeatures": []
+      }
+    }
+  },
+  "cluster reassign execute": {
+    "source": "packages/cli/src/commands/cluster/reassign-execute.ts",
+    "defaults": "The reassignment file supplies target replicas. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "partition": 0,
+            "ok": true
+          }
+        ],
+        "logDirsIgnored": false
+      }
+    },
+    "effect": "Moves partition replicas and can increase network/disk load. Save the current assignment before applying so a deliberate reverse plan can be submitted."
+  },
+  "cluster raft-voter remove": {
+    "source": "packages/cli/src/commands/cluster/raft-voter-remove.ts",
+    "defaults": "Removes the explicitly named voter; confirmation controls do not establish quorum safety.",
+    "output": {
+      "json": {
+        "voterId": 2,
+        "ok": true
+      }
+    },
+    "effect": "Changes the voting quorum and can compromise availability if the remaining voters cannot form a majority. Verify quorum health and a recovery plan before confirmation."
+  },
+  "cluster reassign list": {
+    "source": "packages/cli/src/commands/cluster/reassign-list.ts",
+    "defaults": "Lists active partition reassignments; an empty topics array means none are reported.",
+    "output": {
+      "json": {
+        "topics": []
+      }
+    }
+  },
+  "cluster elect-leaders": {
+    "source": "packages/cli/src/commands/cluster/elect-leaders.ts",
+    "defaults": "Uses the requested election type and topic partitions; use --dry-run to inspect the request.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Changes leadership. Unclean election can lose records unavailable on the elected replica. Inspect ISR health and use a dry run before submitting."
+  },
+  "txn terminate": {
+    "source": "packages/cli/src/commands/txn/terminate.ts",
+    "defaults": "Uses the optional transaction timeout for the fenced producer; inspect result.errorCode.",
+    "output": {
+      "json": {
+        "result": {
+          "errorCode": 0,
+          "producerId": "1",
+          "producerEpoch": 1
+        }
+      }
+    },
+    "effect": "Force-terminates an in-flight transaction. Active writers can be fenced or interrupted; inspect result.errorCode and coordinate recovery before restarting them."
+  },
+  "txn fence": {
+    "source": "packages/cli/src/commands/txn/fence.ts",
+    "defaults": "No timeout is supplied unless --timeout is set.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Invalidates current producer epochs for the selected transactional ids. Active writers can fail and need recovery; coordinate the operation with their owners."
+  },
+  "txn abort": {
+    "source": "packages/cli/src/commands/txn/abort.ts",
+    "defaults": "Writes an abort marker for the explicit producer, epoch and topic partition.",
+    "output": {
+      "json": {
+        "ok": true
+      }
+    },
+    "effect": "Writes an abort marker and changes transaction visibility. Confirm producer id/epoch and partition; coordinate with the application recovery procedure."
+  },
+  "txn list": {
+    "source": "packages/cli/src/commands/txn/list.ts",
+    "defaults": "Lists transactions without implicit filters; supplied filters narrow the result.",
+    "output": {
+      "json": {
+        "transactionStates": []
+      }
+    }
+  },
+  "txn describe": {
+    "source": "packages/cli/src/commands/txn/describe.ts",
+    "defaults": "Describes the supplied transactional ids.",
+    "output": {
+      "json": {
+        "transactionStates": []
+      }
+    }
+  },
+  "config set": {
+    "source": "packages/cli/src/commands/config/set.ts",
+    "defaults": "Applies the provided key/value entries to the selected resources; use --dry-run for validation.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Changes resource behavior; some broker settings need a restart while dynamic settings apply immediately. Save existing overrides and validate the change before execution."
+  },
+  "config list-resources": {
+    "source": "packages/cli/src/commands/config/list-resources.ts",
+    "defaults": "Lists supported config resources known to the broker.",
+    "output": {
+      "json": {
+        "resources": []
+      }
+    }
+  },
+  "config unset": {
+    "source": "packages/cli/src/commands/config/unset.ts",
+    "defaults": "Removes the named overrides so broker defaults apply; use --dry-run for validation.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Removes explicit settings and exposes inherited/default values. Record the old overrides before removal so they can be restored."
+  },
+  "config describe": {
+    "source": "packages/cli/src/commands/config/describe.ts",
+    "defaults": "Reads resource configs; it does not change their values.",
+    "output": {
+      "json": {
+        "resources": []
+      }
+    }
+  },
+  "group delete-offsets": {
+    "source": "packages/cli/src/commands/group/delete-offsets.ts",
+    "defaults": "With no --partition, clears every partition of each selected topic.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Removes committed checkpoints. Stop consumers and save current offsets first; their next start may replay or skip records according to reset policy."
+  },
+  "group offsets": {
+    "source": "packages/cli/src/commands/group/offsets.ts",
+    "defaults": "Reads committed offsets without committing resolved offsets. With no --topic filter, reads every topic with offsets for this group.",
+    "output": {
+      "json": [
+        {
+          "topic": "events",
+          "partitions": [
+            {
+              "partition": 0,
+              "offset": "42",
+              "metadata": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "group reset-offsets": {
+    "source": "packages/cli/src/commands/group/reset-offsets.ts",
+    "defaults": "Preview-only unless --execute is present. --topic and --to are required; --to accepts earliest or latest.",
+    "output": {
+      "json": {
+        "topics": [
+          {
+            "topic": "events",
+            "ok": true,
+            "partitions": [
+              {
+                "partition": 0,
+                "newOffset": "0"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "effect": "Stop consumers first. Preview is the default; --execute applies it. Moving backward replays records and moving forward skips records. Save the prior offsets for recovery."
+  },
+  "group remove-members": {
+    "source": "packages/cli/src/commands/group/remove-members.ts",
+    "defaults": "Removes the specified member identities; consumer membership determines the resulting assignment.",
+    "output": {
+      "json": {
+        "members": []
+      }
+    },
+    "effect": "Evicts group members and triggers reassignment. Coordinate with the application to avoid unexpected rebalances and duplicate external side effects."
+  },
+  "group list": {
+    "source": "packages/cli/src/commands/group/list.ts",
+    "defaults": "Lists consumer groups without an implicit group-id filter.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
+  "group describe": {
+    "source": "packages/cli/src/commands/group/describe.ts",
+    "defaults": "Describes each supplied group id, reporting errors per group.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
+  "group delete": {
+    "source": "packages/cli/src/commands/group/delete.ts",
+    "defaults": "Deletes supplied groups; it does not delete topic records.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "groupId": "demo-reader",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Removes group metadata and committed offsets, not topic records. Stop consumers first; recreating the group may replay or skip records according to reset policy."
+  },
+  "admin call": {
+    "source": "packages/cli/src/commands/admin/call.ts",
+    "defaults": "The selected method determines arguments, return shape, compatibility, and mutation behavior. This is an unstable passthrough. The output example illustrates listTopics; other methods return their own shapes.",
+    "output": {
+      "json": ["events"]
+    },
+    "effect": "May mutate broker state depending on the method. Inspect admin methods classification and the Admin reference before invoking an unfamiliar method."
+  },
+  "admin methods": {
+    "source": "packages/cli/src/commands/admin/methods.ts",
+    "defaults": "Lists the exposed Admin method catalog with classifications; it does not invoke methods.",
+    "output": {
+      "json": {
+        "methods": []
+      }
+    }
+  },
+  "ping": {
+    "source": "packages/cli/src/commands/meta/ping.ts",
+    "defaults": "Checks the cluster selected by connection resolution; no administrative mutation is performed.",
+    "output": {
+      "json": {
+        "ok": true,
+        "cluster": {
+          "brokers": [
+            {
+              "nodeId": 1,
+              "host": "localhost",
+              "port": 9092
+            }
+          ],
+          "controller": 1,
+          "clusterId": "demo"
+        }
+      }
+    }
+  },
+  "profiles": {
+    "source": "packages/cli/src/commands/meta/profiles.ts",
+    "defaults": "Lists all configured profiles and marks the active one; credential fields are redacted.",
+    "output": {
+      "json": {
+        "active": null,
+        "profiles": {}
+      }
+    }
+  },
+  "doctor": {
+    "source": "packages/cli/src/commands/meta/doctor.ts",
+    "defaults": "Local configuration diagnostics only. It tolerates config load errors and never tests broker connectivity; use ping for that.",
+    "output": {
+      "json": {
+        "configPath": null,
+        "transformFallbackUsed": false,
+        "activeProfile": null,
+        "availableProfiles": [],
+        "brokersResolved": true
+      }
+    }
+  },
+  "init": {
+    "source": "packages/cli/src/commands/meta/init.ts",
+    "defaults": "Chooses .ts when the project has tsconfig.json or a TypeScript dependency, otherwise .mjs. Existing files require --force.",
+    "output": {
+      "json": {
+        "path": "/home/example/app/kafka.config.mjs",
+        "format": "mjs"
+      }
+    }
+  },
+  "completion": {
+    "source": "packages/cli/src/commands/meta/completion.ts",
+    "defaults": "Writes completion for the selected shell; it does not load cluster configuration.",
+    "output": {
+      "text": "# shell completion script (shell-specific)"
+    }
+  },
+  "topic offsets": {
+    "source": "packages/cli/src/commands/topic/offsets.ts",
+    "defaults": "The selected offset query controls whether the result is a single offset or low/high offsets per partition.",
+    "output": {
+      "json": {
+        "partitions": [
+          {
+            "partition": 0,
+            "offset": "42"
+          }
+        ]
+      }
+    }
+  },
+  "topic add-partitions": {
+    "source": "packages/cli/src/commands/topic/add-partitions.ts",
+    "defaults": "The requested count is the new total, not the number to add. --dry-run validates without changing the topic.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Increases the partition count permanently; Kafka does not support shrinking it. Key-to-partition mapping can change. Review ordering assumptions before execution."
+  },
+  "topic delete-records": {
+    "source": "packages/cli/src/commands/topic/delete-records.ts",
+    "defaults": "Requires explicit per-partition offset boundaries; it removes records before those boundaries.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Deletes records before each supplied offset boundary; this is not an offset reset. Consumers cannot replay the removed records. Save/check the boundaries and data recovery plan first."
+  },
+  "topic create": {
+    "source": "packages/cli/src/commands/topic/create.ts",
+    "defaults": "Explicit replica assignment excludes partition/replication counts. Otherwise flags override cli.topicDefaults, then omitted values follow client/broker defaults. --dry-run validates without creating.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Creates topics and broker resources. Dry-run validates the request without creation; set explicit partition/replication values for a known cluster."
+  },
+  "topic list": {
+    "source": "packages/cli/src/commands/topic/list.ts",
+    "defaults": "Lists topics without an implicit name filter.",
+    "output": {
+      "json": {
+        "topics": ["events"]
+      }
+    }
+  },
+  "topic describe": {
+    "source": "packages/cli/src/commands/topic/describe.ts",
+    "defaults": "Describes supplied topics; metadata is returned per topic.",
+    "output": {
+      "json": {
+        "topics": []
+      }
+    }
+  },
+  "topic delete": {
+    "source": "packages/cli/src/commands/topic/delete.ts",
+    "defaults": "Confirmation is required unless --yes or configured confirmation policy permits it. --force overrides internal-topic and batch-size protections.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "topic": "events",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Deletes topics and their records. There is no preview flag or undelete operation. Confirm the cluster and backups before bypassing confirmation with --yes or protections with --force."
+  },
+  "topic producers": {
+    "source": "packages/cli/src/commands/topic/producers.ts",
+    "defaults": "With no partition filter, queries every partition of the topic.",
+    "output": {
+      "json": {
+        "partitions": []
+      }
+    }
+  },
+  "share-group offsets": {
+    "source": "packages/cli/src/commands/share-group/offsets.ts",
+    "defaults": "Reads offsets unless a set/delete operation is requested; without a topic filter, reads the full group state.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Set/delete operations change future record delivery. Inspect current offsets and coordinate active consumers before mutating; backward changes can redeliver records."
+  },
+  "share-group list": {
+    "source": "packages/cli/src/commands/share-group/list.ts",
+    "defaults": "Lists share groups reported by the broker; feature support is broker-gated.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
+  "share-group describe": {
+    "source": "packages/cli/src/commands/share-group/describe.ts",
+    "defaults": "Describes the supplied share-group ids, reporting errors per group.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
+  "share-group delete": {
+    "source": "packages/cli/src/commands/share-group/delete.ts",
+    "defaults": "Deletes the selected share groups; topic data is separate.",
+    "output": {
+      "json": {
+        "results": [
+          {
+            "groupId": "demo-share",
+            "ok": true
+          }
+        ]
+      }
+    },
+    "effect": "Removes share-group state. Stop members first and plan how a recreated group should resume delivery."
+  },
+  "scram set": {
+    "source": "packages/cli/src/commands/scram/set.ts",
+    "defaults": "Requires an explicit mechanism and password input. PBKDF2 iterations default to 4096.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Creates or rotates authentication material. Coordinate client credential rollout to avoid disconnecting users, and retain a secure credential recovery path."
+  },
+  "scram list": {
+    "source": "packages/cli/src/commands/scram/list.ts",
+    "defaults": "With no user names, lists credentials for all users. No password is returned.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    }
+  },
+  "scram delete": {
+    "source": "packages/cli/src/commands/scram/delete.ts",
+    "defaults": "Deletes credentials for the selected users/mechanism; other credentials are not a recovery copy.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Removes authentication material and can prevent new client connections. Recovery requires provisioning valid credentials again; the old password cannot be read back."
+  },
+  "quota alter": {
+    "source": "packages/cli/src/commands/quota/alter.ts",
+    "defaults": "Only supplied set/unset operations are applied; an empty entity name selects a cluster-default entity.",
+    "output": {
+      "json": {
+        "entries": []
+      }
+    },
+    "effect": "Changes client limits and may throttle live applications. Save current quota entries; restore them explicitly if the change affects service health."
+  },
+  "quota describe": {
+    "source": "packages/cli/src/commands/quota/describe.ts",
+    "defaults": "Uses the provided entity filters; quota entries and values are broker-specific.",
+    "output": {
+      "json": {
+        "entries": []
+      }
+    }
+  },
+  "acl remove": {
+    "source": "packages/cli/src/commands/acl/remove.ts",
+    "defaults": "Unspecified resource type, pattern type, operation and permission filters default to any. Principal selection still limits the removal.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Revokes matching authorization bindings. Broad any filters can remove multiple permissions. Save the existing bindings before removal so they can be recreated."
+  },
+  "acl add": {
+    "source": "packages/cli/src/commands/acl/add.ts",
+    "defaults": "Pattern type defaults to literal, permission to allow, and host to *. Use --dry-run to inspect entries before applying.",
+    "output": {
+      "json": {
+        "results": []
+      }
+    },
+    "effect": "Changes authorization. A permissive principal/host/pattern can grant broader access than intended. Inspect a dry run; remove the exact added bindings to undo it."
+  },
+  "acl list": {
+    "source": "packages/cli/src/commands/acl/list.ts",
+    "defaults": "Unspecified resource type, pattern type, operation and permission filters default to any.",
+    "output": {
+      "json": {
+        "resources": []
+      }
+    }
+  }
+}

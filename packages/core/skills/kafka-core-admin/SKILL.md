@@ -12,7 +12,7 @@ metadata:
     changes cluster state safely and checks broker support first.
   type: sub-skill
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 requires:
   - kafka-core
   - kafka-core-setup
@@ -20,6 +20,7 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/admin.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/admin.md'
   - 'cookieMonsterDev/kafka:packages/core/src/admin/types.ts'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/recipes.md'
 ---
 
 # kafka-core admin
@@ -128,3 +129,7 @@ For ACLs, SCRAM, delegation tokens, transactions, features, and controller boots
 
 - [Admin operations](references/operations.md): read when working with ACLs, SCRAM credentials,
   delegation tokens, transactions, finalized features, or KRaft controller bootstrap.
+
+## Documentation workflow
+
+For group resets, stop consumers, preview target offsets, then execute and inspect committed offsets before restarting. Use a dedicated local profile when following the task recipes.

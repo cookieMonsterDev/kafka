@@ -35,7 +35,20 @@ pnpm test          # unit tests only (never starts Docker)
 pnpm clean         # build output and node_modules (re-run pnpm install after)
 ```
 
-CI's `typecheck` step excludes `@cookiemonsterdev/kafka-docs` — its `astro check` fails under the current TypeScript catalog pin (a known, pre-existing issue). `pnpm typecheck` from the repo root still runs it, so check docs locally before relying on CI for it.
+Docs use the `docs-check` named TypeScript catalog because the current `astro check`
+requires TypeScript 6; runtime packages use the shared TypeScript 7 catalog. Both are
+checked in CI. Docs browser checks run separately from unit tests:
+
+```sh
+GITHUB_PAGES=1 pnpm --filter @cookiemonsterdev/kafka-docs... build
+pnpm docs:check
+pnpm --filter @cookiemonsterdev/kafka-docs exec playwright install chromium
+pnpm --filter @cookiemonsterdev/kafka-docs test:browser
+```
+
+The docs job checks internal links and anchors, runnable-example drift, keyboard navigation,
+mobile focus containment, reflow, and automated accessibility in the dark theme.
+Manual screen-reader and zoom checks remain part of UI review.
 
 `pnpm -r` walks the workspace graph, so `@cookiemonsterdev/kafka-core` compiles before `@cookiemonsterdev/kafka-docs` imports it.
 
@@ -121,6 +134,11 @@ Keep the description short. One concern per branch.
 - No trailing period
 - One logical change per commit
 - No co-author during committing
+
+Commitlint ignores Dependabot's generated `build(deps)` / `build(deps-dev)` npm
+group-update messages (`bump the npm-production` / `npm-development group across …`),
+whose subjects can exceed 72 characters. Regular dependency commits still follow
+the rules above.
 
 ```
 feat(core): add fetch request v4 encoder

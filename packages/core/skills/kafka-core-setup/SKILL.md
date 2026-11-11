@@ -11,7 +11,7 @@ metadata:
     connection settings defined once and shared across producers, consumers, and admins.
   type: lifecycle
   library: '@cookiemonsterdev/kafka-core'
-  library_version: '2.5.1'
+  library_version: '2.6.1'
 requires:
   - kafka-core
 sources:
@@ -20,6 +20,9 @@ sources:
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/security.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/config-file.md'
   - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/reference/environment-variables.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/start/getting-started.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/production-readiness.md'
+  - 'cookieMonsterDev/kafka:packages/docs/src/content/docs/core/guides/troubleshooting.md'
 ---
 
 # kafka-core setup
@@ -161,3 +164,7 @@ mechanism are wrong.
   or logging in with an Admin-minted delegation token.
 - Config file precedence and discovery rules:
   https://cookiemonsterdev.github.io/kafka/docs/core/reference/config-file/
+
+## Documentation workflow
+
+For a complete local smoke check, use the three runnable files linked from Getting started: start the demo broker, create the topic, start the consumer, and send a record. Stop consumers cleanly and remove only the demo cluster afterward.

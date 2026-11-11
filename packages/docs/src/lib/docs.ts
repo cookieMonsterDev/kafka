@@ -80,6 +80,7 @@ export function packageHomeHref(entries: DocsEntry[], pkg: DocsPackage): string 
 export type DocsNavEntry = {
   href: string;
   label: string;
+  children?: DocsNavEntry[];
 };
 
 export type DocsNavGroup = {
@@ -105,10 +106,7 @@ export function docsNavPackages(entries: DocsEntry[]): DocsNavPackage[] {
     groups: groupDocs(entries, id).map((group) => ({
       section: group.section,
       label: group.label,
-      entries: group.entries.map((entry) => ({
-        href: hrefFor(entry),
-        label: navLabel(entry),
-      })),
+      entries: navEntries(group.entries, entries, id),
     })),
   }));
 }
@@ -136,13 +134,48 @@ export function groupDocs(entries: DocsEntry[], pkg: string = DEFAULT_DOCS_PACKA
   })).filter((group) => group.entries.length > 0);
 }
 
+/** Command pages use their own group sequence; guides follow only visible pages. */
 export function neighbors(entries: DocsEntry[], id: string) {
-  const sorted = sortDocs(entries.filter((entry) => inDocsPackage(entry, docsPackageOf(id))));
+  const command = entries.find((entry) => entry.id === id)?.data.commandPath;
+  const sorted = sortDocs(
+    entries.filter((entry) => {
+      if (!inDocsPackage(entry, docsPackageOf(id))) return false;
+      if (command != null) return entry.data.commandPath?.[0] === command[0];
+      return entry.data.hidden !== true && entry.data.commandPath == null;
+    }),
+  );
   const index = sorted.findIndex((entry) => entry.id === id);
   return {
     prev: index > 0 ? sorted[index - 1] : undefined,
     next: index >= 0 && index < sorted.length - 1 ? sorted[index + 1] : undefined,
   };
+}
+
+export function navEntries(visible: DocsEntry[], all: DocsEntry[], pkg: string): DocsNavEntry[] {
+  return visible.map((entry) => {
+    const item: DocsNavEntry = { href: hrefFor(entry), label: navLabel(entry) };
+    if (pkg !== 'cli' || entry.id !== 'cli/reference/commands') return item;
+    const children: DocsNavEntry[] = [];
+    for (const command of sortDocs(all.filter((page) => page.data.commandPath != null))) {
+      const parts = command.data.commandPath ?? [];
+      let siblings = children;
+      for (let index = 0; index < parts.length; index++) {
+        const label = parts[index] ?? '';
+        if (index === parts.length - 1) {
+          siblings.push({ href: hrefFor(command), label });
+        } else {
+          let group = siblings.find((child) => child.label === label && child.children != null);
+          if (group == null) {
+            group = { label, href: `${item.href}#${parts[0]}`, children: [] };
+            siblings.push(group);
+          }
+          siblings = group.children ?? [];
+        }
+      }
+    }
+    item.children = children;
+    return item;
+  });
 }
 
 export function isCurrentPath(href: string, pathname: string): boolean {

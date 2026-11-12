@@ -16,6 +16,9 @@ skills-lock.json
 .claude
 
 
+# Raw benchmark sessions; only results/published/ is committed
+benchmarks/results/raw/
+
 # Browser verification artifacts
 packages/docs/test-results/
 packages/docs/playwright-report/

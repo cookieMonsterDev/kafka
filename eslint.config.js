@@ -19,9 +19,19 @@ export default tseslint.config(
       'packages/core/test/helpers/**/*.mjs',
       'packages/config/test/fixtures/**',
       'packages/config/test/helpers/**/*.mjs',
+      'benchmarks/results/**',
     ],
   },
   js.configs.recommended,
+  {
+    // Not type-aware: the competitor clients are installed only inside the benchmark images, so
+    // type-checked rules would need them on the host. Type checking runs in the image instead.
+    files: ['benchmarks/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    },
+  },
   {
     files: [
       'packages/core/{src,test}/**/*.ts',
@@ -105,6 +115,8 @@ export default tseslint.config(
       'packages/cli/test/**/*.ts',
       'packages/studio/test/**/*.ts',
     ],
+    // benchmarks/ uses node:test so it needs no test runner installed.
+    ignores: ['benchmarks/**'],
     plugins: { vitest },
     rules: {
       ...vitest.configs.recommended.rules,

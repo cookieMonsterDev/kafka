@@ -17,6 +17,20 @@ updates:
       npm-development:
         dependency-type: development
 
+  # Competitor clients for benchmarks/. A bump is the signal to re-run and re-publish the results.
+  - package-ecosystem: npm
+    directory: /benchmarks
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    labels:
+      - dependencies
+    groups:
+      benchmark-clients:
+        patterns:
+          - '*'
+
   - package-ecosystem: github-actions
     directory: /
     schedule:

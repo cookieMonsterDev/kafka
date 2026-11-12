@@ -16,7 +16,7 @@ import { rejectOnAbort } from '../utils/abort';
 import { runHooks } from '../utils/run-hooks';
 import type { EosManager } from './eos-manager/index';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
-import { createSendMessages } from './send-messages';
+import { createSendMessages, type SendMessagesRequest } from './send-messages';
 import type {
   CustomPartitioner,
   Message,
@@ -50,8 +50,11 @@ export interface MessageProducerOptions {
    */
   lingerMs?: number;
   /**
-   * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
+   * Flush threshold, in record key and value bytes, for the linger buffer. Unlike Java's
+   * per-partition `batch.size`, it counts the producer's total across all topics and partitions,
+   * including records from an earlier flush still awaiting their response. The buffer flushes as
+   * soon as that total reaches `batchSize`, without waiting out `lingerMs`. Ignored when lingerMs
+   * is 0. Default 16384; pass `0` to not flush by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
@@ -101,6 +104,7 @@ const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 /**
  * Races `promise` against `deliveryTimeoutMs`, so the caller sees the rejection as soon as the
  * deadline is up even while an attempt is still in flight. `dispatch` stops the retries themselves.
+ * Used for linger-buffered sends; an unbuffered send lets `dispatch` reject at the deadline instead.
  */
 function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
   if (!(deliveryTimeoutMs > 0)) return promise;
@@ -295,33 +299,43 @@ export function createMessageProducer({
     return [...mergedByTopic.entries()].map(([topic, messages]) => ({ topic, messages }));
   }
 
+  /**
+   * Sends one Produce request under `deadline`: once it passes, retries stop and the partition
+   * gates are released instead of being held by a send nobody is waiting for. One timer covers it.
+   * With `rejectAtDeadline`, the returned promise also rejects then, even while an attempt is in
+   * flight. Only an unbuffered send may do that: a linger flush waits for its attempt to settle so
+   * the next flush can't overtake it.
+   */
   function dispatch(
-    topicMessages: readonly TopicMessages[],
-    acks: number,
-    timeout: number,
-    compression: CompressionType | undefined,
-    compressionLevel: number | undefined,
-    deadline: number,
+    request: Omit<SendMessagesRequest, 'signal'>,
+    { deadline, rejectAtDeadline }: { deadline: number; rejectAtDeadline: boolean },
   ): Promise<RecordMetadata[]> {
     const remaining = deadline - Date.now();
-    if (!Number.isFinite(remaining)) {
-      return sendMessages({ acks, timeout, compression, compressionLevel, topicMessages });
-    }
+    if (!Number.isFinite(remaining)) return sendMessages(request);
     // Expired while lingering behind an earlier flush: its caller was already rejected.
     if (remaining <= 0) return Promise.reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
 
-    // Stop retrying once the caller has been told the send failed, so the partition gates are
-    // released instead of being held by a send nobody is waiting for.
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(new KafkaDeliveryTimeoutError(deliveryTimeoutMs)), remaining);
-    return sendMessages({
-      acks,
-      timeout,
-      compression,
-      compressionLevel,
-      topicMessages,
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timer));
+    return new Promise<RecordMetadata[]>((resolve, reject) => {
+      const sending = sendMessages({ ...request, signal: controller.signal });
+      const timer = setTimeout(() => {
+        const error = new KafkaDeliveryTimeoutError(deliveryTimeoutMs);
+        controller.abort(error);
+        if (rejectAtDeadline) reject(error);
+      }, remaining);
+
+      sending.then(
+        (metadata) => {
+          clearTimeout(timer);
+          resolve(metadata);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the send rejection as-is
+          reject(error);
+        },
+      );
+    });
   }
 
   function deliveryDeadline(): number {
@@ -450,13 +464,19 @@ export function createMessageProducer({
 
         try {
           const metadata = await dispatch(
-            mergeTopicMessages(group),
-            first.acks,
-            first.timeout,
-            first.compression,
-            first.compressionLevel,
-            // A merged request shares one fate, so it stops at its earliest caller's deadline.
-            group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
+            {
+              topicMessages: mergeTopicMessages(group),
+              acks: first.acks,
+              timeout: first.timeout,
+              compression: first.compression,
+              compressionLevel: first.compressionLevel,
+            },
+            {
+              // A merged request shares one fate, so it stops at its earliest caller's deadline.
+              deadline: group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
+              // Each caller's own `rejectOnDeliveryTimeout` already rejects it on time.
+              rejectAtDeadline: false,
+            },
           );
           for (const entry of group) {
             entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
@@ -583,28 +603,32 @@ export function createMessageProducer({
       await runHooks(hooks.onSend, hookEvent, 'onSend', logger);
     }
 
-    const deadline = deliveryDeadline();
     const produce =
       lingerMs <= 0
         ? dispatch(
-            mergedTopicMessages,
-            resolvedAcks,
-            resolvedTimeout,
-            resolvedCompression,
-            resolvedCompressionLevel,
-            deadline,
+            {
+              topicMessages: mergedTopicMessages,
+              acks: resolvedAcks,
+              timeout: resolvedTimeout,
+              compression: resolvedCompression,
+              compressionLevel: resolvedCompressionLevel,
+            },
+            { deadline: deliveryDeadline(), rejectAtDeadline: true },
           )
-        : enqueue(
-            mergedTopicMessages,
-            resolvedAcks,
-            resolvedTimeout,
-            resolvedCompression,
-            resolvedCompressionLevel,
-            totalBytes,
-            deadline,
+        : rejectOnDeliveryTimeout(
+            enqueue(
+              mergedTopicMessages,
+              resolvedAcks,
+              resolvedTimeout,
+              resolvedCompression,
+              resolvedCompressionLevel,
+              totalBytes,
+              deliveryDeadline(),
+            ),
+            deliveryTimeoutMs,
           );
 
-    const settled = rejectOnAbort(rejectOnDeliveryTimeout(produce, deliveryTimeoutMs), signal);
+    const settled = rejectOnAbort(produce, signal);
     if (!hooks?.onAck?.length) return settled;
 
     try {

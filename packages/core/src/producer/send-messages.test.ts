@@ -226,10 +226,30 @@ describe('producer/sendMessages', () => {
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
 
+  it('skips the partition gates when no producer id is initialised', async () => {
+    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+    const eosManager = fakeEosManager();
+    const sendMessages = createSendMessages({
+      logger: silentLogger,
+      cluster: fakeCluster(brokers) as unknown as Cluster,
+      partitioner: cyclingPartitioner,
+      eosManager,
+      retrier: retrier({ retries: 0 }),
+    });
+
+    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+
+    expect(eosManager.acquirePartitionGates).not.toHaveBeenCalled();
+    expect(eosManager.releasePartitionGates).not.toHaveBeenCalled();
+  });
+
   it('retrieves sequence information from the transaction manager and updates it', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({ getSequence: vi.fn().mockReturnValue(5) });
+    const eosManager = fakeEosManager({
+      getSequence: vi.fn().mockReturnValue(5),
+      isInitialized: vi.fn().mockReturnValue(true),
+    });
 
     const sendMessages = createSendMessages({
       logger: silentLogger,

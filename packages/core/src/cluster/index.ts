@@ -223,9 +223,9 @@ export class Cluster {
       }
     });
 
-    this.#refreshMetadataIfNecessary = sharedPromiseTo(async () => {
-      await this.brokerPool.refreshMetadataIfNecessary([...this.targetTopics]);
-    });
+    this.#refreshMetadataIfNecessary = sharedPromiseTo(() =>
+      this.brokerPool.refreshMetadataIfNecessary([...this.targetTopics]),
+    );
 
     this.#findControllerBroker = sharedPromiseTo(async () => {
       const { metadata } = this.brokerPool;
@@ -284,8 +284,9 @@ export class Cluster {
     await this.#refreshMetadata();
   }
 
-  async refreshMetadataIfNecessary(): Promise<void> {
-    await this.#refreshMetadataIfNecessary();
+  /** Called before every produce attempt; returns the shared promise directly to keep that path short. */
+  refreshMetadataIfNecessary(): Promise<void> {
+    return this.#refreshMetadataIfNecessary();
   }
 
   async metadata(

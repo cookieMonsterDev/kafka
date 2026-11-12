@@ -281,8 +281,10 @@ export interface ProducerConfig {
    */
   lingerMs?: number;
   /**
-   * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
+   * Flush threshold, in record key and value bytes, for the linger buffer. Unlike Java's
+   * per-partition `batch.size`, it counts the producer's total across all topics and partitions,
+   * so the buffer flushes as soon as that total reaches `batchSize`, without waiting out
+   * `lingerMs`. Ignored when lingerMs is 0. Default 16384; pass `0` to not flush by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;

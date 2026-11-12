@@ -158,14 +158,25 @@ export function createSendMessages({
      * cannot take sequences ahead of this one's retries. Acquired all at once (sorted inside the
      * EOS manager) so two sends sharing partitions cannot deadlock.
      */
-    async function acquireGatesOnce(): Promise<void> {
-      if (gatedPartitions) return;
+    async function acquireGates(partitions: EosManagerPartition[]): Promise<void> {
+      await eosManager.acquirePartitionGates(partitions, { signal });
+      gatedPartitions = partitions;
+    }
+
+    /** Partitions still to gate, or `undefined` when already gated or when there are no gates to take. */
+    function partitionsToGate(): EosManagerPartition[] | undefined {
+      if (gatedPartitions) return undefined;
       const partitions: EosManagerPartition[] = [];
       for (const [topic, messagesPerPartition] of assignment) {
         for (const partition of messagesPerPartition.keys()) partitions.push({ topic, partition });
       }
-      await eosManager.acquirePartitionGates(partitions, { signal });
-      gatedPartitions = partitions;
+      // Gates exist only once a producer id is initialised; recording the partitions without the
+      // EOS manager call spares a non-idempotent send an `await`, with the same outcome.
+      if (!eosManager.isInitialized()) {
+        gatedPartitions = partitions;
+        return undefined;
+      }
+      return partitions;
     }
 
     function collectResponse(): RecordMetadata[] {
@@ -216,7 +227,8 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       await cluster.refreshMetadataIfNecessary();
       assignMessages();
-      await acquireGatesOnce();
+      const ungatedPartitions = partitionsToGate();
+      if (ungatedPartitions) await acquireGates(ungatedPartitions);
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 
@@ -224,10 +236,14 @@ export function createSendMessages({
         const messagesPerPartition = assignment.get(topic);
         if (!messagesPerPartition) continue;
 
-        const pendingPartitions = new Map<number, Message[]>();
-        for (const [partition, messages] of messagesPerPartition) {
-          if (!ackedPartitions.has(partitionKey(topic, partition))) {
-            pendingPartitions.set(partition, messages);
+        // Nothing is acked before the first attempt, so it sends every assigned partition as is.
+        let pendingPartitions = messagesPerPartition;
+        if (ackedPartitions.size > 0) {
+          pendingPartitions = new Map<number, Message[]>();
+          for (const [partition, messages] of messagesPerPartition) {
+            if (!ackedPartitions.has(partitionKey(topic, partition))) {
+              pendingPartitions.set(partition, messages);
+            }
           }
         }
 
@@ -419,8 +435,10 @@ export function createSendMessages({
         if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
         throw error;
       })
-      .finally(async () => {
-        if (gatedPartitions) await eosManager.releasePartitionGates(gatedPartitions);
+      .finally(() => {
+        // Releasing is a no-op until a producer id is initialised, so skip the call and its promise.
+        if (gatedPartitions && eosManager.isInitialized()) return eosManager.releasePartitionGates(gatedPartitions);
+        return undefined;
       });
   };
 }

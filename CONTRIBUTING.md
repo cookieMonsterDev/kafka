@@ -196,9 +196,9 @@ Do not hand-format. Prettier and ESLint run on commit and in CI.
 - `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`
 - `verbatimModuleSyntax` — use `import type` / inline type imports
 - `erasableSyntaxOnly` — no TypeScript enums or parameter properties (Node type-stripping must still run the source)
-- `bundler` module resolution; relative imports omit file extensions
+- `bundler` module resolution; relative imports omit file extensions (except in `benchmarks/`, which runs TypeScript directly and needs `.ts` extensions)
 
-**ESLint** (`eslint.config.js`): type-checked rules on `packages/core/{src,test}`. Protocol code (`packages/core/src/protocol`, excluding tests) forbids non-null assertions. `packages/docs` is not linted with ESLint; Prettier still applies to Markdown, JSON, YAML, and CSS. `*.astro` is Prettier-ignored.
+**ESLint** (`eslint.config.js`): type-checked rules on `packages/core/{src,test}`, plain TypeScript rules on `benchmarks/`. Protocol code (`packages/core/src/protocol`, excluding tests) forbids non-null assertions. `packages/docs` is not linted with ESLint; Prettier still applies to Markdown, JSON, YAML, and CSS. `*.astro` is Prettier-ignored.
 
 **Filenames and folders:** kebab-case only (`fetch-request`, not `fetchRequest`).
 
@@ -224,6 +224,14 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 `@cookiemonsterdev/kafka-cli` and `@cookiemonsterdev/kafka-studio` each have their own `test:integration`, reusing core's own compose files rather than shipping a second copy of them — same `KAFKA_EXTERNAL`/`DO_NOT_STOP` flags apply. `@cookiemonsterdev/kafka-studio`'s `docker-compose.dev.yml` is separate from this — a one-command broker for trying the UI by hand, not part of any test run (see [`packages/studio/README.md`](packages/studio/README.md#local-kafka-with-docker)).
+
+### Comparative benchmarks
+
+[`benchmarks/`](benchmarks/README.md) compares kafka-core from `develop` with other Kafka clients on
+Node.js and Bun, each run in its own Docker container against a single-node broker. It is a
+standalone project, not a workspace member, and never runs in `pnpm test` or CI. Run it with
+`pnpm benchmarks:run` (see its README for tiers and the publishing rules). The microbenches in
+`packages/core/bench/` are separate and measure kafka-core internals without a broker.
 
 ### Bun
 

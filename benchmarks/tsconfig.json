@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Standalone on purpose: the bench image type-checks this project without the repository around it.
+  // Mirrors the strictness of the repository's tsconfig.base.json, with Node-style resolution because the
+  // sources run directly under Node type stripping and Bun, with explicit `.ts` import extensions.
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["client/**/*.ts", "runner/**/*.ts"]
+}

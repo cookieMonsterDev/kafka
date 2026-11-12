@@ -1,0 +1,33 @@
+{
+  "name": "kafka-core-benchmarks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Comparative benchmarks of @cookiemonsterdev/kafka-core against other Kafka clients, run in Docker.",
+  "packageManager": "pnpm@12.15.0+sha512.b3951d6d6ff4a9f13dc7cf56cd28d2b8eb37dbcc9c68e52e1e1191873ea9f82a017287ab50baadc5ccc494f036c67c0e47eb13608c2fa36f47711b61ea128e61",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "doctor": "node runner/cli.ts doctor",
+    "probe": "node runner/cli.ts probe",
+    "run": "node runner/cli.ts run",
+    "report": "node runner/cli.ts report",
+    "publish": "node runner/cli.ts publish",
+    "typecheck": "tsc -p tsconfig.json",
+    "typecheck:image": "node runner/cli.ts typecheck",
+    "test": "node --test runner/*.test.ts"
+  },
+  "dependencies": {
+    "@platformatic/kafka": "2.15.0",
+    "kafkajs": "2.2.4"
+  },
+  "optionalDependencies": {
+    "@confluentinc/kafka-javascript": "1.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2"
+  }
+}

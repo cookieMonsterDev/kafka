@@ -52,9 +52,11 @@ See [Compatibility](../../reference/compatibility/) and
 calls can share a Produce request. Pass `lingerMs: 0` for one Produce per
 `send()`. `flush()` still drains linger-buffered records.
 
-Prefer **GZIP** or **ZSTD** for compression: both use Node’s zlib threadpool.
-Snappy and LZ4 keep Kafka-compatible framing (xerial / LZ4F) and run the JS
-codecs on `worker_threads`, so they no longer stall the event loop. An optional
+Prefer **GZIP** or **ZSTD** for compression: both use Node’s zlib threadpool
+(on Bun, ZSTD compression uses Bun's own asynchronous codec; see
+[Bun](../../reference/bun/#bun-native-code-paths)). Snappy and LZ4 keep
+Kafka-compatible framing (xerial / LZ4F) and run the JS codecs on
+`worker_threads`, so they no longer stall the event loop. An optional
 native `snappy` or `lz4` package is used when it is installed and exposes an
 async API; it is not a hard dependency.
 

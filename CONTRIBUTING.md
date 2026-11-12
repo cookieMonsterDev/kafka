@@ -161,7 +161,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
 3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, and an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`). The [Security workflow](.github/workflows/security.yml) scans `pnpm-lock.yaml` with [OSV-Scanner](https://google.github.io/osv-scanner/) and `pnpm audit`, and fails on any known-vulnerable or malicious dependency. Fix it by upgrading; if that is not possible yet, add a reviewed entry with a `reason` and `ignoreUntil` date to [`osv-scanner.toml`](osv-scanner.toml), and add its GHSA id to `auditConfig.ignoreGhsas` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, an integration matrix (Kafka 0.10, 2.4, 3.6, 4.0, 4.3 on PRs; the full matrix on `develop` and `master`) with Bun legs, and a build and smoke test of the standalone binaries. What runs on Bun is listed on the [Bun page](packages/docs/src/content/docs/core/reference/bun.md#how-we-test). The [Security workflow](.github/workflows/security.yml) scans `pnpm-lock.yaml` with [OSV-Scanner](https://google.github.io/osv-scanner/) and `pnpm audit`, and fails on any known-vulnerable or malicious dependency. Fix it by upgrading; if that is not possible yet, add a reviewed entry with a `reason` and `ignoreUntil` date to [`osv-scanner.toml`](osv-scanner.toml), and add its GHSA id to `auditConfig.ignoreGhsas` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
@@ -213,15 +213,6 @@ pnpm test
 pnpm --filter @cookiemonsterdev/kafka-core test
 ```
 
-CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
-locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, cli,
-and studio in that order, then run:
-
-```sh
-pnpm test:bun                # every package's unit suite under `bun --bun`
-bun scripts/bun-smoke.mjs    # also runs on Node: node scripts/bun-smoke.mjs
-```
-
 Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):
 
 ```sh
@@ -233,6 +224,46 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
 
 `@cookiemonsterdev/kafka-cli` and `@cookiemonsterdev/kafka-studio` each have their own `test:integration`, reusing core's own compose files rather than shipping a second copy of them — same `KAFKA_EXTERNAL`/`DO_NOT_STOP` flags apply. `@cookiemonsterdev/kafka-studio`'s `docker-compose.dev.yml` is separate from this — a one-command broker for trying the UI by hand, not part of any test run (see [`packages/studio/README.md`](packages/studio/README.md#local-kafka-with-docker)).
+
+### Bun
+
+CI also runs the unit suites on Bun, plus a smoke test of the built packages. To reproduce that
+locally, install Bun (see the minimum in each package's `engines.bun`), build config, core, cli,
+and studio in that order, then run:
+
+```sh
+pnpm test:bun                # every package's unit suite under `bun --bun`
+bun scripts/bun-smoke.mjs    # also runs on Node: node scripts/bun-smoke.mjs
+```
+
+Each package with integration tests also has `test:bun:integration`, which takes the same
+`KAFKA_VERSION` and flags as on Node.js:
+
+```sh
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:bun:integration
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-cli test:bun:integration     # build config and core first
+KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-studio test:bun:integration  # build config, core and cli first
+pnpm --filter @cookiemonsterdev/kafka-core bench:bun   # core's microbenches on Bun (no Docker)
+```
+
+A Bun-native code path is kept only if it beats the `node:` path in a benchmark under
+`packages/core/bench/` ([how to run them](packages/core/README.md#tests)). What is native today,
+and why the rest is not, is on the
+[Bun page](packages/docs/src/content/docs/core/reference/bun.md#bun-native-code-paths).
+
+The standalone `kafka` and `kafka-studio` binaries are compiled with `bun build --compile` from
+each package's built `dist/`. To build and smoke-test them for your own platform (into
+`dist/binaries/`), build the package and its dependencies first:
+
+```sh
+pnpm --filter "@cookiemonsterdev/kafka-studio..." build
+node scripts/build-binaries.mjs cli                      # or: studio; --target all for every platform
+node scripts/smoke-binaries.mjs cli dist/binaries
+```
+
+CI's `binaries` job does the same on Linux x64. On a CLI or studio release, the
+[Release](.github/workflows/release.yml) workflow compiles every target, smoke-tests each on its
+own platform, and attaches the binaries and their `SHA256SUMS` file to the GitHub release.
 
 ## Documentation site
 

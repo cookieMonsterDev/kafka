@@ -3,7 +3,8 @@
 #
 # PRs run the expensive ends plus one middle ZooKeeper and one middle KRaft
 # stack (0.10, 2.4, 3.6, 4.0, 4.3). Pushes to `develop` (default) or `master`,
-# and manual workflow_dispatch runs, cover the full matrix.
+# and manual workflow_dispatch runs, cover the full matrix. The core integration
+# job's Bun legs run a fixed 2.4, 3.6, 4.3 subset on every event.
 name: CI
 
 on:
@@ -80,20 +81,25 @@ jobs:
         run: pnpm skills:validate
 
   bun:
-    name: Unit (Bun)
+    name: Unit (Bun ${{ matrix.bun }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The oldest minor `engines.bun` admits (>=1.4.0), at its newest patch, and the latest release.
+    # setup-bun matches ranges with compare-versions, where a bare '1.4' means exactly 1.4.0, not
+    # the newest 1.4.
+    strategy:
+      fail-fast: false
+      matrix:
+        bun: ['1.4.x', 'latest']
     # Node still installs dependencies and builds every dist; Bun then runs each package's unit
-    # suite (`test:bun`) and scripts/bun-smoke.mjs against the built output. Integration suites
-    # stay Node-only.
+    # suite (`test:bun`) and scripts/bun-smoke.mjs against the built output. The integration jobs'
+    # Bun legs cover real brokers.
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
-      # The oldest minor `engines.bun` admits (>=1.4.0), at its newest patch. setup-bun matches
-      # ranges with compare-versions, where a bare '1.4' means exactly 1.4.0, not the newest 1.4.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.x
+          bun-version: ${{ matrix.bun }}
       # Same dependency build order as the unit job above.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
@@ -122,7 +128,7 @@ jobs:
           fi
 
   integration:
-    name: Integration (Kafka ${{ matrix.kafka-version }})
+    name: Integration (Kafka ${{ matrix.kafka-version }}${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
     needs: [unit, integration-matrix]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -130,11 +136,25 @@ jobs:
       fail-fast: false
       matrix:
         kafka-version: ${{ fromJSON(needs.integration-matrix.outputs.versions) }}
+        # '' runs on Node.js. The Bun legs cover one ZooKeeper and two KRaft stacks on the oldest Bun
+        # minor `engines.bun` admits and on the latest release (see the `bun` job for '1.4.x').
+        bun: ['']
+        include:
+          - { kafka-version: '2.4', bun: '1.4.x' }
+          - { kafka-version: '2.4', bun: latest }
+          - { kafka-version: '3.6', bun: '1.4.x' }
+          - { kafka-version: '3.6', bun: latest }
+          - { kafka-version: '4.3', bun: '1.4.x' }
+          - { kafka-version: '4.3', bun: latest }
     env:
       KAFKA_VERSION: ${{ matrix.kafka-version }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
+      - if: matrix.bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
       - name: Restore Kafka Docker images
         id: docker-cache
         uses: actions/cache@v6
@@ -156,20 +176,29 @@ jobs:
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
-      - run: pnpm --filter @cookiemonsterdev/kafka-core test:integration
+      - run: pnpm --filter @cookiemonsterdev/kafka-core ${{ matrix.bun && 'test:bun:integration' || 'test:integration' }}
 
   cli-integration:
-    name: Integration (CLI / Kafka 4.3)
+    name: Integration (CLI / Kafka 4.3${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
     needs: [unit]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # 4.3 rather than the CLI's other supported version (4.0): share group commands (KIP-932)
     # need a broker at least at 4.1, and this is the one leg that exercises them.
+    strategy:
+      fail-fast: false
+      matrix:
+        # '' runs on Node.js; the same Bun versions as the core integration job.
+        bun: ['', '1.4.x', 'latest']
     env:
       KAFKA_VERSION: '4.3'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
+      - if: matrix.bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
       - name: Restore Kafka Docker images
         id: docker-cache
         uses: actions/cache@v6
@@ -193,19 +222,28 @@ jobs:
       # before tests run — config first, since core depends on it in turn.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
-      - run: pnpm --filter @cookiemonsterdev/kafka-cli test:integration
+      - run: pnpm --filter @cookiemonsterdev/kafka-cli ${{ matrix.bun && 'test:bun:integration' || 'test:integration' }}
 
   studio-integration:
-    name: Integration (Studio / Kafka 4.3)
+    name: Integration (Studio / Kafka 4.3${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
     needs: [unit]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Same reasoning as the CLI leg above: the one version this suite pins itself against.
+    strategy:
+      fail-fast: false
+      matrix:
+        # '' runs on Node.js; the same Bun versions as the core integration job.
+        bun: ['', '1.4.x', 'latest']
     env:
       KAFKA_VERSION: '4.3'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
+      - if: matrix.bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ matrix.bun }}
       - name: Restore Kafka Docker images
         id: docker-cache
         uses: actions/cache@v6
@@ -230,7 +268,7 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-cli build
-      - run: pnpm --filter @cookiemonsterdev/kafka-studio test:integration
+      - run: pnpm --filter @cookiemonsterdev/kafka-studio ${{ matrix.bun && 'test:bun:integration' || 'test:integration' }}
 
   oauthbearer:
     name: Integration (OAUTHBEARER / 4.0)
@@ -285,3 +323,21 @@ jobs:
         with:
           name: docs-browser-results
           path: packages/docs/test-results/
+
+  binaries:
+    name: Standalone binaries (Bun)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The release workflow compiles `kafka` and `kafka-studio` for every target; this host build
+    # catches a change that breaks them (an asset or worker the executable cannot find) earlier.
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node-pnpm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+      - run: pnpm --filter "@cookiemonsterdev/kafka-studio..." build
+      - run: node scripts/build-binaries.mjs cli
+      - run: node scripts/build-binaries.mjs studio
+      - run: node scripts/smoke-binaries.mjs cli dist/binaries
+      - run: node scripts/smoke-binaries.mjs studio dist/binaries

@@ -65,6 +65,7 @@
     "test": "vitest run --project unit",
     "test:bun": "bun --bun ./node_modules/vitest/vitest.mjs run --project unit",
     "test:integration": "vitest run --project integration",
+    "test:bun:integration": "bun --bun ./node_modules/vitest/vitest.mjs run --project integration",
     "test:watch": "vitest",
     "clean": "rm -rf dist"
   },

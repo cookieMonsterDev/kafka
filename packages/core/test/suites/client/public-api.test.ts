@@ -5,9 +5,25 @@ import {
   generateMessages,
   secureRandom,
   waitForConsumerToJoinGroup,
+  waitFor,
   waitForMessages,
 } from '../../helpers/index';
 import { KafkaNonRetriableError } from '../../../src/errors';
+
+/**
+ * `listTopics` reads metadata from any broker, and `createTopics({ waitForLeaders })` does not
+ * wait for every broker to learn a new topic (seen on Node.js and Bun alike against Kafka 4.0), so
+ * poll until all `topics` are listed.
+ */
+function listTopicsOnceVisible(
+  client: { listTopics: () => Promise<string[]> },
+  topics: readonly string[],
+): Promise<string[]> {
+  return waitFor(async () => {
+    const listed = await client.listTopics();
+    return topics.every((topic) => listed.includes(topic)) ? listed : false;
+  });
+}
 
 describe('kafka.publicApi', () => {
   let topicName: string;
@@ -63,7 +79,9 @@ describe('kafka.publicApi', () => {
           topics: [{ topic: extraTopic, numPartitions: 1, replicationFactor: 1 }],
         }),
       ).resolves.toBe(true);
-      expect(await admin.listTopics()).toEqual(expect.arrayContaining([extraTopic, topicName]));
+      expect(await listTopicsOnceVisible(admin, [extraTopic, topicName])).toEqual(
+        expect.arrayContaining([extraTopic, topicName]),
+      );
 
       const cluster = await admin.describeCluster();
       expect(cluster.brokers.length).toBeGreaterThan(0);
@@ -86,8 +104,8 @@ describe('kafka.publicApi', () => {
       await producer.connect();
       await consumer.connect();
 
-      expect(await producer.listTopics()).toEqual(expect.arrayContaining([topicName]));
-      expect(await consumer.listTopics()).toEqual(expect.arrayContaining([topicName]));
+      expect(await listTopicsOnceVisible(producer, [topicName])).toEqual(expect.arrayContaining([topicName]));
+      expect(await listTopicsOnceVisible(consumer, [topicName])).toEqual(expect.arrayContaining([topicName]));
 
       const partitions = await producer.partitionsFor(topicName);
       expect(partitions.length).toBeGreaterThan(0);

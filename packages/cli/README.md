@@ -54,7 +54,9 @@ bunx --bun @cookiemonsterdev/kafka-cli ping --brokers localhost:9092
 bunx --bun kafka --version
 ```
 
-See [Bun](../docs/src/content/docs/core/reference/bun.md) for what else differs on Bun.
+See [Bun](../docs/src/content/docs/core/reference/bun.md) for what else differs on Bun. Each GitHub
+release also attaches a [standalone binary](../docs/src/content/docs/cli/start/installation.md#standalone-binary)
+that needs neither runtime.
 
 The package also ships a `kafka-cli` skill for coding agents under `skills/`; see
 [Agent skills](../docs/src/content/docs/core/start/agent-skills.md).

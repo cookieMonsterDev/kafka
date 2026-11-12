@@ -1,13 +1,7 @@
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
-import {
-  codecWorkerUrl,
-  runCodecOpSync,
-  type CodecWorkerOp,
-  type CodecWorkerRequest,
-  type CodecWorkerResponse,
-} from './codec-worker';
+import type { CodecWorkerOp, CodecWorkerRequest, CodecWorkerResponse } from './codec-worker';
 
 interface PendingJob {
   resolve: (buffer: Buffer) => void;
@@ -23,7 +17,19 @@ const idle: Worker[] = [];
 const pending = new Map<number, PendingJob>();
 const queued: Array<{ request: CodecWorkerRequest; job: PendingJob }> = [];
 
-function workerFilename(): string {
+type CodecWorkerModule = typeof import('./codec-worker');
+let codecWorkerModule: Promise<CodecWorkerModule> | undefined;
+
+/**
+ * Loaded on first Snappy/LZ4 use, so applications that never use those codecs do not load the JS
+ * codec libraries at startup.
+ */
+function loadCodecWorkerModule(): Promise<CodecWorkerModule> {
+  codecWorkerModule ??= import('./codec-worker');
+  return codecWorkerModule;
+}
+
+function workerFilename(codecWorkerUrl: string): string {
   const url = new URL(codecWorkerUrl);
   url.search = '';
   url.hash = '';
@@ -89,8 +95,8 @@ function onWorkerError(error: Error): void {
   failAll(error);
 }
 
-function spawnWorker(): Worker {
-  const worker = new Worker(workerFilename());
+function spawnWorker(codecWorkerUrl: string): Worker {
+  const worker = new Worker(workerFilename(codecWorkerUrl));
   worker.on('message', (msg: CodecWorkerResponse) => {
     onWorkerMessage(worker, msg);
   });
@@ -106,11 +112,14 @@ function spawnWorker(): Worker {
   return worker;
 }
 
-function ensurePool(): void {
+async function ensurePool(): Promise<void> {
+  if (workers.length > 0 || workerFailed) return;
+  const { codecWorkerUrl } = await loadCodecWorkerModule();
+  // Another caller may have started the pool while the module loaded.
   if (workers.length > 0 || workerFailed) return;
   try {
     for (let i = 0; i < POOL_SIZE; i++) {
-      const worker = spawnWorker();
+      const worker = spawnWorker(codecWorkerUrl);
       workers.push(worker);
       idle.push(worker);
     }
@@ -121,10 +130,10 @@ function ensurePool(): void {
   }
 }
 
-function runOnWorker(op: CodecWorkerOp, buffer: Buffer, maxOutputLength?: number): Promise<Buffer> {
-  ensurePool();
+async function runOnWorker(op: CodecWorkerOp, buffer: Buffer, maxOutputLength?: number): Promise<Buffer> {
+  await ensurePool();
   if (workerFailed || workers.length === 0) {
-    return Promise.reject(new Error('codec worker pool is unavailable'));
+    throw new Error('codec worker pool is unavailable');
   }
 
   return new Promise((resolve, reject) => {
@@ -164,6 +173,7 @@ export async function runCodecOp(op: CodecWorkerOp, buffer: Buffer, maxOutputLen
     }
   }
 
+  const { runCodecOpSync } = await loadCodecWorkerModule();
   return new Promise((resolve, reject) => {
     setImmediate(() => {
       try {

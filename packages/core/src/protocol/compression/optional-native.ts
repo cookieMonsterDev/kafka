@@ -1,14 +1,11 @@
 import { createRequire } from 'node:module';
+import { isPromiseLike } from '../../utils/is-promise-like';
 
 const optionalRequire = createRequire(import.meta.url);
 
 export interface OptionalNativeCodec {
   compress(buffer: Buffer): Promise<Buffer>;
   decompress(buffer: Buffer, maxOutputLength?: number): Promise<Buffer>;
-}
-
-function isThenable(value: unknown): value is Promise<unknown> {
-  return typeof value === 'object' && value !== null && 'then' in value && typeof value.then === 'function';
 }
 
 function asBuffer(value: unknown): Buffer {
@@ -67,7 +64,7 @@ export function loadOptionalNativeSnappy(): OptionalNativeCodec | null {
 
   try {
     const probe = compressFn(Buffer.from('k'));
-    if (!isThenable(probe)) return null;
+    if (!isPromiseLike(probe)) return null;
   } catch {
     return null;
   }
@@ -104,7 +101,7 @@ export async function loadOptionalNativeLz4(): Promise<OptionalNativeCodec | nul
 
   try {
     const probe = compressFn(Buffer.from('kafka-lz4-probe'));
-    if (!isThenable(probe)) return null;
+    if (!isPromiseLike(probe)) return null;
     const encoded = asBuffer(await probe);
     if (!isLz4Frame(encoded)) return null;
     return wrapAsync(compressFn, decompressFn);

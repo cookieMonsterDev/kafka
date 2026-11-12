@@ -24,6 +24,7 @@ import {
   perSendBatchingGaps,
   readInstalledVersion,
   sumValueBytes,
+  unverifiedCrcGaps,
 } from './shared.ts';
 
 // kafkajs is CommonJS; its default import is `module.exports` under Node and Bun alike.
@@ -156,10 +157,11 @@ function createConsumer(options: AdapterOptions): BenchConsumer {
 }
 
 function capabilityGaps(options: AdapterOptions, scenario: ScenarioDefinition): string[] {
+  const gaps = unverifiedCrcGaps(scenario);
   if (options.profile !== 'normalized' || scenario.kind === 'consume') {
-    return [];
+    return gaps;
   }
-  return perSendBatchingGaps(options.wire);
+  return [...gaps, ...perSendBatchingGaps(options.wire)];
 }
 
 export const adapter: ClientAdapter = {

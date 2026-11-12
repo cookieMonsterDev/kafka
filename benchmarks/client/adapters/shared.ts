@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { WireSettings } from '../spec.ts';
+import type { ScenarioDefinition, WireSettings } from '../spec.ts';
 
 function readManifestVersion(directory: string, packageName: string): string | null {
   try {
@@ -87,6 +87,18 @@ export function createOffsetCommitter<LastRecord>(
       return commit(dueRecords);
     },
   };
+}
+
+/**
+ * Gap of a consumer that does not verify record-batch CRCs (kafkajs and Platformatic have no check;
+ * librdkafka's `check.crcs` defaults to false). Not a wire setting, so it applies under both
+ * profiles, wherever records are consumed.
+ */
+export function unverifiedCrcGaps(scenario: ScenarioDefinition): string[] {
+  if (scenario.kind !== 'consume' && scenario.kind !== 'e2e') {
+    return [];
+  }
+  return ['CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default'];
 }
 
 /**

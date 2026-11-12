@@ -87,9 +87,11 @@ async function handle(value: Buffer | null): Promise<void> {
 }
 ```
 
-`resolveOffset` marks progress so auto-commit only covers processed records. `eachMessage`
-delivers at most 500 records between commit checkpoints (`maxRecords`); `eachBatch` is unlimited
-unless `maxRecords` is set. `...throughputPreset().consumer` sets concurrency to 4.
+`resolveOffset` marks progress so auto-commit only covers processed records. By default
+auto-commit sends one OffsetCommit after each fetched batch; set `autoCommitThreshold` or
+`autoCommitInterval` to also commit between `maxRecords` slices. `eachMessage` delivers at most
+500 records per slice (`maxRecords`); `eachBatch` is unlimited unless `maxRecords` is set.
+`...throughputPreset().consumer` sets concurrency to 4.
 
 ### Iterate with `for await`
 

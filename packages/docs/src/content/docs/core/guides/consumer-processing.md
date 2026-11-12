@@ -44,13 +44,20 @@ re-fetched. The protocol/ecosystem term for the same idea is
 The default differs by handler:
 
 - `eachMessage` defaults to `500`. An oversized fetched batch is delivered in
-  slices of at most 500 records, with an offset-commit checkpoint between
-  slices so a crash partway through the batch does not lose offsets that were
-  already processed.
+  slices of at most 500 records.
 - `eachBatch` is unlimited unless `maxRecords` is set explicitly — a batch
   handler is designed to receive a whole batch by default. Setting
   `maxRecords` splits an oversized batch into smaller sub-batches instead,
-  each with its own `resolveOffset` and a checkpoint between slices.
+  each with its own `resolveOffset`.
+
+With the default auto-commit settings (`autoCommitInterval` and
+`autoCommitThreshold` both unset), offsets are committed once after each
+fetched batch is processed, not between its slices, so a process that crashes
+partway through a batch replays that batch from its start. To commit between
+slices, set `autoCommitThreshold` (a record count) or `autoCommitInterval`
+(milliseconds): the consumer then checks whether a commit is due after every
+slice as well as after every batch. An error thrown by the handler, a
+rebalance, and `disconnect()` still commit what was processed.
 
 ```ts
 await consumer.run({

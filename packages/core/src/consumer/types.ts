@@ -50,10 +50,14 @@ export interface ConsumerRunConfig {
   autoCommit?: boolean;
   /**
    * Commit at least this often, in milliseconds. When both this and
-   * `autoCommitThreshold` are unset, commit after each processed batch.
+   * `autoCommitThreshold` are unset, commit once after each fetched batch is processed, not
+   * between its `maxRecords` slices.
    */
   autoCommitInterval?: number | null;
-  /** Commit after this many messages have been processed. */
+  /**
+   * Commit after this many messages have been processed. Checked between `maxRecords` slices
+   * and after each fetched batch.
+   */
   autoCommitThreshold?: number | null;
   /** When true, resolve the last offset of each batch after `eachBatch` returns. */
   eachBatchAutoResolve?: boolean;

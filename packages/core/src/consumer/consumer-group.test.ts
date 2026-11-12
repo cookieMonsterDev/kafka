@@ -6,7 +6,9 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { MemberAssignment } from './assigner-protocol';
+import type { Batch } from './batch';
 import { ConsumerGroup, nextAdaptiveMaxBytes } from './consumer-group';
+import { isFetchBatchCurrent, settleFetchBatch } from './fetcher';
 import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetManager } from './offset-manager/index';
 import type { TopicOffsetConfiguration } from './offset-reset';
@@ -1066,6 +1068,242 @@ describe('consumer/consumer-group', () => {
     expect(nextAdaptiveMaxBytes({ current: 1000, used: 500, min: 100, max: 10_000 })).toBe(1000);
     expect(nextAdaptiveMaxBytes({ current: 100, used: 0, min: 100, max: 10_000 })).toBe(100);
     expect(nextAdaptiveMaxBytes({ current: 8000, used: 8000, min: 100, max: 9000 })).toBe(9000);
+  });
+
+  it('grows the adaptive maxBytes out of tiny values', () => {
+    expect(nextAdaptiveMaxBytes({ current: 1, used: 1, min: 1, max: 10_000 })).toBe(2);
+    expect(nextAdaptiveMaxBytes({ current: 2, used: 2, min: 1, max: 10_000 })).toBe(3);
+  });
+
+  it('keeps the adaptive maxBytes within [min, max], letting max win over a larger min', () => {
+    expect(nextAdaptiveMaxBytes({ current: 1500, used: 0, min: 1024, max: 10_000 })).toBe(1024);
+    expect(nextAdaptiveMaxBytes({ current: 1, used: 0, min: 1024, max: 10_000 })).toBe(1024);
+    expect(nextAdaptiveMaxBytes({ current: 500, used: 0, min: 2048, max: 1024 })).toBe(1024);
+  });
+
+  describe('prefetch positions', () => {
+    interface FetchRequest {
+      maxBytes: number;
+      topicsForResponse: { partitions: { fetchOffset: bigint }[] }[];
+    }
+
+    function record(offset: bigint): Record<string, unknown> {
+      return { offset, isControlRecord: false, byteSize: 10, batchContext: {} };
+    }
+
+    function createPrefetchGroup({
+      messagesPerFetch = 2,
+      duringFetch,
+    }: { messagesPerFetch?: number; duringFetch?: () => void } = {}): {
+      consumerGroup: ConsumerGroup;
+      fetchOffsets: () => bigint[];
+      requestedMaxBytes: () => number[];
+      setPosition: (offset: bigint) => void;
+    } {
+      let position = 0n;
+      const brokerFetch = vi.fn(async (request: FetchRequest) => {
+        const fetchOffset = request.topicsForResponse[0]?.partitions[0]?.fetchOffset ?? 0n;
+        const messages = Array.from({ length: messagesPerFetch }, (_, index) => record(fetchOffset + BigInt(index)));
+        duringFetch?.();
+        return {
+          responses: [{ topicName: 'topic1', partitions: [{ partition: 0, highWatermark: 1_000n, messages }] }],
+          sessionId: 0,
+        };
+      });
+      const cluster = {
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1 }]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+      } as unknown as Cluster;
+
+      const consumerGroup = new ConsumerGroup({
+        logger: silentLogger,
+        topics: ['topic1'],
+        topicConfigurations: {},
+        cluster,
+        groupId: 'group',
+        assigners: [],
+        sessionTimeout: 30_000,
+        rebalanceTimeout: 60_000,
+        maxBytesPerPartition: 1024,
+        minBytes: 1,
+        maxBytes: 8192,
+        maxWaitTimeInMs: 100,
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+        rackId: '',
+        metadataMaxAge: 300_000,
+        autoCommit: true,
+        autoCommitInterval: null,
+        autoCommitThreshold: null,
+      });
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.offsetManager = {
+        committedOffsets: () => ({ topic1: { 0: 0n } }),
+        nextOffset: () => position,
+        seek: vi.fn(async ({ offset }: { offset: bigint }) => {
+          position = offset;
+        }),
+        resolveOffsets: vi.fn(async () => undefined),
+        resetOffset: vi.fn(),
+      } as unknown as OffsetManager;
+
+      return {
+        consumerGroup,
+        fetchOffsets: () =>
+          brokerFetch.mock.calls.map(([request]) => request.topicsForResponse[0]?.partitions[0]?.fetchOffset ?? -1n),
+        requestedMaxBytes: () => brokerFetch.mock.calls.map(([request]) => request.maxBytes),
+        setPosition: (offset) => {
+          position = offset;
+        },
+      };
+    }
+
+    async function fetchOne(consumerGroup: ConsumerGroup): Promise<Batch> {
+      const [batch] = await consumerGroup.fetch('1');
+      if (!batch) throw new Error('expected a batch');
+      return batch;
+    }
+
+    it('does not refetch the records of a batch that is still queued or in flight', async () => {
+      const { consumerGroup, fetchOffsets } = createPrefetchGroup();
+
+      const first = await fetchOne(consumerGroup);
+      const second = await fetchOne(consumerGroup);
+
+      expect(first.fetchedOffset).toBe(0n);
+      expect(second.fetchedOffset).toBe(2n);
+      expect(fetchOffsets()).toEqual([0n, 2n]);
+    });
+
+    it('leaves out a partition with two unsettled batches and wakes once one settles', async () => {
+      vi.useFakeTimers();
+      try {
+        const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup();
+        const first = await fetchOne(consumerGroup);
+        await fetchOne(consumerGroup);
+
+        let isDone = false;
+        const waiting = consumerGroup.fetch('1').then((batches) => {
+          isDone = true;
+          return batches;
+        });
+        await vi.advanceTimersByTimeAsync(50);
+        expect(isDone).toBe(false);
+
+        setPosition(2n);
+        settleFetchBatch(first);
+        await expect(waiting).resolves.toEqual([]);
+        await fetchOne(consumerGroup);
+
+        expect(fetchOffsets()).toEqual([0n, 2n, 4n]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps fetching ahead while earlier batches are consumed in order', async () => {
+      const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup();
+
+      const first = await fetchOne(consumerGroup);
+      const second = await fetchOne(consumerGroup);
+      setPosition(2n);
+      settleFetchBatch(first);
+      await fetchOne(consumerGroup);
+      setPosition(4n);
+      settleFetchBatch(second);
+
+      // The newest batch is still buffered, so the next fetch continues after it.
+      await fetchOne(consumerGroup);
+      expect(fetchOffsets()).toEqual([0n, 2n, 4n, 6n]);
+    });
+
+    it('fetches from the consumed position once the newest batch settles', async () => {
+      const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup();
+
+      const first = await fetchOne(consumerGroup);
+      setPosition(2n);
+      settleFetchBatch(first);
+      setPosition(7n);
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 7n]);
+    });
+
+    it('falls back to the consumed position when a batch settles without being fully consumed', async () => {
+      const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup();
+
+      const first = await fetchOne(consumerGroup);
+      await fetchOne(consumerGroup);
+      setPosition(1n);
+      settleFetchBatch(first);
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 2n, 1n]);
+    });
+
+    it('does not continue after a batch whose position moved while it was fetched', async () => {
+      let movePosition = (): void => {};
+      const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup({ duringFetch: () => movePosition() });
+      movePosition = () => setPosition(5n);
+
+      await fetchOne(consumerGroup);
+      movePosition = () => {};
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 5n]);
+    });
+
+    it('fetches from the sought offset once a seek is applied', async () => {
+      const { consumerGroup, fetchOffsets } = createPrefetchGroup();
+
+      await fetchOne(consumerGroup);
+      consumerGroup.seek({ topic: 'topic1', partition: 0, offset: 50n });
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 50n]);
+    });
+
+    it('fetches from the reset offset after resetOffset', async () => {
+      const { consumerGroup, fetchOffsets, setPosition } = createPrefetchGroup();
+
+      await fetchOne(consumerGroup);
+      setPosition(0n);
+      consumerGroup.resetOffset({ topic: 'topic1', partition: 0 });
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 0n]);
+    });
+
+    it('marks a buffered batch as no longer current once its partition is paused', async () => {
+      const { consumerGroup } = createPrefetchGroup();
+
+      const batch = await fetchOne(consumerGroup);
+      expect(isFetchBatchCurrent(batch)).toBe(true);
+      consumerGroup.pause([{ topic: 'topic1', partitions: [0] }]);
+      expect(isFetchBatchCurrent(batch)).toBe(false);
+    });
+
+    it('does not continue after an empty batch', async () => {
+      const { consumerGroup, fetchOffsets } = createPrefetchGroup({ messagesPerFetch: 0 });
+
+      await fetchOne(consumerGroup);
+      await fetchOne(consumerGroup);
+
+      expect(fetchOffsets()).toEqual([0n, 0n]);
+    });
+
+    it('never shrinks the request maxBytes below maxBytesPerPartition', async () => {
+      const { consumerGroup, requestedMaxBytes } = createPrefetchGroup({ messagesPerFetch: 0 });
+
+      for (let index = 0; index < 12; index++) {
+        settleFetchBatch(await fetchOne(consumerGroup));
+      }
+
+      expect(requestedMaxBytes()[0]).toBe(8192);
+      expect(Math.min(...requestedMaxBytes())).toBe(1024);
+    });
   });
 
   describe('position', () => {

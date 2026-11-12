@@ -136,8 +136,36 @@ describe('consumer/worker-queue prefetch', () => {
     expect(partitions).toEqual([0]);
   });
 
-  it('estimates prefetch bytes from each message byteSize', () => {
+  it('estimates prefetch bytes from each message byteSize plus its length prefix', () => {
     expect(estimatePrefetchBytes({ messages: [] })).toBe(1);
-    expect(estimatePrefetchBytes({ messages: [{ byteSize: 10 }, { byteSize: 5 }] })).toBe(15);
+    expect(estimatePrefetchBytes({ messages: [{ byteSize: 10 }, { byteSize: 5 }] })).toBe(17);
+    expect(estimatePrefetchBytes({ messages: [{ byteSize: 64 }] })).toBe(66);
+  });
+
+  it('adds one record batch header per distinct batchContext', () => {
+    const first = { ...defaultBatchContext };
+    const second = { ...defaultBatchContext };
+    const messages = [
+      { byteSize: 123, batchContext: first },
+      { byteSize: 123, batchContext: first },
+      { byteSize: 123, batchContext: second },
+    ];
+
+    expect(estimatePrefetchBytes({ messages })).toBe(3 * (123 + 2) + 2 * 61);
+  });
+
+  it('sizes a batch from its raw messages once and reuses the result', () => {
+    const batch = new Batch('test-topic', 1n, {
+      partition: 0,
+      highWatermark: 100n,
+      messages: [kafkaMessage(0n, 10), kafkaMessage(1n, 10)],
+    });
+    const expected = 2 * (10 + 1) + 61;
+
+    expect(estimatePrefetchBytes(batch)).toBe(expected);
+    batch.rawMessages.forEach((message) => {
+      (message as { byteSize: number }).byteSize = 1_000;
+    });
+    expect(estimatePrefetchBytes(batch)).toBe(expected);
   });
 });

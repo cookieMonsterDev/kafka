@@ -25,11 +25,12 @@ export class SeekOffsets {
   }
 
   has(topic: string, partition: number): boolean {
+    if (this.#offsets.size === 0) return false;
     return this.#offsets.has(this.getKey(topic, partition));
   }
 
   pop(topic: string, partition: number): SeekEntry | undefined {
-    if (this.#offsets.size === 0 || !this.has(topic, partition)) {
+    if (!this.has(topic, partition)) {
       return undefined;
     }
 

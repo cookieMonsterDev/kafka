@@ -20,6 +20,7 @@ import type {
 import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
 import type { OffsetManagerHandle } from './offset-manager-handle';
+import { ResolvedOffsets } from './resolved-offsets';
 
 /**
  * `OffsetCommit`/`OffsetFetch` outside of any consumer-group membership use these sentinels -
@@ -68,9 +69,9 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
   topicConfigurations: Record<string, TopicOffsetConfiguration>;
   instrumentationEmitter: InstrumentationEventEmitter;
   topics: string[];
-  resolvedOffsets: Record<string, Record<string, bigint>>;
   #basePositions: Record<string, Record<string, bigint>>;
   #coordinator: Broker | null = null;
+  readonly #resolvedOffsets = new ResolvedOffsets();
 
   constructor({
     cluster,
@@ -87,6 +88,15 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
     this.topics = Object.keys(assignment);
     this.resolvedOffsets = indexTopics(this.topics);
     this.#basePositions = indexTopics(this.topics);
+  }
+
+  /** Next offset to commit per topic and partition: the last resolved offset plus one. */
+  get resolvedOffsets(): Record<string, Record<string, bigint>> {
+    return this.#resolvedOffsets.snapshot();
+  }
+
+  set resolvedOffsets(resolvedOffsets: Record<string, Record<string, bigint>>) {
+    this.#resolvedOffsets.replace(resolvedOffsets);
   }
 
   /**
@@ -142,8 +152,7 @@ export class AssignedOffsetManager implements OffsetManagerHandle {
   }
 
   resolveOffset({ topic, partition, offset }: TopicPartitionOffset): void {
-    const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
-    resolvedTopic[partition] = offset + 1n;
+    this.#resolvedOffsets.resolve(topic, partition, offset);
   }
 
   countResolvedOffsets(): bigint {

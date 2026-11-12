@@ -47,6 +47,34 @@ describe('consumer/batch', () => {
     expect(batch.messages.map((m) => m.offset)).toEqual([3n, 4n, 5n]);
   });
 
+  it('reuses the fetched array internally when no message is filtered', () => {
+    const messages = [msg(3n), msg(4n), msg(5n)];
+    const batch = new Batch(topic, 3n, { partition: 0, highWatermark: 100n, messages });
+
+    expect(batch.messagesWithinOffset).toBe(messages);
+    expect(batch.messages).not.toBe(messages);
+    expect(batch.messages).toEqual(messages);
+  });
+
+  it('keeps lastOffset() when a handler mutates batch.messages', () => {
+    const batch = new Batch(topic, 3n, { partition: 0, highWatermark: 100n, messages: [msg(3n), msg(4n), msg(5n)] });
+
+    batch.messages.reverse();
+    expect(batch.lastOffset()).toBe(5n);
+    batch.messages.splice(0);
+    expect(batch.lastOffset()).toBe(5n);
+    expect(batch.firstOffset()).toBe(3n);
+    expect(batch.isEmptyIncludingFiltered()).toBe(false);
+  });
+
+  it('copies only the messages from the requested offset on', () => {
+    const messages = [msg(1n), msg(2n), msg(3n)];
+    const batch = new Batch(topic, 2n, { partition: 0, highWatermark: 100n, messages });
+
+    expect(batch.messagesWithinOffset.map((m) => m.offset)).toEqual([2n, 3n]);
+    expect(batch.rawMessages).toHaveLength(3);
+  });
+
   it('discards control records', () => {
     const batch = new Batch(topic, 0n, {
       partition: 0,

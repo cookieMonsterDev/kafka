@@ -6,6 +6,10 @@ function isAbortMarker(message: { key?: Buffer | string | null; isControlRecord?
   return key.equals(ABORTED_MESSAGE_KEY);
 }
 
+function isControlRecord(message: { isControlRecord?: boolean }): boolean {
+  return message.isControlRecord === true;
+}
+
 export interface FilterableMessage {
   offset: bigint;
   key?: Buffer | string | null;
@@ -36,7 +40,7 @@ export function filterAbortedMessages<T extends FilterableMessage>({
   excludeControlRecords?: boolean;
 }): T[] {
   if (!abortedTransactions || abortedTransactions.length === 0) {
-    if (excludeControlRecords) {
+    if (excludeControlRecords && messages.some(isControlRecord)) {
       return messages.filter((message) => !message.isControlRecord);
     }
     return messages as T[];

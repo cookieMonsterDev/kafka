@@ -9,6 +9,18 @@ export interface BatchPartitionData {
 }
 
 /**
+ * `messages` from `fetchedOffset` on, reusing the array when none is below it. Offsets ascend
+ * within a partition, so only a leading run can be below `fetchedOffset`.
+ */
+function messagesFromOffset(messages: readonly KafkaMessage[], fetchedOffset: bigint): KafkaMessage[] {
+  let start = 0;
+  while (start < messages.length && (messages[start]?.offset ?? fetchedOffset) < fetchedOffset) {
+    start += 1;
+  }
+  return start === 0 ? (messages as KafkaMessage[]) : messages.slice(start);
+}
+
+/**
  * Messages from a single fetch response partition. A batch can contain multiple RecordBatches;
  * compressed fetches can also include offsets below the requested `fetchedOffset`, which are
  * discarded here (https://github.com/apache/kafka/blob/trunk/clients/src/main/java/org/apache/kafka/clients/consumer/internals/Fetcher.java).
@@ -29,12 +41,14 @@ export class Batch {
     this.highWatermark = partitionData.highWatermark;
     this.rawMessages = partitionData.messages;
 
-    this.messagesWithinOffset = this.rawMessages.filter((message) => message.offset >= this.fetchedOffset);
-    this.messages = filterAbortedMessages({
+    this.messagesWithinOffset = messagesFromOffset(this.rawMessages, fetchedOffset);
+    const messages = filterAbortedMessages({
       messages: this.messagesWithinOffset,
       abortedTransactions: partitionData.abortedTransactions,
       excludeControlRecords: true,
     });
+    // Handlers can mutate the public `messages`; sharing the array would change `lastOffset()`.
+    this.messages = messages === this.messagesWithinOffset ? messages.slice() : messages;
   }
 
   isEmpty(): boolean {

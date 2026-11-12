@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
+import type { BatchProcessPayload, CommitOffsetsPayload } from '../../../src/consumer/instrumentation-events';
 import type { EachMessagePayload } from '../../../src/consumer/types';
 import {
   createCluster,
@@ -83,6 +84,49 @@ describe('consumer.autoCommit', () => {
     await rejoin;
     await waitForMessages(secondPass, { number: 4 });
     expect(secondPass).toEqual([0n, 1n, 2n, 3n]);
+  });
+
+  it('commits once per fetched batch by default, not between maxRecords slices', async () => {
+    const messageCount = 1200;
+    await producer!.connect();
+    await producer!.send({ acks: 1, topic: topicName, messages: generateMessages({ number: messageCount }) });
+
+    consumer = createConsumer({
+      cluster: createCluster(),
+      groupId,
+      maxWaitTimeInMs: 100,
+      logger: newLogger(),
+    });
+    await consumer.connect();
+    await consumer.subscribe({ topic: topicName, fromBeginning: true });
+
+    const batchEndOffsets = new Set<bigint>();
+    const batchSizes: number[] = [];
+    const committedOffsets: bigint[] = [];
+    consumer.on(consumer.events.END_BATCH_PROCESS, (event) => {
+      const { lastOffset, batchSize } = event.payload as BatchProcessPayload;
+      batchEndOffsets.add(lastOffset + 1n);
+      batchSizes.push(batchSize);
+    });
+    consumer.on(consumer.events.COMMIT_OFFSETS, (event) => {
+      for (const { partitions } of (event.payload as CommitOffsetsPayload).topics) {
+        for (const { offset } of partitions) committedOffsets.push(offset);
+      }
+    });
+
+    const consumed: bigint[] = [];
+    await consumer.run({
+      eachMessage: async ({ message }) => {
+        consumed.push(message.offset);
+      },
+    });
+    await waitForMessages(consumed, { number: messageCount });
+    await waitFor(() => committedOffsets.includes(BigInt(messageCount)));
+
+    // At least one fetched batch holds more than the default 500-record `maxRecords` slice, so a
+    // commit between slices would land on an offset no batch ended at.
+    expect(Math.max(...batchSizes)).toBeGreaterThan(500);
+    expect(committedOffsets.every((offset) => batchEndOffsets.has(offset))).toBe(true);
   });
 
   it('commits after autoCommitThreshold messages', async () => {

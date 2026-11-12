@@ -8,9 +8,24 @@ const DOUBLE_SIZE = 8;
 
 const MOST_SIGNIFICANT_BIT = 0x80; // 128
 const OTHER_BITS = 0x7f; // 127
+const VARINT_GROUP_MULTIPLIER = 0x80; // 2 ** 7: each varint byte carries 7 bits
+
+/**
+ * A varlong of at most 7 bytes carries at most 49 bits, so it decodes exactly into a `number`
+ * (below `Number.MAX_SAFE_INTEGER`). Longer varlongs fall back to BigInt arithmetic.
+ */
+const MAX_SAFE_NUMBER_VARLONG_BYTES = 7;
 
 function decodeZigZag(value: number): number {
   return (value >>> 1) ^ -(value & 1);
+}
+
+/**
+ * Zigzag decoding with arithmetic instead of bitwise operators, which would truncate `value` to
+ * 32 bits. `value` must be a non-negative safe integer.
+ */
+function decodeZigZagSafeInteger(value: number): number {
+  return value % 2 === 0 ? value / 2 : -(value + 1) / 2;
 }
 
 /** `longValue` is always non-negative here (it only ever holds a zigzag-encoded varlong in progress). */
@@ -48,6 +63,16 @@ export class Decoder {
       throw new RangeError(`Tried to read past the end of the buffer (offset ${offset})`);
     }
     return byte;
+  }
+
+  /**
+   * `-1` marks a null field; any other negative length is malformed and would move `offset`
+   * backwards, re-reading earlier bytes as the next field.
+   */
+  #checkNullableLength(byteLength: number): void {
+    if (byteLength < -1) {
+      throw new RangeError(`Invalid negative length ${byteLength} at offset ${this.offset}`);
+    }
   }
 
   readInt8(): number {
@@ -107,6 +132,7 @@ export class Decoder {
 
   readString(): string | null {
     const byteLength = this.readInt16();
+    this.#checkNullableLength(byteLength);
 
     if (byteLength === -1) {
       return null;
@@ -119,6 +145,7 @@ export class Decoder {
 
   readVarIntString(): string | null {
     const byteLength = this.readVarInt();
+    this.#checkNullableLength(byteLength);
 
     if (byteLength === -1) {
       return null;
@@ -146,6 +173,8 @@ export class Decoder {
   }
 
   readBytes(byteLength: number = this.readInt32()): Buffer | null {
+    this.#checkNullableLength(byteLength);
+
     if (byteLength === -1) {
       return null;
     }
@@ -157,6 +186,7 @@ export class Decoder {
 
   readVarIntBytes(): Buffer | null {
     const byteLength = this.readVarInt();
+    this.#checkNullableLength(byteLength);
 
     if (byteLength === -1) {
       return null;
@@ -314,6 +344,33 @@ export class Decoder {
   }
 
   readVarLong(): bigint {
+    const value = this.readVarLongNumberOrBigInt();
+    return typeof value === 'bigint' ? value : BigInt(value);
+  }
+
+  /**
+   * Reads a signed varlong as an exact `number` when it is encoded in at most 7 bytes, and as a
+   * `bigint` otherwise. Record decoding uses this to avoid allocating BigInts for small deltas.
+   */
+  readVarLongNumberOrBigInt(): number | bigint {
+    const start = this.offset;
+    let result = 0;
+    let groupWeight = 1;
+
+    for (let byteCount = 1; byteCount <= MAX_SAFE_NUMBER_VARLONG_BYTES; byteCount++) {
+      const currentByte = this.#readByte(this.offset++);
+      result += (currentByte & OTHER_BITS) * groupWeight;
+      if (currentByte < MOST_SIGNIFICANT_BIT) {
+        return decodeZigZagSafeInteger(result);
+      }
+      groupWeight *= VARINT_GROUP_MULTIPLIER;
+    }
+
+    this.offset = start;
+    return this.#readVarLongBigInt();
+  }
+
+  #readVarLongBigInt(): bigint {
     let currentByte: number;
     let result = 0n;
     let i = 0n;

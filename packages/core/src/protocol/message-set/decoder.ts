@@ -128,7 +128,10 @@ export async function decodeMessageSet(
           throw new Error('Invariant violated: compressed MessageSet entry has a null value');
         }
         const buffer = await codec.decompress(message.value);
-        messages.push(...decodeEntries(new Decoder(buffer), message, checkCrcs));
+        // A loop rather than a spread push, which overflows the call stack for large message sets.
+        for (const entry of decodeEntries(new Decoder(buffer), message, checkCrcs)) {
+          messages.push(entry);
+        }
       } else {
         messages.push(message);
       }

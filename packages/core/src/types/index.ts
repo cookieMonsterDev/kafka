@@ -424,7 +424,9 @@ export interface ConsumerConfig {
    * Verify each fetched record batch's CRC (RecordBatch v2 CRC-32C, or the legacy MessageSet
    * CRC-32) and throw {@link KafkaCorruptRecordError} on mismatch. Default `true`. Set `false`
    * to skip the check for extreme throughput - corrupted bytes on the wire (a bad disk, a buggy
-   * proxy, transport bit-flips) then go undetected instead of failing loudly.
+   * proxy, transport bit-flips) then go undetected instead of failing loudly. The check runs in
+   * JavaScript (Node.js and Bun ship no native CRC-32C), so it costs one extra pass over every
+   * fetched byte.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
    */
   checkCrcs?: boolean;

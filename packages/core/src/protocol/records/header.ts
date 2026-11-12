@@ -1,4 +1,3 @@
-import type { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 
 /**
@@ -13,18 +12,6 @@ export interface RecordHeaderInput {
   value: Buffer | string | null;
 }
 
-export interface DecodedRecordHeader {
-  key: string | null;
-  value: Buffer | null;
-}
-
 export function encodeHeader({ key, value }: RecordHeaderInput): Encoder {
   return new Encoder().writeVarIntString(key).writeVarIntBytes(value);
-}
-
-export function decodeHeader(decoder: Decoder): DecodedRecordHeader {
-  return {
-    key: decoder.readVarIntString(),
-    value: decoder.readVarIntBytes(),
-  };
 }

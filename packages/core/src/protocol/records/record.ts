@@ -2,7 +2,7 @@ import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import type { TimestampType } from '../enums/timestamp-types';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
-import { decodeHeader, type RecordHeaderInput } from './header';
+import type { RecordHeaderInput } from './header';
 
 /**
  * v2
@@ -113,6 +113,10 @@ export interface RecordBatchContext {
   magicByte: number;
 }
 
+/**
+ * A decoded record: a plain object whose ten fields are all own, enumerable data properties, so
+ * object spread, `Object.keys()`, `structuredClone()`, and `JSON.stringify()` see every field.
+ */
 export interface DecodedRecord {
   magicByte: number;
   attributes: number;
@@ -125,79 +129,82 @@ export interface DecodedRecord {
   batchContext: RecordBatchContext;
   /**
    * This record's on-wire size (post-decompression): attributes, timestamp/offset deltas, key,
-   * value, and headers, all together - excluding the record's own length-prefix varint. Cheap —
-   * it's just the length already read off the wire to isolate this record's bytes — and available
-   * without decoding `value`/`headers`, so byte-usage accounting (e.g. the consumer's adaptive
-   * fetch-size controller) doesn't have to force that decode just to estimate how much was used.
+   * value, and headers, all together - excluding the record's own length-prefix varint. It is the
+   * length already read off the wire to isolate this record's bytes, so byte-usage accounting (e.g.
+   * the consumer's adaptive fetch-size controller) can use it without measuring the fields.
    */
   byteSize: number;
 }
 
-function decodeHeadersArray(decoder: Decoder): Record<string, HeaderValue | HeaderValue[]> {
+function throwRecordOverrun(recordStart: number, recordEnd: number): never {
+  throw new RangeError(`Record fields overran the record length (${recordEnd - recordStart} bytes)`);
+}
+
+/** Always returns a fresh object, even with no headers, because callers may mutate it. */
+function decodeHeaders(
+  decoder: Decoder,
+  recordStart: number,
+  recordEnd: number,
+): Record<string, HeaderValue | HeaderValue[]> {
   const headers: Record<string, HeaderValue | HeaderValue[]> = {};
-  for (const { key: headerKey, value: headerValue } of decoder.readVarIntArray(decodeHeader)) {
-    const existing = headers[String(headerKey)];
+  const headerCount = decoder.readVarInt();
+  for (let i = 0; i < headerCount; i++) {
+    const headerKey = String(decoder.readVarIntString());
+    const headerValue = decoder.readVarIntBytes();
+    // Checked per header so a corrupt header count stops at the record end instead of parsing
+    // the following records as headers.
+    if (decoder.offset > recordEnd) throwRecordOverrun(recordStart, recordEnd);
+    const existing = headers[headerKey];
     if (existing === undefined) {
-      headers[String(headerKey)] = headerValue;
+      headers[headerKey] = headerValue;
     } else if (Array.isArray(existing)) {
       existing.push(headerValue);
     } else {
-      headers[String(headerKey)] = [existing, headerValue];
+      headers[headerKey] = [existing, headerValue];
     }
   }
   return headers;
 }
 
-export function decodeRecord(decoder: Decoder, batchContext: RecordBatchContext): DecodedRecord {
-  const { firstOffset, firstTimestamp, magicByte, isControlBatch, timestampType, maxTimestamp } = batchContext;
-  const byteSize = decoder.buffer.length;
+/**
+ * Decodes one record body that runs from `decoder.offset` to `recordEnd` (the end of the buffer by
+ * default) and leaves `decoder` at `recordEnd`. Decoding reads the shared batch decoder in place,
+ * with no per-record decoder, and throws a `RangeError` when the fields overrun `recordEnd`.
+ *
+ * The result is an object literal with no accessors, built with its fields in one fixed order, so
+ * every record shares one V8 hidden class. Getters on a literal are defined through a runtime call
+ * with fresh closures per record, which moved each record into slow dictionary mode.
+ */
+export function decodeRecord(
+  decoder: Decoder,
+  batchContext: RecordBatchContext,
+  recordEnd: number = decoder.buffer.length,
+): DecodedRecord {
+  const recordStart = decoder.offset;
   const attributes = decoder.readInt8();
-
-  const timestampDelta = decoder.readVarLong();
-  const timestamp = timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + timestampDelta;
-
+  const timestampDelta = decoder.readVarLongNumberOrBigInt();
   const offsetDelta = decoder.readVarInt();
-  const offset = firstOffset + BigInt(offsetDelta);
-
   const key = decoder.readVarIntBytes();
+  const value = decoder.readVarIntBytes();
+  if (decoder.offset > recordEnd) throwRecordOverrun(recordStart, recordEnd);
+  const headers = decodeHeaders(decoder, recordStart, recordEnd);
+  if (decoder.offset > recordEnd) throwRecordOverrun(recordStart, recordEnd);
+  decoder.offset = recordEnd;
 
-  // `value`/`headers` are the fields an `eachBatch` consumer that only reads offsets (e.g.
-  // `batch.lastOffset()`) never touches, and headers in particular costs an array-of-tags parse
-  // plus a fresh object per record. Deferred via getters (not a spread, which would evaluate
-  // them immediately) until the first access to either — headers always follows value on the
-  // wire, so there's no benefit to decoding them independently.
-  const bodyBuffer = decoder.readAll();
-  let bodyDecoded = false;
-  let value: Buffer | null = null;
-  let headers: Record<string, HeaderValue | HeaderValue[]> = {};
-
-  function decodeBody(): void {
-    if (bodyDecoded) return;
-    // Only latch `bodyDecoded` once parsing actually succeeds, so a throw (malformed/truncated
-    // wire data) is retried — and rethrown — on the next access instead of being cached as if
-    // it had decoded to the empty defaults below.
-    const bodyDecoder = new Decoder(bodyBuffer);
-    value = bodyDecoder.readVarIntBytes();
-    headers = decodeHeadersArray(bodyDecoder);
-    bodyDecoded = true;
-  }
+  const { firstOffset, firstTimestamp, maxTimestamp, timestampType } = batchContext;
+  const timestamp =
+    timestampType === TIMESTAMP_TYPES.LOG_APPEND_TIME ? maxTimestamp : firstTimestamp + BigInt(timestampDelta);
 
   return {
-    magicByte,
+    magicByte: batchContext.magicByte,
     attributes,
     timestamp,
-    offset,
+    offset: firstOffset + BigInt(offsetDelta),
     key,
-    get value() {
-      decodeBody();
-      return value;
-    },
-    get headers() {
-      decodeBody();
-      return headers;
-    },
-    isControlRecord: isControlBatch,
+    value,
+    headers,
+    isControlRecord: batchContext.isControlBatch,
     batchContext,
-    byteSize,
+    byteSize: recordEnd - recordStart,
   };
 }

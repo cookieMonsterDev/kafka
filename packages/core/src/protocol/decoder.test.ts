@@ -6,6 +6,47 @@ import { Encoder } from './encoder';
 const MAX_INT64 = 9223372036854775807n;
 const MIN_INT64 = -9223372036854775808n;
 
+/** The BigInt-only varlong decoding that `readVarLong` used before its `number` fast path. */
+function referenceReadVarLong(buffer: Buffer): { value: bigint; bytesRead: number } {
+  let result = 0n;
+  let shift = 0n;
+  let bytesRead = 0;
+  let currentByte: number;
+  do {
+    currentByte = buffer[bytesRead] ?? 0;
+    bytesRead += 1;
+    result += BigInt(currentByte & 0x7f) << shift;
+    shift += 7n;
+  } while (currentByte >= 0x80);
+  const value = (result >> 1n) ^ ((result & 1n) === 0n ? 0n : -1n);
+  return { value, bytesRead };
+}
+
+// Seven varlong bytes hold 49 zigzag bits: [-2^48, 2^48 - 1] is the last range the fast path covers.
+const LAST_SEVEN_BYTE_POSITIVE = 2n ** 48n - 1n;
+const LAST_SEVEN_BYTE_NEGATIVE = -(2n ** 48n);
+const VARLONG_BOUNDARY_VALUES = [
+  0n,
+  1n,
+  -1n,
+  63n,
+  -64n,
+  64n,
+  -65n,
+  LAST_SEVEN_BYTE_POSITIVE,
+  LAST_SEVEN_BYTE_NEGATIVE,
+  LAST_SEVEN_BYTE_POSITIVE + 1n,
+  LAST_SEVEN_BYTE_NEGATIVE - 1n,
+  BigInt(Number.MAX_SAFE_INTEGER),
+  BigInt(Number.MIN_SAFE_INTEGER),
+  2n ** 53n,
+  -(2n ** 53n),
+  2n ** 53n + 1n,
+  -(2n ** 53n) - 1n,
+  MAX_INT64,
+  MIN_INT64,
+];
+
 describe('protocol/Decoder', () => {
   describe('readInt64', () => {
     it('round-trips values at the ±2^63 boundary', () => {
@@ -170,6 +211,88 @@ describe('protocol/Decoder', () => {
       expect(outer.offset).toBe(0);
       outer.forward(4);
       expect(outer.readInt32()).toEqual(2);
+    });
+  });
+
+  describe('readVarLong / readVarLongNumberOrBigInt', () => {
+    it('decodes boundary values exactly like the BigInt-only decoder', () => {
+      for (const value of VARLONG_BOUNDARY_VALUES) {
+        const buffer = new Encoder().writeVarLong(value).buffer;
+        const reference = referenceReadVarLong(buffer);
+        const decoder = new Decoder(buffer);
+
+        expect(reference.value).toBe(value);
+        expect(decoder.readVarLong()).toBe(value);
+        expect(decoder.offset).toBe(reference.bytesRead);
+      }
+    });
+
+    it('returns a number up to 7 encoded bytes and a bigint from 8 bytes on', () => {
+      for (const value of VARLONG_BOUNDARY_VALUES) {
+        const buffer = new Encoder().writeVarLong(value).buffer;
+        const decoded = new Decoder(buffer).readVarLongNumberOrBigInt();
+
+        expect(typeof decoded).toBe(buffer.length <= 7 ? 'number' : 'bigint');
+        expect(BigInt(decoded)).toBe(value);
+      }
+      expect(new Encoder().writeVarLong(LAST_SEVEN_BYTE_POSITIVE).buffer).toHaveLength(7);
+      expect(new Encoder().writeVarLong(LAST_SEVEN_BYTE_NEGATIVE).buffer).toHaveLength(7);
+      expect(new Encoder().writeVarLong(LAST_SEVEN_BYTE_POSITIVE + 1n).buffer).toHaveLength(8);
+      expect(new Encoder().writeVarLong(LAST_SEVEN_BYTE_NEGATIVE - 1n).buffer).toHaveLength(8);
+    });
+
+    it('decodes non-canonical, zero-padded encodings on both sides of the 7-byte boundary', () => {
+      const paddedToSevenBytes = Buffer.from([0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
+      const paddedToEightBytes = Buffer.from([0x81, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00]);
+
+      for (const buffer of [paddedToSevenBytes, paddedToEightBytes]) {
+        const decoder = new Decoder(buffer);
+        expect(decoder.readVarLong()).toBe(referenceReadVarLong(buffer).value);
+        expect(decoder.offset).toBe(buffer.length);
+      }
+    });
+
+    it('matches the BigInt-only decoder across random 64-bit values', () => {
+      let seed = 0x9e3779b97f4a7c15n;
+      for (let i = 0; i < 500; i++) {
+        seed = BigInt.asUintN(64, seed * 6364136223846793005n + 1442695040888963407n);
+        const value = BigInt.asIntN(64, seed >> BigInt(i % 64));
+        const buffer = new Encoder().writeVarLong(value).buffer;
+
+        expect(new Decoder(buffer).readVarLong()).toBe(referenceReadVarLong(buffer).value);
+      }
+    });
+
+    it('reads consecutive varlongs without losing its position', () => {
+      const encoder = new Encoder();
+      for (const value of VARLONG_BOUNDARY_VALUES) encoder.writeVarLong(value);
+      const decoder = new Decoder(encoder.buffer);
+
+      for (const value of VARLONG_BOUNDARY_VALUES) {
+        expect(decoder.readVarLong()).toBe(value);
+      }
+      expect(decoder.offset).toBe(encoder.buffer.length);
+    });
+  });
+
+  describe('negative lengths', () => {
+    it('rejects a length below -1 instead of moving the offset backwards', () => {
+      const varIntPrefixed = new Encoder().writeVarInt(-5).writeBuffer(Buffer.alloc(8)).buffer;
+      const int16Prefixed = new Encoder().writeInt16(-5).writeBuffer(Buffer.alloc(8)).buffer;
+      const int32Prefixed = new Encoder().writeInt32(-5).writeBuffer(Buffer.alloc(8)).buffer;
+
+      expect(() => new Decoder(varIntPrefixed).readVarIntBytes()).toThrow(RangeError);
+      expect(() => new Decoder(varIntPrefixed).readVarIntString()).toThrow(RangeError);
+      expect(() => new Decoder(int16Prefixed).readString()).toThrow(RangeError);
+      expect(() => new Decoder(int32Prefixed).readBytes()).toThrow(RangeError);
+      expect(() => new Decoder(Buffer.alloc(8)).readBytes(-2)).toThrow(RangeError);
+    });
+
+    it('still decodes a -1 length as null', () => {
+      expect(new Decoder(new Encoder().writeVarInt(-1).buffer).readVarIntBytes()).toBeNull();
+      expect(new Decoder(new Encoder().writeVarInt(-1).buffer).readVarIntString()).toBeNull();
+      expect(new Decoder(new Encoder().writeInt16(-1).buffer).readString()).toBeNull();
+      expect(new Decoder(new Encoder().writeInt32(-1).buffer).readBytes()).toBeNull();
     });
   });
 

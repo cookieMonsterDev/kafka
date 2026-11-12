@@ -29,6 +29,7 @@ function chunkedSocketFactory(chunkSize: number, bodySize: number): SocketFactor
     const socket = new EventEmitter() as EventEmitter & Socket;
     socket.end = (() => socket) as Socket['end'];
     socket.unref = (() => socket) as Socket['unref'];
+    socket.destroy = (() => socket) as Socket['destroy'];
     socket.write = ((data: Buffer | string) => {
       const request = Buffer.isBuffer(data) ? data : Buffer.from(data, 'binary');
       const correlationId = request.readInt32BE(8);

@@ -29,7 +29,11 @@
     "seo:indexnow": "node scripts/submit-search-index.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run",
-    "docs:check": "node scripts/check-docs.mjs"
+    "docs:check": "node scripts/check-docs.mjs",
+    "benchmarks:doctor": "node benchmarks/runner/cli.ts doctor",
+    "benchmarks:run": "node benchmarks/runner/cli.ts run",
+    "benchmarks:report": "node benchmarks/runner/cli.ts report",
+    "benchmarks:publish": "node benchmarks/runner/cli.ts publish"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",

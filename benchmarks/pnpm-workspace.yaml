@@ -1,0 +1,8 @@
+# Standalone root: keeps the competitor clients out of the repository workspace and its lockfile.
+packages: []
+
+# Same supply-chain guard as the repository root.
+minimumReleaseAge: 1440
+# The Confluent client downloads or builds its librdkafka addon in an install script.
+allowBuilds:
+  '@confluentinc/kafka-javascript': true

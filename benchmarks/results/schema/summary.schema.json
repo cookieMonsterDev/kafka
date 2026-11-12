@@ -1,0 +1,505 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cookieMonsterDev/kafka/benchmarks/results/schema/summary.schema.json",
+  "title": "kafka-core benchmark session summary",
+  "description": "Written by runner/aggregate.ts; published copies live in results/published/. Bump schemaVersion on incompatible changes.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "generatedAt",
+    "manifest",
+    "environment",
+    "supportMatrix",
+    "footprints",
+    "noiseThresholdCv",
+    "noiseFloor",
+    "aaNoiseFloors",
+    "cells",
+    "comparisons",
+    "failures"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "publishedAt": {
+      "type": "string"
+    },
+    "manifest": {
+      "type": "object",
+      "required": [
+        "sessionId",
+        "tier",
+        "seed",
+        "startedAt",
+        "finishedAt",
+        "repetitions",
+        "clients",
+        "runtimes",
+        "scenarios",
+        "profiles",
+        "series",
+        "core",
+        "images",
+        "broker",
+        "plannedRuns",
+        "payload",
+        "countScale"
+      ],
+      "properties": {
+        "tier": {
+          "enum": ["smoke", "standard", "full"]
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "repetitions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "clients": {
+          "type": "array",
+          "items": {
+            "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
+          }
+        },
+        "runtimes": {
+          "type": "array",
+          "items": {
+            "enum": ["node24", "node26", "bun"]
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "enum": ["P1", "P2", "P3", "P4", "P5", "C1", "C2", "C3", "C4", "E1", "L1"]
+          }
+        },
+        "profiles": {
+          "type": "array",
+          "items": {
+            "enum": ["normalized", "defaults"]
+          }
+        },
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "core": {
+          "type": "object",
+          "required": ["requestedRef", "sha", "commitDate", "isWorktree", "isDirty", "isOnOriginDevelop"],
+          "properties": {
+            "sha": {
+              "type": "string"
+            },
+            "isWorktree": {
+              "type": "boolean"
+            },
+            "isDirty": {
+              "type": "boolean"
+            },
+            "isOnOriginDevelop": {
+              "type": "boolean"
+            }
+          }
+        },
+        "images": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "runtime",
+              "reference",
+              "imageId",
+              "baseImage",
+              "baseDigest",
+              "runtimeVersion",
+              "clientVersions"
+            ],
+            "properties": {
+              "runtime": {
+                "enum": ["node24", "node26", "bun"]
+              },
+              "baseDigest": {
+                "type": ["string", "null"]
+              },
+              "runtimeVersion": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "broker": {
+          "type": "object",
+          "required": ["image", "digest"],
+          "properties": {
+            "image": {
+              "type": "string"
+            },
+            "digest": {
+              "type": ["string", "null"]
+            }
+          }
+        },
+        "payload": {
+          "enum": ["small", "medium"]
+        },
+        "countScale": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "environment": {
+      "type": ["object", "null"],
+      "required": ["takenAt", "host", "docker", "budget", "checks", "forced", "warnings"],
+      "properties": {
+        "forced": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "supportMatrix": {
+      "type": ["object", "null"],
+      "required": ["imageIds", "cells"],
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["client", "runtime", "supported", "reason"],
+            "properties": {
+              "client": {
+                "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
+              },
+              "runtime": {
+                "enum": ["node24", "node26", "bun"]
+              },
+              "supported": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "footprints": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["client", "packageName", "version", "installBytes", "dependencyCount", "hasNativeAddon"],
+        "properties": {
+          "client": {
+            "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
+          },
+          "packageName": {
+            "type": "string"
+          },
+          "version": {
+            "type": ["string", "null"]
+          },
+          "installBytes": {
+            "type": ["integer", "null"]
+          },
+          "dependencyCount": {
+            "type": ["integer", "null"]
+          },
+          "hasNativeAddon": {
+            "type": ["boolean", "null"]
+          }
+        }
+      }
+    },
+    "noiseThresholdCv": {
+      "type": "number",
+      "minimum": 0
+    },
+    "cells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenario",
+          "scenarioName",
+          "kind",
+          "series",
+          "client",
+          "runtime",
+          "profile",
+          "clientVersion",
+          "messageCount",
+          "runs",
+          "passedRuns",
+          "capabilityGaps",
+          "primaryMetric",
+          "metrics",
+          "noisy"
+        ],
+        "properties": {
+          "scenario": {
+            "enum": ["P1", "P2", "P3", "P4", "P5", "C1", "C2", "C3", "C4", "E1", "L1"]
+          },
+          "scenarioName": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": ["produce", "consume", "e2e", "startup"]
+          },
+          "series": {
+            "type": "string"
+          },
+          "client": {
+            "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
+          },
+          "runtime": {
+            "enum": ["node24", "node26", "bun"]
+          },
+          "profile": {
+            "enum": ["normalized", "defaults"]
+          },
+          "clientVersion": {
+            "type": ["string", "null"]
+          },
+          "runs": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "passedRuns": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "capabilityGaps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "primaryMetric": {
+            "enum": ["recordsPerSecond", "latencyP99Ms", "firstAckedProduceMs"]
+          },
+          "noisy": {
+            "type": "boolean"
+          },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "recordsPerSecond",
+              "megabytesPerSecond",
+              "latencyP50Ms",
+              "latencyP99Ms",
+              "cpuSeconds",
+              "recordsPerCpuSecond",
+              "peakMemoryBytes",
+              "rssBytes",
+              "firstAckedProduceMs",
+              "firstConsumedRecordMs"
+            ],
+            "properties": {
+              "recordsPerSecond": {
+                "$ref": "#/$defs/stat"
+              },
+              "megabytesPerSecond": {
+                "$ref": "#/$defs/stat"
+              },
+              "latencyP50Ms": {
+                "$ref": "#/$defs/stat"
+              },
+              "latencyP99Ms": {
+                "$ref": "#/$defs/stat"
+              },
+              "cpuSeconds": {
+                "$ref": "#/$defs/stat"
+              },
+              "recordsPerCpuSecond": {
+                "$ref": "#/$defs/stat"
+              },
+              "peakMemoryBytes": {
+                "$ref": "#/$defs/stat"
+              },
+              "firstAckedProduceMs": {
+                "$ref": "#/$defs/stat"
+              },
+              "firstConsumedRecordMs": {
+                "$ref": "#/$defs/stat"
+              },
+              "rssBytes": {
+                "$ref": "#/$defs/stat"
+              }
+            }
+          },
+          "messageCount": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario", "runtime", "profile", "series", "primaryMetric", "ratio", "verdict", "reason"],
+        "properties": {
+          "scenario": {
+            "enum": ["P1", "P2", "P3", "P4", "P5", "C1", "C2", "C3", "C4", "E1", "L1"]
+          },
+          "runtime": {
+            "enum": ["node24", "node26", "bun"]
+          },
+          "profile": {
+            "enum": ["normalized", "defaults"]
+          },
+          "series": {
+            "type": "string"
+          },
+          "primaryMetric": {
+            "enum": ["recordsPerSecond", "latencyP99Ms", "firstAckedProduceMs"]
+          },
+          "ratio": {
+            "type": "number",
+            "minimum": 0
+          },
+          "verdict": {
+            "enum": ["better", "worse", "inconclusive"]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["runId", "scenario", "series", "runtime", "profile", "status", "reason"],
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "scenario": {
+            "enum": ["P1", "P2", "P3", "P4", "P5", "C1", "C2", "C3", "C4", "E1", "L1"]
+          },
+          "series": {
+            "type": "string"
+          },
+          "runtime": {
+            "enum": ["node24", "node26", "bun"]
+          },
+          "profile": {
+            "enum": ["normalized", "defaults"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "noiseFloor": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "aaNoiseFloors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "P1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "P2": {
+          "type": "number",
+          "minimum": 0
+        },
+        "P3": {
+          "type": "number",
+          "minimum": 0
+        },
+        "P4": {
+          "type": "number",
+          "minimum": 0
+        },
+        "P5": {
+          "type": "number",
+          "minimum": 0
+        },
+        "C1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "C2": {
+          "type": "number",
+          "minimum": 0
+        },
+        "C3": {
+          "type": "number",
+          "minimum": 0
+        },
+        "C4": {
+          "type": "number",
+          "minimum": 0
+        },
+        "E1": {
+          "type": "number",
+          "minimum": 0
+        },
+        "L1": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "stat": {
+      "type": ["object", "null"],
+      "required": ["samples", "median", "min", "max", "cv"],
+      "additionalProperties": false,
+      "properties": {
+        "samples": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "median": {
+          "type": "number"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "cv": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

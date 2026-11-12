@@ -1,0 +1,48 @@
+# Single-node KRaft broker for the benchmark suite, on an internal network with no published ports.
+# Started by runner/broker.ts, which passes the resource budget through the BROKER_* variables.
+# Keep the image tag in step with packages/core/test/assets/docker-compose.kraft-4-3.yml.
+
+name: kafka-bench
+
+services:
+  broker:
+    image: apache/kafka:4.3.2
+    container_name: kafka-bench-broker
+    hostname: broker
+    restart: 'no'
+    networks:
+      - kafka-bench
+    cpuset: ${BROKER_CPUSET:?set by runner/broker.ts}
+    mem_limit: ${BROKER_MEMORY_BYTES:?set by runner/broker.ts}
+    memswap_limit: ${BROKER_MEMORY_BYTES:?set by runner/broker.ts}
+    tmpfs:
+      - /var/lib/kafka/data:size=${BROKER_TMPFS_BYTES:?set by runner/broker.ts},mode=1777
+    # No healthcheck: a recurring check would start a JVM in the broker's cpuset during measured runs.
+    # The runner polls readiness once after start instead.
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_HEAP_OPTS: -Xms${BROKER_HEAP_BYTES:?set by runner/broker.ts} -Xmx${BROKER_HEAP_BYTES:?set by runner/broker.ts}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Deleted topics leave the tmpfs after 1 s instead of the default 60 s.
+      KAFKA_LOG_SEGMENT_DELETE_DELAY_MS: 1000
+
+networks:
+  kafka-bench:
+    name: kafka-bench
+    internal: true

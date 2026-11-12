@@ -80,6 +80,10 @@ export interface SupportMatrix {
 }
 
 export interface ClientContainerOptions {
+  /** Cancels an active client container during runner shutdown. */
+  signal?: AbortSignal;
+  /** Reports disposal failures without replacing the client outcome or cancellation reason. */
+  onCleanupError?: (error: unknown) => void;
   image: string;
   /** JSON-encoded into the `BENCH_SPEC` environment variable. */
   spec: unknown;

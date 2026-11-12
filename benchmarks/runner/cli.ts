@@ -15,8 +15,9 @@ import {
   UsageError,
 } from './args.ts';
 import type { DoctorArgs, EnvironmentArgs, PublishArgs, ReportArgs, RunArgs, TypecheckArgs } from './args.ts';
-import { deleteTopic, startBroker, stopBroker } from './broker.ts';
-import { clientContainerName, removeContainer } from './container.ts';
+import { BenchmarkAttempts } from './attempt.ts';
+import { startBroker, stopBroker } from './broker.ts';
+import { removeContainer } from './container.ts';
 import { resolveCoreSource } from './core-source.ts';
 import { hasFailedChecks, runDoctor } from './doctor.ts';
 import { measureFootprints } from './footprint.ts';
@@ -28,7 +29,7 @@ import { probeSupport } from './probe.ts';
 import { publishSession } from './publish.ts';
 import { writeReport } from './report.ts';
 import { executeSchedule, warmUpBroker } from './run.ts';
-import type { ActiveRun, RunContext } from './run.ts';
+import type { RunContext } from './run.ts';
 import { buildSchedule, seriesFor } from './schedule.ts';
 import {
   createSessionDir,
@@ -59,23 +60,15 @@ interface ShutdownState {
   lock: SerialLock | null;
   broker: BrokerHandle | null;
   keepBroker: boolean;
-  activeRun: ActiveRun | null;
   isShuttingDown: boolean;
 }
 
-const shutdown: ShutdownState = { lock: null, broker: null, keepBroker: false, activeRun: null, isShuttingDown: false };
+const shutdown: ShutdownState = { lock: null, broker: null, keepBroker: false, isShuttingDown: false };
+const attempts = new BenchmarkAttempts();
 
 async function cleanUp(): Promise<void> {
-  const { activeRun, broker } = shutdown;
-  shutdown.activeRun = null;
-  if (activeRun !== null) {
-    await removeContainer(clientContainerName(activeRun.runId));
-    if (broker !== null) {
-      await deleteTopic(broker, activeRun.topic).catch((error: unknown) => {
-        log(`cleanup: cannot delete topic ${activeRun.topic}: ${errorMessage(error)}`);
-      });
-    }
-  }
+  await attempts.cancelAll();
+  const { broker } = shutdown;
   if (broker !== null && !shutdown.keepBroker) {
     shutdown.broker = null;
     log('stopping the broker');
@@ -198,6 +191,7 @@ async function prepareEnvironment(options: EnvironmentArgs): Promise<PreparedEnv
   log(`broker ${broker.image} (${broker.imageDigest ?? 'no digest'}) is ready`);
 
   const support = await probeSupport({
+    attempts,
     images,
     clients: options.clients,
     broker,
@@ -240,9 +234,7 @@ async function commandRun(options: RunArgs): Promise<number> {
     budget,
     imageByRuntime: new Map(images.map((image) => [image.runtime, image])),
     log,
-    setActiveRun: (run) => {
-      shutdown.activeRun = run;
-    },
+    attempts,
     isStopping: () => shutdown.isShuttingDown,
   };
   const paths = sessionPaths(sessionDir);

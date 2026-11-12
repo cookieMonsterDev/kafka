@@ -4,9 +4,8 @@ import { join } from 'node:path';
 
 import { payloadSeed, scenarios } from '../client/spec.ts';
 import type { ClientId, RunSpec, RuntimeId } from '../client/spec.ts';
-import { createTopic, deleteTopic } from './broker.ts';
-import { clientContainerOptions, runClientContainer } from './container.ts';
-import { errorMessage } from './process.ts';
+import type { BenchmarkAttempts } from './attempt.ts';
+import { clientContainerOptions } from './container.ts';
 import { writeJson } from './session.ts';
 import type {
   BrokerHandle,
@@ -18,6 +17,7 @@ import type {
 } from './types.ts';
 
 export interface ProbeOptions {
+  attempts: BenchmarkAttempts;
   images: readonly RuntimeImage[];
   clients: readonly ClientId[];
   broker: BrokerHandle;
@@ -168,6 +168,7 @@ async function probeCell(
   client: ClientId,
   broker: BrokerHandle,
   budget: ResourceBudget,
+  attempts: BenchmarkAttempts,
   log: (line: string) => void,
 ): Promise<CellOutcome> {
   if (image.clientVersions[client] === null) {
@@ -176,9 +177,8 @@ async function probeCell(
 
   const runId = `probe-${client}-${image.runtime}-${randomUUID().slice(0, 8)}`;
   const topic = `kafka-bench-${runId}`;
-  await createTopic(broker, topic, probeTopicPartitions);
-  try {
-    const outcome = await runClientContainer(
+  const attempt = await attempts.run({ broker, topic, partitions: probeTopicPartitions }, async ({ runClient }) => {
+    const outcome = await runClient(
       clientContainerOptions({
         image,
         spec: probeSpec(client, image.runtime, broker, topic, runId),
@@ -190,11 +190,10 @@ async function probeCell(
     );
     if (outcome.result?.status === 'ok') return { cell: { supported: true, reason: '' }, cacheable: true };
     return { cell: { supported: false, reason: failureReason(outcome) }, cacheable: !outcome.timedOut };
-  } finally {
-    await deleteTopic(broker, topic).catch((error: unknown) => {
-      log(`probe: could not delete topic ${topic}: ${errorMessage(error)}`);
-    });
-  }
+  });
+  for (const error of attempt.cleanupErrors) log(`probe: ${error}`);
+  if (!attempt.ok) throw attempt.error;
+  return attempt.value;
 }
 
 /**
@@ -218,7 +217,7 @@ export async function probeSupport(options: ProbeOptions): Promise<SupportMatrix
         continue;
       }
 
-      const { cell, cacheable } = await probeCell(image, client, broker, budget, log);
+      const { cell, cacheable } = await probeCell(image, client, broker, budget, options.attempts, log);
       log(`probe ${client} on ${image.runtime}: ${cell.supported ? 'supported' : cell.reason}`);
       cells.push({ client, runtime: image.runtime, ...cell });
       if (!cacheable) continue;

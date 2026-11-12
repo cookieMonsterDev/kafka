@@ -188,7 +188,8 @@ runner/            host-side orchestrator (Node.js built-ins only)
   cli.ts           doctor | probe | run | report | publish | typecheck
   doctor.ts budget.ts lock.ts              host checks, resource budget, serial lock
   core-source.ts images.ts probe.ts footprint.ts   kafka-core build, images, support matrix, F1
-  broker.ts container.ts schedule.ts session.ts    broker, client containers, matrix, session files
+  broker.ts container.ts attempt.ts                broker, client containers, attempt resource ownership
+  schedule.ts session.ts                          matrix, session files
   aggregate.ts report.ts publish.ts schema.ts      statistics, Markdown, publishing guards
 client/            runs inside the container on the runtime under test
   main.ts          reads BENCH_SPEC, loads one adapter, prints one result line
@@ -203,8 +204,9 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
 - `node runner/cli.ts typecheck` type-checks `client/` and `runner/` inside the image against the installed
   clients. For editor support and a quick host check, run `pnpm install --ignore-scripts` in this directory and
   `pnpm typecheck` (the Confluent addon is not built on the host).
-- `pnpm test` (in this directory) runs the unit tests of the results pipeline with `node:test`; they need no
-  Docker and no installed dependencies.
+- `pnpm test` (in this directory) runs results-pipeline and attempt-lifecycle tests with `node:test`; they need
+  no Docker and no installed dependencies. Shutdown waits for in-flight topic setup and client-container
+  cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
 - ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
 - Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one.
 - The security workflow scans only the repository's root lockfile. This lockfile is not scanned: these packages

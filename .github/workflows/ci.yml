@@ -155,24 +155,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-${{ matrix.kafka-version }}-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-${{ matrix.kafka-version }}-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
@@ -199,24 +182,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-4.3-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-4.3-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # cli resolves both `@cookiemonsterdev/kafka-config` and `@cookiemonsterdev/kafka-core`
       # through their published `exports` (dist), so vitest's module resolution needs both built
       # before tests run — config first, since core depends on it in turn.
@@ -244,24 +210,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-4.3-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-4.3-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # studio resolves both `@cookiemonsterdev/kafka-config` and `@cookiemonsterdev/kafka-core`
       # through their published `exports` (dist), so vitest's module resolution needs both built
       # before tests run — config first, since core depends on it in turn.
@@ -281,24 +230,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-oauthbearer-4.0-${{ hashFiles('packages/core/test/assets/docker-compose.kraft-oauthbearer.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-oauthbearer-4.0-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build

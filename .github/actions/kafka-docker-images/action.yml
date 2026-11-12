@@ -1,0 +1,40 @@
+name: Kafka Docker images
+description: >
+  Loads the Docker images of the compose stack the job's KAFKA_VERSION / OAUTHBEARER_ENABLED
+  select (see packages/core/scripts/resolve-compose-file.sh) from the Actions cache, or pulls and
+  caches them on a miss. Assumes the caller has checked out the repo.
+
+runs:
+  using: composite
+  steps:
+    # Every compose image is pinned to a tag, so the image list alone decides the cache entry: stacks
+    # that share images share an entry, and an exact hit needs no registry pull.
+    - id: images
+      name: List the stack's images
+      shell: bash
+      run: |
+        set -euo pipefail
+        compose_file=$(bash packages/core/scripts/resolve-compose-file.sh)
+        images=$(docker compose -f "${compose_file}" config --images | sort -u | tr '\n' ' ')
+        echo "list=${images}" >> "$GITHUB_OUTPUT"
+        echo "hash=$(sha256sum <<<"${images}" | cut -c1-16)" >> "$GITHUB_OUTPUT"
+    - name: Restore Kafka Docker images
+      id: cache
+      uses: actions/cache@v6
+      with:
+        path: /tmp/kafka-docker-images.tar
+        key: kafka-docker-images-${{ steps.images.outputs.hash }}
+    - name: Load cached Docker images
+      if: ${{ steps.cache.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: docker load -i /tmp/kafka-docker-images.tar
+    - name: Pull and save Docker images
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        IMAGES: ${{ steps.images.outputs.list }}
+      run: |
+        set -euo pipefail
+        bash packages/core/scripts/compose-pull.sh
+        # Word splitting is intended: IMAGES is a space-separated list of image references.
+        docker save ${IMAGES} -o /tmp/kafka-docker-images.tar

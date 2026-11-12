@@ -163,8 +163,8 @@ round-trips Snappy and LZ4 through the compression workers (and checks that the 
 exits on its own), and loads a TypeScript config file.
 
 Integration tests against real brokers run on Node.js across the supported Kafka versions. On Bun
-1.4.x and the latest release, the core suite runs against Kafka 2.4, 3.6, and 4.3, and the CLI and
-studio suites against Kafka 4.3.
+1.4.x and the latest release, the core suite runs against Kafka 3.6 and 4.3, and the CLI and studio
+suites against Kafka 4.3.
 
 CI also compiles the standalone binaries for Linux x64 and smoke-tests them. A release compiles
 every target and runs each one on its own platform before attaching it.

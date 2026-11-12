@@ -33,17 +33,18 @@ The client negotiates protocol versions from `ApiVersions`. A broker that
 advertises an API uses the highest version both sides implement. A broker that
 is too old for a _used_ API throws `KafkaServerDoesNotSupportApiKey`.
 
-| Broker        | Record format                         | Notes                                                                            |
-| ------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
-| Kafka 0.10    | MessageSet (magic 0/1)                | No headers, no transactions                                                      |
-| Kafka 0.11    | RecordBatch (magic 2)                 | Headers, transactions, ACLs, DescribeConfigs                                     |
-| Kafka 1.x     | RecordBatch                           | SaslAuthenticate, CreatePartitions, DeleteGroups                                 |
-| Kafka 2.x     | RecordBatch                           | ZSTD from 2.1, rack-aware fetch from 2.2                                         |
-| Kafka 3.x     | RecordBatch, KRaft                    | Same client APIs as 2.x                                                          |
-| Kafka 4.0     | RecordBatch, KRaft only on the broker | Talks via overlap (Produce 3–13, Fetch 4–18)                                     |
-| Kafka 4.1–4.3 | RecordBatch, KRaft only on the broker | Compose files in tree (`apache/kafka:4.1.2` / `4.2.2` / `4.3.2`); CI PRs run 4.3 |
+| Broker        | Record format                         | Notes                                                            |
+| ------------- | ------------------------------------- | ---------------------------------------------------------------- |
+| Kafka 0.10    | MessageSet (magic 0/1)                | No headers, no transactions                                      |
+| Kafka 0.11    | RecordBatch (magic 2)                 | Headers, transactions, ACLs, DescribeConfigs                     |
+| Kafka 1.x     | RecordBatch                           | SaslAuthenticate, CreatePartitions, DeleteGroups                 |
+| Kafka 2.x     | RecordBatch                           | ZSTD from 2.1, rack-aware fetch from 2.2                         |
+| Kafka 3.x     | RecordBatch, KRaft                    | Same client APIs as 2.x                                          |
+| Kafka 4.0     | RecordBatch, KRaft only on the broker | Talks via overlap (Produce 3–13, Fetch 4–18)                     |
+| Kafka 4.1–4.3 | RecordBatch, KRaft only on the broker | Compose files in tree (`apache/kafka:4.1.2` / `4.2.2` / `4.3.2`) |
 
-Integration tests cover 0.10, 0.11, 1.1, 2.4, 3.6, 4.0, and 4.3. Kafka 4.0
+Integration tests cover 0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.3;
+[Compatibility](../../reference/compatibility/#tested-brokers) lists which run on each CI event. Kafka 4.0
 brokers no longer run ZooKeeper. The client still encodes older Produce/Fetch
 versions when a 0.10–3.x broker advertises them. Constructor defaults, the
 implemented producer/consumer/admin surface, and APIs that are not

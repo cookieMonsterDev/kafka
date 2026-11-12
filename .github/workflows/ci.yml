@@ -1,20 +1,26 @@
 # Unit tests never start Docker. Integration jobs select a compose file via
 # KAFKA_VERSION (see packages/core/test/assets/README.md).
 #
-# PRs run the expensive ends plus one middle ZooKeeper and one middle KRaft
-# stack (0.10, 2.4, 3.6, 4.0, 4.3). Pushes to `develop` (default) or `master`,
-# and manual workflow_dispatch runs, cover the full matrix. The core integration
-# job's Bun legs run a fixed 2.4, 3.6, 4.3 subset on every event.
+# The `integration-matrix` job picks the Kafka versions for each event: PRs and
+# pushes test the latest 3.x line (the `3.6` stack) and newer, and the weekly and
+# manual runs add the legacy ZooKeeper stacks. Documented under "Tested brokers"
+# in packages/docs/src/content/docs/core/reference/compatibility.md.
 name: CI
 
 on:
   push:
     branches: [develop, master]
   pull_request:
+  # Scheduled runs use the default branch. GitHub disables them after 60 days without
+  # repository activity; re-enable from the Actions tab.
+  schedule:
+    - cron: '0 4 * * 1'
   workflow_dispatch:
 
+# Keyed on the event too, so scheduled, manual, and push runs on the same branch never cancel each
+# other.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -114,18 +120,27 @@ jobs:
   integration-matrix:
     name: Integration matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       versions: ${{ steps.set.outputs.versions }}
     steps:
+      # `push` only fires for develop and master (see `on.push.branches`).
       - id: set
         env:
-          FULL_MATRIX: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch))) }}
+          EVENT: ${{ github.event_name }}
         run: |
-          if [[ "${FULL_MATRIX}" == "true" ]]; then
-            echo 'versions=["0.10","0.11","1.1","2.4","3.6","4.0","4.1","4.2","4.3"]' >> "$GITHUB_OUTPUT"
-          else
-            echo 'versions=["0.10","2.4","3.6","4.0","4.3"]' >> "$GITHUB_OUTPUT"
-          fi
+          case "${EVENT}" in
+            schedule | workflow_dispatch)
+              versions='["0.10","0.11","1.1","2.4","3.6","4.0","4.1","4.2","4.3"]'
+              ;;
+            push)
+              versions='["3.6","4.0","4.1","4.2","4.3"]'
+              ;;
+            *)
+              versions='["3.6","4.0","4.3"]'
+              ;;
+          esac
+          echo "versions=${versions}" >> "$GITHUB_OUTPUT"
 
   integration:
     name: Integration (Kafka ${{ matrix.kafka-version }}${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
@@ -136,12 +151,10 @@ jobs:
       fail-fast: false
       matrix:
         kafka-version: ${{ fromJSON(needs.integration-matrix.outputs.versions) }}
-        # '' runs on Node.js. The Bun legs cover one ZooKeeper and two KRaft stacks on the oldest Bun
+        # '' runs on Node.js. The Bun legs cover the oldest and newest KRaft stacks on the oldest Bun
         # minor `engines.bun` admits and on the latest release (see the `bun` job for '1.4.x').
         bun: ['']
         include:
-          - { kafka-version: '2.4', bun: '1.4.x' }
-          - { kafka-version: '2.4', bun: latest }
           - { kafka-version: '3.6', bun: '1.4.x' }
           - { kafka-version: '3.6', bun: latest }
           - { kafka-version: '4.3', bun: '1.4.x' }
@@ -155,24 +168,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-${{ matrix.kafka-version }}-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-${{ matrix.kafka-version }}-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build
@@ -199,24 +195,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-4.3-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-4.3-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # cli resolves both `@cookiemonsterdev/kafka-config` and `@cookiemonsterdev/kafka-core`
       # through their published `exports` (dist), so vitest's module resolution needs both built
       # before tests run — config first, since core depends on it in turn.
@@ -244,24 +223,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ matrix.bun }}
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-4.3-${{ hashFiles('packages/core/test/assets/**/*.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-4.3-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # studio resolves both `@cookiemonsterdev/kafka-config` and `@cookiemonsterdev/kafka-core`
       # through their published `exports` (dist), so vitest's module resolution needs both built
       # before tests run — config first, since core depends on it in turn.
@@ -281,24 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Restore Kafka Docker images
-        id: docker-cache
-        uses: actions/cache@v6
-        with:
-          path: /tmp/kafka-docker-images.tar
-          key: kafka-docker-oauthbearer-4.0-${{ hashFiles('packages/core/test/assets/docker-compose.kraft-oauthbearer.yml', 'packages/core/scripts/format-and-start.sh') }}
-          restore-keys: |
-            kafka-docker-oauthbearer-4.0-
-      - name: Load cached Docker images
-        if: steps.docker-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/kafka-docker-images.tar
-      - name: Pull Docker images
-        run: bash packages/core/scripts/compose-pull.sh
-      - name: Save Docker images
-        if: steps.docker-cache.outputs.cache-hit != 'true'
-        run: |
-          images=$(docker compose -f "$(bash packages/core/scripts/resolve-compose-file.sh)" config --images)
-          docker save ${images} -o /tmp/kafka-docker-images.tar
+      - uses: ./.github/actions/kafka-docker-images
       # core resolves `@cookiemonsterdev/kafka-config` through its published `exports` (dist),
       # so vitest's module resolution needs that dist built before tests run.
       - run: pnpm --filter @cookiemonsterdev/kafka-config build

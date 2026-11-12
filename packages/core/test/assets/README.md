@@ -44,7 +44,7 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 `KAFKA_VERSION=4.2` uses `apache/kafka:4.2.2` (KRaft). Same layout as 4.0.
 
-`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.2` (KRaft). Same layout as 4.0. This is the current docs line; PRs include it in the integration matrix.
+`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.2` (KRaft). Same layout as 4.0. This is the current docs line.
 
 OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
 
@@ -82,4 +82,4 @@ There is no Kerberos / GSSAPI compose stack. GSSAPI is unit-tested with a
 mock token exchange; a live KDC harness is documented on the
 [security guide](../../../docs/src/content/docs/core/guides/security.md).
 
-PRs cover `0.10`, `2.4`, `3.6`, `4.0`, and `4.3` (MessageSet end, last ZK line, KRaft LTS, current default, current docs line). Pushes to the default branch run the full table above, including `4.1`, `4.2`, and `4.3`. Docker images are cached per `KAFKA_VERSION`.
+Which versions CI runs on each event (pull request, push, weekly schedule, manual run) is listed under [Tested brokers](../../../docs/src/content/docs/core/reference/compatibility.md#tested-brokers). Docker images are cached per stack image set.

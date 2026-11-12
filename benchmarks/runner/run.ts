@@ -11,12 +11,20 @@ import type {
   ScenarioId,
   Verification,
 } from '../client/spec.ts';
-import { createTopic, deleteTopic, readEndOffsetTotal, seedTopic, waitForBrokerIdle } from './broker.ts';
-import { clientContainerOptions, runClientContainer } from './container.ts';
+import { readEndOffsetTotal, seedTopic, waitForBrokerIdle } from './broker.ts';
+import type { BenchmarkAttempts } from './attempt.ts';
+import { clientContainerOptions } from './container.ts';
 import { errorMessage, tailLines } from './process.ts';
 import { createRunSpec } from './schedule.ts';
 import { runRecordPath, writeJson } from './session.ts';
-import type { BrokerHandle, ClientContainerOutcome, ResourceBudget, RuntimeImage, SupportMatrix } from './types.ts';
+import type {
+  BrokerHandle,
+  ClientContainerOptions,
+  ClientContainerOutcome,
+  ResourceBudget,
+  RuntimeImage,
+  SupportMatrix,
+} from './types.ts';
 
 const containerTimeoutGraceMs = 30_000;
 const coolDownMaxWaitMs = 60_000;
@@ -26,19 +34,12 @@ const maxConsecutiveInfrastructureFailures = 3;
 const startupRecordCount = 1;
 const warmupScenarios: readonly ScenarioId[] = ['P3', 'C1'];
 
-/** The client container and topic of the run in progress, which a signal handler must remove. */
-export interface ActiveRun {
-  runId: string;
-  topic: string;
-}
-
 export interface RunContext {
   broker: BrokerHandle;
   budget: ResourceBudget;
   imageByRuntime: ReadonlyMap<RuntimeId, RuntimeImage>;
   log: (line: string) => void;
-  /** Called with a run before its topic is created, and with null once its topic is deleted. */
-  setActiveRun: (run: ActiveRun | null) => void;
+  attempts: BenchmarkAttempts;
   /** Checked before each scheduled run; true stops the schedule early. */
   isStopping: () => boolean;
 }
@@ -142,9 +143,13 @@ function coolDown(context: RunContext): Promise<void> {
   });
 }
 
-async function measureRun(spec: RunSpec, context: RunContext, image: RuntimeImage): Promise<RunRecord> {
+async function measureRun(
+  spec: RunSpec,
+  context: RunContext,
+  image: RuntimeImage,
+  runClient: (options: ClientContainerOptions) => Promise<ClientContainerOutcome>,
+): Promise<RunRecord> {
   const scenario = scenarios[spec.scenario];
-  await createTopic(context.broker, spec.topic, spec.partitions);
   if (scenario.kind === 'consume') {
     await seedTopic(context.broker, {
       topic: spec.topic,
@@ -158,7 +163,7 @@ async function measureRun(spec: RunSpec, context: RunContext, image: RuntimeImag
   }
   const startedAt = new Date().toISOString();
   const containerTimeoutMs = spec.timeoutMs + containerTimeoutGraceMs;
-  const outcome = await runClientContainer(
+  const outcome = await runClient(
     clientContainerOptions({
       image,
       spec,
@@ -182,14 +187,20 @@ async function measureRun(spec: RunSpec, context: RunContext, image: RuntimeImag
 async function executeRun(spec: RunSpec, context: RunContext): Promise<RunAttempt> {
   const image = context.imageByRuntime.get(spec.runtime);
   const startedAt = new Date().toISOString();
-  context.setActiveRun({ runId: spec.runId, topic: spec.topic });
-  let infrastructureError: string | null = null;
+  let infrastructureError: string | null;
   let record: RunRecord;
   try {
     if (image === undefined) {
       throw new Error(`no image was built for runtime ${spec.runtime}`);
     }
-    record = await measureRun(spec, context, image);
+    const attempt = await context.attempts.run(
+      { broker: context.broker, topic: spec.topic, partitions: spec.partitions },
+      ({ runClient }) => measureRun(spec, context, image, runClient),
+    );
+    for (const error of attempt.cleanupErrors) context.log(error);
+    infrastructureError = attempt.cleanupErrors[0] ?? null;
+    if (!attempt.ok) throw attempt.error;
+    record = attempt.value;
   } catch (error) {
     infrastructureError = errorMessage(error);
     const result = failedResult(spec, image, `harness error: ${infrastructureError}`);
@@ -203,14 +214,7 @@ async function executeRun(spec: RunSpec, context: RunContext): Promise<RunAttemp
     };
   }
   try {
-    await deleteTopic(context.broker, spec.topic);
-  } catch (error) {
-    infrastructureError ??= `cannot delete topic: ${errorMessage(error)}`;
-    context.log(`cannot delete topic ${spec.topic}: ${errorMessage(error)}`);
-  }
-  context.setActiveRun(null);
-  try {
-    await coolDown(context);
+    if (!context.isStopping()) await coolDown(context);
   } catch (error) {
     infrastructureError ??= `cool-down failed: ${errorMessage(error)}`;
   }

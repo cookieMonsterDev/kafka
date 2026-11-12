@@ -3,7 +3,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resultLineMarker, resultSchemaVersion, runtimeIds, specEnvVar } from '../client/spec.ts';
 import type { ClientResult, RunMetrics, RunSpec, RunStatus } from '../client/spec.ts';
-import { runCommand } from './process.ts';
+import { CommandError, runCommand } from './process.ts';
 import type {
   BrokerHandle,
   ClientContainerOptions,
@@ -42,7 +42,10 @@ export function clientContainerName(runId: string): string {
 
 /** Force-removes a container; succeeds when it does not exist. */
 export async function removeContainer(name: string): Promise<void> {
-  await runCommand('docker', ['rm', '--force', name], { allowFailure: true, timeoutMs: 30_000 });
+  const result = await runCommand('docker', ['rm', '--force', name], { allowFailure: true, timeoutMs: 30_000 });
+  if (result.exitCode !== 0 && !result.stderr.includes('No such container:')) {
+    throw new CommandError(`Cannot remove client container ${name}: ${result.stderr.trim()}`, result);
+  }
 }
 
 export interface ClientRunTarget {
@@ -151,6 +154,7 @@ class OutputCollector {
  * The container is killed when `timeoutMs` elapses; `result` is null when no valid line was printed.
  */
 export async function runClientContainer(options: ClientContainerOptions): Promise<ClientContainerOutcome> {
+  options.signal?.throwIfAborted();
   const containerName = clientContainerName(runIdOf(options.spec));
   const args = buildDockerRunArgs(options, containerName);
   const stdout = new OutputCollector();
@@ -167,16 +171,26 @@ export async function runClientContainer(options: ClientContainerOptions): Promi
     child.on('close', (exitCode) => resolve(exitCode));
   });
 
+  let termination: Promise<void> | undefined;
+  const terminate = (): void => {
+    termination ??= stopContainer();
+    // Awaited below after the child exits; observe a rejection immediately as well.
+    void termination.catch(() => undefined);
+  };
   const timer = setTimeout(() => {
     isTimedOut = true;
-    void killAfterTimeout();
+    terminate();
   }, options.timeoutMs);
+  options.signal?.addEventListener('abort', terminate, { once: true });
+  if (options.signal?.aborted) terminate();
 
-  async function killAfterTimeout(): Promise<void> {
-    await runCommand('docker', ['kill', containerName], { allowFailure: true, timeoutMs: 30_000 });
-    await delay(killGraceMs, undefined, { ref: false });
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGKILL');
+  async function stopContainer(): Promise<void> {
+    try {
+      await runCommand('docker', ['kill', containerName], { allowFailure: true, timeoutMs: 30_000 });
+      await Promise.race([exited.catch(() => undefined), delay(killGraceMs, undefined, { ref: false })]);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      // Also covers cancellation before Docker has registered the container's name.
       await removeContainer(containerName);
     }
   }
@@ -186,7 +200,17 @@ export async function runClientContainer(options: ClientContainerOptions): Promi
     exitCode = await exited;
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', terminate);
+    await termination?.catch((error: unknown) => {
+      if (options.onCleanupError !== undefined) {
+        options.onCleanupError(error);
+      } else {
+        const errors = options.signal?.aborted ? [options.signal.reason, error] : [error];
+        throw new AggregateError(errors, 'Client container disposal failed', { cause: errors[0] });
+      }
+    });
   }
+  options.signal?.throwIfAborted();
   stdout.end();
   stderr.end();
 

@@ -288,7 +288,7 @@ function sessionCandidates(client, sources) {
   ];
 }
 
-/** One chart cell with its provenance, or an explicit unsupported / not-measured marker. */
+/** One chart cell with its provenance, or an explicit unsupported / failed / not-measured marker. */
 function buildCell({ chart, runtime, client, sources }) {
   const competitorSession = sources.competitors;
   if (client !== CORE_CLIENT_ID && isUnsupported(competitorSession, runtime, client)) {
@@ -315,6 +315,18 @@ function buildCell({ chart, runtime, client, sources }) {
       )
       .map(describeFailure)
       .sort();
+    if (cell.passedRuns === 0) {
+      return {
+        runtime,
+        client,
+        status: 'failed',
+        source,
+        sessionId: session.summary.sessionId,
+        runs: cell.runs,
+        passedRuns: 0,
+        failures,
+      };
+    }
     return {
       runtime,
       client,
@@ -601,6 +613,7 @@ function chartTable(chart, comparison) {
     const client = clientLabel(cell.client);
     if (cell.status === 'unsupported') return [runtime, client, 'not supported', '—'];
     if (cell.status === 'not-measured') return [runtime, client, 'not measured', '—'];
+    if (cell.status === 'failed') return [runtime, client, `all ${cell.runs} runs failed`, '—'];
     const range = `${formatTableValue(cell.min, chart.metric)}–${formatTableValue(cell.max, chart.metric)}`;
     return [runtime, client, formatTableValue(cell.median, chart.metric), range];
   });
@@ -639,7 +652,7 @@ function methodText(comparison) {
 const CAVEATS = [
   'Only kafka-core verifies record-batch CRCs while consuming, so it does extra work in the consume and latency results.',
   'Concurrent sends favour clients that merge separate `send()` calls into one batch, as kafka-core does. Batched send is the fairer produce comparison.',
-  "Confluent's client runs on Node.js 24 only. Some of its consume runs ran out of memory, so those medians cover the remaining runs.",
+  "Confluent's client runs on Node.js 24 only. Its consume runs can run out of memory under the 2 GiB limit: a median covers the runs that finished, and a cell where every run failed has no value.",
   'All results come from one machine. Treat small differences as inconclusive.',
 ];
 

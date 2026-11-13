@@ -3,7 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   build: {
     target: 'node24',
-    sourcemap: true,
+    // Maps embedding the TS source were about 40% of the install size; unminified output stays debuggable without them.
+    sourcemap: false,
     minify: false,
     lib: { entry: { index: 'src/index.ts' }, formats: ['es'] },
     rollupOptions: {

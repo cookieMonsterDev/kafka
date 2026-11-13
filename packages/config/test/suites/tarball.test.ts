@@ -14,11 +14,11 @@ const RELATIVE_OR_NODE_IMPORT_PATTERN = /^(?:\.\.?\/|node:)/;
 const STATIC_IMPORT_LINE_PATTERN = /^\s*(?:import|export)\s[^;]*?\sfrom\s*['"]([^'"]+)['"]/gm;
 const DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-function findJsFiles(dir: string): string[] {
+function findFiles(dir: string, suffix: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) return findJsFiles(path);
-    return entry.name.endsWith('.js') ? [path] : [];
+    if (entry.isDirectory()) return findFiles(path, suffix);
+    return entry.name.endsWith(suffix) ? [path] : [];
   });
 }
 
@@ -39,7 +39,7 @@ describe('npm tarball', () => {
         logLevel: 'silent',
         build: { outDir: distDir, emptyOutDir: true },
       });
-      execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--outDir', distDir], {
+      execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--outDir', distDir], {
         cwd: PACKAGE_ROOT,
       });
       cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
@@ -74,7 +74,7 @@ describe('npm tarball', () => {
 
   it('ships a dist that only imports node: builtins or its own relative files', () => {
     const distDir = join(installDir, INSTALLED_PACKAGE_DIR, 'dist');
-    const jsFiles = findJsFiles(distDir).filter((file) => statSync(file).isFile());
+    const jsFiles = findFiles(distDir, '.js').filter((file) => statSync(file).isFile());
 
     expect(jsFiles.length).toBeGreaterThan(0);
 
@@ -92,6 +92,12 @@ describe('npm tarball', () => {
         ).toBe(true);
       }
     }
+  });
+
+  it('ships no source maps, declaration maps or test-file declarations', () => {
+    const distDir = join(installDir, INSTALLED_PACKAGE_DIR, 'dist');
+    expect(findFiles(distDir, '.map')).toEqual([]);
+    expect(findFiles(distDir, '.test.d.ts')).toEqual([]);
   });
 
   it('installs from the tarball and loads a real config file', async () => {

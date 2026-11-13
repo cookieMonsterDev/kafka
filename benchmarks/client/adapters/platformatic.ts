@@ -16,7 +16,13 @@ import type {
   ClientAdapter,
   ConsumeOptions,
 } from './types.ts';
-import { createOffsetCommitter, nextOffsetAfter, perSendBatchingGaps, readInstalledVersion } from './shared.ts';
+import {
+  createOffsetCommitter,
+  nextOffsetAfter,
+  perSendBatchingGaps,
+  readInstalledVersion,
+  unverifiedCrcGaps,
+} from './shared.ts';
 
 const packageName = clientPackageNames.platformatic;
 
@@ -174,7 +180,7 @@ function createConsumer(options: AdapterOptions): BenchConsumer {
 }
 
 function capabilityGaps(options: AdapterOptions, scenario: ScenarioDefinition): string[] {
-  const gaps: string[] = [];
+  const gaps = unverifiedCrcGaps(scenario);
   // Not tied to a wire setting, so reported under both profiles.
   if (scenario.kind === 'consume' && scenario.consumeMode === 'each-batch') {
     gaps.push(

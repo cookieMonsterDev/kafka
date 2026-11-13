@@ -30,7 +30,7 @@ export interface RequestQueueOptions {
 /**
  * Owns every in-flight and queued request for one `Connection`: enforces `maxInFlightRequests`,
  * matches correlation ids, and applies client-side throttling from KIP-219. Per-request timeouts
- * are `SocketRequest`'s own `AbortSignal.timeout()`, not tracked here.
+ * are `SocketRequest`'s own timer, not tracked here.
  */
 export class RequestQueue extends EventEmitter {
   readonly instrumentationEmitter: InstrumentationEventEmitter<NetworkEventMap> | null;
@@ -76,11 +76,11 @@ export class RequestQueue extends EventEmitter {
   }
 
   #emitQueueSizeEvent(): void {
-    emitNetworkEvent(this.instrumentationEmitter, this.logger, NETWORK_REQUEST_QUEUE_SIZE, {
+    emitNetworkEvent(this.instrumentationEmitter, this.logger, NETWORK_REQUEST_QUEUE_SIZE, () => ({
       broker: this.broker,
       clientId: this.clientId,
       queueSize: this.pending.length,
-    });
+    }));
 
     this.#emitRequestQueueEmptyIfIdle();
   }

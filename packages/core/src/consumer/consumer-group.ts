@@ -14,10 +14,10 @@ import type { ConsumerGroupHeartbeatResponseV1Body } from '../protocol/requests/
 import { retrier, type RetryOptions } from '../retry/index';
 import { arrayDiff } from '../utils/array-diff';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
-import { sleep } from '../utils/wait';
 import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
 import { FetchSessionHandler } from './fetch-session';
+import { topicPartitionKey, trackFetchBatch } from './fetcher';
 import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
 import { AssignedOffsetManager } from './offset-manager/assigned-offset-manager';
 import { OffsetManager, type OffsetManagerHandle } from './offset-manager/index';
@@ -35,6 +35,7 @@ import type {
   TopicPartitionOffset,
   TopicPartitions,
 } from './types';
+import { estimatePrefetchBytes } from './worker-queue';
 
 const STALE_METADATA_ERRORS = Object.freeze([
   'LEADER_NOT_AVAILABLE',
@@ -50,7 +51,10 @@ const STALE_METADATA_ERRORS = Object.freeze([
 
 const CONSUMER_REPLICA_ID = -1;
 
-/** Sleep when a node has no fetchable partitions, instead of blocking for `maxWaitTimeInMs`. */
+/**
+ * Sleep when a node has no fetchable partitions, or when a fetch sent without a long poll because
+ * a partition is held back returns no records, instead of blocking for `maxWaitTimeInMs`.
+ */
 export const EMPTY_NODE_FETCH_SLEEP_MS = 100;
 
 const ADAPTIVE_FULL_RATIO = 0.9;
@@ -61,8 +65,8 @@ const ADAPTIVE_SHRINK_FACTOR = 0.5;
 /**
  * Next Fetch `maxBytes` from the previous response fill ratio.
  *
- * Formula (clamped to `[min, max]`):
- * - `used/current >= 0.90` → grow: `floor(current * 1.5)`
+ * Formula (clamped to `[min, max]`; `max` wins when `min > max`, and both are at least 1):
+ * - `used/current >= 0.90` → grow: `ceil(current * 1.5)`
  * - `used/current <= 0.25` (including `used === 0`) → shrink: `floor(current * 0.5)`
  * - otherwise unchanged
  */
@@ -77,31 +81,43 @@ export function nextAdaptiveMaxBytes({
   min: number;
   max: number;
 }): number {
-  const lower = Math.max(1, min);
-  const upper = Math.max(lower, max);
+  const upper = Math.max(1, max);
+  const lower = Math.min(upper, Math.max(1, min));
   const safeCurrent = Math.min(upper, Math.max(lower, current));
-  if (used <= 0 || used / safeCurrent <= ADAPTIVE_SPARSE_RATIO) {
+  const fillRatio = used / safeCurrent;
+  if (used <= 0 || fillRatio <= ADAPTIVE_SPARSE_RATIO) {
     return Math.max(lower, Math.floor(safeCurrent * ADAPTIVE_SHRINK_FACTOR));
   }
-  if (used / safeCurrent >= ADAPTIVE_FULL_RATIO) {
-    return Math.min(upper, Math.floor(safeCurrent * ADAPTIVE_GROW_FACTOR));
+  if (fillRatio >= ADAPTIVE_FULL_RATIO) {
+    return Math.min(upper, Math.ceil(safeCurrent * ADAPTIVE_GROW_FACTOR));
   }
   return safeCurrent;
 }
 
-/**
- * Sums each message's on-wire `byteSize` rather than its decoded `key`/`value` lengths — the
- * latter would force every message's `value`/`headers` to decode on every fetch (they're lazy;
- * see `DecodedRecord`), defeating that laziness for every `eachBatch`/`eachMessage` consumer.
- */
 function estimateFetchedBytes(batches: readonly Batch[]): number {
   let bytes = 0;
   for (const batch of batches) {
-    for (const message of batch.rawMessages) {
-      bytes += message.byteSize;
-    }
+    bytes += estimatePrefetchBytes(batch);
   }
   return bytes;
+}
+
+/** One batch queued or being handled, plus one held by the fetcher until that one settles. */
+const MAX_UNSETTLED_BATCHES_PER_PARTITION = 2;
+
+/** Where the next fetch of a partition starts while a batch already returned for it is unsettled. */
+interface PrefetchPosition {
+  /** The offset after the last record of `batch`. */
+  offset: bigint;
+  /** The newest batch returned for the partition. */
+  batch: Batch;
+}
+
+/** A partition's batches from the fetch that returned them until the fetch pipeline settles them. */
+interface PartitionPrefetch {
+  unsettledBatches: number;
+  /** `null` fetches from the consumed position. */
+  position: PrefetchPosition | null;
 }
 
 interface PreferredReadReplica {
@@ -302,6 +318,10 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #lastFetchedLeaderEpoch: Record<string, Record<number, number>> = {};
   /** KIP-227: one incremental fetch session per broker node. */
   #fetchSessionHandlers = new Map<string, FetchSessionHandler>();
+  readonly #prefetches = new Map<string, PartitionPrefetch>();
+  readonly #fetchableWaiters = new Set<() => void>();
+  /** Bumped on every wake, so a fetch can tell that a partition became fetchable while it was in flight. */
+  #fetchableGeneration = 0;
   /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
   readonly #assignMode: boolean;
   readonly #fixedAssignment: TopicPartitions[] | null;
@@ -638,6 +658,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
     this.subscriptionState.assign([]);
     this.#invalidateActiveTopicPartitions();
+    this.#prefetches.clear();
 
     await this.#notify(this.onPartitionsLost, lost, 'onPartitionsLost');
   }
@@ -676,6 +697,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
+    this.#prefetches.clear();
 
     const memberAssignment = currentMemberAssignment.reduce<MemberAssignmentMap>(
       (partitionsByTopic, { topic, partitions }) => {
@@ -1033,6 +1055,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   resetOffset({ topic, partition }: TopicPartition): void {
     this.#requireOffsetManager().resetOffset({ topic, partition });
+    this.#clearPrefetchPosition(topic, partition);
   }
 
   resolveOffset({ topic, partition, offset }: TopicPartitionOffset): void {
@@ -1053,6 +1076,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.logger.info(`Resuming fetching from ${topicPartitions.length} topics`, { topicPartitions });
     this.subscriptionState.resume(topicPartitions);
     this.#invalidateActiveTopicPartitions();
+    this.#wakeFetchableWaiters();
   }
 
   assigned(): TopicPartitions[] {
@@ -1114,6 +1138,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const committedOffsets = offsetManager.committedOffsets();
       const activeTopicPartitions = this.getActiveTopicPartitions();
 
+      let hasHeldBackPartition = false;
       const requests = topicPartitions
         .map(({ topic, partitions }) => {
           const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic);
@@ -1122,10 +1147,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
             topic,
             topicId: this.cluster.findTopicId(topic),
             partitions: partitions
-              .filter(
-                (partition) =>
-                  committedOffsets[topic]?.[partition] != null && activeTopicPartitions[topic]?.has(partition) === true,
-              )
+              .filter((partition) => {
+                if (
+                  committedOffsets[topic]?.[partition] == null ||
+                  activeTopicPartitions[topic]?.has(partition) !== true
+                ) {
+                  return false;
+                }
+                if (this.#canPrefetch(topic, partition)) return true;
+                hasHeldBackPartition = true;
+                return false;
+              })
               .map((partition) => {
                 const leaderEpoch = partitionMetadata.find((p) => p.partitionId === partition)?.leaderEpoch;
                 if (leaderEpoch != null && leaderEpoch >= 0) {
@@ -1135,7 +1167,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
                 return {
                   partition,
                   currentLeaderEpoch: leaderEpoch,
-                  fetchOffset: offsetManager.nextOffset(topic, partition),
+                  fetchOffset:
+                    this.#prefetches.get(topicPartitionKey(topic, partition))?.position?.offset ??
+                    offsetManager.nextOffset(topic, partition),
                   maxBytes: this.maxBytesPerPartition,
                 };
               }),
@@ -1144,16 +1178,19 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         .filter(({ partitions }) => partitions.length > 0);
 
       if (requests.length === 0) {
-        await sleep(Math.min(EMPTY_NODE_FETCH_SLEEP_MS, this.maxWaitTime));
+        await this.#waitForFetchablePartition(Math.min(EMPTY_NODE_FETCH_SLEEP_MS, this.maxWaitTime));
         return [];
       }
 
+      const fetchableGeneration = this.#fetchableGeneration;
       const broker = await this.cluster.findBroker({ nodeId });
       const fetchSession = this.#fetchSessionHandlerFor(nodeId);
       const sessionRequest = fetchSession.buildRequest(requests);
       const { responses, sessionId } = await broker.fetch({
         replicaId: CONSUMER_REPLICA_ID,
-        maxWaitTime: this.maxWaitTime,
+        // The node has one fetch in flight, so a long poll here would also delay the held-back
+        // partition's next fetch until it ends, even once that partition settles.
+        maxWaitTime: hasHeldBackPartition ? 0 : this.maxWaitTime,
         minBytes: this.minBytes,
         maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
@@ -1211,12 +1248,29 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           });
       });
 
+      for (const batch of batches) {
+        this.#trackFetchedBatch(batch, offsetManager);
+      }
+
+      // Floored at one partition's limit: below it the broker returns little more than the first
+      // non-empty partition's first batch (KIP-74), so the other partitions wait a round trip each.
       this.#adaptiveMaxBytes = nextAdaptiveMaxBytes({
         current: this.#adaptiveMaxBytes,
         used: estimateFetchedBytes(batches),
-        min: this.minBytes,
+        min: this.maxBytesPerPartition,
         max: this.maxBytes,
       });
+
+      // Without the long poll, a response with no records would be refetched at once. Records
+      // that are filtered out still move the position, and a wake while the fetch was in flight
+      // means a held-back partition may be fetchable already, so both return without waiting.
+      if (
+        hasHeldBackPartition &&
+        this.#fetchableGeneration === fetchableGeneration &&
+        batches.every((batch) => batch.rawMessages.length === 0)
+      ) {
+        await this.#waitForFetchablePartition(Math.min(EMPTY_NODE_FETCH_SLEEP_MS, this.maxWaitTime));
+      }
 
       return batches;
     } catch (e) {
@@ -1225,9 +1279,98 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       // INVALID_FETCH_SESSION_EPOCH), or anything else - the broker's actual session state is no
       // longer known to match, so start over with a full fetch next time.
       this.#fetchSessionHandlerFor(nodeId).reset();
+      // Recovery can move positions (offset reset, truncation); fetch from the consumed position.
+      for (const prefetch of this.#prefetches.values()) prefetch.position = null;
       await this.recoverFromFetch(e);
       return [];
     }
+  }
+
+  #canPrefetch(topic: string, partition: number): boolean {
+    const unsettledBatches = this.#prefetches.get(topicPartitionKey(topic, partition))?.unsettledBatches ?? 0;
+    return unsettledBatches < MAX_UNSETTLED_BATCHES_PER_PARTITION;
+  }
+
+  #clearPrefetchPosition(topic: string, partition: number): void {
+    const prefetch = this.#prefetches.get(topicPartitionKey(topic, partition));
+    if (prefetch) prefetch.position = null;
+  }
+
+  /** Waits up to `timeoutMs`, returning early once a partition may be fetchable again. */
+  #waitForFetchablePartition(timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const done = (): void => {
+        clearTimeout(timeoutId);
+        this.#fetchableWaiters.delete(done);
+        resolve();
+      };
+      const timeoutId = setTimeout(done, timeoutMs);
+      this.#fetchableWaiters.add(done);
+    });
+  }
+
+  #wakeFetchableWaiters(): void {
+    this.#fetchableGeneration += 1;
+    for (const done of [...this.#fetchableWaiters]) done();
+  }
+
+  /**
+   * Counts `batch` as unsettled until the fetch pipeline settles it; a partition with
+   * `MAX_UNSETTLED_BATCHES_PER_PARTITION` unsettled batches is left out of fetch requests.
+   */
+  #trackFetchedBatch(batch: Batch, offsetManager: OffsetManagerHandle): void {
+    const { topic, partition } = batch;
+    const key = topicPartitionKey(topic, partition);
+    let prefetch = this.#prefetches.get(key);
+    if (!prefetch) {
+      prefetch = { unsettledBatches: 0, position: null };
+      this.#prefetches.set(key, prefetch);
+    }
+    const tracked = prefetch;
+    tracked.unsettledBatches += 1;
+    const extended = this.#extendPrefetchPosition(tracked, batch, offsetManager);
+
+    trackFetchBatch(batch, {
+      // A held batch waits behind the partition's earlier one; a pause or seek meanwhile drops it.
+      isCurrent: () => !this.subscriptionState.isPaused(topic, partition) && !this.seekOffset.has(topic, partition),
+      onSettled: () => {
+        if (this.#prefetches.get(key) !== tracked) return;
+        tracked.unsettledBatches -= 1;
+        if (extended && tracked.position === extended.position) {
+          const isFullyConsumed = this.position(topic, partition) === extended.endOffset;
+          if (!isFullyConsumed || extended.position.batch === batch) tracked.position = null;
+        }
+        if (tracked.unsettledBatches === 0 && tracked.position == null) this.#prefetches.delete(key);
+        this.#wakeFetchableWaiters();
+      },
+    });
+  }
+
+  /**
+   * Starts the partition's next fetch after `batch` instead of fetching the same records again. The
+   * position is dropped once the newest batch settles, or once any of its batches settles without
+   * being fully consumed (paused, sought, failed, or stale), so the next fetch falls back to the
+   * consumed position. Returns the position and `batch`'s end offset, or `null` when not extended.
+   */
+  #extendPrefetchPosition(
+    prefetch: PartitionPrefetch,
+    batch: Batch,
+    offsetManager: OffsetManagerHandle,
+  ): { position: PrefetchPosition; endOffset: bigint } | null {
+    if (batch.isEmptyIncludingFiltered()) return null;
+
+    const expectedOffset = prefetch.position?.offset ?? offsetManager.nextOffset(batch.topic, batch.partition);
+    // Fetched from a position that is already outdated: the runner drops it as stale.
+    if (batch.fetchedOffset !== expectedOffset) return null;
+
+    const endOffset = batch.lastOffset() + 1n;
+    if (prefetch.position) {
+      prefetch.position.offset = endOffset;
+      prefetch.position.batch = batch;
+    } else {
+      prefetch.position = { offset: endOffset, batch };
+    }
+    return { position: prefetch.position, endOffset };
   }
 
   #fetchSessionHandlerFor(nodeId: string): FetchSessionHandler {
@@ -1513,6 +1656,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           seek: seekEntry,
         });
         await offsetManager.seek(seekEntry);
+        this.#clearPrefetchPosition(topic, partition);
       }
     }
 

@@ -113,8 +113,8 @@ and 2 headers. Topics have 3 partitions.
 | ID  | Name                   | Measures                                                                          |
 | --- | ---------------------- | --------------------------------------------------------------------------------- |
 | P1  | `produce-single`       | Sequential `await send()` of one record, acks 1, no linger                        |
-| P2  | `produce-batch`        | Sequential `await send()` of 100 records                                          |
-| P3  | `produce-throughput`   | Up to 256 concurrent single-record `send()` calls, linger 5 ms, 16 KiB batches    |
+| P2  | `produce-batch`        | Sequential `await send()` of 100 records; the headline produce comparison         |
+| P3  | `produce-throughput`   | Up to 256 concurrent single-record `send()` calls, linger 5 ms, 16 KiB batches¹   |
 | P4  | `produce-gzip`         | P3 with gzip                                                                      |
 | P5  | `produce-idempotent`   | P3 with idempotence and acks all                                                  |
 | C1  | `consume-each-message` | Read a preloaded topic from the start with a per-record handler                   |
@@ -124,6 +124,13 @@ and 2 headers. Topics have 3 partitions.
 | E1  | `e2e-latency`          | Open-loop fixed-rate producer and a consumer; latency from the intended send time |
 | L1  | `startup`              | Process start to the first acknowledged produce and to the first consumed record  |
 | F1  | `footprint`            | Install size, dependency count, native addon (static, read from the image)        |
+
+¹ P3, and P4 and P5 built on it, are structurally biased. Each of the 256 workers awaits its own single-record
+`send()`, so the result shows whether and when a client merges records from separate calls, not protocol speed.
+kafkajs and Platformatic send one request per call, librdkafka waits out `linger.ms` for each partition batch, and
+kafka-core flushes once its buffered bytes across all partitions reach `batchSize`
+([option mapping](client/adapters/option-mapping.md#kafka-core)). Use P2 as the headline produce comparison; the
+report repeats this note under each of these scenarios.
 
 Each run warms up in-process, then measures. Per run: records/s and MB/s (10^6 bytes, values only), latency
 percentiles from a preallocated sample buffer, process and cgroup CPU seconds, records per CPU second, cgroup peak
@@ -144,7 +151,9 @@ floor (the `--noise-floor` passed in, or the A/A floor measured in the same sess
 2. Two profiles: `normalized` applies the same wire settings to every client and is the headline; `defaults` sets
    only brokers, client id and group id, showing what a user gets out of the box. `defaults` runs for P3 and C1.
 3. Gaps are declared, not hidden: when a library cannot express a setting, its adapter reports it and the report
-   footnotes it.
+   footnotes it. Differences outside the wire settings are declared the same way. For example, only kafka-core
+   verifies record-batch CRCs on consume by default, so the other clients' consume and E1 results carry a CRC
+   footnote.
 4. Adapters are thin and symmetric: the same payload bytes, `Buffer` keys and values, no serializers, logging off,
    the same call shape, and the same commit policy.
 5. Every run is verified: broker end offsets must equal what was produced; consumed count and bytes must equal
@@ -166,6 +175,22 @@ Recorded by the probe on 2026-11-12, with the pinned versions:
   its source build fails while linking: GNU `ar` cuts MRI-script paths at `@`, and every install path contains
   `node_modules/@confluentinc/`. Bun 1.4 reports ABI 147 as well, so the Node 24 binary is rejected there too.
   The package is an optional dependency, so these cells are recorded as unsupported instead of failing the build.
+
+### Known issues
+
+Recorded from session `20261112113347-fe9c38b14aa8` (tier `standard`, 2026-11-12):
+
+- **Confluent runs out of memory while consuming.** 4 of 450 runs failed with exit code 137 and no stderr: Confluent
+  on Node 24, C1 `normalized` repetition 3 and C2 repetitions 3 to 5. Passing Confluent consume runs peaked at
+  979–2,029 MiB against the 2 GiB client limit, so these are out-of-memory kills inside the library's process, not
+  kafka-core failures. The limit stays the same for every client to keep results comparable. `publish` refuses a
+  session with these failures.
+- **Consume counts are not calibrated for the faster clients.** With 2,000,000 measured records, the slowest
+  passing series took 11.3 s for C1 `normalized` and 8.2 s for C2 (both Confluent; only 2 of its 5 C2 runs passed).
+  kafka-core's C1 `defaults` took about 50 s on Node because it committed every 500 records; that build predates
+  the once-per-batch default. Every other series finished in 0.9–6.4 s, which makes those cells the noisiest. The counts stay unchanged, because
+  larger topics would push Confluent into more out-of-memory failures. Recalibrate them, as described in
+  [Calibrating](#calibrating-before-the-first-published-run), once kafka-core's consumer changes have landed.
 
 ## Results
 

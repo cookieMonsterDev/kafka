@@ -1,5 +1,5 @@
 import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
-import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import type { InstrumentationEventEmitter, InstrumentationPayload } from '../../instrumentation/emitter';
 import type { Logger } from '../../loggers/index';
 import { emitNetworkEvent, NETWORK_REQUEST, NETWORK_REQUEST_TIMEOUT } from '../instrumentation-events';
 import type { NetworkEventMap } from '../instrumentation-events';
@@ -32,7 +32,9 @@ export interface SocketRequestOptions {
 
 /**
  * Tracks one in-flight request (pending → sent → completed/rejected).
- * Timeout is a single `AbortSignal.timeout()` armed at `send()` and cleared on settle.
+ * Timeout is a single unref'd timer armed at `send()` and cleared on settle. Not
+ * `AbortSignal.timeout()`: its timer can't be cancelled, so every settled request would keep a
+ * live timer (plus GC bookkeeping for the signal) until `requestTimeout` elapsed.
  */
 export class SocketRequest {
   readonly createdAt = Date.now();
@@ -51,11 +53,14 @@ export class SocketRequest {
   #enforceRequestTimeout: boolean;
   #sendRequest: () => void;
   #timeoutHandler: () => void;
-  #timeoutSignal: AbortSignal | undefined;
-  #onTimeout = (): void => this.timeoutRequest();
+  #timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  #onTimeout = (): void => {
+    this.#timeoutTimer = undefined;
+    this.timeoutRequest();
+  };
   #emitEvent: <EventName extends keyof NetworkEventMap>(
     eventName: EventName,
-    payload: NetworkEventMap[EventName],
+    payload: InstrumentationPayload<NetworkEventMap[EventName]>,
   ) => void;
 
   constructor(options: SocketRequestOptions) {
@@ -82,8 +87,9 @@ export class SocketRequest {
     this.#state = 'sent';
 
     if (this.#enforceRequestTimeout) {
-      this.#timeoutSignal = AbortSignal.timeout(this.requestTimeout);
-      this.#timeoutSignal.addEventListener('abort', this.#onTimeout, { once: true });
+      // Unref'd like `AbortSignal.timeout()`, so a pending request alone doesn't keep the process alive.
+      this.#timeoutTimer = setTimeout(this.#onTimeout, this.requestTimeout);
+      this.#timeoutTimer.unref();
     }
   }
 
@@ -121,7 +127,7 @@ export class SocketRequest {
     this.duration = duration;
     entry.resolve({ correlationId, entry, size, payload });
 
-    this.#emitEvent(NETWORK_REQUEST, {
+    this.#emitEvent(NETWORK_REQUEST, () => ({
       broker,
       clientId,
       correlationId,
@@ -133,7 +139,7 @@ export class SocketRequest {
       apiName: entry.apiName,
       apiKey: entry.apiKey,
       apiVersion: entry.apiVersion,
-    });
+    }));
   }
 
   rejected(error: unknown): void {
@@ -146,8 +152,10 @@ export class SocketRequest {
   }
 
   #disarmTimeout(): void {
-    this.#timeoutSignal?.removeEventListener('abort', this.#onTimeout);
-    this.#timeoutSignal = undefined;
+    if (this.#timeoutTimer !== undefined) {
+      clearTimeout(this.#timeoutTimer);
+      this.#timeoutTimer = undefined;
+    }
   }
 
   #throwIfInvalidState({ accepted, next }: { accepted: RequestState[]; next: RequestState }): void {

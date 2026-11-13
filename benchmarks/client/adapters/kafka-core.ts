@@ -127,6 +127,7 @@ export const adapter: ClientAdapter = {
   packageName,
   version: () => readInstalledVersion(packageName),
   // Every WireSettings field maps to a kafka-core option, so nothing is missing under either profile.
+  // `checkCrcs` stays at its default (true); the other adapters declare that they skip the check.
   capabilityGaps: () => [],
   createProducer,
   createConsumer,

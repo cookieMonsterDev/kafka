@@ -3,6 +3,8 @@ import { KafkaOffsetOutOfRange, KafkaProtocolError } from '../../../errors';
 import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
 import { encodeMessageSet } from '../../message-set/index';
+import { encodeRecordBatch } from '../../records/batch';
+import { encodeRecord } from '../../records/record';
 import {
   decodeCompactRecordSet,
   decodeRecordSet,
@@ -202,6 +204,25 @@ describe('protocol/requests/fetch/shared', () => {
       expect(records).toHaveLength(1);
       expect(records[0]?.key?.toString()).toBe('k');
       expect(records[0]?.value?.toString()).toBe('v');
+    });
+
+    it('decodes a RecordBatch with more records than a spread call can pass as arguments', async () => {
+      const recordCount = 250_000; // `push(...records)` overflows the stack at this size on Node.js 26
+      const batch = await encodeRecordBatch({
+        recordCount,
+        lastOffsetDelta: recordCount - 1,
+        writeRecords: (encoder) => {
+          for (let offsetDelta = 0; offsetDelta < recordCount; offsetDelta++) {
+            encodeRecord({ offsetDelta }, encoder);
+          }
+        },
+      });
+      const decoder = new Decoder(new Encoder().writeInt32(batch.size()).writeEncoder(batch).buffer);
+
+      const records = await decodeRecordSet(decoder);
+
+      expect(records).toHaveLength(recordCount);
+      expect(records.at(-1)?.offset).toBe(BigInt(recordCount - 1));
     });
   });
 

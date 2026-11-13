@@ -1,6 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 
 import { clientIds, scenarioIds } from '../client/spec.ts';
+import type { ScenarioId } from '../client/spec.ts';
 import { aggregateSession, baselineSeries } from './aggregate.ts';
 import type { CellSummary, Comparison, SessionSummary, StatSummary } from './aggregate.ts';
 import { sessionPaths } from './session.ts';
@@ -130,7 +131,21 @@ function renderSupportMatrix(summary: SessionSummary): string {
   return ['## Support matrix', '', table(['Client', 'Runtime', 'Status', 'Reason'], rows)].join('\n');
 }
 
-function renderScenario(summary: SessionSummary, scenario: string, footnotes: Map<string, number>): string {
+const concurrentSendBias =
+  'Structurally biased: 256 workers each await their own single-record `send()`, so this measures whether and when a ' +
+  'client merges records from separate calls, not protocol speed. kafkajs and Platformatic send one request per ' +
+  'call, librdkafka flushes each partition batch at `batch.size` or after `linger.ms`, and kafka-core flushes once ' +
+  'its buffered bytes across all partitions reach `batchSize`. Use P2 as the headline produce comparison.';
+
+/** Reading notes printed under a scenario heading, for results that need context to compare fairly. */
+const scenarioNotes: Partial<Record<ScenarioId, string>> = {
+  P2: 'Headline produce comparison: every client sends the same 100-record batches with the same wire settings.',
+  P3: concurrentSendBias,
+  P4: concurrentSendBias,
+  P5: concurrentSendBias,
+};
+
+function renderScenario(summary: SessionSummary, scenario: ScenarioId, footnotes: Map<string, number>): string {
   const cells = summary.cells.filter((cell) => cell.scenario === scenario);
   const first = cells[0];
   if (!first) {
@@ -209,7 +224,9 @@ function renderScenario(summary: SessionSummary, scenario: string, footnotes: Ma
       versus,
     ];
   });
-  return [`### ${first.scenario} \`${first.scenarioName}\``, '', table(header, rows)].join('\n');
+  const note = scenarioNotes[scenario];
+  const heading = `### ${first.scenario} \`${first.scenarioName}\``;
+  return [heading, '', ...(note === undefined ? [] : [note, '']), table(header, rows)].join('\n');
 }
 
 function renderFootprints(summary: SessionSummary): string {

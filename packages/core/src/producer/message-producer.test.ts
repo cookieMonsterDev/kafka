@@ -56,6 +56,7 @@ function fakeEosManager() {
     getTransactionalId: vi.fn().mockReturnValue(undefined),
     updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
+    isInitialized: vi.fn().mockReturnValue(true),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
     requestEpochBump: vi.fn(),
     bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
@@ -433,6 +434,78 @@ describe('producer/messageProducer', () => {
       // The caller was told the send failed, so it must not keep retrying in the background.
       await vi.advanceTimersByTimeAsync(20_000);
       expect(broker.produce).toHaveBeenCalledTimes(1);
+    });
+
+    describe('without linger', () => {
+      it('rejects with KafkaDeliveryTimeoutError once the deadline elapses', async () => {
+        vi.useFakeTimers();
+        const broker = fakeBroker(1);
+        broker.produce.mockImplementation(() => new Promise(() => {}));
+        const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+        let settled = false;
+        sendPromise.then(
+          () => (settled = true),
+          () => (settled = true),
+        );
+
+        await vi.advanceTimersByTimeAsync(499);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+      });
+
+      it('arms a single deadline timer per send and clears it when the send settles', async () => {
+        vi.useFakeTimers();
+        const broker = fakeBroker(1);
+        let respond: (value: unknown) => void = () => {};
+        broker.produce.mockImplementation(() => new Promise((resolve) => (respond = resolve)));
+        const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(broker.produce).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(1);
+
+        respond(fakeProduceResponse(topic, 0));
+        await expect(sendPromise).resolves.toHaveLength(1);
+        expect(vi.getTimerCount()).toBe(0);
+      });
+
+      it('stops retrying and releases the partition gates once the deadline elapses', async () => {
+        vi.useFakeTimers();
+        const broker = fakeBroker(1);
+        broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
+        const eosManager = fakeEosManager();
+        const producer = createTestProducer(broker, {
+          eosManager,
+          lingerMs: 0,
+          retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
+          deliveryTimeoutMs: 500,
+        });
+
+        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+        // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
+        const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
+        await vi.advanceTimersByTimeAsync(500);
+        await assertion;
+        expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(broker.produce).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+      });
+
+      it('arms no deadline timer when deliveryTimeoutMs is not positive', async () => {
+        vi.useFakeTimers();
+        const broker = fakeBroker(1);
+        const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 0 });
+
+        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
+        expect(vi.getTimerCount()).toBe(0);
+        await expect(sendPromise).resolves.toHaveLength(1);
+      });
     });
 
     it('a non-positive deliveryTimeoutMs disables the deadline', async () => {

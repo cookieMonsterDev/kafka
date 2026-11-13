@@ -94,6 +94,36 @@ describe('consumer/offset-manager', () => {
     });
   });
 
+  describe('resolveOffset', () => {
+    it('exposes the next offset to commit through resolvedOffsets', () => {
+      const offsetManager = createOffsetManager();
+      offsetManager.resolveOffset({ topic: 'topic1', partition: 0, offset: 4n });
+      offsetManager.resolveOffset({ topic: 'topic1', partition: 0, offset: 5n });
+      offsetManager.resolveOffset({ topic: 'topic2', partition: 3, offset: 0n });
+
+      expect(offsetManager.resolvedOffsets['topic1']).toEqual({ 0: 6n });
+      expect(offsetManager.resolvedOffsets['topic2']).toEqual({ 3: 1n });
+      expect(offsetManager.nextOffset('topic1', 0)).toBe(6n);
+    });
+
+    it('applies resolve, reset and clear calls in the order they were made', () => {
+      const offsetManager = createOffsetManager();
+      offsetManager.committedOffsets()['topic1']![0] = 2n;
+
+      offsetManager.resolveOffset({ topic: 'topic1', partition: 0, offset: 9n });
+      offsetManager.resetOffset({ topic: 'topic1', partition: 0 });
+      expect(offsetManager.nextOffset('topic1', 0)).toBe(2n);
+
+      offsetManager.resolveOffset({ topic: 'topic1', partition: 1, offset: 7n });
+      offsetManager.clearOffsets({ topic: 'topic1', partition: 1 });
+      expect(offsetManager.resolvedOffsets['topic1']?.[1]).toBeUndefined();
+
+      offsetManager.resolveOffset({ topic: 'topic1', partition: 2, offset: 3n });
+      offsetManager.clearAllOffsets();
+      expect(offsetManager.resolvedOffsets['topic1']).toEqual({});
+    });
+  });
+
   describe('uncommittedOffsets', () => {
     it('returns all resolved offsets which have not been committed', () => {
       const topic1 = 'topic-1';

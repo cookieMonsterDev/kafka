@@ -92,7 +92,8 @@ need no setup on either runtime.
 
 On Bun, the client calls a Bun API instead of Bun's Node.js compatibility layer only where a
 benchmark showed a clear gain with the same behavior. The npm packages ship one build for both
-runtimes and choose the code path when they run, so there is nothing to configure.
+runtimes and choose the code path when they run, so there is nothing to configure. For how the
+client compares with other Kafka clients on Bun, see [Benchmarks](../benchmarks/).
 
 | Area               | On Bun                 | Why                                                                                                                                                                                                                                                 |
 | ------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -30,6 +30,7 @@
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run",
     "docs:check": "node scripts/check-docs.mjs",
+    "docs:benchmarks": "node scripts/generate-benchmark-docs.mjs",
     "benchmarks:doctor": "node benchmarks/runner/cli.ts doctor",
     "benchmarks:run": "node benchmarks/runner/cli.ts run",
     "benchmarks:report": "node benchmarks/runner/cli.ts report",

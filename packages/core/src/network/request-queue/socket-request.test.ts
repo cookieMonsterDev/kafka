@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
@@ -37,6 +37,10 @@ describe('network/request-queue/SocketRequest', () => {
       logger: silentLogger,
       ...overrides,
     });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   describe('send', () => {
     it('sends the request using the provided function', () => {
@@ -110,6 +114,65 @@ describe('network/request-queue/SocketRequest', () => {
       await new Promise((resolve) => setTimeout(resolve, 60));
 
       expect(timeoutHandler).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('request timeout', () => {
+    it('rejects with the request timing fields once requestTimeout elapses', async () => {
+      vi.useFakeTimers();
+      const timeoutHandler = vi.fn();
+      const request = createSocketRequest({ requestTimeout: 200, timeout: timeoutHandler });
+
+      request.send();
+      await vi.advanceTimersByTimeAsync(199);
+      expect(timeoutHandler).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(timeoutHandler).toHaveBeenCalledOnce();
+      const error = vi.mocked(request.entry.reject).mock.calls[0]?.[0] as KafkaRequestTimeoutError;
+      expect(error).toBeInstanceOf(KafkaRequestTimeoutError);
+      expect(error.message).toBe('Request Produce(key: 0, version: 4) timed out');
+      expect(error).toMatchObject({
+        broker: 'localhost:9092',
+        correlationId: request.correlationId,
+        createdAt: request.createdAt,
+        sentAt: request.sentAt,
+        pendingDuration: request.pendingDuration,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('arms no timer until the request is sent', () => {
+      vi.useFakeTimers();
+      createSocketRequest();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('clears its timer when the request completes', () => {
+      vi.useFakeTimers();
+      const request = createSocketRequest();
+
+      request.send();
+      expect(vi.getTimerCount()).toBe(1);
+      request.completed({ size, payload });
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('clears its timer when the request is rejected', () => {
+      vi.useFakeTimers();
+      const request = createSocketRequest();
+
+      request.send();
+      request.rejected(new Error('closed'));
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('arms no timer when enforceRequestTimeout is false', () => {
+      vi.useFakeTimers();
+      const request = createSocketRequest({ enforceRequestTimeout: false });
+
+      request.send();
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 
@@ -189,6 +252,17 @@ describe('network/request-queue/SocketRequest', () => {
         clientId: 'kafka',
         size,
       });
+    });
+
+    it('passes a lazy NETWORK_REQUEST payload so nothing is built without listeners', () => {
+      const emitter = new InstrumentationEventEmitter<NetworkEventMap>();
+      const emit = vi.spyOn(emitter, 'emit');
+
+      const request = createSocketRequest({ instrumentationEmitter: emitter });
+      request.send();
+      request.completed({ size, payload });
+
+      expect(emit).toHaveBeenCalledWith(NETWORK_REQUEST, expect.any(Function));
     });
 
     it('emits NETWORK_REQUEST_TIMEOUT on timeout', () => {

@@ -9,7 +9,8 @@ Constructor defaults batch Produce traffic (`lingerMs: 5`, `batchSize: 16384`,
 `maxInFlightRequests: 5`, murmur2, `partitionsConsumedConcurrently: 1`). For
 10k–100k msgs/s, spread `throughputPreset()` into the producer and into
 `consumer.run()`, use `eachBatch`, and pass `lingerMs: 0` only when you want
-one Produce per `send()`.
+one Produce per `send()`. For measured throughput next to other Kafka clients, see
+[Benchmarks](../../reference/benchmarks/).
 
 ```ts
 import { Kafka, throughputPreset, CompressionTypes } from '@cookiemonsterdev/kafka-core';

@@ -9,7 +9,13 @@ import type {
   ClientAdapter,
   ConsumeOptions,
 } from './types.ts';
-import { createOffsetCommitter, nextOffsetAfter, readInstalledVersion, sumValueBytes } from './shared.ts';
+import {
+  createOffsetCommitter,
+  nextOffsetAfter,
+  readInstalledVersion,
+  sumValueBytes,
+  unverifiedCrcGaps,
+} from './shared.ts';
 
 // CommonJS package with a native addon: the default import is `module.exports`, and importing it fails when
 // the addon is missing for this runtime, which the harness records as unsupported.
@@ -147,8 +153,8 @@ export const adapter: ClientAdapter = {
   id: 'confluent',
   packageName,
   version: () => readInstalledVersion(packageName),
-  // Every WireSettings field maps to a librdkafka property, so nothing is missing under either profile.
-  capabilityGaps: () => [],
+  // Every WireSettings field maps to a librdkafka property; `check.crcs` stays at its default (false).
+  capabilityGaps: (_options, scenario) => unverifiedCrcGaps(scenario),
   createProducer,
   createConsumer,
 };

@@ -3,6 +3,7 @@ import { isKafkaError, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { retrier, type RetryOptions } from '../retry/index';
+import { isPromiseLike } from '../utils/is-promise-like';
 import { runHooks } from '../utils/run-hooks';
 import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
@@ -34,6 +35,8 @@ export interface RunnerOptions {
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
   autoCommit?: boolean;
+  /** Whether `run()` set `autoCommitInterval` or `autoCommitThreshold`. See {@link Runner.hasAutoCommitCadence}. */
+  hasAutoCommitCadence?: boolean;
   /** Ordered async `onConsume` hook. See {@link ConsumerHooks}. */
   hooks?: ConsumerHooks;
   maxRecords?: number;
@@ -82,6 +85,11 @@ export class Runner extends EventEmitter {
   retrier: ReturnType<typeof retrier>;
   onCrash: (reason: Error) => void | Promise<void>;
   autoCommit: boolean;
+  /**
+   * `true` when `autoCommitInterval` or `autoCommitThreshold` is set. Without either, offsets
+   * are committed once per fetched batch, never between its `maxRecords` slices.
+   */
+  readonly hasAutoCommitCadence: boolean;
   hooks: ConsumerHooks | undefined;
   /**
    * Raw `maxRecords` as configured. `null` means "not set": `eachMessage` falls back to
@@ -111,6 +119,7 @@ export class Runner extends EventEmitter {
     onCrash,
     retry,
     autoCommit = true,
+    hasAutoCommitCadence = false,
     hooks,
     maxRecords,
   }: RunnerOptions) {
@@ -125,6 +134,7 @@ export class Runner extends EventEmitter {
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
+    this.hasAutoCommitCadence = hasAutoCommitCadence;
     this.hooks = hooks;
     this.maxRecords = maxRecords ?? null;
     this.fetchManager = createFetchManager<Batch>({
@@ -349,34 +359,35 @@ export class Runner extends EventEmitter {
     const eachMessage = this.eachMessage;
     if (!eachMessage) return;
 
+    const topicPartition = { topic, partition };
     const pause = (): (() => void) => {
       this.consumerGroup.pause([{ topic, partitions: [partition] }]);
       return () => this.consumerGroup.resume([{ topic, partitions: [partition] }]);
     };
+    const heartbeat = (): Promise<void> => this.heartbeat();
 
     // `maxRecords` slices delivery to `eachMessage` (default 500), mirroring Java's
     // `max.poll.records`: the broker already returned the full batch (the Fetch request is
-    // untouched), this only checkpoints offsets between slices so a crash partway through an
-    // oversized batch does not lose offsets that were already processed.
+    // untouched). With `autoCommitInterval` or `autoCommitThreshold` set, a commit can happen
+    // between slices; otherwise `handleBatch` commits once after the whole batch.
     const maxRecords = this.maxRecords ?? DEFAULT_MAX_RECORDS_EACH_MESSAGE;
     let recordsInCurrentSlice = 0;
+    let handledMessages = 0;
 
     for (const message of batch.messages) {
-      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
-        break;
+      // Checked before every message: the handler, or anything else, may seek this partition.
+      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset(topicPartition)) {
+        return;
       }
 
       try {
         if (this.hooks?.onConsume?.length) {
           await runHooks(this.hooks.onConsume, { topic, partition, message }, 'onConsume', this.logger);
         }
-        await eachMessage({
-          topic,
-          partition,
-          message,
-          heartbeat: () => this.heartbeat(),
-          pause,
-        });
+        const handled: unknown = eachMessage({ topic, partition, message, heartbeat, pause });
+        // Skip the microtask hop for a handler that returns no promise; a synchronous throw
+        // still lands in this catch.
+        if (isPromiseLike(handled)) await handled;
       } catch (e) {
         if (!isKafkaError(e)) {
           this.logger.error(`Error when calling eachMessage`, {
@@ -394,18 +405,33 @@ export class Runner extends EventEmitter {
 
       this.consumerGroup.resolveOffset({ topic, partition, offset: message.offset });
       recordsInCurrentSlice += 1;
+      handledMessages += 1;
 
-      const heartbeat = this.heartbeatIfDue();
-      if (heartbeat) await heartbeat;
+      const heartbeatDue = this.heartbeatIfDue();
+      if (heartbeatDue) await heartbeatDue;
 
+      // Checked after every message: the handler may pause through `pause()` or `consumer.pause()`.
       if (this.consumerGroup.isPaused(topic, partition)) {
-        break;
+        return;
       }
 
       if (recordsInCurrentSlice >= maxRecords) {
-        await this.autoCommitOffsetsIfNecessary();
+        await this.autoCommitOffsetsBetweenSlices();
         recordsInCurrentSlice = 0;
       }
+    }
+
+    // Like `eachBatch`, move past trailing control or filtered records once every message was
+    // handled, so the next fetch starts after the batch instead of refetching its tail.
+    const lastOffset = batch.lastOffset();
+    const lastMessage = batch.messages[batch.messages.length - 1];
+    if (
+      handledMessages === batch.messages.length &&
+      lastMessage &&
+      lastOffset > lastMessage.offset &&
+      !this.consumerGroup.hasSeekOffset(topicPartition)
+    ) {
+      this.consumerGroup.resolveOffset({ topic, partition, offset: lastOffset });
     }
   }
 
@@ -494,9 +520,9 @@ export class Runner extends EventEmitter {
       }
 
       if (!isLastSlice) {
-        // Checkpoint what has been resolved so far before moving to the next maxRecords slice
-        // of this already-fetched batch (no re-fetch, no dropped records).
-        await this.autoCommitOffsetsIfNecessary();
+        // Moving to the next maxRecords slice of this already-fetched batch (no re-fetch, no
+        // dropped records); `handleBatch` commits after the last one.
+        await this.autoCommitOffsetsBetweenSlices();
       }
     }
   }
@@ -589,6 +615,7 @@ export class Runner extends EventEmitter {
       duration: Date.now() - startBatchProcess,
     });
 
+    // With neither autoCommitInterval nor autoCommitThreshold set, this is the batch's only commit.
     await this.autoCommitOffsetsIfNecessary();
     await this.heartbeatIfDue();
   }
@@ -605,6 +632,16 @@ export class Runner extends EventEmitter {
       return this.consumerGroup.commitOffsetsIfNecessary();
     }
     return undefined;
+  }
+
+  /**
+   * Commit check between `maxRecords` slices of one fetched batch. Only a due
+   * `autoCommitInterval` or `autoCommitThreshold` commits here; with neither set, the commit
+   * waits for the end of the batch, so the default cadence is one OffsetCommit per batch.
+   */
+  autoCommitOffsetsBetweenSlices(): Promise<void> | undefined {
+    if (!this.hasAutoCommitCadence) return undefined;
+    return this.autoCommitOffsetsIfNecessary();
   }
 
   commitOffsets(offsets: Offsets): Promise<void> | undefined {

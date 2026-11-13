@@ -276,7 +276,10 @@ describe('writeReport', () => {
 
     const report = await readFile(await writeReport(directory), 'utf8');
 
-    assert.match(report, /### P3 `produce-throughput`/);
+    assert.match(
+      report,
+      /### P3 `produce-throughput`\n\nStructurally biased: .* Use P2 as the headline produce comparison\./,
+    );
     assert.match(report, /\| node24 \| normalized \| kafkajs\[\^1\] \| 50,000 \|/);
     assert.match(report, /\[\^1\]: lingerMs: no linger support/);
     assert.match(report, /Doctor warnings/);

@@ -647,3 +647,11 @@ html:has(.docs-menu-dialog[open]) {
   min-height: 0;
   flex: 1 1 auto;
 }
+
+/* Charts from ```chart blocks (src/lib/rehype-chart.ts). The container reserves the chart's height
+   (an inline min-height) before ApexCharts renders into it. */
+.prose .chart-container {
+  margin-block: 1.5rem 1rem;
+  min-width: 0;
+  max-width: 100%;
+}

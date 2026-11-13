@@ -56,10 +56,29 @@ export function absoluteMarkdownLinks(body: string, htmlUrl: string): string {
     .join('');
 }
 
+/**
+ * Replaces each ```chart block (ApexCharts options as JSON, see rehype-chart.ts) with one line, so the
+ * Markdown export stays readable; pages put the chart's data in a table after the block.
+ */
+export function summarizeChartBlocks(body: string): string {
+  return body.replace(/^```chart\n([\s\S]*?)\n```$/gm, (_block, json: string) => {
+    let title = 'chart';
+    try {
+      const options = JSON.parse(json) as { description?: unknown; title?: { text?: unknown } };
+      const text = typeof options.description === 'string' ? options.description : options.title?.text;
+      if (typeof text === 'string') title = text;
+    } catch {
+      // The site build rejects invalid chart JSON; keep the generic line here.
+    }
+    return `[Chart: ${title}]`;
+  });
+}
+
 export function markdownFor(entry: DocsEntry): string {
   const url = absoluteUrl(hrefFor(entry));
   const pkg = docsPackageOf(entry.id);
-  return `# ${entry.data.title}\n\n${entry.data.description}\n\nPackage: @cookiemonsterdev/kafka-${pkg} ${packageVersions[pkg] ?? ''}\nCanonical: ${url}\nSource revision: ${publication.revision}\n\n${absoluteMarkdownLinks(entry.body ?? '', url)}\n`;
+  const body = summarizeChartBlocks(entry.body ?? '');
+  return `# ${entry.data.title}\n\n${entry.data.description}\n\nPackage: @cookiemonsterdev/kafka-${pkg} ${packageVersions[pkg] ?? ''}\nCanonical: ${url}\nSource revision: ${publication.revision}\n\n${absoluteMarkdownLinks(body, url)}\n`;
 }
 
 const skillFiles = import.meta.glob('../../../*/skills/**/*.md', {

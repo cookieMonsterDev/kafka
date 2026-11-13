@@ -1,0 +1,122 @@
+---
+// Renders the `.chart-container` elements that src/lib/rehype-chart.ts makes from ```chart blocks.
+// docs-layout.astro includes this component only on pages that have one, so no other page loads it.
+---
+
+<script>
+  import type ApexCharts from 'apexcharts';
+
+  type ChartOptions = Record<string, unknown>;
+
+  // Resolved from the dark-only tokens in src/styles/global.css (oklch → sRGB). ApexCharts derives
+  // shades from series colors and cannot parse oklch(), so the values are copied; re-resolve them if
+  // the tokens change. Series colors follow the order --chart-1, --chart-3, --chart-2, --chart-4,
+  // --chart-5, so the first series (kafka-core on the benchmarks page) uses the site's primary green.
+  const palette = {
+    series: ['#35ce95', '#709afb', '#f2ab35', '#f46eb4', '#35c5db'],
+    text: '#f1f4f2', // --foreground
+    mutedText: '#909b95', // --muted-foreground
+    grid: '#262b28', // --border (white 9%) over --background
+  };
+
+  function isPlainObject(value: unknown): value is ChartOptions {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  /** Site defaults first, then the chart's own options; arrays and scalars from the chart win. */
+  function mergeOptions(defaults: ChartOptions, overrides: ChartOptions): ChartOptions {
+    const merged: ChartOptions = { ...defaults };
+    for (const [key, value] of Object.entries(overrides)) {
+      const base = merged[key];
+      merged[key] = isPlainObject(base) && isPlainObject(value) ? mergeOptions(base, value) : value;
+    }
+    return merged;
+  }
+
+  /** 709.5k, 2.84M, 3.42; labels that are not numbers (category names) pass through. */
+  function formatValue(value: unknown): string {
+    if (value === null || value === undefined) return 'not supported';
+    const number = Number(value);
+    if (Number.isNaN(number)) return String(value);
+    const magnitude = Math.abs(number);
+    if (magnitude >= 1_000_000) return `${(number / 1_000_000).toFixed(2)}M`;
+    if (magnitude >= 10_000) return `${(number / 1_000).toFixed(1)}k`;
+    if (magnitude >= 100) return number.toFixed(0);
+    if (magnitude >= 10) return number.toFixed(1);
+    return number.toFixed(2);
+  }
+
+  const axisNumber = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+
+  /** Axis ticks: 0, 200K, 1.5M, 10. */
+  function formatTick(value: unknown): string {
+    const number = Number(value);
+    return Number.isNaN(number) ? String(value) : axisNumber.format(number);
+  }
+
+  function siteOptions(): ChartOptions {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return {
+      chart: {
+        background: 'transparent',
+        fontFamily: 'inherit',
+        foreColor: palette.mutedText,
+        toolbar: { show: false },
+        zoom: { enabled: false },
+        animations: { enabled: !reducedMotion },
+        parentHeightOffset: 0,
+      },
+      theme: { mode: 'dark' },
+      colors: palette.series,
+      fill: { opacity: 1 },
+      grid: { borderColor: palette.grid },
+      title: { style: { color: palette.text, fontSize: '15px', fontWeight: 600 } },
+      subtitle: { style: { color: palette.mutedText, fontSize: '12px' } },
+      legend: { position: 'top', horizontalAlign: 'left', fontSize: '13px', labels: { colors: palette.text } },
+      dataLabels: {
+        enabled: true,
+        formatter: (value: unknown) => (value === null ? '' : formatValue(value)),
+        offsetX: 28,
+        style: { colors: [palette.text], fontSize: '12px', fontWeight: 500 },
+      },
+      plotOptions: { bar: { dataLabels: { position: 'top' } } },
+      stroke: { show: true, width: 2, colors: ['transparent'] },
+      tooltip: { theme: 'dark', y: { formatter: formatValue } },
+      xaxis: { labels: { formatter: formatTick, style: { colors: palette.mutedText } } },
+      yaxis: { labels: { style: { colors: [palette.text], fontSize: '13px' } } },
+      responsive: [
+        {
+          breakpoint: 480,
+          options: {
+            title: { style: { fontSize: '13px' } },
+            subtitle: { style: { fontSize: '11px' } },
+            dataLabels: { style: { fontSize: '11px' } },
+          },
+        },
+      ],
+    };
+  }
+
+  const containers = document.querySelectorAll<HTMLElement>('.chart-container[data-chart]');
+  let apexCharts: Promise<typeof ApexCharts> | undefined;
+
+  async function renderChart(container: HTMLElement): Promise<void> {
+    apexCharts ??= import('apexcharts').then((module) => module.default);
+    const ApexChartsClass = await apexCharts;
+    const options = mergeOptions(siteOptions(), JSON.parse(container.dataset.chart ?? '{}') as ChartOptions);
+    await new ApexChartsClass(container, options as ApexCharts.ApexOptions).render();
+  }
+
+  // Render on first sight: a chart drawn while hidden or off-layout measures zero width.
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        void renderChart(entry.target as HTMLElement);
+      }
+    },
+    { rootMargin: '200px 0px' },
+  );
+  containers.forEach((container) => observer.observe(container));
+</script>

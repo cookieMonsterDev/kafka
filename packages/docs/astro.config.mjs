@@ -3,6 +3,7 @@ import { defineConfig } from 'astro/config';
 
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
+import { chartLanguage, markdownCharts } from './src/lib/rehype-chart.ts';
 
 const githubPages = process.env.GITHUB_PAGES === '1';
 
@@ -28,9 +29,11 @@ export default defineConfig({
     shikiConfig: {
       theme: 'github-dark',
     },
+    // Chart blocks hold JSON for markdownCharts(), not code to highlight.
+    syntaxHighlight: { type: 'shiki', excludeLangs: [chartLanguage] },
   },
 
-  integrations: [react()],
+  integrations: [react(), markdownCharts()],
 
   vite: {
     plugins: [tailwindcss()],

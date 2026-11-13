@@ -54,7 +54,7 @@ See [Security](../../guides/security/).
 | `compression`            | none                          | [compression.type](https://kafka.apache.org/43/configuration/producer-configs/#compression.type)                                                                                                                                              |
 | `compressionLevel`       | codec default                 | Honored by GZIP (zlib `level`, `0`-`9`) and ZSTD (`zlib.constants.ZSTD_c_compressionLevel`, roughly `1`-`22`). No-op for Snappy and LZ4 — see [Throughput](../../guides/throughput/#compression-level)                                        |
 | `lingerMs`               | `5`                           | Pass `0` for one Produce per `send()`. [linger.ms](https://kafka.apache.org/43/configuration/producer-configs/#linger.ms)                                                                                                                     |
-| `batchSize`              | `16384`                       | Pass `0` to not batch by size. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                                                                                           |
+| `batchSize`              | `16384`                       | Total buffered bytes across all partitions, not per partition as in Java. Pass `0` to not batch by size. [batch.size](https://kafka.apache.org/43/configuration/producer-configs/#batch.size)                                                 |
 | `createPartitioner`      | murmur2                       | `Partitioners.StickyPartitioner` adds opt-in KIP-794 sticky routing (enabled by `throughputPreset()`)                                                                                                                                         |
 | `metadataMaxAge`         | `300000`                      |                                                                                                                                                                                                                                               |
 | `allowAutoTopicCreation` | `true`                        | [auto.create.topics.enable](https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable)                                                                                                                              |
@@ -113,6 +113,10 @@ See [Throughput](../../guides/throughput/) and [Compatibility](../compatibility/
 | `checkCrcs`            | `true`                     | Verify each fetched batch's CRC. `false` skips the check for throughput — see [Throughput](../../guides/throughput/#checkcrcs). [check.crcs](https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs) |
 | `retry`                | `{ retries: 5 }`           |                                                                                                                                                                                                                      |
 | `hooks`                | unset                      | Ordered async `onConsume`/`onCommit` hooks (not an interceptor SPI). See [Consumer hooks](../../guides/consumer/#hooks)                                                                                              |
+
+While a partition has a fetched batch waiting behind the one being processed, fetches from its
+broker for the other partitions skip the long poll: they return whatever is available at once,
+ignoring `minBytes` and `maxWaitTimeInMs`.
 
 `committed`, `position`, and `currentLag` on `Consumer` read committed
 offsets, fetch position, and lag without any extra config. See

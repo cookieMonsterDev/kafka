@@ -67,18 +67,18 @@ consumer - calling one after the other throws, and so does `run`/`stream` if nei
 
 ## `run` / `stream`
 
-| Option                           | Default | Notes                                                                             |
-| -------------------------------- | ------- | --------------------------------------------------------------------------------- |
-| `eachMessage`                    |         | Per-record handler                                                                |
-| `eachBatch`                      |         | Per-batch handler                                                                 |
-| `autoCommit`                     | `true`  | Commit after processing                                                           |
-| `autoCommitInterval`             |         | ms. When both interval and threshold are unset, commit after each processed batch |
-| `autoCommitThreshold`            |         | messages                                                                          |
-| `partitionsConsumedConcurrently` | `1`     | Parallel partitions                                                               |
-| `signal`                         |         | Abort to stop                                                                     |
-| `onPartitionsRevoked`            |         | Partitions given up this rebalance, before fetching the new assignment            |
-| `onPartitionsAssigned`           |         | Partitions newly gained this rebalance                                            |
-| `onPartitionsLost`               |         | Fires instead of `onPartitionsRevoked` when the assignment was lost, not revoked  |
+| Option                           | Default | Notes                                                                                |
+| -------------------------------- | ------- | ------------------------------------------------------------------------------------ |
+| `eachMessage`                    |         | Per-record handler                                                                   |
+| `eachBatch`                      |         | Per-batch handler                                                                    |
+| `autoCommit`                     | `true`  | Commit after processing                                                              |
+| `autoCommitInterval`             |         | ms. When both interval and threshold are unset, commit once after each fetched batch |
+| `autoCommitThreshold`            |         | messages. Checked after each `maxRecords` slice and each fetched batch               |
+| `partitionsConsumedConcurrently` | `1`     | Parallel partitions                                                                  |
+| `signal`                         |         | Abort to stop                                                                        |
+| `onPartitionsRevoked`            |         | Partitions given up this rebalance, before fetching the new assignment               |
+| `onPartitionsAssigned`           |         | Partitions newly gained this rebalance                                               |
+| `onPartitionsLost`               |         | Fires instead of `onPartitionsRevoked` when the assignment was lost, not revoked     |
 
 `stream()` cannot run alongside `run()`. See
 [Rebalance callbacks](../../guides/consumer/#rebalance-callbacks) for the

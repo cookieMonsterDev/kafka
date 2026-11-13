@@ -3,16 +3,26 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   build: {
     target: 'node24',
-    sourcemap: true,
+    // Maps embedding the TS source were half the install size; unminified output stays debuggable without them.
+    sourcemap: false,
     minify: false,
-    lib: { entry: { index: 'src/index.ts' }, formats: ['es'] },
+    lib: {
+      // One bundled module instead of one file per source module: Node's ESM loader pays per file,
+      // and importing ~800 files took ~130 ms. The codec worker and its pool stay separate files at
+      // fixed paths: `new Worker()` loads the worker by path, and the smoke and binary scripts load
+      // both directly.
+      entry: {
+        index: 'src/index.ts',
+        'protocol/compression/off-thread': 'src/protocol/compression/off-thread.ts',
+        'protocol/compression/codec-worker': 'src/protocol/compression/codec-worker.ts',
+      },
+      formats: ['es'],
+    },
     rollupOptions: {
       external: [/^node:/, 'kerberos', 'lz4-lite', 'snappyjs', '@cookiemonsterdev/kafka-config'],
       output: {
-        // 1:1 with src, so the emitted .js tree matches the tsc-emitted .d.ts tree
-        preserveModules: true,
-        preserveModulesRoot: 'src',
         entryFileNames: '[name].js',
+        chunkFileNames: '[name].js',
       },
     },
   },

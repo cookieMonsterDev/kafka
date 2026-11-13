@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, type Stats } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
@@ -95,9 +95,14 @@ async function serveFile(filePath: string, res: ServerResponse, req: IncomingMes
     return;
   }
 
+  // Read whole instead of streamed, before the headers so a read error is not sent as a broken 200.
+  // Assets are small, and a `bun build --compile` binary serves them from its embedded filesystem,
+  // where `createReadStream` fails with ENOENT (Bun 1.4) but `readFile` works. Streaming can return
+  // once `scripts/smoke-binaries.mjs` passes with `createReadStream` on every Bun version CI builds with.
+  const body = await readFile(variant?.path ?? filePath);
   res.writeHead(200, {
     'content-type': contentTypeFor(filePath),
-    'content-length': stats.size,
+    'content-length': body.length,
     etag,
     // Present whenever a precompressed variant *could* have been chosen, not only when it was —
     // a shared cache must know this response varies on the request header even on the identity path.
@@ -107,7 +112,7 @@ async function serveFile(filePath: string, res: ServerResponse, req: IncomingMes
     // index.html itself must always be revalidated so a new deploy is picked up immediately.
     'cache-control': path.basename(filePath) === 'index.html' ? 'no-cache' : 'public, max-age=31536000, immutable',
   });
-  createReadStream(variant?.path ?? filePath).pipe(res);
+  res.end(body);
 }
 
 /**

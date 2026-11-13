@@ -46,6 +46,10 @@ kafka studio
 
 It prints a `localhost` URL with a per-session token in the hash and opens a browser.
 
+Where neither runtime is installed, each studio GitHub release also attaches a standalone
+`kafka-studio-<os>-<arch>` executable that bundles Bun and the web UI. Use it instead of
+`kafka studio` from the standalone `kafka` binary, which cannot load the studio.
+
 From the monorepo, build Studio and its workspace dependencies with
 `pnpm --filter @cookiemonsterdev/kafka-studio... build`, then run `node packages/studio/dist/bin.js`.
 

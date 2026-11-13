@@ -31,6 +31,17 @@ const requestInfo = ({
   apiVersion: number;
 }): string => `${apiName}(key: ${apiKey}, version: ${apiVersion})`;
 
+const FRAME_SIZE_BYTES = Decoder.int32Size();
+/** Every response header starts with an INT32 correlation id. */
+const MIN_RESPONSE_SIZE_BYTES = Decoder.int32Size();
+
+/**
+ * Largest frame buffer allocated up front from a length prefix alone. Bigger frames start at this
+ * size and double as their bytes arrive, so a corrupt or hostile prefix (up to 2 GiB) can't force a
+ * huge allocation that no received data backs. Sized above the consumer's 10 MiB default `maxBytes`.
+ */
+const MAX_PREALLOCATED_FRAME_BYTES = 16 * 1024 * 1024;
+
 const NON_AUTHENTICATED_API_KEYS: readonly number[] = [
   API_KEYS.ApiVersions,
   API_KEYS.SaslHandshake,
@@ -202,10 +213,21 @@ export class Connection {
   #authenticatedAt: [number, number] | null = null;
   #sessionLifetime = 0n;
 
-  #bytesNeeded = Decoder.int32Size();
-  #receiveBuffer = Buffer.allocUnsafe(0);
-  #receiveReadOffset = 0;
-  #receiveWriteOffset = 0;
+  /**
+   * Receive state. Complete frames are parsed straight from the socket chunk, which the socket hands
+   * over and never writes again, so decoded responses may keep views into it. Only a frame split
+   * across chunks is copied, once, into its own buffer, which is likewise never written after it is
+   * handed on.
+   */
+  #pendingFrame: Buffer | null = null;
+  #pendingFrameLength = 0;
+  #pendingFrameSize = 0;
+  /**
+   * Bytes processed ahead of the next chunk: a size prefix split across chunks, or whatever follows
+   * a SASL response frame until the exchange moves on.
+   */
+  #deferredReceiveBytes: Buffer | null = null;
+  #isReceiveStreamCorrupt = false;
 
   #authenticate = sharedPromiseTo(async (): Promise<void> => {
     if (this.sasl && !this.isAuthenticated()) {
@@ -359,7 +381,6 @@ export class Connection {
       };
 
       const onData = (data: Buffer): void => {
-        this.#touchActivity();
         this.#processData(data);
       };
 
@@ -709,19 +730,33 @@ export class Connection {
     this.#failIfNotConnected();
   }
 
+  /**
+   * Restarts the idle countdown on every write and received chunk. `refresh()` reschedules the
+   * existing timer in place instead of allocating a new one. Without a timer (idle close disabled,
+   * or cleared by `disconnect`) there is nothing to restart.
+   */
   #touchActivity(): void {
-    if (this.isConnected()) {
-      this.#armIdleTimer();
+    if (this.#idleTimer !== undefined && this.isConnected()) {
+      this.#idleTimer.refresh();
     }
   }
 
   #armIdleTimer(): void {
-    this.#clearIdleTimer();
-    if (this.#connectionsMaxIdleMs <= 0 || !this.isConnected()) return;
-    this.#idleTimer = setTimeout(() => {
-      void this.#closeIfIdle();
-    }, this.#connectionsMaxIdleMs);
+    if (this.#connectionsMaxIdleMs <= 0 || !this.isConnected()) {
+      this.#clearIdleTimer();
+      return;
+    }
+    // `refresh()` also re-arms a timer that has already fired.
+    if (this.#idleTimer !== undefined) {
+      this.#idleTimer.refresh();
+      return;
+    }
+    this.#idleTimer = setTimeout(this.#onIdleTimeout, this.#connectionsMaxIdleMs);
   }
+
+  #onIdleTimeout = (): void => {
+    void this.#closeIfIdle();
+  };
 
   #clearIdleTimer(): void {
     if (this.#idleTimer) {
@@ -749,96 +784,133 @@ export class Connection {
   }
 
   #resetReceiveBuffer(): void {
-    this.#receiveBuffer = Buffer.allocUnsafe(0);
-    this.#receiveReadOffset = 0;
-    this.#receiveWriteOffset = 0;
-    this.#bytesNeeded = Decoder.int32Size();
+    this.#pendingFrame = null;
+    this.#pendingFrameLength = 0;
+    this.#pendingFrameSize = 0;
+    this.#deferredReceiveBytes = null;
+    this.#isReceiveStreamCorrupt = false;
+  }
+
+  #processData(chunk: Buffer): void {
+    this.#touchActivity();
+    if (this.#authHandlers && !this.#authExpectResponse) {
+      this.#authHandlers.onSuccess(chunk);
+      return;
+    }
+    if (this.#isReceiveStreamCorrupt) return;
+
+    let data = chunk;
+    if (this.#deferredReceiveBytes) {
+      data = Buffer.concat([this.#deferredReceiveBytes, chunk]);
+      this.#deferredReceiveBytes = null;
+    }
+
+    let offset = 0;
+    while (offset < data.length) {
+      let frame: Buffer;
+
+      if (this.#pendingFrame !== null) {
+        offset = this.#appendToPendingFrame(data, offset);
+        if (this.#pendingFrameLength < this.#pendingFrameSize) return;
+        frame = this.#takePendingFrame();
+      } else if (data.length - offset < FRAME_SIZE_BYTES) {
+        // A size prefix split across chunks is rare, so it is simply joined with the next chunk.
+        this.#deferredReceiveBytes = data.subarray(offset);
+        return;
+      } else {
+        const frameSize = this.#frameSizeFromPrefix(data.readInt32BE(offset));
+        if (frameSize === null) return;
+        if (data.length - offset < frameSize) {
+          this.#startPendingFrame(frameSize);
+          continue;
+        }
+        frame = data.subarray(offset, offset + frameSize);
+        offset += frameSize;
+      }
+
+      if (this.#authHandlers) {
+        // The SASL exchange sets its next handler asynchronously, so later bytes wait for the next chunk.
+        if (offset < data.length) this.#deferredReceiveBytes = data.subarray(offset);
+        this.#authHandlers.onSuccess(frame);
+        return;
+      }
+
+      if (!this.#fulfillResponse(frame)) return;
+    }
+  }
+
+  /** Returns the whole frame size (prefix included), or `null` after failing the connection on a corrupt prefix. */
+  #frameSizeFromPrefix(responseSize: number): number | null {
+    if (responseSize < 0) {
+      this.#failCorruptReceiveStream(responseSize);
+      return null;
+    }
+    return FRAME_SIZE_BYTES + responseSize;
+  }
+
+  #startPendingFrame(frameSize: number): void {
+    this.#pendingFrame = Buffer.allocUnsafe(Math.min(frameSize, MAX_PREALLOCATED_FRAME_BYTES));
+    this.#pendingFrameLength = 0;
+    this.#pendingFrameSize = frameSize;
+  }
+
+  #appendToPendingFrame(data: Buffer, offset: number): number {
+    const end = Math.min(data.length, offset + this.#pendingFrameSize - this.#pendingFrameLength);
+    let frame = this.#pendingFrame!;
+    const required = this.#pendingFrameLength + (end - offset);
+    if (required > frame.length) {
+      const capacity = Math.min(this.#pendingFrameSize, Math.max(frame.length * 2, required));
+      const grown = Buffer.allocUnsafe(capacity);
+      frame.copy(grown, 0, 0, this.#pendingFrameLength);
+      frame = grown;
+      this.#pendingFrame = grown;
+    }
+    this.#pendingFrameLength += data.copy(frame, this.#pendingFrameLength, offset, end);
+    return end;
+  }
+
+  #takePendingFrame(): Buffer {
+    const frame = this.#pendingFrame!;
+    this.#pendingFrame = null;
+    this.#pendingFrameLength = 0;
+    this.#pendingFrameSize = 0;
+    return frame;
+  }
+
+  /** Decodes the response header and hands the payload to its request. Returns `false` once the stream is corrupt. */
+  #fulfillResponse(frame: Buffer): boolean {
+    const responseSize = frame.length - FRAME_SIZE_BYTES;
+    if (responseSize < MIN_RESPONSE_SIZE_BYTES) {
+      this.#failCorruptReceiveStream(responseSize);
+      return false;
+    }
+
+    const response = new Decoder(frame.subarray(FRAME_SIZE_BYTES));
+    const correlationId = response.readInt32();
+    const inflight = this.requestQueue.inflight.get(correlationId);
+    if (inflight && usesFlexibleResponseHeader(inflight.entry.apiKey, inflight.entry.apiVersion)) {
+      response.readTaggedFields();
+    }
+    const payload = response.readAll();
+
+    this.requestQueue.fulfillRequest({ size: responseSize, correlationId, payload });
+    return true;
   }
 
   /**
-   * Make room for `additional` bytes. Compacts unparsed bytes to offset 0 (onto a fresh Buffer so
-   * in-flight payload views keep the previous backing store). Growth doubles while a frame
-   * accumulates; compaction happens here rather than after parsing, so the fresh Buffer is sized
-   * once for the leftover bytes, the incoming chunk, and the pending frame, and one large
-   * response doesn't pin (and re-copy) its capacity for every later frame.
+   * The byte stream can't be resynchronised after a bad length prefix, so fail the connection like
+   * a socket error: reject everything waiting on it and disconnect. Further chunks are ignored.
    */
-  #ensureReceiveCapacity(additional: number): void {
-    const remaining = this.#receiveWriteOffset - this.#receiveReadOffset;
-    const needed = remaining + additional;
-    if (this.#receiveReadOffset === 0 && needed <= this.#receiveBuffer.length) {
-      return;
-    }
+  #failCorruptReceiveStream(responseSize: number): void {
+    this.#isReceiveStreamCorrupt = true;
+    this.#pendingFrame = null;
+    this.#deferredReceiveBytes = null;
 
-    const capacity =
-      this.#receiveReadOffset === 0
-        ? Math.max(this.#receiveBuffer.length * 2, needed)
-        : Math.max(needed, this.#bytesNeeded);
-    const next = Buffer.allocUnsafe(capacity);
-    if (remaining > 0) {
-      this.#receiveBuffer.copy(next, 0, this.#receiveReadOffset, this.#receiveWriteOffset);
-    }
-    this.#receiveBuffer = next;
-    this.#receiveReadOffset = 0;
-    this.#receiveWriteOffset = remaining;
-  }
-
-  /** Drops a fully consumed buffer; a partial frame is compacted by the next `#ensureReceiveCapacity`. */
-  #releaseConsumedReceiveBuffer(): void {
-    if (this.#receiveReadOffset === 0 || this.#receiveReadOffset !== this.#receiveWriteOffset) {
-      return;
-    }
-    this.#receiveBuffer = Buffer.allocUnsafe(0);
-    this.#receiveReadOffset = 0;
-    this.#receiveWriteOffset = 0;
-  }
-
-  #processData(rawData: Buffer): void {
-    this.#touchActivity();
-    if (this.#authHandlers && !this.#authExpectResponse) {
-      this.#authHandlers.onSuccess(rawData);
-      return;
-    }
-
-    this.#ensureReceiveCapacity(rawData.length);
-    rawData.copy(this.#receiveBuffer, this.#receiveWriteOffset);
-    this.#receiveWriteOffset += rawData.length;
-
-    while (this.#receiveWriteOffset - this.#receiveReadOffset >= this.#bytesNeeded) {
-      const expectedResponseSize = this.#receiveBuffer.readInt32BE(this.#receiveReadOffset);
-      const frameSize = Decoder.int32Size() + expectedResponseSize;
-
-      if (this.#receiveWriteOffset - this.#receiveReadOffset < frameSize) {
-        this.#bytesNeeded = frameSize;
-        return;
-      }
-
-      const responseStart = this.#receiveReadOffset + Decoder.int32Size();
-      const responseEnd = this.#receiveReadOffset + frameSize;
-
-      if (this.#authHandlers) {
-        const rawResponseBuffer = this.#receiveBuffer.subarray(this.#receiveReadOffset, responseEnd);
-        this.#receiveReadOffset = responseEnd;
-        this.#bytesNeeded = Decoder.int32Size();
-        this.#releaseConsumedReceiveBuffer();
-        this.#authHandlers.onSuccess(rawResponseBuffer);
-        return;
-      }
-
-      const response = new Decoder(this.#receiveBuffer.subarray(responseStart, responseEnd));
-      this.#receiveReadOffset = responseEnd;
-      this.#bytesNeeded = Decoder.int32Size();
-
-      const correlationId = response.readInt32();
-      const inflight = this.requestQueue.inflight.get(correlationId);
-      if (inflight && usesFlexibleResponseHeader(inflight.entry.apiKey, inflight.entry.apiVersion)) {
-        response.readTaggedFields();
-      }
-      const payload = response.readAll();
-
-      this.requestQueue.fulfillRequest({ size: expectedResponseSize, correlationId, payload });
-    }
-
-    this.#releaseConsumedReceiveBuffer();
+    const error = new KafkaConnectionError(`Invalid response size ${responseSize}`, { broker: this.broker });
+    this.#logError(error.message);
+    this.#authHandlers?.onError();
+    this.#rejectRequests(error);
+    void this.disconnect();
   }
 
   #rejectRequests(error: unknown): void {

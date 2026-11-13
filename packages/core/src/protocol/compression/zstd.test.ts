@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { promisify } from 'node:util';
+import { zstdDecompress } from 'node:zlib';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError } from '../../errors';
+import { isBun } from '../../runtime/runtime';
 import { Encoder } from '../encoder';
 import { decompressZstd, zstdCodec } from './zstd';
 
@@ -41,5 +44,53 @@ describe('protocol/compression/zstd', () => {
     expect(fast.length).toBeGreaterThan(best.length);
     expect(await zstdCodec.decompress(fast)).toEqual(encoder.buffer);
     expect(await zstdCodec.decompress(best)).toEqual(encoder.buffer);
+  });
+
+  describe('compression path per runtime', () => {
+    const nodeDecompress = promisify(zstdDecompress);
+    const multiBlock = Buffer.from(
+      Array.from({ length: 20_000 }, (_, i) => `record-${i}-${(i * 2654435761) % 100_003};`).join(''),
+    );
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+    });
+
+    it.each([undefined, 1, 19])(
+      'round-trips empty, tiny and multi-block input through node:zlib (level %s)',
+      async (level) => {
+        for (const input of [Buffer.alloc(0), Buffer.from('k'), multiBlock]) {
+          const compressed = await zstdCodec.compress(new Encoder().writeBuffer(input), level);
+          const expected = new Encoder().writeBuffer(input).buffer;
+
+          expect(Buffer.isBuffer(compressed)).toBe(true);
+          expect((await nodeDecompress(compressed)).equals(expected)).toBe(true);
+        }
+      },
+    );
+
+    it.each([-5, 0, 23, 1.5])(
+      'keeps level %s working although Bun.zstdCompress only takes integers 1 to 22',
+      async (level) => {
+        const encoder = new Encoder().writeString('levels outside 1..22');
+        const compressed = await zstdCodec.compress(encoder, level);
+        expect(await zstdCodec.decompress(compressed)).toEqual(encoder.buffer);
+      },
+    );
+
+    it.runIf(isBun())('uses Bun.zstdCompress on Bun unless KAFKA_BUN_NATIVE=0', async () => {
+      const bun = (globalThis as unknown as { Bun: { zstdCompress: (input: Uint8Array) => Promise<Buffer> } }).Bun;
+      const spy = vi.spyOn(bun, 'zstdCompress');
+      const encoder = new Encoder().writeString('bun native');
+
+      vi.stubEnv('KAFKA_BUN_NATIVE', '1');
+      await zstdCodec.compress(encoder, 3);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      vi.stubEnv('KAFKA_BUN_NATIVE', '0');
+      await zstdCodec.compress(encoder, 3);
+      expect(spy).toHaveBeenCalledTimes(1);
+    });
   });
 });

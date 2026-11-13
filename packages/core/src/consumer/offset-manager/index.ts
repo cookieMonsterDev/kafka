@@ -23,6 +23,7 @@ import type {
 import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
 import type { OffsetManagerHandle } from './offset-manager-handle';
+import { ResolvedOffsets } from './resolved-offsets';
 
 export type { OffsetManagerHandle } from './offset-manager-handle';
 
@@ -68,10 +69,10 @@ export class OffsetManager implements OffsetManagerHandle {
   autoCommitThreshold: number | null;
   lastCommit: number;
   topics: string[];
-  resolvedOffsets: Record<string, Record<string, bigint>>;
   logger: Logger;
   hooks: ConsumerHooks | undefined;
   #committedOffsets: Record<string, Record<string, bigint>> | undefined;
+  readonly #resolvedOffsets = new ResolvedOffsets();
 
   constructor({
     cluster,
@@ -105,6 +106,15 @@ export class OffsetManager implements OffsetManagerHandle {
     this.logger = logger.namespace('OffsetManager');
     this.hooks = hooks;
     this.clearAllOffsets();
+  }
+
+  /** Next offset to commit per topic and partition: the last resolved offset plus one. */
+  get resolvedOffsets(): Record<string, Record<string, bigint>> {
+    return this.#resolvedOffsets.snapshot();
+  }
+
+  set resolvedOffsets(resolvedOffsets: Record<string, Record<string, bigint>>) {
+    this.#resolvedOffsets.replace(resolvedOffsets);
   }
 
   nextOffset(topic: string, partition: number): bigint {
@@ -141,8 +151,7 @@ export class OffsetManager implements OffsetManagerHandle {
   }
 
   resolveOffset({ topic, partition, offset }: TopicPartitionOffset): void {
-    const resolvedTopic = (this.resolvedOffsets[topic] ??= {});
-    resolvedTopic[partition] = offset + 1n;
+    this.#resolvedOffsets.resolve(topic, partition, offset);
   }
 
   countResolvedOffsets(): bigint {

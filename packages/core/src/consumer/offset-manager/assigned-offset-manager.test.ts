@@ -254,6 +254,20 @@ describe('consumer/offset-manager/assigned-offset-manager', () => {
     });
   });
 
+  describe('resolveOffset', () => {
+    it('drops a resolved position when seek overrides it', async () => {
+      const manager = createManager({ assignment: { events: [0] } });
+      manager.resolveOffset({ topic: 'events', partition: 0, offset: 20n });
+      expect(manager.resolvedOffsets['events']).toEqual({ 0: 21n });
+
+      manager.resolveOffset({ topic: 'events', partition: 0, offset: 30n });
+      await manager.seek({ topic: 'events', partition: 0, offset: 5n });
+
+      expect(manager.resolvedOffsets['events']).toEqual({});
+      expect(manager.nextOffset('events', 0)).toBe(5n);
+    });
+  });
+
   describe('setDefaultOffset', () => {
     it('throws when the reset policy is none', async () => {
       const manager = createManager({ topicConfigurations: { events: { autoOffsetReset: 'none' } } });

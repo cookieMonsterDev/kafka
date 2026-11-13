@@ -5,12 +5,13 @@ order: 10
 section: reference
 ---
 
-`@cookiemonsterdev/kafka-core` never reads `process.env` on its own. There is one pre-existing
-exception, and it is a wart, not a precedent: the logger module reads `KAFKA_LOG_LEVEL` directly and
-uses it to override an explicitly passed `logLevel` (see the
-[config file precedence table](../config-file/#precedence)). Nothing else in this client touches
-the environment implicitly. Everything below is opt-in — you call it yourself, typically from a
-`kafka.config.ts` file.
+`@cookiemonsterdev/kafka-core` never reads its configuration from `process.env` on its own. There
+is one pre-existing exception, and it is a wart, not a precedent: the logger module reads
+`KAFKA_LOG_LEVEL` directly and uses it to override an explicitly passed `logLevel` (see the
+[config file precedence table](../config-file/#precedence)). On Bun, the client also reads
+`KAFKA_BUN_NATIVE`, a runtime escape hatch rather than configuration: it can turn off the
+[Bun-native code paths](../bun/#bun-native-code-paths). Everything below is opt-in — you call it
+yourself, typically from a `kafka.config.ts` file.
 
 ## `fromEnv`
 

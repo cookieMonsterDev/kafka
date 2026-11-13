@@ -281,8 +281,10 @@ export interface ProducerConfig {
    */
   lingerMs?: number;
   /**
-   * Soft cap on buffered record bytes before a Produce is sent (with lingerMs).
-   * Ignored when lingerMs is 0. Default 16384; pass `0` to not batch by size.
+   * Flush threshold, in record key and value bytes, for the linger buffer. Unlike Java's
+   * per-partition `batch.size`, it counts the producer's total across all topics and partitions,
+   * so the buffer flushes as soon as that total reaches `batchSize`, without waiting out
+   * `lingerMs`. Ignored when lingerMs is 0. Default 16384; pass `0` to not flush by size.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
@@ -424,7 +426,9 @@ export interface ConsumerConfig {
    * Verify each fetched record batch's CRC (RecordBatch v2 CRC-32C, or the legacy MessageSet
    * CRC-32) and throw {@link KafkaCorruptRecordError} on mismatch. Default `true`. Set `false`
    * to skip the check for extreme throughput - corrupted bytes on the wire (a bad disk, a buggy
-   * proxy, transport bit-flips) then go undetected instead of failing loudly.
+   * proxy, transport bit-flips) then go undetected instead of failing loudly. The check runs in
+   * JavaScript (Node.js and Bun ship no native CRC-32C), so it costs one extra pass over every
+   * fetched byte.
    * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
    */
   checkCrcs?: boolean;

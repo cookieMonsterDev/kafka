@@ -5,6 +5,7 @@ import DocsSidebar from '@/components/docs-sidebar.astro';
 import PackageSwitcher from '@/components/package-switcher.astro';
 import TableOfContents from '@/components/table-of-contents.astro';
 import PrevNext from '@/components/prev-next.astro';
+import MarkdownCharts from '@/components/markdown-charts.astro';
 import { docsPackageFromPathname } from '@/lib/docs';
 
 interface Props {
@@ -19,6 +20,9 @@ interface Props {
 const { title, description, headings, prev, next, markdownUrl } = Astro.props;
 const currentPackage = docsPackageFromPathname(Astro.url.pathname);
 const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+// Rendered up front so the chart script (and ApexCharts) ships only with pages that have a chart.
+const content = await Astro.slots.render('default');
+const hasCharts = content.includes('class="chart-container"');
 ---
 
 <BaseLayout title={title} description={description} markdownUrl={markdownUrl} docs>
@@ -132,7 +136,8 @@ const tocHeadings = headings.filter((heading) => heading.depth === 2 || heading.
               </div>
             </details>
           )}
-          <slot />
+          <Fragment set:html={content} />
+          {hasCharts && <MarkdownCharts />}
           <PrevNext prev={prev} next={next} />
         </main>
 

@@ -179,7 +179,10 @@ Local microbenches under `bench/` measure encode/decode/framing without Docker. 
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-core bench
+pnpm --filter @cookiemonsterdev/kafka-core bench:bun   # the same benches on Bun
 ```
+
+Run on Bun, `compression-zlib` and `transport-bun-connect` also measure Bun's own APIs against the `node:` path; each file's header records the result that decided which path Bun uses.
 
 Live produce/consume comparisons (`send()` linger 0 vs 5, `eachMessage` vs `eachBatch`) run only when `KAFKA_EXTERNAL=1` or `KAFKA_BROKERS=host:port` is set. Optional: `BENCH_FRAMING_1_BYTE=1` for a 4 MiB response in 1-byte TCP chunks.
 

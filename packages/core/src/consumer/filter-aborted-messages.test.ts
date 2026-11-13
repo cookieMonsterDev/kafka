@@ -85,6 +85,15 @@ describe('consumer/filter-aborted-messages', () => {
     expect(filterAbortedMessages({ messages: abortedMessages, abortedTransactions: [] })).toBe(abortedMessages);
   });
 
+  it('returns the same array instance when excluding control records and there are none', () => {
+    expect(filterAbortedMessages({ messages: nontransactionalMessages, excludeControlRecords: true })).toBe(
+      nontransactionalMessages,
+    );
+    expect(
+      filterAbortedMessages({ messages: abortedMessages, excludeControlRecords: true }).map(({ offset }) => offset),
+    ).toEqual([4n, 5n]);
+  });
+
   it('treats a four-null-byte string key as an abort marker', () => {
     const abortedTransactions = [{ producerId: 103000n, firstOffset: 4n }];
     const messages = [

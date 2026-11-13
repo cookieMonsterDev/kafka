@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { crc32c, crc32cJs, usesNativeCrc32c } from './crc32c';
 
+/** Bit-at-a-time CRC32C straight from the polynomial: slow, but shares nothing with the tables. */
+function crc32cBitwise(buffer: Buffer): number {
+  let crc = -1;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) {
+      crc = (crc & 1) === 1 ? (crc >>> 1) ^ 0x82f63b78 : crc >>> 1;
+    }
+  }
+  return (crc ^ -1) >>> 0;
+}
+
 describe('protocol/crc32c', () => {
   it('returns 0 for an empty buffer', () => {
     expect(crc32c(Buffer.alloc(0))).toBe(0);
@@ -9,6 +21,25 @@ describe('protocol/crc32c', () => {
   it('matches the standard CRC-32C/Castagnoli check value for "123456789"', () => {
     // https://reveng.sourceforge.io/crc-catalogue/17plus.htm#crc.cat.crc-32c — check=0xe3069283
     expect(crc32c(Buffer.from('123456789'))).toBe(0xe3069283);
+  });
+
+  it('matches the RFC 3720 appendix B.4 test vectors', () => {
+    const ascending = Buffer.from(Array.from({ length: 32 }, (_, i) => i));
+    const descending = Buffer.from(Array.from({ length: 32 }, (_, i) => 31 - i));
+    expect(crc32cJs(Buffer.alloc(32, 0x00))).toBe(0x8a9136aa);
+    expect(crc32cJs(Buffer.alloc(32, 0xff))).toBe(0x62a8ab43);
+    expect(crc32cJs(ascending)).toBe(0x46dd794e);
+    expect(crc32cJs(descending)).toBe(0x113fdb5c);
+  });
+
+  it('JS implementation matches a bit-at-a-time reference for every length and offset near a block', () => {
+    const source = Buffer.from(Array.from({ length: 200 }, (_, i) => (i * 151 + 7) & 0xff));
+    for (let offset = 0; offset < 4; offset++) {
+      for (let length = 0; length <= 70; length++) {
+        const sample = source.subarray(offset, offset + length);
+        expect(crc32cJs(sample)).toBe(crc32cBitwise(sample));
+      }
+    }
   });
 
   it('matches a known-answer CRC32C vector', () => {

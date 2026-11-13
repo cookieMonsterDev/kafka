@@ -658,6 +658,7 @@ export function createConsumer({
         heartbeatInterval,
         retry,
         autoCommit: runnerAutoCommit,
+        hasAutoCommitCadence: autoCommitInterval != null || autoCommitThreshold != null,
         eachBatchAutoResolve,
         eachBatch,
         eachMessage,

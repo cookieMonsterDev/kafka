@@ -3,7 +3,7 @@ import { KafkaCorruptRecordError } from '../../errors';
 import { COMPRESSION_TYPES } from '../compression/index';
 import { Decoder } from '../decoder';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
-import { decodeRecordBatch, encodeRecordBatch } from './batch';
+import { decodeRecordBatch, encodeRecordBatch, RECORD_BATCH_OVERHEAD_BYTES } from './batch';
 import { encodeRecord } from './record';
 
 // One gzip-compressed record batch.
@@ -56,6 +56,21 @@ describe('protocol/records/batch', () => {
     expect(decoded.records.map((r) => r.key?.toString())).toEqual(['k0', 'k1', 'k2']);
     expect(decoded.records.map((r) => r.value?.toString())).toEqual(['v0', 'v1', 'v2']);
     expect(decoded.records.map((r) => r.offset)).toEqual([100n, 101n, 102n]);
+    expect(decoded.records.map((r) => r.byteSize)).toEqual(records.map((r) => r.size() - 1));
+  });
+
+  it('RECORD_BATCH_OVERHEAD_BYTES is the size of an encoded batch with no records', async () => {
+    const encoded = await encodeRecordBatch({ records: [] });
+    expect(encoded.size()).toBe(RECORD_BATCH_OVERHEAD_BYTES);
+  });
+
+  it('rejects a record whose length prefix runs past the end of the batch', async () => {
+    const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
+    const corrupted = Buffer.from(encoded.buffer);
+    const recordLengthIndex = RECORD_BATCH_OVERHEAD_BYTES; // the first record's length varint follows the header
+    corrupted[recordLengthIndex] = 0x7e; // zigzag 63, longer than the record bytes that follow
+
+    await expect(decodeRecordBatch(new Decoder(corrupted), { checkCrcs: false })).rejects.toThrow(RangeError);
   });
 
   it('round-trips a gzip-compressed batch', async () => {
@@ -145,8 +160,8 @@ describe('protocol/records/batch', () => {
     it('defaults to true and rejects a batch whose CRC does not match its bytes', async () => {
       const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
       const corrupted = Buffer.from(encoded.buffer);
-      // Flip a byte inside the record payload (after the fixed header) without touching the CRC field.
-      const flipIndex = corrupted.length - 1;
+      // Flip the value byte `v` (the last byte is the header count), leaving the CRC field untouched.
+      const flipIndex = corrupted.length - 2;
       corrupted[flipIndex] = (corrupted[flipIndex] as number) ^ 0xff;
 
       await expect(decodeRecordBatch(new Decoder(corrupted))).rejects.toBeInstanceOf(KafkaCorruptRecordError);
@@ -156,11 +171,12 @@ describe('protocol/records/batch', () => {
     it('checkCrcs: false skips the check and decodes the corrupted batch anyway', async () => {
       const encoded = await encodeRecordBatch({ records: [encodeRecord({ key: 'k', value: 'v' })] });
       const corrupted = Buffer.from(encoded.buffer);
-      const flipIndex = corrupted.length - 1;
+      const flipIndex = corrupted.length - 2;
       corrupted[flipIndex] = (corrupted[flipIndex] as number) ^ 0xff;
 
       const decoded = await decodeRecordBatch(new Decoder(corrupted), { checkCrcs: false });
       expect(decoded.records).toHaveLength(1);
+      expect(decoded.records[0]?.value).toEqual(Buffer.from([0x76 ^ 0xff]));
     });
 
     it('checkCrcs: true (explicit) still accepts a valid batch', async () => {

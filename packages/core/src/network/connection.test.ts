@@ -370,6 +370,197 @@ describe('network/Connection', () => {
     });
   });
 
+  describe('idle timer', () => {
+    it('restarts the idle countdown in place on traffic instead of creating a new timer', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { connectionsMaxIdleMs: 60_000 });
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      try {
+        for (let i = 0; i < 5; i += 1) socket.emit('data', Buffer.alloc(1));
+        expect(setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 60_000)).toEqual([]);
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
+      expect(connection.isConnected()).toBe(true);
+    });
+
+    it('keeps a connection with steady traffic open past the idle interval, then closes it once idle', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { connectionsMaxIdleMs: 80 });
+
+      for (let i = 0; i < 4; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        socket.emit('data', Buffer.alloc(1));
+      }
+      expect(connection.isConnected()).toBe(true);
+
+      await vi.waitFor(() => expect(connection.isConnected()).toBe(false), { timeout: 1_000 });
+    });
+  });
+
+  describe('receive framing', () => {
+    const rawResponse = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+    const responseFrame = (correlationId: number, body: Buffer): Buffer => {
+      const responseHeader = new Encoder().writeInt32(correlationId);
+      return Buffer.concat([
+        new Encoder().writeInt32(responseHeader.size() + body.length).writeEncoder(responseHeader).buffer,
+        body,
+      ]);
+    };
+    /** Copies `parts` into one unpooled buffer, so a payload sharing its `ArrayBuffer` proves no copy was made. */
+    const unpooledChunk = (...parts: Buffer[]): Buffer => {
+      const chunk = Buffer.alloc(parts.reduce((total, part) => total + part.length, 0));
+      let offset = 0;
+      for (const part of parts) offset += part.copy(chunk, offset);
+      return chunk;
+    };
+    const sendInFlight = async (connection: Connection, count: number): Promise<Promise<Buffer | undefined>[]> => {
+      const requests = Array.from({ length: count }, () =>
+        connection.send({ request: metadataRequest(), response: rawResponse }),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      return requests;
+    };
+
+    it('parses several complete frames from one chunk without copying them', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { maxInFlightRequests: 5 });
+      const requests = await sendInFlight(connection, 2);
+      const chunk = unpooledChunk(responseFrame(0, Buffer.alloc(40, 1)), responseFrame(1, Buffer.alloc(30, 2)));
+
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        socket.emit('data', chunk);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size > 0)).toEqual([]);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+
+      const [first, second] = await Promise.all(requests);
+      expect(first).toEqual(Buffer.alloc(40, 1));
+      expect(second).toEqual(Buffer.alloc(30, 2));
+      expect(first?.buffer).toBe(chunk.buffer);
+      expect(second?.buffer).toBe(chunk.buffer);
+    });
+
+    it('copies a frame split across chunks once, into a buffer of exactly its size', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const [request] = await sendInFlight(connection, 1);
+      const body = Buffer.alloc(10_000, 7);
+      const frame = responseFrame(0, body);
+
+      const chunks = [frame.subarray(0, 3_000), frame.subarray(3_000, 7_000), frame.subarray(7_000)].map((part) =>
+        unpooledChunk(part),
+      );
+
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        for (const chunk of chunks) socket.emit('data', chunk);
+        expect(allocUnsafe.mock.calls.filter(([size]) => size > 0)).toEqual([[frame.length]]);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+
+      await expect(request).resolves.toEqual(body);
+    });
+
+    it('reassembles a size prefix split across chunks, after a complete frame in the same chunk', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { maxInFlightRequests: 5 });
+      const [first, second] = await sendInFlight(connection, 2);
+      const firstFrame = responseFrame(0, Buffer.from('first'));
+      const secondFrame = responseFrame(1, Buffer.from('second'));
+
+      socket.emit('data', unpooledChunk(firstFrame, secondFrame.subarray(0, 2)));
+      await expect(first).resolves.toEqual(Buffer.from('first'));
+      socket.emit('data', unpooledChunk(secondFrame.subarray(2, 3)));
+      socket.emit('data', unpooledChunk(secondFrame.subarray(3)));
+
+      await expect(second).resolves.toEqual(Buffer.from('second'));
+    });
+
+    it('does not let a received payload change when later chunks arrive', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { maxInFlightRequests: 5 });
+      const [first, second, third] = await sendInFlight(connection, 3);
+      const frames = [
+        responseFrame(0, Buffer.alloc(100, 0xa1)),
+        responseFrame(1, Buffer.alloc(100, 0xb2)),
+        responseFrame(2, Buffer.alloc(100, 0xc3)),
+      ];
+      const stream = Buffer.concat(frames);
+
+      socket.emit('data', unpooledChunk(stream.subarray(0, 150)));
+      const firstPayload = await first;
+      socket.emit('data', unpooledChunk(stream.subarray(150, 250)));
+      const secondPayload = await second;
+      socket.emit('data', unpooledChunk(stream.subarray(250)));
+      const thirdPayload = await third;
+
+      expect(firstPayload).toEqual(Buffer.alloc(100, 0xa1));
+      expect(secondPayload).toEqual(Buffer.alloc(100, 0xb2));
+      expect(thirdPayload).toEqual(Buffer.alloc(100, 0xc3));
+    });
+
+    it('caps the up-front allocation for a huge length prefix until its bytes arrive', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { requestTimeout: 50 });
+      const [request] = await sendInFlight(connection, 1);
+      const settled = request!.then(
+        () => 'resolved',
+        () => 'rejected',
+      );
+      const prefix = Buffer.alloc(8);
+      prefix.writeInt32BE(0x7fffffff, 0);
+
+      const allocUnsafe = vi.spyOn(Buffer, 'allocUnsafe');
+      try {
+        socket.emit('data', prefix);
+        const largest = Math.max(0, ...allocUnsafe.mock.calls.map(([size]) => size));
+        expect(largest).toBeLessThanOrEqual(16 * 1024 * 1024);
+      } finally {
+        allocUnsafe.mockRestore();
+      }
+
+      expect(connection.isConnected()).toBe(true);
+      await expect(settled).resolves.toBe('rejected');
+    });
+
+    it('fails the connection on a negative length prefix and ignores the rest of the stream', async () => {
+      const { connection, socket, destroy } = await connectWithFakeSocket(createConnection);
+      const [request] = await sendInFlight(connection, 1);
+      const corrupt = Buffer.alloc(12, 0xff);
+
+      expect(() => socket.emit('data', corrupt)).not.toThrow();
+      await expect(request).rejects.toThrow(KafkaConnectionError);
+      await expect(request).rejects.toThrow('Invalid response size -1');
+      expect(() => socket.emit('data', responseFrame(0, Buffer.alloc(4)))).not.toThrow();
+      await vi.waitFor(() => expect(connection.isConnected()).toBe(false));
+      expect(destroy).toHaveBeenCalled();
+    });
+
+    it.each([
+      { name: 'a negative', prefix: Buffer.from([0xff, 0xff, 0xff, 0xff]), message: 'Invalid response size -1' },
+      { name: 'a 0-size', prefix: Buffer.alloc(4), message: 'Invalid response size 0' },
+    ])('fails the connection on $name length prefix split across chunks', async ({ prefix, message }) => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const [request] = await sendInFlight(connection, 1);
+
+      expect(() => socket.emit('data', unpooledChunk(prefix.subarray(0, 2)))).not.toThrow();
+      expect(() => socket.emit('data', unpooledChunk(prefix.subarray(2, 3)))).not.toThrow();
+      expect(() => socket.emit('data', unpooledChunk(prefix.subarray(3)))).not.toThrow();
+
+      await expect(request).rejects.toThrow(KafkaConnectionError);
+      await expect(request).rejects.toThrow(message);
+      await vi.waitFor(() => expect(connection.isConnected()).toBe(false));
+    });
+
+    it('fails the connection on a frame too short to hold a correlation id', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const [request] = await sendInFlight(connection, 1);
+      const frame = Buffer.alloc(6);
+      frame.writeInt32BE(2, 0);
+
+      expect(() => socket.emit('data', frame)).not.toThrow();
+      await expect(request).rejects.toThrow('Invalid response size 2');
+      await vi.waitFor(() => expect(connection.isConnected()).toBe(false));
+    });
+  });
+
   describe('maxInFlightRequests', () => {
     it('defaults to null so the request queue is unbounded', () => {
       const connection = createConnection(0);

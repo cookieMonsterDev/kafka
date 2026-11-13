@@ -1,0 +1,6 @@
+{
+  // Declaration emit for the published package. `tsconfig.json` keeps the test files so typecheck
+  // and ESLint's projectService still cover them; publishing their `.d.ts` stubs is dead weight.
+  "extends": "./tsconfig.json",
+  "exclude": ["src/**/*.test.ts", "src/retry/test-defaults.ts"]
+}

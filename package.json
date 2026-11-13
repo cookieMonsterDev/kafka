@@ -29,7 +29,12 @@
     "seo:indexnow": "node scripts/submit-search-index.mjs",
     "release": "node scripts/run-semantic-release.mjs",
     "release:dry-run": "node scripts/run-semantic-release.mjs --dry-run",
-    "docs:check": "node scripts/check-docs.mjs"
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:benchmarks": "node scripts/generate-benchmark-docs.mjs",
+    "benchmarks:doctor": "node benchmarks/runner/cli.ts doctor",
+    "benchmarks:run": "node benchmarks/runner/cli.ts run",
+    "benchmarks:report": "node benchmarks/runner/cli.ts report",
+    "benchmarks:publish": "node benchmarks/runner/cli.ts publish"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.4",
@@ -44,13 +49,13 @@
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@tanstack/intent": "^0.5.6",
     "@vitest/eslint-plugin": "^1.6.28",
-    "eslint": "^10.13.0",
+    "eslint": "^10.14.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
     "prettier": "^3.9.10",
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
-    "semver": "^7.8.5",
+    "semver": "^7.8.6",
     "typescript-eslint": "^8.72.1",
     "@cookiemonsterdev/kafka-studio": "workspace:*"
   }

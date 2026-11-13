@@ -1,4 +1,4 @@
-import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
+import type { InstrumentationEventEmitter, InstrumentationPayload } from '../instrumentation/emitter';
 import { namespace } from '../instrumentation/event-type';
 import type { Logger } from '../loggers/index';
 
@@ -49,13 +49,14 @@ export interface NetworkEventMap {
 /**
  * Emits a network event, logging a throwing listener instead of propagating it: these events fire
  * from inside the socket `data` handler and request queue, where a user listener's error would
- * otherwise escape as an uncaught exception and leave the connection mid-frame.
+ * otherwise escape as an uncaught exception and leave the connection mid-frame. Hot paths pass a
+ * `() => payload` builder, which runs only when the event has listeners.
  */
 export function emitNetworkEvent<EventName extends keyof NetworkEventMap>(
   emitter: InstrumentationEventEmitter<NetworkEventMap> | null | undefined,
   logger: Logger,
   eventName: EventName,
-  payload: NetworkEventMap[EventName],
+  payload: InstrumentationPayload<NetworkEventMap[EventName]>,
 ): void {
   try {
     emitter?.emit(eventName, payload);

@@ -133,31 +133,131 @@ describe('protocol/records/record', () => {
     expect(decoded.value).toEqual(Buffer.from('v'));
   });
 
-  describe('lazy value/headers', () => {
-    it('accessing headers first decodes it correctly, without reading value first', () => {
-      const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
-      const decoded = decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext());
+  describe('timestamp and offset', () => {
+    it('computes a timestamp whose delta needs more than 7 varlong bytes', () => {
+      const timestampDelta = 2n ** 53n + 1n;
+      const encoded = encodeRecord({ offsetDelta: 7, timestampDelta }).buffer;
+      const decoded = decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext({ firstOffset: 10n }));
 
-      expect(decoded.headers).toEqual({ h: Buffer.from('hv') });
-      expect(decoded.value).toEqual(Buffer.from('v'));
+      expect(decoded.timestamp).toBe(1509827900073n + timestampDelta);
+      expect(decoded.offset).toBe(17n);
     });
 
-    it('memoizes value/headers instead of re-parsing on every access', () => {
-      const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
+    it('computes a negative timestamp delta exactly', () => {
+      const encoded = encodeRecord({ timestampDelta: -1000n }).buffer;
       const decoded = decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext());
 
-      const value1 = decoded.value;
-      const value2 = decoded.value;
-      expect(value1).toBe(value2);
+      expect(decoded.timestamp).toBe(1509827900073n - 1000n);
+    });
+  });
 
-      const headers1 = decoded.headers;
-      const headers2 = decoded.headers;
-      expect(headers1).toBe(headers2);
+  describe('object shape', () => {
+    const ALL_FIELDS = [
+      'magicByte',
+      'attributes',
+      'timestamp',
+      'offset',
+      'key',
+      'value',
+      'headers',
+      'isControlRecord',
+      'batchContext',
+      'byteSize',
+    ];
+
+    function decodeSample() {
+      const encoded = encodeRecord({ offsetDelta: 3, key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
+      return decodeRecord(new Decoder(unwrapRecordBody(encoded)), baseBatchContext());
+    }
+
+    it('exposes every field as an own enumerable data property', () => {
+      const decoded = decodeSample();
+
+      expect(Object.keys(decoded)).toEqual(ALL_FIELDS);
+      for (const field of ALL_FIELDS) {
+        expect(Object.getOwnPropertyDescriptor(decoded, field)).toHaveProperty('writable', true);
+      }
     });
 
-    it('does not decode value/headers until accessed', () => {
-      // Truncate the encoded body right after `key` — offset/attributes/key survive `decodeRecord`
-      // untouched, but nothing is left for value/headers to parse from.
+    it('keeps every field in object spread and structuredClone', () => {
+      const decoded = decodeSample();
+      const spread = { ...decoded, value: decoded.value?.toString() };
+      const cloned = structuredClone(decoded);
+
+      expect(spread).toMatchObject({ offset: 3n, timestamp: 1509827900073n, value: 'v' });
+      expect(spread.headers).toEqual({ h: Buffer.from('hv') });
+      expect(Object.keys(cloned)).toEqual(ALL_FIELDS);
+      expect(cloned.offset).toBe(3n);
+      expect(Buffer.from(cloned.value ?? [])).toEqual(Buffer.from('v'));
+    });
+
+    it('gives every record its own headers object, even with no headers', () => {
+      const body = unwrapRecordBody(encodeRecord({}).buffer);
+      const first = decodeRecord(new Decoder(body), baseBatchContext());
+      const second = decodeRecord(new Decoder(body), baseBatchContext());
+
+      expect(first.headers).toEqual({});
+      expect(first.headers).not.toBe(second.headers);
+      first.headers.added = 'x';
+      expect(second.headers).toEqual({});
+    });
+  });
+
+  describe('in-place decoding', () => {
+    it('decodes consecutive records from one shared decoder and stops at each record end', () => {
+      const first = unwrapRecordBody(encodeRecord({ offsetDelta: 0, key: 'k0', value: 'v0' }).buffer);
+      const second = unwrapRecordBody(encodeRecord({ offsetDelta: 1, key: 'k1', value: 'v1' }).buffer);
+      const decoder = new Decoder(Buffer.concat([first, second]));
+
+      const firstRecord = decodeRecord(decoder, baseBatchContext(), first.length);
+      expect(decoder.offset).toBe(first.length);
+      const secondRecord = decodeRecord(decoder, baseBatchContext(), first.length + second.length);
+
+      expect(firstRecord.byteSize).toBe(first.length);
+      expect(secondRecord.byteSize).toBe(second.length);
+      expect(firstRecord.value).toEqual(Buffer.from('v0'));
+      expect(secondRecord.key).toEqual(Buffer.from('k1'));
+      expect(secondRecord.value).toEqual(Buffer.from('v1'));
+    });
+
+    it('throws instead of reading the next record when the key overruns the record length', () => {
+      const body = unwrapRecordBody(encodeRecord({ key: 'key', value: 'value' }).buffer);
+      const keyEnd = 1 + 1 + 1 + 1 + 'key'.length; // attributes, deltas, key length, key bytes
+
+      expect(() => decodeRecord(new Decoder(body), baseBatchContext(), keyEnd - 1)).toThrow(RangeError);
+    });
+
+    it('throws when the value overruns the record length, without reading the next record', () => {
+      const body = unwrapRecordBody(encodeRecord({ key: 'key', value: 'value' }).buffer);
+
+      expect(() => decodeRecord(new Decoder(body), baseBatchContext(), body.length - 2)).toThrow(RangeError);
+    });
+
+    it('rejects a negative key length instead of re-reading bytes of the previous record', () => {
+      const first = unwrapRecordBody(encodeRecord({ key: 'k0', value: 'v0' }).buffer);
+      const second = Buffer.from(unwrapRecordBody(encodeRecord({ key: 'k1', value: 'v1' }).buffer));
+      const keyLengthIndex = 1 + 1 + 1; // after attributes and both deltas
+      second[keyLengthIndex] = 0x09; // zigzag -5
+      const decoder = new Decoder(Buffer.concat([first, second]));
+
+      decodeRecord(decoder, baseBatchContext(), first.length);
+
+      expect(() => decodeRecord(decoder, baseBatchContext(), first.length + second.length)).toThrow(RangeError);
+    });
+
+    it('stops at the record end when a corrupt header count runs into the next record', () => {
+      const first = unwrapRecordBody(encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer);
+      const second = unwrapRecordBody(encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer);
+      const corrupted = Buffer.concat([first, second]);
+      const headerCountIndex = 1 + 1 + 1 + 2 + 2; // after attributes, both deltas, key and value
+      corrupted[headerCountIndex] = 0x7e; // zigzag 63 headers
+
+      expect(() => decodeRecord(new Decoder(corrupted), baseBatchContext(), first.length)).toThrow(RangeError);
+    });
+  });
+
+  describe('truncated records', () => {
+    it('throws when the body ends right after the key', () => {
       const encoded = encodeRecord({ key: 'k', value: 'v', headers: { h: 'hv' } }).buffer;
       const body = unwrapRecordBody(encoded);
 
@@ -168,15 +268,7 @@ describe('protocol/records/record', () => {
       probe.readVarIntBytes(); // key
       const truncatedBody = body.subarray(0, probe.offset);
 
-      const decoded = decodeRecord(new Decoder(truncatedBody), baseBatchContext());
-
-      // Decoding the record itself, and reading its cheap fields, must not throw.
-      expect(decoded.key).toEqual(Buffer.from('k'));
-      expect(decoded.offset).toBe(0n);
-
-      // Only once `value` (or `headers`) is actually read does the missing data surface.
-      expect(() => decoded.value).toThrow();
-      expect(() => decoded.headers).toThrow();
+      expect(() => decodeRecord(new Decoder(truncatedBody), baseBatchContext())).toThrow(RangeError);
     });
   });
 });

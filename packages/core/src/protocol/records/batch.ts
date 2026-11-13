@@ -64,8 +64,11 @@ export interface EncodeRecordBatchOptions {
   estimatedBytes?: number;
 }
 
-/** firstOffset … records-count, matching Java `DefaultRecordBatch.RECORD_BATCH_OVERHEAD`. */
-const RECORD_BATCH_OVERHEAD = 61;
+/**
+ * Size of the full v2 RecordBatch header, baseOffset through the records count (including
+ * baseOffset and batchLength), matching Java `DefaultRecordBatch.RECORD_BATCH_OVERHEAD`.
+ */
+export const RECORD_BATCH_OVERHEAD_BYTES = 61;
 
 function sizeOfEncodedRecords(records: readonly Encoder[]): number {
   let size = 0;
@@ -127,8 +130,8 @@ export async function encodeRecordBatch({
   const estimatedSize =
     estimatedBytes ??
     (compressedRecords !== undefined
-      ? RECORD_BATCH_OVERHEAD + compressedRecords.length
-      : RECORD_BATCH_OVERHEAD + sizeOfEncodedRecords(records));
+      ? RECORD_BATCH_OVERHEAD_BYTES + compressedRecords.length
+      : RECORD_BATCH_OVERHEAD_BYTES + sizeOfEncodedRecords(records));
 
   const encoder = new Encoder(estimatedSize);
   encoder.writeInt64(firstOffset);
@@ -200,9 +203,16 @@ async function decodeRecords(
   return records;
 }
 
+/** Decodes a length-prefixed record in place, without a per-record buffer view or decoder. */
 function decodeOneRecord(decoder: Decoder, batchContext: RecordBatchContext): DecodedRecord {
-  const recordBuffer = decoder.readVarIntBytes() ?? Buffer.alloc(0);
-  return decodeRecord(new Decoder(recordBuffer), batchContext);
+  const recordLength = decoder.readVarInt();
+  const recordEnd = decoder.offset + recordLength;
+  if (recordLength < 0 || recordEnd > decoder.buffer.length) {
+    throw new RangeError(
+      `Record length ${recordLength} does not fit the ${decoder.buffer.length - decoder.offset} remaining bytes`,
+    );
+  }
+  return decodeRecord(decoder, batchContext, recordEnd);
 }
 
 export interface DecodeRecordBatchOptions {

@@ -1,7 +1,7 @@
 import { KafkaOffsetOutOfRange, KafkaPartialMessageError } from '../../../errors';
 import { createErrorFromCode, ERROR_CODES, failure } from '../../error-codes';
 import { decodeMessageSet } from '../../message-set/decoder';
-import { decodeRecordBatch, type DecodedRecordBatch } from '../../records/batch';
+import { decodeRecordBatch, RECORD_BATCH_OVERHEAD_BYTES, type DecodedRecordBatch } from '../../records/batch';
 import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
 import { ISOLATION_LEVEL } from '../../enums/isolation-level';
@@ -256,18 +256,20 @@ async function decodeRecordSetBuffer(
   }
 
   const records: DecodedRecordBatch['records'] = [];
-  // The fixed-size portion of a v2 RecordBatch header (everything up to, but not including, the
-  // records themselves) is 57 bytes - firstOffset(8) + length(4) + partitionLeaderEpoch(4) +
-  // magic(1) + crc(4) + attributes(2) + lastOffsetDelta(4) + firstTimestamp(8) + maxTimestamp(8) +
-  // producerId(8) + producerEpoch(2) + firstSequence(4). Stop once fewer than that remain, rather
-  // than attempting one more decode: reading the header fields themselves would throw a raw
-  // out-of-bounds `RangeError` (from `Buffer#readInt32BE`/`readBigInt64BE`) before
-  // `decodeRecordBatch`'s own `KafkaPartialMessageError` truncation check ever runs.
-  const RECORD_BATCH_HEADER_SIZE = 57;
-  while (messagesDecoder.canReadBytes(RECORD_BATCH_HEADER_SIZE)) {
+  // The fixed v2 RecordBatch fields, baseOffset through firstSequence: the full header without its
+  // trailing 4-byte records count. Stop once fewer than that remain, rather than attempting one
+  // more decode: reading the header fields themselves would throw a raw out-of-bounds `RangeError`
+  // (from `Buffer#readInt32BE`/`readBigInt64BE`) before `decodeRecordBatch`'s own
+  // `KafkaPartialMessageError` truncation check ever runs.
+  const RECORD_BATCH_FIXED_FIELDS_BYTES = RECORD_BATCH_OVERHEAD_BYTES - Decoder.int32Size();
+  while (messagesDecoder.canReadBytes(RECORD_BATCH_FIXED_FIELDS_BYTES)) {
     try {
       const batch = await decodeRecordBatch(messagesDecoder, { checkCrcs });
-      records.push(...batch.records);
+      // A loop, not `push(...batch.records)`: spreading a large batch overflows the call stack
+      // (from about 200,000 records on Node.js 26) and throws a RangeError.
+      for (const record of batch.records) {
+        records.push(record);
+      }
     } catch (e) {
       // The tail of the record batches can have incomplete records due to how max_bytes works.
       // @see https://kafka.apache.org/protocol#The_Messages_Fetch

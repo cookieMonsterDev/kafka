@@ -9,7 +9,7 @@ import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
 import { REBALANCING } from './instrumentation-events';
 import { Runner } from './runner';
-import type { EachBatchHandler, KafkaMessage, OnConsumeEvent } from './types';
+import type { EachBatchHandler, EachMessageHandler, EachMessagePayload, KafkaMessage, OnConsumeEvent } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -756,12 +756,189 @@ describe('consumer/runner', () => {
     runner = undefined;
   });
 
+  describe('eachMessage loop', () => {
+    const threeMessages = (): Batch =>
+      new Batch(topicName, 0n, {
+        partition,
+        highWatermark: 5n,
+        messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)],
+      });
+
+    async function startRunner(consumerGroup: ConsumerGroupHandle, eachMessage: EachMessageHandler): Promise<Runner> {
+      const started = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      started.scheduleFetchManager = vi.fn();
+      await started.start();
+      return started;
+    }
+
+    function resolvedOffsets(consumerGroup: ConsumerGroupHandle): bigint[] {
+      return vi.mocked(consumerGroup.resolveOffset).mock.calls.map(([{ offset }]) => offset);
+    }
+
+    it('stops after the message whose handler pauses the partition', async () => {
+      let paused = false;
+      const consumerGroup = fakeConsumerGroup({
+        pause: vi.fn(() => {
+          paused = true;
+        }),
+        isPaused: vi.fn(() => paused),
+      });
+      const seen: bigint[] = [];
+      runner = await startRunner(consumerGroup, async ({ message, pause }) => {
+        seen.push(message.offset);
+        if (message.offset === 2n) pause();
+      });
+
+      await runner.handleBatch(threeMessages());
+
+      expect(seen).toEqual([1n, 2n]);
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
+      expect(consumerGroup.pause).toHaveBeenCalledWith([{ topic: topicName, partitions: [partition] }]);
+    });
+
+    it('stops before the next message once the handler seeks the partition', async () => {
+      let hasSeek = false;
+      const consumerGroup = fakeConsumerGroup({ hasSeekOffset: vi.fn(() => hasSeek) });
+      const seen: bigint[] = [];
+      runner = await startRunner(consumerGroup, async ({ message }) => {
+        seen.push(message.offset);
+        hasSeek = true;
+      });
+
+      await runner.handleBatch(threeMessages());
+
+      expect(seen).toEqual([1n]);
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n]);
+      expect(consumerGroup.hasSeekOffset).toHaveBeenCalledWith({ topic: topicName, partition });
+    });
+
+    it('hands every message the same heartbeat callback, which heartbeats the group', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const heartbeats: EachMessagePayload['heartbeat'][] = [];
+      runner = await startRunner(consumerGroup, async ({ heartbeat }) => {
+        heartbeats.push(heartbeat);
+      });
+
+      await runner.handleBatch(threeMessages());
+      expect(new Set(heartbeats).size).toBe(1);
+      expect(consumerGroup.heartbeat).not.toHaveBeenCalled();
+
+      await heartbeats[0]!();
+      expect(consumerGroup.heartbeat).toHaveBeenCalledWith({ interval: 3000 });
+    });
+
+    it('resolves an async handler message only after its promise settles', async () => {
+      const order: string[] = [];
+      const consumerGroup = fakeConsumerGroup({
+        resolveOffset: vi.fn(({ offset }: { offset: bigint }) => order.push(`resolve ${offset}`)),
+      });
+      runner = await startRunner(consumerGroup, async ({ message }) => {
+        order.push(`start ${message.offset}`);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        order.push(`end ${message.offset}`);
+      });
+
+      await runner.handleBatch(threeMessages());
+
+      expect(order).toEqual([
+        'start 1',
+        'end 1',
+        'resolve 1',
+        'start 2',
+        'end 2',
+        'resolve 2',
+        'start 3',
+        'end 3',
+        'resolve 3',
+      ]);
+    });
+
+    it('accepts a handler that returns no promise, and handles its synchronous throw', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const failure = new Error('sync handler failure');
+      const seen: bigint[] = [];
+      const syncHandler = ({ message }: EachMessagePayload): void => {
+        seen.push(message.offset);
+        if (message.offset === 2n) throw failure;
+      };
+      runner = await startRunner(consumerGroup, syncHandler as unknown as EachMessageHandler);
+
+      await expect(runner.handleBatch(threeMessages())).rejects.toBe(failure);
+
+      expect(seen).toEqual([1n, 2n]);
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n]);
+      // The error path commits what was processed before rethrowing.
+      expect(consumerGroup.commitOffsets).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects with the error of an async handler and commits what was processed', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      const failure = new Error('async handler failure');
+      runner = await startRunner(consumerGroup, async ({ message }) => {
+        if (message.offset === 3n) throw failure;
+      });
+
+      await expect(runner.handleBatch(threeMessages())).rejects.toBe(failure);
+
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
+      expect(consumerGroup.commitOffsets).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolves past trailing control records once every message is handled', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      runner = await startRunner(consumerGroup, async () => undefined);
+
+      const controlRecord = { ...kafkaMessage(4n), isControlRecord: true };
+      await runner.handleBatch(
+        new Batch(topicName, 0n, {
+          partition,
+          highWatermark: 5n,
+          messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord],
+        }),
+      );
+
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n, 4n]);
+    });
+
+    it('does not resolve past trailing control records when the handler pauses the partition', async () => {
+      let paused = false;
+      const consumerGroup = fakeConsumerGroup({
+        pause: vi.fn(() => {
+          paused = true;
+        }),
+        isPaused: vi.fn(() => paused),
+      });
+      runner = await startRunner(consumerGroup, async ({ message, pause }) => {
+        if (message.offset === 2n) pause();
+      });
+
+      const controlRecord = { ...kafkaMessage(4n), isControlRecord: true };
+      await runner.handleBatch(
+        new Batch(topicName, 0n, {
+          partition,
+          highWatermark: 5n,
+          messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord],
+        }),
+      );
+
+      expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
+    });
+  });
+
   describe('maxRecords', () => {
     function messagesRange(count: number, startOffset = 1n): KafkaMessage[] {
       return Array.from({ length: count }, (_, index) => kafkaMessage(startOffset + BigInt(index)));
     }
 
-    it('defaults to 500-record slices per poll for eachMessage even when the batch is much larger', async () => {
+    it('defaults to 500-record slices for eachMessage and commits once per batch', async () => {
       const consumerGroup = fakeConsumerGroup();
       const seenOffsets: bigint[] = [];
       runner = new Runner({
@@ -787,8 +964,31 @@ describe('consumer/runner', () => {
       expect(seenOffsets[0]).toBe(1n);
       expect(seenOffsets[seenOffsets.length - 1]).toBe(1200n);
 
-      // Two internal 500-record checkpoints (after offsets 500 and 1000) plus the final commit
-      // `handleBatch` issues once `processEachMessage` returns.
+      // Neither autoCommitInterval nor autoCommitThreshold is set: no commit between the
+      // 500-record slices, only the one `handleBatch` issues after the whole batch.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+      expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
+    });
+
+    it('checks for a due commit between eachMessage slices when an interval or threshold is set', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachMessage: async () => undefined,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+        hasAutoCommitCadence: true,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 2000n, messages: messagesRange(1200, 1n) });
+      await runner.handleBatch(batch);
+
+      // After offsets 500 and 1000, plus the end-of-batch check.
       expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
       expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
     });
@@ -872,7 +1072,30 @@ describe('consumer/runner', () => {
 
       expect(receivedSizes).toEqual([5, 5, 2]);
       expect(receivedOffsets).toEqual(messages.map((message) => message.offset));
-      // Checkpointed between the 2 slice boundaries, plus the final commit after the last slice.
+      // No interval or threshold: one commit after the last slice.
+      expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks for a due commit between eachBatch slices when an interval or threshold is set', async () => {
+      const consumerGroup = fakeConsumerGroup();
+      runner = new Runner({
+        consumerGroup,
+        onCrash: vi.fn(),
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        logger: silentLogger,
+        eachBatch: async () => undefined,
+        maxRecords: 5,
+        hasAutoCommitCadence: true,
+        concurrency: 1,
+        heartbeatInterval: 3000,
+      });
+      runner.scheduleFetchManager = vi.fn();
+      await runner.start();
+
+      const batch = new Batch(topicName, 0n, { partition, highWatermark: 20n, messages: messagesRange(12, 1n) });
+      await runner.handleBatch(batch);
+
+      // Between the 2 slice boundaries, plus the end-of-batch check.
       expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(3);
     });
 

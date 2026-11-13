@@ -1,3 +1,6 @@
+import { Encoder } from '../protocol/encoder';
+import { RECORD_BATCH_OVERHEAD_BYTES } from '../protocol/records/batch';
+import type { RecordBatchContext } from '../protocol/records/record';
 import type { QueueItem, Worker } from './worker';
 
 /** Default cap on queued+in-flight batches for one fetch node. */
@@ -7,22 +10,42 @@ export const DEFAULT_PREFETCH_MAX_BYTES = 10_485_760;
 
 export interface PrefetchSize {
   byteSize: number;
+  /** Shared by every record of one record batch; a change marks the start of the next batch. */
+  batchContext?: RecordBatchContext;
 }
 
+export interface PrefetchSizedBatch {
+  messages?: readonly PrefetchSize[];
+  /** Every record the broker returned, before offset and transaction filtering; preferred when set. */
+  rawMessages?: readonly PrefetchSize[];
+}
+
+const estimatedBytesByBatch = new WeakMap<object, number>();
+
 /**
- * Lower bound of on-wire bytes in a batch; empty batches count as 1 byte so they still occupy a
- * slot. Sums each message's `byteSize` rather than its decoded `key`/`value` lengths — the
- * latter would force every message's `value`/`headers` to decode just to size the batch,
- * defeating the point of decoding them lazily (see `DecodedRecord`).
+ * Estimated on-wire bytes of a batch; empty batches count as 1 byte so they still occupy a slot.
+ * Adds each record's length prefix and one header per record batch to the records' `byteSize`,
+ * because small records would otherwise be under-counted by a third or more. The result is
+ * cached per batch object, so the adaptive fetch size and prefetch accounting share one pass.
  */
-export function estimatePrefetchBytes(batch: { messages?: readonly PrefetchSize[] }): number {
-  const messages = batch.messages;
-  if (messages == null || messages.length === 0) return 1;
+export function estimatePrefetchBytes(batch: PrefetchSizedBatch): number {
+  const cached = estimatedBytesByBatch.get(batch);
+  if (cached !== undefined) return cached;
+
+  const messages = batch.rawMessages ?? batch.messages;
   let bytes = 0;
-  for (const message of messages) {
-    bytes += message.byteSize;
+  let previousBatchContext: RecordBatchContext | undefined;
+  for (const message of messages ?? []) {
+    bytes += message.byteSize + Encoder.sizeOfVarInt(message.byteSize);
+    if (message.batchContext !== undefined && message.batchContext !== previousBatchContext) {
+      bytes += RECORD_BATCH_OVERHEAD_BYTES;
+      previousBatchContext = message.batchContext;
+    }
   }
-  return bytes > 0 ? bytes : 1;
+
+  const estimate = bytes > 0 ? bytes : 1;
+  estimatedBytesByBatch.set(batch, estimate);
+  return estimate;
 }
 
 export interface PushForNodeOptions<T> {

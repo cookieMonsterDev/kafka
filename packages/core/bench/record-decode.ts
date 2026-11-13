@@ -22,11 +22,11 @@ async function buildBatch(): Promise<Buffer> {
 }
 
 /**
- * P2-04's "done when": an `eachBatch` consumer that only reads offsets (e.g. `lastOffset()`)
- * shouldn't pay for decoding every record's value/headers. Compares that against a consumer
- * that reads every value and header — the case decode used to pay for unconditionally.
+ * Decode cost for an `eachBatch` consumer that only reads offsets (e.g. `lastOffset()`) against
+ * one that reads every value and header. Records decode value and headers eagerly, so records keep
+ * every field as an own property; the gap between the two shows the cost of reading them.
  */
-export async function benchLazyRecordDecode(): Promise<BenchStats> {
+export async function benchRecordDecode(): Promise<BenchStats> {
   const batch = await buildBatch();
 
   const offsetsOnly = await measure({

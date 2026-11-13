@@ -114,6 +114,10 @@ See [Throughput](../../guides/throughput/) and [Compatibility](../compatibility/
 | `retry`                | `{ retries: 5 }`           |                                                                                                                                                                                                                      |
 | `hooks`                | unset                      | Ordered async `onConsume`/`onCommit` hooks (not an interceptor SPI). See [Consumer hooks](../../guides/consumer/#hooks)                                                                                              |
 
+While a partition has a fetched batch waiting behind the one being processed, fetches from its
+broker for the other partitions skip the long poll: they return whatever is available at once,
+ignoring `minBytes` and `maxWaitTimeInMs`.
+
 `committed`, `position`, and `currentLag` on `Consumer` read committed
 offsets, fetch position, and lag without any extra config. See
 [Consumer](../../guides/consumer/#committed-offsets-position-and-lag) and

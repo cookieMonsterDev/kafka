@@ -51,7 +51,10 @@ const STALE_METADATA_ERRORS = Object.freeze([
 
 const CONSUMER_REPLICA_ID = -1;
 
-/** Sleep when a node has no fetchable partitions, instead of blocking for `maxWaitTimeInMs`. */
+/**
+ * Sleep when a node has no fetchable partitions, or when a fetch sent without a long poll because
+ * a partition is held back returns no records, instead of blocking for `maxWaitTimeInMs`.
+ */
 export const EMPTY_NODE_FETCH_SLEEP_MS = 100;
 
 const ADAPTIVE_FULL_RATIO = 0.9;
@@ -317,6 +320,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   #fetchSessionHandlers = new Map<string, FetchSessionHandler>();
   readonly #prefetches = new Map<string, PartitionPrefetch>();
   readonly #fetchableWaiters = new Set<() => void>();
+  /** Bumped on every wake, so a fetch can tell that a partition became fetchable while it was in flight. */
+  #fetchableGeneration = 0;
   /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
   readonly #assignMode: boolean;
   readonly #fixedAssignment: TopicPartitions[] | null;
@@ -1133,6 +1138,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       const committedOffsets = offsetManager.committedOffsets();
       const activeTopicPartitions = this.getActiveTopicPartitions();
 
+      let hasHeldBackPartition = false;
       const requests = topicPartitions
         .map(({ topic, partitions }) => {
           const partitionMetadata = this.cluster.findTopicPartitionMetadata(topic);
@@ -1141,12 +1147,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
             topic,
             topicId: this.cluster.findTopicId(topic),
             partitions: partitions
-              .filter(
-                (partition) =>
-                  committedOffsets[topic]?.[partition] != null &&
-                  activeTopicPartitions[topic]?.has(partition) === true &&
-                  this.#canPrefetch(topic, partition),
-              )
+              .filter((partition) => {
+                if (
+                  committedOffsets[topic]?.[partition] == null ||
+                  activeTopicPartitions[topic]?.has(partition) !== true
+                ) {
+                  return false;
+                }
+                if (this.#canPrefetch(topic, partition)) return true;
+                hasHeldBackPartition = true;
+                return false;
+              })
               .map((partition) => {
                 const leaderEpoch = partitionMetadata.find((p) => p.partitionId === partition)?.leaderEpoch;
                 if (leaderEpoch != null && leaderEpoch >= 0) {
@@ -1171,12 +1182,15 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         return [];
       }
 
+      const fetchableGeneration = this.#fetchableGeneration;
       const broker = await this.cluster.findBroker({ nodeId });
       const fetchSession = this.#fetchSessionHandlerFor(nodeId);
       const sessionRequest = fetchSession.buildRequest(requests);
       const { responses, sessionId } = await broker.fetch({
         replicaId: CONSUMER_REPLICA_ID,
-        maxWaitTime: this.maxWaitTime,
+        // The node has one fetch in flight, so a long poll here would also delay the held-back
+        // partition's next fetch until it ends, even once that partition settles.
+        maxWaitTime: hasHeldBackPartition ? 0 : this.maxWaitTime,
         minBytes: this.minBytes,
         maxBytes: this.#adaptiveMaxBytes,
         isolationLevel: this.isolationLevel,
@@ -1247,6 +1261,17 @@ export class ConsumerGroup implements ConsumerGroupHandle {
         max: this.maxBytes,
       });
 
+      // Without the long poll, a response with no records would be refetched at once. Records
+      // that are filtered out still move the position, and a wake while the fetch was in flight
+      // means a held-back partition may be fetchable already, so both return without waiting.
+      if (
+        hasHeldBackPartition &&
+        this.#fetchableGeneration === fetchableGeneration &&
+        batches.every((batch) => batch.rawMessages.length === 0)
+      ) {
+        await this.#waitForFetchablePartition(Math.min(EMPTY_NODE_FETCH_SLEEP_MS, this.maxWaitTime));
+      }
+
       return batches;
     } catch (e) {
       // The request as sent already advanced the session's local bookkeeping (buildRequest runs
@@ -1285,6 +1310,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }
 
   #wakeFetchableWaiters(): void {
+    this.#fetchableGeneration += 1;
     for (const done of [...this.#fetchableWaiters]) done();
   }
 

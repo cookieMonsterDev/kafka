@@ -1306,6 +1306,229 @@ describe('consumer/consumer-group', () => {
     });
   });
 
+  describe('fetch wait while a partition is held back', () => {
+    type Partition1Response = 'records' | 'empty' | 'control';
+
+    interface WaitFetchRequest {
+      maxWaitTime: number;
+      topicsForResponse: { partitions: { partition: number; fetchOffset: bigint }[] }[];
+    }
+
+    function record(offset: bigint, isControlRecord = false): Record<string, unknown> {
+      return { offset, isControlRecord, byteSize: 10, batchContext: { producerId: -1n, inTransaction: false } };
+    }
+
+    /** Partition 0 always has two records to return; partition 1 answers with `partition1`. */
+    function createTwoPartitionGroup({ duringFetch }: { duringFetch?: () => void } = {}): {
+      consumerGroup: ConsumerGroup;
+      requests: () => { maxWaitTime: number; partitions: number[] }[];
+      setPartition1: (response: Partition1Response) => void;
+      setPosition: (partition: number, offset: bigint) => void;
+    } {
+      const positions = new Map<number, bigint>([
+        [0, 0n],
+        [1, 0n],
+      ]);
+      let partition1: Partition1Response = 'empty';
+      const brokerFetch = vi.fn(async (request: WaitFetchRequest) => {
+        const requested = request.topicsForResponse[0]?.partitions ?? [];
+        const partitions = requested.map(({ partition, fetchOffset }) => {
+          let messages: Record<string, unknown>[] = [];
+          if (partition === 0 || partition1 === 'records') {
+            messages = [record(fetchOffset), record(fetchOffset + 1n)];
+          } else if (partition1 === 'control') {
+            messages = [record(fetchOffset, true)];
+          }
+          return { partition, highWatermark: 1_000n, messages };
+        });
+        duringFetch?.();
+        return { responses: [{ topicName: 'topic1', partitions }], sessionId: 0 };
+      });
+      const cluster = {
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        findTopicPartitionMetadata: vi.fn(() => [
+          { partitionId: 0, leader: 1 },
+          { partitionId: 1, leader: 1 },
+        ]),
+        findTopicId: vi.fn(() => undefined),
+        findBroker: vi.fn(async () => ({ fetch: brokerFetch })),
+      } as unknown as Cluster;
+
+      const consumerGroup = new ConsumerGroup({
+        logger: silentLogger,
+        topics: ['topic1'],
+        topicConfigurations: {},
+        cluster,
+        groupId: 'group',
+        assigners: [],
+        sessionTimeout: 30_000,
+        rebalanceTimeout: 60_000,
+        maxBytesPerPartition: 1024,
+        minBytes: 1,
+        maxBytes: 8192,
+        maxWaitTimeInMs: 5_000,
+        instrumentationEmitter: new InstrumentationEventEmitter(),
+        isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+        rackId: '',
+        metadataMaxAge: 300_000,
+        autoCommit: true,
+        autoCommitInterval: null,
+        autoCommitThreshold: null,
+      });
+      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+      consumerGroup.offsetManager = {
+        committedOffsets: () => ({ topic1: { 0: 0n, 1: 0n } }),
+        nextOffset: (_topic: string, partition: number) => positions.get(partition) ?? 0n,
+        seek: vi.fn(async () => undefined),
+        resolveOffsets: vi.fn(async () => undefined),
+        resetOffset: vi.fn(),
+      } as unknown as OffsetManager;
+
+      return {
+        consumerGroup,
+        requests: () =>
+          brokerFetch.mock.calls.map(([request]) => ({
+            maxWaitTime: request.maxWaitTime,
+            partitions: (request.topicsForResponse[0]?.partitions ?? []).map(({ partition }) => partition),
+          })),
+        setPartition1: (response) => {
+          partition1 = response;
+        },
+        setPosition: (partition, offset) => {
+          positions.set(partition, offset);
+        },
+      };
+    }
+
+    /** Fetches twice and settles partition 1's empty batches, so only partition 0 is held back. */
+    async function holdBackPartition0(consumerGroup: ConsumerGroup): Promise<{ first: Batch }> {
+      const batches = [...(await consumerGroup.fetch('1')), ...(await consumerGroup.fetch('1'))];
+      for (const batch of batches) {
+        if (batch.partition === 1) settleFetchBatch(batch);
+      }
+      const first = batches.find((batch) => batch.partition === 0);
+      if (!first) throw new Error('expected a partition 0 batch');
+      return { first };
+    }
+
+    async function markDone(fetching: Promise<Batch[]>, state: { isDone: boolean }): Promise<Batch[]> {
+      const batches = await fetching;
+      state.isDone = true;
+      return batches;
+    }
+
+    it('long-polls with maxWaitTime while no partition is held back', async () => {
+      const { consumerGroup, requests } = createTwoPartitionGroup();
+
+      await consumerGroup.fetch('1');
+
+      expect(requests()).toEqual([{ maxWaitTime: 5_000, partitions: [0, 1] }]);
+    });
+
+    it('fetches the other partitions without a long poll while one is held back', async () => {
+      vi.useFakeTimers();
+      try {
+        const { consumerGroup, requests, setPartition1 } = createTwoPartitionGroup();
+        await holdBackPartition0(consumerGroup);
+
+        setPartition1('records');
+        await consumerGroup.fetch('1');
+
+        expect(requests()[2]).toEqual({ maxWaitTime: 0, partitions: [1] });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('waits at most the empty-node interval after a response without records, not maxWaitTime', async () => {
+      vi.useFakeTimers();
+      try {
+        const { consumerGroup, requests } = createTwoPartitionGroup();
+        await holdBackPartition0(consumerGroup);
+
+        const state = { isDone: false };
+        const waiting = markDone(consumerGroup.fetch('1'), state);
+        await vi.advanceTimersByTimeAsync(99);
+        expect(state.isDone).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(state.isDone).toBe(true);
+
+        // The empty batch is tracked like any other and frees its partition once settled.
+        const [empty] = await waiting;
+        expect(empty?.partition).toBe(1);
+        expect(empty?.isEmpty()).toBe(true);
+        if (empty) settleFetchBatch(empty);
+        expect(requests()[2]).toEqual({ maxWaitTime: 0, partitions: [1] });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('ends the wait once a held-back batch settles', async () => {
+      vi.useFakeTimers();
+      try {
+        const { consumerGroup, requests, setPosition } = createTwoPartitionGroup();
+        const { first } = await holdBackPartition0(consumerGroup);
+
+        const state = { isDone: false };
+        const waiting = markDone(consumerGroup.fetch('1'), state);
+        await vi.advanceTimersByTimeAsync(10);
+        expect(state.isDone).toBe(false);
+
+        setPosition(0, 2n);
+        settleFetchBatch(first);
+        await waiting;
+        expect(state.isDone).toBe(true);
+
+        await consumerGroup.fetch('1');
+        expect(requests()[3]?.partitions).toContain(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not wait when a held-back batch settled while the fetch was in flight', async () => {
+      vi.useFakeTimers();
+      try {
+        let onFetch = (): void => {};
+        const { consumerGroup, setPosition } = createTwoPartitionGroup({ duringFetch: () => onFetch() });
+        const { first } = await holdBackPartition0(consumerGroup);
+
+        onFetch = () => {
+          setPosition(0, 2n);
+          settleFetchBatch(first);
+        };
+        const state = { isDone: false };
+        const waiting = markDone(consumerGroup.fetch('1'), state);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(state.isDone).toBe(true);
+        await waiting;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('returns filtered-out records without waiting, since they still move the position', async () => {
+      vi.useFakeTimers();
+      try {
+        const { consumerGroup, setPartition1 } = createTwoPartitionGroup();
+        await holdBackPartition0(consumerGroup);
+
+        setPartition1('control');
+        const state = { isDone: false };
+        const waiting = markDone(consumerGroup.fetch('1'), state);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(state.isDone).toBe(true);
+        const [batch] = await waiting;
+        expect(batch?.isEmptyControlRecord()).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('position', () => {
     it('returns the offset manager next offset for an assigned partition', () => {
       const consumerGroup = createGroup();

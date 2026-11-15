@@ -56,7 +56,7 @@
     "semantic-release": "^25.0.9",
     "semantic-release-monorepo": "^8.0.2",
     "semver": "^7.8.6",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "@cookiemonsterdev/kafka-studio": "workspace:*"
   }
 }

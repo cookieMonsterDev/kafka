@@ -1277,18 +1277,15 @@ function expectedOutputs(options) {
 function assertClientCoverageIsCurrent() {
   const manifest = readJson(BENCHMARKS_MANIFEST_PATH);
   const pinnedVersions = { ...manifest.dependencies, ...manifest.optionalDependencies };
-  const stale = CLIENTS.filter((client) => client.id !== CORE_CLIENT_ID)
-    .map(({ packageName }) => ({
-      packageName,
-      pinned: pinnedVersions[packageName],
-      checked: CLIENT_COVERAGE_CHECKED_VERSIONS[packageName],
-    }))
-    .filter(({ pinned, checked }) => pinned !== checked);
-  if (stale.length === 0) return;
-  const details = stale.map(
-    ({ packageName, pinned, checked }) =>
-      `${packageName} is pinned at ${pinned ?? 'nothing'}, checked at ${checked ?? 'nothing'}`,
+  // Every competitor in CLIENTS, so a newly added one without a checked version fails too.
+  const details = CLIENTS.filter(
+    ({ id, packageName }) =>
+      id !== CORE_CLIENT_ID && pinnedVersions[packageName] !== CLIENT_COVERAGE_CHECKED_VERSIONS[packageName],
+  ).map(
+    ({ packageName }) =>
+      `${packageName} is pinned at ${pinnedVersions[packageName] ?? 'nothing'}, checked at ${CLIENT_COVERAGE_CHECKED_VERSIONS[packageName] ?? 'nothing'}`,
   );
+  if (details.length === 0) return;
   throw new Error(
     `CLIENT_COVERAGE in scripts/generate-benchmark-docs.mjs is out of date: ${details.join('; ')}. Re-check what each client implements, then update CLIENT_COVERAGE and CLIENT_COVERAGE_CHECKED_VERSIONS.`,
   );

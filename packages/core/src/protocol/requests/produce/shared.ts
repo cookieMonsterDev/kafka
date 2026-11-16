@@ -1,4 +1,4 @@
-import { encodeRecord, type RecordHeaders } from '../../records/record';
+import { encodeRecord, sizeOfRecordHeaders, type RecordHeaders } from '../../records/record';
 import { encodeRecordBatch } from '../../records/batch';
 import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index';
 import { Decoder } from '../../decoder';
@@ -6,10 +6,9 @@ import { Encoder } from '../../encoder';
 import { createErrorFromCode, failure } from '../../error-codes';
 import {
   array,
-  bytes,
   compactArray,
-  compactBytes,
   compactNullableString,
+  compactOwnedEncoderBytes,
   compactString,
   defineResponse,
   field,
@@ -19,6 +18,7 @@ import {
   int64,
   nullableString,
   object,
+  ownedEncoderBytes,
   string,
   uuid,
   type RequestDefinition,
@@ -77,7 +77,7 @@ const requestBodySchema = object([
     array(
       object([
         field('topic', string),
-        field('partitions', array(object([field('partition', int32), field('recordSet', bytes)]))),
+        field('partitions', array(object([field('partition', int32), field('recordSet', ownedEncoderBytes)]))),
       ]),
     ),
   ),
@@ -98,7 +98,7 @@ async function encodePartition(
     producerId?: bigint;
     producerEpoch?: number;
   },
-): Promise<{ partition: number; recordSet: Buffer }> {
+): Promise<{ partition: number; recordSet: Encoder }> {
   const dateNow = Date.now();
   let firstTimestamp = dateNow;
   let maxTimestamp = dateNow;
@@ -121,6 +121,7 @@ async function encodePartition(
     estimatedBytes += 32;
     if (message.key != null) estimatedBytes += Buffer.byteLength(message.key);
     if (message.value != null) estimatedBytes += Buffer.byteLength(message.value);
+    if (message.headers != null) estimatedBytes += sizeOfRecordHeaders(message.headers);
   }
 
   const recordBatch = await encodeRecordBatch({
@@ -153,7 +154,7 @@ async function encodePartition(
     },
   });
 
-  return { partition, recordSet: recordBatch.buffer };
+  return { partition, recordSet: recordBatch };
 }
 
 const flexibleRequestBodySchema = flexibleObject([
@@ -167,7 +168,7 @@ const flexibleRequestBodySchema = flexibleObject([
         field('topic', compactString),
         field(
           'partitions',
-          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactBytes)])),
+          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactOwnedEncoderBytes)])),
         ),
       ]),
     ),
@@ -185,7 +186,7 @@ const flexibleRequestBodySchemaV13 = flexibleObject([
         field('topicId', uuid),
         field(
           'partitions',
-          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactBytes)])),
+          compactArray(flexibleObject([field('partition', int32), field('recordSet', compactOwnedEncoderBytes)])),
         ),
       ]),
     ),
@@ -201,7 +202,7 @@ async function encodeTopicPartitions(
     producerId?: bigint;
     producerEpoch?: number;
   },
-): Promise<{ partition: number; recordSet: Buffer }[]> {
+): Promise<{ partition: number; recordSet: Encoder }[]> {
   return Promise.all(partitions.map((partition) => encodePartition(partition, options)));
 }
 

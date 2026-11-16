@@ -16,6 +16,11 @@ export interface SocketFactoryArgs {
   servername?: string;
 }
 
+/**
+ * Creates the socket for one broker connection. The client reuses a written request buffer once
+ * that write's callback fires, so a custom socket must call it only after the chunk has been
+ * consumed, as `net.Socket` and `tls.TLSSocket` do.
+ */
 export type SocketFactory = (args: SocketFactoryArgs) => net.Socket;
 
 function tlsServername(host: string, servername: string | undefined): { servername: string } | Record<string, never> {

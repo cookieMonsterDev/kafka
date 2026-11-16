@@ -9,6 +9,7 @@ import {
   compactNullableArray,
   compactNullableBytes,
   compactNullableString,
+  compactOwnedEncoderBytes,
   compactString,
   field,
   flexibleObject,
@@ -23,6 +24,7 @@ import {
   nullableString,
   nullableStruct,
   object,
+  ownedEncoderBytes,
   string,
   taggedFields,
   uuid,
@@ -148,6 +150,23 @@ describe('protocol/schema', () => {
 
     expect(() => compactBytes.read(new Decoder(new Encoder().writeUVarIntBytes(null).buffer))).toThrow(RangeError);
   });
+
+  it.each([
+    ['ownedEncoderBytes', ownedEncoderBytes, (e: Encoder, v: Buffer) => e.writeBytes(v)],
+    ['compactOwnedEncoderBytes', compactOwnedEncoderBytes, (e: Encoder, v: Buffer) => e.writeUVarIntBytes(v)],
+  ] as const)(
+    '%s writes the same wire bytes as a Buffer and releases the source encoder',
+    (_, fieldCodec, writeBytes) => {
+      const payload = Buffer.from([1, 2, 3]);
+      const source = new Encoder().writeBuffer(payload);
+      const encoded = new Encoder();
+      fieldCodec.write(encoded, source);
+
+      expect(encoded.buffer).toEqual(writeBytes(new Encoder(), payload).buffer);
+      expect(() => source.buffer).toThrow(/released/);
+      expect(fieldCodec.read(new Decoder(encoded.buffer)).buffer).toEqual(payload);
+    },
+  );
 
   it('round-trips compact arrays and maps a null compact array to []', () => {
     const withValues = new Encoder();

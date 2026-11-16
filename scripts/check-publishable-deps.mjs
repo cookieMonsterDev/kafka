@@ -12,7 +12,8 @@ const CONFIG_NAME = '@cookiemonsterdev/kafka-config';
 const CLI_NAME = '@cookiemonsterdev/kafka-cli';
 const STUDIO_NAME = '@cookiemonsterdev/kafka-studio';
 
-// core depends on kafka-config to resolve `kafka.config.*` files, plus its two third-party codecs;
+// core depends on kafka-config to resolve `kafka.config.*` files, plus its two third-party codecs,
+// and optionally on @node-rs/crc32 for hardware CRC32C (it falls back to JS without it);
 // kafka-config itself stays dependency-free; cli depends on core and config only. Studio also
 // uses pure-JS Schema Registry/Protobuf codecs for its debugger. Runtime additions must be
 // deliberate decisions recorded here, not a drive-by `pnpm add`.
@@ -21,7 +22,7 @@ const STUDIO_NAME = '@cookiemonsterdev/kafka-studio';
 // they stay `devDependencies`, same as `vite` itself.
 function expectedDependencies() {
   return {
-    [CORE_NAME]: ['lz4-lite', 'snappyjs', CONFIG_NAME],
+    [CORE_NAME]: ['lz4-lite', 'snappyjs', '@node-rs/crc32', CONFIG_NAME],
     [CONFIG_NAME]: [],
     [CLI_NAME]: [CORE_NAME, CONFIG_NAME],
     [STUDIO_NAME]: [CORE_NAME, CONFIG_NAME, '@kafkajs/confluent-schema-registry', 'protobufjs'],
@@ -61,7 +62,8 @@ function checkManifest(manifest, workspaceVersions, expectedDeps) {
 
   const expected = expectedDeps[name];
   if (expected) {
-    const actual = Object.keys(manifest.dependencies ?? {});
+    // Optional dependencies install by default too, so they count as runtime dependencies here.
+    const actual = Object.keys({ ...manifest.dependencies, ...manifest.optionalDependencies });
     const isWorkspace = (dep) => dep.startsWith(WORKSPACE_SCOPE);
 
     // Reported separately so the failure message says which rule broke: a stray third-party

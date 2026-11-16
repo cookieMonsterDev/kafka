@@ -380,8 +380,9 @@ another workspace package must use a plain semver range, never `workspace:`:
 the published tarball uninstallable; `pnpm pack` alone would rewrite it, but that's not what
 release uses. `linkWorkspacePackages: true` still links the local package during development, so
 nothing about the day-to-day workflow changes. `scripts/check-publishable-deps.mjs` enforces this
-in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` to exactly
-`{lz4-lite, snappyjs, @cookiemonsterdev/kafka-config}` — a guardrail against
+in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` and
+`optionalDependencies` together to exactly
+`{lz4-lite, snappyjs, @node-rs/crc32, @cookiemonsterdev/kafka-config}` — a guardrail against
 `@cookiemonsterdev/kafka-core` quietly picking up a runtime dependency it can't drop later without
 a breaking release.
 

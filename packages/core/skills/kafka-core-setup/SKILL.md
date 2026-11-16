@@ -38,6 +38,10 @@ manager:
 npm install @cookiemonsterdev/kafka-core
 ```
 
+This also installs the optional `@node-rs/crc32` package for faster record batch checksums. Keep
+it unless the user asks otherwise (no `--omit=optional`). `getCrc32cImplementation()` returns
+`'native'` or `'javascript'`.
+
 Minimal client:
 
 ```ts

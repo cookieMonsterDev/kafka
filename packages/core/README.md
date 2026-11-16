@@ -7,7 +7,7 @@
 </p>
 
 A TypeScript Apache Kafka client for Node.js that talks the wire protocol directly — no Java
-client, no native bindings. Protocol versions are negotiated from `ApiVersions` at connect time,
+client, no required native bindings. Protocol versions are negotiated from `ApiVersions` at connect time,
 so it works against **Kafka 0.10 and up**. Offsets are `bigint` (Kafka offsets can exceed what a
 JS `number` represents exactly), and its `.d.ts` types are generated from source rather than
 hand-maintained.

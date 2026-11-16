@@ -1,5 +1,18 @@
+import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import { crc32c, crc32cJs, usesNativeCrc32c } from './crc32c';
+import { crc32c, crc32cJs, getCrc32cImplementation, selectCrc32c } from './crc32c';
+
+const requireFromHere = createRequire(import.meta.url);
+
+/** False after an install without optional dependencies, where only the JS fallback can run. */
+const isNodeRsInstalled = ((): boolean => {
+  try {
+    requireFromHere.resolve('@node-rs/crc32');
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 /** Bit-at-a-time CRC32C straight from the polynomial: slow, but shares nothing with the tables. */
 function crc32cBitwise(buffer: Buffer): number {
@@ -61,7 +74,7 @@ describe('protocol/crc32c', () => {
     expect(crc32c(a)).not.toBe(crc32c(b));
   });
 
-  it('JS table and public crc32c agree (native path when available)', () => {
+  it('JS table and public crc32c agree', () => {
     const samples = [
       Buffer.alloc(0),
       Buffer.from('123456789'),
@@ -74,8 +87,62 @@ describe('protocol/crc32c', () => {
     }
   });
 
-  it('JS table matches the Castagnoli check value independently of native', () => {
-    expect(crc32cJs(Buffer.from('123456789'))).toBe(0xe3069283);
-    expect(typeof usesNativeCrc32c).toBe('boolean');
+  it.skipIf(!isNodeRsInstalled)('reports the native implementation when the optional package is installed', () => {
+    expect(getCrc32cImplementation()).toBe('native');
+  });
+});
+
+describe('protocol/crc32c implementation selection', () => {
+  const ascending = Buffer.from(Array.from({ length: 32 }, (_, i) => i));
+  const offsetSource = Buffer.from(Array.from({ length: 200 }, (_, i) => (i * 151 + 7) & 0xff));
+  const knownVectors: [Buffer, number][] = [
+    [Buffer.alloc(0), 0],
+    [Buffer.from('123456789'), 0xe3069283],
+    [Buffer.alloc(32, 0x00), 0x8a9136aa],
+    [Buffer.alloc(32, 0xff), 0x62a8ab43],
+    [ascending, 0x46dd794e],
+    [Buffer.from(ascending).reverse(), 0x113fdb5c],
+  ];
+
+  function expectKnownVectors(checksum: (buffer: Buffer) => number): void {
+    for (const [input, expected] of knownVectors) {
+      expect(checksum(input)).toBe(expected);
+    }
+    // A subarray that doesn't start at its backing buffer's first byte, as batch.ts passes.
+    for (let offset = 1; offset < 4; offset++) {
+      const sample = offsetSource.subarray(offset, offset + 150);
+      expect(checksum(sample)).toBe(crc32cJs(sample));
+    }
+  }
+
+  it.skipIf(!isNodeRsInstalled)('uses @node-rs/crc32 when it loads, with the same checksums as the JS table', () => {
+    const selected = selectCrc32c(requireFromHere);
+    expect(selected.implementation).toBe('native');
+    expect(selected.checksum).not.toBe(crc32cJs);
+    expectKnownVectors(selected.checksum);
+  });
+
+  it('falls back to the JS table when loading @node-rs/crc32 fails', () => {
+    const selected = selectCrc32c((id) => {
+      throw new Error(`Cannot find module '${id}'`);
+    });
+    expect(selected).toEqual({ implementation: 'javascript', checksum: crc32cJs });
+    expectKnownVectors(selected.checksum);
+  });
+
+  it.each([
+    ['is not an object', null],
+    ['has no crc32c function', {}],
+    ['computes a different CRC (IEEE CRC-32 check value)', { crc32c: () => 0xcbf43926 }],
+    [
+      'throws from crc32c',
+      {
+        crc32c: () => {
+          throw new Error('binding failed');
+        },
+      },
+    ],
+  ])('falls back to the JS table when the loaded module %s', (_case, loaded) => {
+    expect(selectCrc32c(() => loaded).implementation).toBe('javascript');
   });
 });

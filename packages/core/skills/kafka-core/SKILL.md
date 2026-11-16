@@ -26,8 +26,8 @@ sources:
 # kafka-core
 
 `@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client that speaks the wire protocol
-directly (no JVM, no native addon). It supports brokers from Kafka 0.10 onward and negotiates
-protocol versions with each broker through `ApiVersions`. The API shape follows kafkajs:
+directly (no JVM, no required native addon). It supports brokers from Kafka 0.10 onward and
+negotiates protocol versions with each broker through `ApiVersions`. The API shape follows kafkajs:
 `new Kafka({ brokers }).producer() / consumer() / admin()`.
 
 ## Task skills

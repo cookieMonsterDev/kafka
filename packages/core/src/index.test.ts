@@ -16,6 +16,7 @@ import {
   Partitioners,
   ResourcePatternTypes,
   ScramMechanisms,
+  getCrc32cImplementation,
   logLevel,
 } from './index';
 
@@ -60,6 +61,10 @@ describe('public surface', () => {
     expect(ResourcePatternTypes.LITERAL).toBe(3);
     expect(ScramMechanisms.SCRAM_SHA_256).toBe(1);
     expect(ScramMechanisms.SCRAM_SHA_512).toBe(2);
+  });
+
+  it('exports the CRC32C implementation diagnostic', () => {
+    expect(['native', 'javascript']).toContain(getCrc32cImplementation());
   });
 
   it('exports the error classes, not the internal helpers', () => {

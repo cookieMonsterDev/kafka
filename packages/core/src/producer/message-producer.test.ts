@@ -11,7 +11,6 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { retrier } from '../retry/index';
-import type { EosManager } from './eos-manager/index';
 import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
 import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
@@ -49,27 +48,20 @@ function fakePartitionMetadata(): PartitionMetadata {
   };
 }
 
-/** Transaction calls are mocked; sequences and gates run on a real ledger with an in-memory InitProducerId. */
-function fakeEosManager(
-  ledger: IdempotenceLedger = createIdempotenceLedger({
+/** Sequences and gates run on a real ledger with an in-memory InitProducerId. */
+function inMemoryLedger(): IdempotenceLedger {
+  return createIdempotenceLedger({
     logger: silentLogger,
     initProducerId: (current: ProducerIdentity) =>
       Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
-  }),
-) {
-  return {
-    ledger,
-    getTransactionalId: vi.fn().mockReturnValue(undefined),
-    isTransactional: vi.fn().mockReturnValue(false),
-    addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-  } as unknown as EosManager;
+  });
 }
 
-/** An idempotent producer's EOS manager, its producer id already initialized. */
-async function idempotentEosManager(): Promise<EosManager> {
-  const eosManager = fakeEosManager();
-  await eosManager.ledger.initProducerId();
-  return eosManager;
+/** An idempotent producer's ledger, its producer id already initialized. */
+async function idempotentLedger(): Promise<IdempotenceLedger> {
+  const ledger = inMemoryLedger();
+  await ledger.initProducerId();
+  return ledger;
 }
 
 function sentFirstSequences(broker: ReturnType<typeof fakeBroker>): (number | undefined)[] {
@@ -111,7 +103,7 @@ function createTestProducer(broker: ReturnType<typeof fakeBroker>, overrides: Pa
     logger: silentLogger,
     cluster: fakeCluster(broker) as unknown as Cluster,
     partitioner: () => 0,
-    eosManager: fakeEosManager(),
+    ledger: inMemoryLedger(),
     idempotent: false,
     retrier: retrier({ retries: 0 }),
     getConnectionStatus: () => CONNECTION_STATUS.CONNECTED,
@@ -490,8 +482,8 @@ describe('producer/messageProducer', () => {
 
     it('assigns one sequence range to same-turn calls of an idempotent producer', async () => {
       const broker = fakeBroker(1);
-      const eosManager = await idempotentEosManager();
-      const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
+      const ledger = await idempotentLedger();
+      const producer = createTestProducer(broker, { lingerMs: 0, ledger, idempotent: true });
 
       await Promise.all([
         producer.send({ topic, messages: [{ value: 'a' }] }),
@@ -504,10 +496,17 @@ describe('producer/messageProducer', () => {
 
     it('adds the partitions of same-turn transactional calls to the transaction once', async () => {
       const broker = fakeBroker(1);
-      const eosManager = await idempotentEosManager();
-      vi.mocked(eosManager.isTransactional).mockReturnValue(true);
-      vi.mocked(eosManager.getTransactionalId).mockReturnValue('transactional-id');
-      const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
+      const transaction = {
+        transactionalId: 'transactional-id',
+        enrollPartitions: vi.fn((): Promise<void> | undefined => undefined),
+        sendFailed: vi.fn(),
+      };
+      const producer = createTestProducer(broker, {
+        lingerMs: 0,
+        ledger: await idempotentLedger(),
+        transaction,
+        idempotent: true,
+      });
 
       await Promise.all([
         producer.send({ topic, messages: [{ value: 'a' }] }),
@@ -516,7 +515,7 @@ describe('producer/messageProducer', () => {
 
       expect(broker.produce).toHaveBeenCalledTimes(1);
       expect(broker.produce).toHaveBeenCalledWith(expect.objectContaining({ transactionalId: 'transactional-id' }));
-      expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledTimes(1);
+      expect(transaction.enrollPartitions).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -592,7 +591,7 @@ describe('producer/messageProducer', () => {
       const broker = fakeBroker(1);
       broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
       const producer = createTestProducer(broker, {
-        eosManager: await idempotentEosManager(),
+        ledger: await idempotentLedger(),
         retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
         deliveryTimeoutMs: 500,
       });
@@ -671,7 +670,7 @@ describe('producer/messageProducer', () => {
         const broker = fakeBroker(1);
         broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
         const producer = createTestProducer(broker, {
-          eosManager: await idempotentEosManager(),
+          ledger: await idempotentLedger(),
           lingerMs: 0,
           retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
           deliveryTimeoutMs: 500,

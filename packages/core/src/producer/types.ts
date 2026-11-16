@@ -1,4 +1,4 @@
-import type { PartitionMetadata } from '../cluster/index';
+import type { PartitionMetadata, TopicOffsets } from '../cluster/index';
 import type { CompressionType } from '../protocol/compression/index';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { NodeLatencyReader } from './node-latency-tracker';
@@ -129,4 +129,18 @@ export interface ProducerHooks {
   onSend?: readonly ProducerSendHook[];
   /** After the call settles: `metadata` on success, `error` on failure. */
   onAck?: readonly ProducerAckHook[];
+}
+
+/**
+ * In-flight producer transaction. Exactly one may be active per transactional producer.
+ * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
+ */
+export interface Transaction {
+  send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
+  sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
+  /** Commit consumer-group offsets as part of this transaction (exactly-once consume-transform-produce). */
+  sendOffsets(options: { consumerGroupId: string; topics: readonly TopicOffsets[] }): Promise<void>;
+  commit(): Promise<void>;
+  abort(): Promise<void>;
+  isActive(): boolean;
 }

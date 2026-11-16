@@ -36,17 +36,7 @@ export interface TransitionEvent {
   to: TransactionState;
 }
 
-export interface TransactionStateGuard {
-  legalStates: readonly TransactionState[];
-  /** Defaults to `true` (an illegal call rejects). Set `false` for a synchronous method, which throws instead. */
-  async?: boolean;
-}
-
-/**
- * Guards a plain object's methods so each only runs while the machine is in one of its declared
- * `legalStates` - otherwise it rejects (or, for `async: false`, throws synchronously) with a
- * `KafkaNonRetriableError` instead of running at all.
- */
+/** The transaction states and the legal transitions between them. */
 export class TransactionStateMachine extends EventEmitter {
   readonly #logger: Logger;
   #currentState: TransactionState;
@@ -79,39 +69,15 @@ export class TransactionStateMachine extends EventEmitter {
     this.emit('transition', { to: state, from } satisfies TransitionEvent);
   }
 
+  /** The error for `call` made in the current state: the fenced error from `FATAL_ERROR`, a state error otherwise. */
+  illegalCallError(call: string): KafkaNonRetriableError {
+    return this.#stateError(`Cannot call "${call}" in state "${this.#currentState}"`);
+  }
+
   #stateError(detail: string): KafkaNonRetriableError {
     if (this.#currentState === TRANSACTION_STATES.FATAL_ERROR) {
       return new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE);
     }
     return new KafkaNonRetriableError(`Transaction state exception: ${detail}`);
-  }
-
-  createGuarded<T extends object>(object: T, methodStateGuards: Partial<Record<keyof T, TransactionStateGuard>>): T {
-    const rawObject = object as Record<string, unknown>;
-    const guarded: Record<string, unknown> = { ...rawObject };
-
-    for (const key of Object.keys(methodStateGuards)) {
-      const guard = methodStateGuards[key as keyof T];
-      if (!guard) continue;
-
-      const fn = rawObject[key];
-      if (typeof fn !== 'function') {
-        throw new KafkaNonRetriableError(`Cannot add guard on missing method "${key}"`);
-      }
-
-      const { legalStates, async: isAsync = true } = guard;
-
-      guarded[key] = (...args: unknown[]): unknown => {
-        if (!legalStates.includes(this.#currentState)) {
-          const error = this.#stateError(`Cannot call "${key}" in state "${this.#currentState}"`);
-          if (isAsync) return Promise.reject(error);
-          throw error;
-        }
-
-        return (fn as (...fnArgs: unknown[]) => unknown).apply(rawObject, args);
-      };
-    }
-
-    return guarded as T;
   }
 }

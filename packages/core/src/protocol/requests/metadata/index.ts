@@ -35,7 +35,12 @@ import { metadataResponseV13 } from './v13/response';
 export interface MetadataOptions {
   topics?: string[];
   topicIds?: Buffer[];
-  allowAutoTopicCreation?: boolean;
+  /**
+   * Whether the broker may auto-create requested topics (v4+). Required, with no family default:
+   * the wire default is `true`, so a call that left it out would auto-create topics regardless of
+   * the client's configuration. Pass the broker's configured `allowAutoTopicCreation`.
+   */
+  allowAutoTopicCreation: boolean;
   includeClusterAuthorizedOperations?: boolean;
   includeTopicAuthorizedOperations?: boolean;
 }
@@ -45,25 +50,25 @@ const VERSIONS = {
   1: ({ topics = [] }) => ({ request: metadataRequestV1({ topics }), response: metadataResponseV1 }),
   2: ({ topics = [] }) => ({ request: metadataRequestV2({ topics }), response: metadataResponseV2 }),
   3: ({ topics = [] }) => ({ request: metadataRequestV3({ topics }), response: metadataResponseV3 }),
-  4: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  4: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV4({ topics, allowAutoTopicCreation }),
     response: metadataResponseV4,
   }),
-  5: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  5: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV5({ topics, allowAutoTopicCreation }),
     response: metadataResponseV5,
   }),
-  6: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  6: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV6({ topics, allowAutoTopicCreation }),
     response: metadataResponseV6,
   }),
-  7: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  7: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV7({ topics, allowAutoTopicCreation }),
     response: metadataResponseV7,
   }),
   8: ({
     topics = [],
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -77,7 +82,7 @@ const VERSIONS = {
   }),
   9: ({
     topics = [],
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -92,7 +97,7 @@ const VERSIONS = {
   10: ({
     topics = [],
     topicIds,
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -105,7 +110,7 @@ const VERSIONS = {
     }),
     response: metadataResponseV10,
   }),
-  11: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  11: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV11({
       topics,
       topicIds,
@@ -114,7 +119,7 @@ const VERSIONS = {
     }),
     response: metadataResponseV11,
   }),
-  12: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  12: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV12({
       topics,
       topicIds,
@@ -123,7 +128,7 @@ const VERSIONS = {
     }),
     response: metadataResponseV12,
   }),
-  13: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  13: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV13({
       topics,
       topicIds,

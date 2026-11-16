@@ -45,7 +45,7 @@ describe('broker.offsets', () => {
 
   it('lists, commits, and fetches offsets', async () => {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      seedBroker!.send(Metadata, { topics: [topicName] }),
+      seedBroker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
@@ -119,7 +119,7 @@ describe('broker.offsets', () => {
 
   it('lists earliest and latest offsets after a produce', async () => {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      seedBroker!.send(Metadata, { topics: [topicName] }),
+      seedBroker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;

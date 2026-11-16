@@ -28,7 +28,9 @@ describe('broker.adminApis', () => {
   });
 
   async function connectToController(): Promise<Broker> {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.send(Metadata, { topics: [] }));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      broker!.send(Metadata, { topics: [], allowAutoTopicCreation: true }),
+    );
     const controller = metadata.brokers.find((b) => b.nodeId === metadata.controllerId);
     if (!controller) throw new Error('controller not found');
     const address = advertisedAddress(controller.host, controller.port);

@@ -15,9 +15,9 @@ import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import { runHooks } from '../utils/run-hooks';
 import { DeliveryDeadlines } from './delivery-deadlines';
-import type { EosManager } from './eos-manager/index';
+import type { IdempotenceLedger } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
-import { createSendMessages, type SendMessagesRequest } from './send-messages';
+import { createSendMessages, type OpenTransaction, type SendMessagesRequest } from './send-messages';
 import type {
   CustomPartitioner,
   Message,
@@ -32,7 +32,9 @@ export interface MessageProducerOptions {
   logger: Logger;
   cluster: Cluster;
   partitioner: ReturnType<CustomPartitioner>;
-  eosManager: EosManager;
+  ledger: IdempotenceLedger;
+  /** The transaction every send produces into; absent for a non-transactional producer. */
+  transaction?: OpenTransaction;
   idempotent: boolean;
   retrier: Retrier;
   /** Shared across a producer's lifetime, including transactions. Defaults to a fresh tracker. */
@@ -156,7 +158,8 @@ export function createMessageProducer({
   logger,
   cluster,
   partitioner,
-  eosManager,
+  ledger,
+  transaction,
   idempotent,
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
@@ -177,7 +180,8 @@ export function createMessageProducer({
     cluster,
     retrier,
     partitioner,
-    eosManager,
+    ledger,
+    transaction,
     nodeLatencyTracker,
     metrics,
   });

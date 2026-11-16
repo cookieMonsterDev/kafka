@@ -156,7 +156,7 @@ function readSsl(
     warn(
       onDiagnostic,
       sslKey,
-      `ignored because "${sslKey}" is "false" while ssl file options are also set — ssl stays disabled`,
+      `ignored because "${sslKey}" is "false" while ssl file options are also set, so ssl stays disabled`,
     );
     return false;
   }

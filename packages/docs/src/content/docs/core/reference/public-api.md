@@ -8,7 +8,9 @@ section: reference
 The public barrel is
 [`src/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/index.ts).
 Types are generated from the TypeScript source (`tsc --emitDeclarationOnly`);
-there is no hand-maintained `types/index.d.ts`.
+there is no hand-maintained `types/index.d.ts`. Import from the package root only:
+the published `.d.ts` files are the ones `dist/index.d.ts` reaches, so a deep import
+into `dist/` can have no types.
 
 ## Runtime exports
 

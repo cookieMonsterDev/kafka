@@ -8,17 +8,12 @@
 // silently degrades to `any`.
 //
 // Usage: node scripts/add-declaration-extensions.mjs <dist-dir>
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-// `from '…'` and `import('…')`, including `{@link import('…')}` in JSDoc, which TypeScript
-// resolves the same way.
-const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(\s*)(['"])(\.\.?(?:\/[^'"\n]*)?)\2/g;
-const EXPLICIT_EXTENSION = /\.(?:js|mjs|cjs|json)$/;
+import { isFile, RELATIVE_SPECIFIER } from './declaration-files.mjs';
 
-function isFile(filePath) {
-  return statSync(filePath, { throwIfNoEntry: false })?.isFile() ?? false;
-}
+const EXPLICIT_EXTENSION = /\.(?:js|mjs|cjs|json)$/;
 
 // Mirrors `bundler` resolution, which tries `<specifier>.ts` before `<specifier>/index.ts`;
 // `.`, `..`, and a trailing `/` name a directory, so only its index can match.

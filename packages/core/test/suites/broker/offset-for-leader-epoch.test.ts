@@ -41,7 +41,7 @@ describe('broker.offsetForLeaderEpoch (KIP-320 primitive)', () => {
 
   testIfKafkaAtLeast_2_1('resolves the end offset for the partition’s current leader epoch', async () => {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      seedBroker!.send(Metadata, { topics: [topicName] }),
+      seedBroker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;

@@ -568,7 +568,7 @@ describe('broker/Broker', () => {
         const broker = await connectedBroker(pool);
         pool.send.mockImplementationOnce(parsedBy(body));
 
-        const result = await broker.send(Metadata, { topics: [] });
+        const result = await broker.send(Metadata, { topics: [], allowAutoTopicCreation: true });
 
         expect(result.topicMetadata).toEqual([healthyTopic]);
       });
@@ -578,7 +578,9 @@ describe('broker/Broker', () => {
         const broker = await connectedBroker(pool);
         pool.send.mockImplementationOnce(parsedBy(body));
 
-        await expect(broker.send(Metadata, { topics: ['deleted', 'orders'] })).rejects.toThrow(KafkaProtocolError);
+        await expect(
+          broker.send(Metadata, { topics: ['deleted', 'orders'], allowAutoTopicCreation: true }),
+        ).rejects.toThrow(KafkaProtocolError);
       });
     });
 

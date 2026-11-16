@@ -9,7 +9,7 @@ function emptyAssignment(): Encoder {
 }
 
 describe('protocol/requests/consumer-group-describe/v0/response', () => {
-  it('decodes a described consumer-protocol group and member assignment', async () => {
+  it('decodes a described consumer-protocol group, filling the v1+ memberType with -1 (unknown)', async () => {
     const buffer = new Encoder()
       .writeInt32(7)
       .writeUVarInt(2)
@@ -70,6 +70,7 @@ describe('protocol/requests/consumer-group-describe/v0/response', () => {
                 topicPartitions: [{ topicId, topicName: 'events', partitions: [0] }],
               },
               targetAssignment: { topicPartitions: [] },
+              memberType: -1,
             },
           ],
           authorizedOperations: -2147483648,

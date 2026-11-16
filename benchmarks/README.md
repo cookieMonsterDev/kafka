@@ -146,23 +146,34 @@ report repeats this note under each of these scenarios.
 ² F1 is read from the image, not run. For each client it reports bytes, files and dependencies twice: the required
 part is the package and everything it reaches through `dependencies`; the optional part is what installed
 `optionalDependencies` add on top. It names no smaller or larger client, because a client's size follows what it
-implements and bundles. A session recorded before this split has no F1 data once it is re-aggregated.
+implements and bundles. A session recorded before this split measured only totals, without file counts; once
+re-aggregated, its rows show those totals and mark the required and optional cells as not split.
 
 Each run warms up in-process, then measures. Per run: records/s and MB/s (10^6 bytes, values only), latency
 percentiles from a preallocated sample buffer, process and cgroup CPU seconds, records per CPU second, cgroup peak
 memory, heap, GC count and time, and event-loop delay p99 (the last three are `null` where the runtime lacks the
 API).
 
-Statistics: repetitions run in fresh containers and are interleaved: each round runs every cell once, in an
-order shuffled with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a
-separate, fixed seed, so every session sends the same bytes. The report shows the median with min–max
-and the coefficient of variation. A cell above the noise threshold is marked noisy, and a comparison is called
-`inconclusive` when either cell is noisy, the min–max ranges overlap, or the difference is within the noise
-floor (the `--noise-floor` passed in, or the A/A floor measured in the same session, whichever is larger).
-Throughput scenarios compare records/s, L1 compares time to the first acknowledged produce, and E1 compares p99
-and p50 latency, each with its own coefficient of variation and A/A floor. Every chart on the docs page, peak
-memory included, names a highest or lowest client on a runtime only when this rule puts it ahead of every other
-client, and otherwise says there is no clear one.
+### Comparison rule
+
+Repetitions run in fresh containers and are interleaved: each round runs every cell once, in an order shuffled
+with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a separate, fixed
+seed, so every session sends the same bytes. The report shows the median with min–max and the coefficient of
+variation (CV). A cell whose CV is above the noise threshold (5%, or the `--noise-threshold` passed in) is marked
+noisy.
+
+A comparison of two cells is `inconclusive`, and names neither as better, when any of these holds:
+
+1. Either cell is noisy. This check comes first, so two noisy cells stay inconclusive even when their min–max
+   ranges do not overlap.
+2. Their min–max ranges overlap.
+3. Their medians differ by no more than the noise floor: the `--noise-floor` passed in, or the A/A floor measured
+   in the same session, whichever is larger.
+
+Otherwise the cell with the better median is better. Throughput scenarios compare records/s, L1 compares time to
+the first acknowledged produce, and E1 compares p99 and p50 latency, each with its own CV and A/A floor. Every
+chart on the docs page, peak memory included, names a highest or lowest client on a runtime only when this rule
+puts it ahead of every other client there, and otherwise says there is no clear one.
 
 ## Fairness rules
 
@@ -271,7 +282,9 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
   cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
 - ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
 - Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one, and re-check what the
-  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`).
+  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`). The docs
+  generator, `--check` included, fails until `CLIENT_COVERAGE_CHECKED_VERSIONS` there matches the versions
+  pinned in `package.json`.
 - The security workflow scans only the repository's root lockfile. This lockfile is not scanned: these packages
   are never shipped, and at run time they execute only in containers without internet access. They are installed
   with network access during `docker build`, from the frozen lockfile with integrity hashes and pnpm's one-day

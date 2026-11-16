@@ -42,7 +42,7 @@ describe('broker.produceFetch', () => {
 
   async function connectToLeader(): Promise<Broker> {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      broker!.send(Metadata, { topics: [topicName] }),
+      broker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
@@ -290,7 +290,7 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtLeast_4_0('Kafka 4.0+ Fetch v13 uses topic IDs from metadata', async () => {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      broker!.send(Metadata, { topics: [topicName] }),
+      broker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const topicId = metadata.topicMetadata[0]?.topicId;
     expect(topicId).toBeInstanceOf(Buffer);
@@ -333,7 +333,7 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtLeast_4_3('Kafka 4.3+ Produce v13 uses topic IDs from metadata', async () => {
     const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      broker!.send(Metadata, { topics: [topicName] }),
+      broker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
     );
     const topicId = metadata.topicMetadata[0]?.topicId;
     expect(topicId).toBeInstanceOf(Buffer);

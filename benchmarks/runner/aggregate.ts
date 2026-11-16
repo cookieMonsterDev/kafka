@@ -353,16 +353,31 @@ async function readJsonIfPresent<T>(path: string): Promise<T | null> {
   }
 }
 
-/**
- * The session's F1 footprints. A session recorded before F1 split required and optional dependencies has
- * only totals, which F1 no longer reports, so its footprints are left out.
- */
-async function readSplitFootprints(path: string): Promise<Footprint[] | null> {
-  const footprints = await readJsonIfPresent<Footprint[]>(path);
-  if (footprints === null || !footprints.every((footprint) => 'required' in footprint)) {
-    return null;
+/** A `footprint.json` entry written before F1 split required and optional dependencies. */
+interface UnsplitFootprintEntry {
+  client: Footprint['client'];
+  packageName: string;
+  version: string | null;
+  /** Null, like the two fields below, when the package is not installed. */
+  installBytes: number | null;
+  dependencyCount: number | null;
+  hasNativeAddon: boolean | null;
+}
+
+/** Keeps the total of an unsplit entry as it was measured; it cannot be divided into the two parts. */
+function fromUnsplitEntry(entry: UnsplitFootprintEntry): Footprint {
+  const { client, packageName, version, installBytes, dependencyCount, hasNativeAddon } = entry;
+  const footprint: Footprint = { client, packageName, version, required: null, optional: null };
+  if (installBytes !== null && dependencyCount !== null && hasNativeAddon !== null) {
+    footprint.unsplitTotal = { bytes: installBytes, dependencyCount, hasNativeAddon };
   }
-  return footprints;
+  return footprint;
+}
+
+/** The session's F1 footprints; entries from a session recorded before the split keep only their total. */
+async function readFootprints(path: string): Promise<Footprint[] | null> {
+  const entries = await readJsonIfPresent<(Footprint | UnsplitFootprintEntry)[]>(path);
+  return entries?.map((entry) => ('required' in entry ? entry : fromUnsplitEntry(entry))) ?? null;
 }
 
 export async function readRunRecords(sessionDir: string): Promise<RunRecord[]> {
@@ -456,7 +471,7 @@ export async function aggregateSession(sessionDir: string, options: AggregateOpt
     manifest,
     environment: await readJsonIfPresent<EnvironmentReport>(paths.environment),
     supportMatrix: await readJsonIfPresent<SupportMatrix>(paths.supportMatrix),
-    footprints: await readSplitFootprints(paths.footprint),
+    footprints: await readFootprints(paths.footprint),
     noiseThresholdCv,
     noiseFloor,
     aaNoiseFloors,

@@ -181,6 +181,8 @@ describe('admin.groups', () => {
     expect(described.groups[0]?.groupId).toBe(groupId);
     expect(described.groups[0]?.members.length).toBeGreaterThan(0);
     expect(described.groups[0]?.groupState).toEqual(expect.any(String));
+    // A consumer-protocol member: 1 on ConsumerGroupDescribe v1+, -1 (unknown) on v0.
+    expect([-1, 1]).toContain(described.groups[0]?.members[0]?.memberType);
 
     const classic = await admin.describeClassicGroups([groupId]);
     const legacy = await admin.describeGroups([groupId]);

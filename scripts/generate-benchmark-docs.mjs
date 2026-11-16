@@ -33,18 +33,25 @@ import { parseArgs } from 'node:util';
 import { createRecordPool, headerValueBytes, payloadShapes } from '../benchmarks/client/payload.ts';
 import { payloadSeed, scenarioIds, scenarios as scenarioDefinitions } from '../benchmarks/client/spec.ts';
 import { effectiveNoiseFloor, findClearBest, summarize, summarySchemaVersion } from '../benchmarks/runner/aggregate.ts';
-import { formatNativeAddon } from '../benchmarks/runner/report.ts';
+import { footprintTotal, formatNativeAddon, hasUnsplitFootprint } from '../benchmarks/runner/report.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
 const PAGE_PATH = join(ROOT, 'packages/docs/src/content/docs/core/reference/benchmarks.md');
+const BENCHMARKS_MANIFEST_PATH = join(ROOT, 'benchmarks/package.json');
 const BENCHMARKS_README_URL = 'https://github.com/cookieMonsterDev/kafka/blob/develop/benchmarks/README.md';
 const COMPATIBILITY_PAGE_URL = '../compatibility/';
 
 /**
- * What each client implements, for the install-size section. Checked against the installed packages of
- * the competitor versions pinned in `benchmarks/package.json`; re-check it when one of them is bumped.
+ * What each client implements, for the install-size section, checked against the installed packages of
+ * `CLIENT_COVERAGE_CHECKED_VERSIONS`. The script refuses to run when `benchmarks/package.json` pins another
+ * competitor version, so a bump cannot leave this sentence unchecked: re-check it, then update both.
  */
+const CLIENT_COVERAGE_CHECKED_VERSIONS = {
+  '@platformatic/kafka': '2.15.0',
+  kafkajs: '2.2.4',
+  '@confluentinc/kafka-javascript': '1.11.0',
+};
 const CLIENT_COVERAGE = `kafka-core implements KIP-848 consumer groups, KIP-932 share groups and transactions (see [Compatibility](${COMPATIBILITY_PAGE_URL})), Platformatic and Confluent's client implement KIP-848 and transactions but not share groups, KafkaJS implements transactions but neither KIP-848 nor share groups, and Confluent's client bundles librdkafka as a native addon`;
 const NEW_ISSUE_URL = 'https://github.com/cookieMonsterDev/kafka/issues/new/choose';
 const SCHEMA_VERSION = 4;
@@ -404,11 +411,15 @@ function declaredGaps(chart, sources) {
   return gapsByClient;
 }
 
+/**
+ * One install-size entry per client. A session recorded before F1 split required and optional dependencies
+ * gives an entry with only `unsplitTotal`, and null parts.
+ */
 function buildFootprints(sources) {
   return CLIENTS.map(({ id }) => {
     for (const [source, session] of sessionCandidates(id, sources)) {
       const footprint = session.summary.footprints?.find((entry) => entry.client === id);
-      if (footprint === undefined || footprint.required === null) continue;
+      if (footprint === undefined || footprintTotal(footprint) === null) continue;
       return {
         client: id,
         status: 'ok',
@@ -416,6 +427,7 @@ function buildFootprints(sources) {
         version: footprint.version,
         required: footprint.required,
         optional: footprint.optional,
+        ...(footprint.unsplitTotal === undefined ? {} : { unsplitTotal: footprint.unsplitTotal }),
         source,
         sessionId: session.summary.sessionId,
         ...(id === CORE_CLIENT_ID ? { coreSha: session.summary.manifest.core.sha } : {}),
@@ -775,8 +787,18 @@ function chartSection(chart, comparison) {
   return [chartBlock(chart, datasets[0]), '', chartTable(chart, datasets)];
 }
 
+function formatMegabytes(bytes) {
+  return (bytes / MEGABYTE).toFixed(2);
+}
+
 function footprintPartCells(part) {
-  return [(part.bytes / MEGABYTE).toFixed(2), String(part.dependencyCount), formatCount(part.fileCount)];
+  if (part === null) return ['not split', 'not split', 'not split'];
+  return [formatMegabytes(part.bytes), String(part.dependencyCount), formatCount(part.fileCount)];
+}
+
+function footprintTotalCells(footprint) {
+  const { bytes, dependencyCount } = footprintTotal(footprint);
+  return [formatMegabytes(bytes), String(dependencyCount)];
 }
 
 /**
@@ -796,9 +818,12 @@ function installSizeText(comparison) {
     entry.footprints.some((footprint) => footprint.status === 'ok'),
   );
   if (dataset === undefined) return [...lines, 'Not measured in the published sessions yet.'];
+  // Split rows show their totals too, so the total columns have a value for every measured client.
+  const hasTotals = hasUnsplitFootprint(dataset.footprints);
   const header = [
     'Client',
     'Version',
+    ...(hasTotals ? ['Total (MB)', 'Total dependencies'] : []),
     'Required (MB)',
     'Required dependencies',
     'Required files',
@@ -813,12 +838,19 @@ function installSizeText(comparison) {
     return [
       client,
       footprint.version ?? '—',
+      ...(hasTotals ? footprintTotalCells(footprint) : []),
       ...footprintPartCells(footprint.required),
       ...footprintPartCells(footprint.optional),
       formatNativeAddon(footprint),
     ];
   });
-  return [...lines, markdownTable(header, rows), '', 'MB is 1,000,000 bytes.'];
+  const notes = ['MB is 1,000,000 bytes.'];
+  if (hasTotals) {
+    notes.push(
+      'Rows marked not split come from a session recorded before required and optional were measured apart, so they have only the total, without a file count.',
+    );
+  }
+  return [...lines, markdownTable(header, rows), '', notes.join(' ')];
 }
 
 function listText(items) {
@@ -852,6 +884,7 @@ const CAVEATS = [
   'Concurrent sends favour clients that merge separate `send()` calls into one batch, as kafka-core does. Batched send is the fairer produce comparison.',
   "Confluent's client runs on Node.js 24 only. Its consume runs can run out of memory under the 2 GiB limit: a median covers the runs that finished, and a cell where every run failed has no value.",
   'All results come from one machine. Treat small differences as inconclusive.',
+  `A chart names the highest or lowest client on a runtime only when that client's runs separate from each other client's beyond noise: neither client's runs are noisy, their min–max ranges do not overlap, and their medians differ by more than the noise floor. Otherwise it says there is no clear highest or lowest. The [comparison rule](${BENCHMARKS_README_URL}#comparison-rule) has the details.`,
 ];
 
 /** One column per stored dataset, headline payload first. */
@@ -1240,7 +1273,26 @@ function expectedOutputs(options) {
   ]);
 }
 
+/** Throws when a competitor's pinned version differs from the one `CLIENT_COVERAGE` was checked against. */
+function assertClientCoverageIsCurrent() {
+  const manifest = readJson(BENCHMARKS_MANIFEST_PATH);
+  const pinnedVersions = { ...manifest.dependencies, ...manifest.optionalDependencies };
+  // Every competitor in CLIENTS, so a newly added one without a checked version fails too.
+  const details = CLIENTS.filter(
+    ({ id, packageName }) =>
+      id !== CORE_CLIENT_ID && pinnedVersions[packageName] !== CLIENT_COVERAGE_CHECKED_VERSIONS[packageName],
+  ).map(
+    ({ packageName }) =>
+      `${packageName} is pinned at ${pinnedVersions[packageName] ?? 'nothing'}, checked at ${CLIENT_COVERAGE_CHECKED_VERSIONS[packageName] ?? 'nothing'}`,
+  );
+  if (details.length === 0) return;
+  throw new Error(
+    `CLIENT_COVERAGE in scripts/generate-benchmark-docs.mjs is out of date: ${details.join('; ')}. Re-check what each client implements, then update CLIENT_COVERAGE and CLIENT_COVERAGE_CHECKED_VERSIONS.`,
+  );
+}
+
 function main() {
+  assertClientCoverageIsCurrent();
   const options = parseOptions();
   const outputs = expectedOutputs(options);
   if (options.check) {

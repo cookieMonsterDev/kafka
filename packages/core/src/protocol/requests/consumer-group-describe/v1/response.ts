@@ -14,31 +14,15 @@ import {
 import type { ResponseDefinition } from '../../../schema';
 import type {
   ConsumerGroupDescribeAssignment,
+  ConsumerGroupDescribeGroupV0,
   ConsumerGroupDescribeMemberV0,
   ConsumerGroupDescribeResponseV0Body,
 } from '../v0/response';
 
-export interface ConsumerGroupDescribeMemberV1 extends ConsumerGroupDescribeMemberV0 {
-  memberType: number;
-}
-
-export interface ConsumerGroupDescribeGroupV1 {
-  errorCode: number;
-  errorMessage: string | null;
-  groupId: string;
-  groupState: string;
-  groupEpoch: number;
-  assignmentEpoch: number;
-  assignorName: string;
-  members: ConsumerGroupDescribeMemberV1[];
-  authorizedOperations: number;
-}
-
-export interface ConsumerGroupDescribeResponseV1Body {
-  throttleTime: number;
-  clientSideThrottleTime: number;
-  groups: ConsumerGroupDescribeGroupV1[];
-}
+/** The same decoded shape as v0, which fills `memberType` with -1 (unknown). */
+export type ConsumerGroupDescribeMemberV1 = ConsumerGroupDescribeMemberV0;
+export type ConsumerGroupDescribeGroupV1 = ConsumerGroupDescribeGroupV0;
+export type ConsumerGroupDescribeResponseV1Body = ConsumerGroupDescribeResponseV0Body;
 
 export type { ConsumerGroupDescribeAssignment };
 
@@ -94,5 +78,3 @@ export const consumerGroupDescribeResponseV1: ResponseDefinition<ConsumerGroupDe
     return data;
   },
 };
-
-export type { ConsumerGroupDescribeResponseV0Body };

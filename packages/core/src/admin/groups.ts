@@ -72,11 +72,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         cluster,
         retry,
         groupIds,
-        // ConsumerGroupDescribe v0 members carry no `memberType`, which `ConsumerGroupDescription` types as present.
-        describe: async (coordinator, ids) =>
-          (await coordinator.send(ConsumerGroupDescribe, { groupIds: ids })) as {
-            groups: ConsumerGroupDescribeGroupV1[];
-          },
+        describe: (coordinator, ids) => coordinator.send(ConsumerGroupDescribe, { groupIds: ids }),
       }),
     };
   };

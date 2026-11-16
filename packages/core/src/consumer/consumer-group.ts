@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment, isRebalancing } from '../errors';
@@ -771,7 +770,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   #ensureMemberId(): string {
     if (!this.memberId) {
-      this.memberId = randomUUID();
+      this.memberId = globalThis.crypto.randomUUID();
     }
     return this.memberId;
   }

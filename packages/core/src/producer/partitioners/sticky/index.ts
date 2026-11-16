@@ -25,8 +25,19 @@ function toPositive(value: number): number {
   return value & 0x7fffffff;
 }
 
+/**
+ * Uniform index in `[0, length)`. Masks a random value to the smallest covering power of two and
+ * draws again when it lands past `length`, because `value % length` favours the low indexes.
+ */
 function randomIndex(length: number): number {
-  return randomBytes(4).readUInt32BE(0) % length;
+  if (length <= 1) return 0;
+
+  const mask = 2 ** (32 - Math.clz32(length - 1)) - 1;
+  let index: number;
+  do {
+    index = randomBytes(4).readUInt32BE(0) & mask;
+  } while (index >= length);
+  return index;
 }
 
 /** KIP-794's plain rule: uniformly at random from every candidate except the previous partition. */

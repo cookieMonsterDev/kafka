@@ -132,6 +132,29 @@ describe('published file count', () => {
     expect(entry).toMatch(/import\(\s*["']\.\/lazy-requests\.js["']\s*\)/);
   });
 
+  // Only TLS, compression or SCRAM need these, so the entry loads them on first use. `node:util`
+  // is listed because it loads `node:worker_threads` on Node.js 26.
+  it('statically imports no builtin or codec pool that only some applications need', () => {
+    const lazySpecifiers = [
+      'node:crypto',
+      'node:tls',
+      'node:util',
+      'node:worker_threads',
+      'node:zlib',
+      './protocol/compression/off-thread.js',
+    ];
+    // `shared.js` is the only chunk `index.js` imports statically; the JS_FILES test above lists every chunk.
+    const staticImports = ['index.js', 'shared.js'].flatMap((file) => {
+      const source = readFileSync(join(packSource, 'dist', file), 'utf8');
+      return [...source.matchAll(/^(?:import|export)\s(?:[^'";]*?\sfrom\s*)?["']([^"']+)["']/gm)].map(
+        (match) => match[1] ?? '',
+      );
+    });
+    // Guards the pattern itself: an empty match list would pass the check below vacuously.
+    expect(staticImports).toEqual(expect.arrayContaining(['./shared.js', 'node:net']));
+    expect(staticImports.filter((specifier) => lazySpecifiers.includes(specifier))).toEqual([]);
+  });
+
   it('exports from the built entry what src/index.ts exports', async () => {
     const sourceExports = Object.keys(await import('../../src/index')).sort();
     const output = runInBuild(`

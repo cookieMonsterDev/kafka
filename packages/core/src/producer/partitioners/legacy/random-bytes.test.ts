@@ -14,4 +14,9 @@ describe('producer/partitioners/legacy/randomBytes', () => {
     expect(Buffer.isBuffer(bytes)).toBe(true);
     expect(bytes.byteLength).toBe(32);
   });
+
+  // Web Crypto's `getRandomValues` rejects more than 65536 bytes, so the limit must not exceed it.
+  it('returns the maximum entropy budget in one call', () => {
+    expect(randomBytes(65536).byteLength).toBe(65536);
+  });
 });

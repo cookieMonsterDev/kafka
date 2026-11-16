@@ -1,12 +1,24 @@
-import { promisify } from 'node:util';
-import { constants as zlibConstants, zstdCompress, zstdDecompress } from 'node:zlib';
 import { KafkaNonRetriableError } from '../../errors';
 import { isBunNativeEnabled } from '../../runtime/runtime';
 import type { CompressionCodec } from './index';
 import { MAX_DECOMPRESSED_SIZE } from './limits';
 
-const compress = promisify(zstdCompress);
-const decompress = promisify(zstdDecompress);
+/** Loaded on first ZSTD use that needs `node:zlib`, so importing the client loads neither it nor `node:util`. */
+async function importZstd() {
+  const [zlib, { promisify }] = await Promise.all([import('node:zlib'), import('node:util')]);
+  return {
+    compress: promisify(zlib.zstdCompress),
+    decompress: promisify(zlib.zstdDecompress),
+    compressionLevelParam: zlib.constants.ZSTD_c_compressionLevel,
+  };
+}
+
+let zstdFunctions: ReturnType<typeof importZstd> | undefined;
+
+function loadZstd(): ReturnType<typeof importZstd> {
+  zstdFunctions ??= importZstd();
+  return zstdFunctions;
+}
 
 /** Levels `Bun.zstdCompress` accepts; it throws for others that `node:zlib` takes (negative fast levels, clamping). */
 const BUN_ZSTD_MIN_LEVEL = 1;
@@ -29,6 +41,7 @@ function bunZstdCompressorFor(level: number | undefined): BunZstd | undefined {
 }
 
 export async function decompressZstd(buffer: Buffer, maxOutputLength = MAX_DECOMPRESSED_SIZE): Promise<Buffer> {
+  const { decompress } = await loadZstd();
   try {
     return await decompress(buffer, { maxOutputLength });
   } catch (e) {
@@ -47,8 +60,9 @@ export const zstdCodec: CompressionCodec = {
   async compress(encoder, level) {
     const bun = bunZstdCompressorFor(level);
     if (bun) return level == null ? bun.zstdCompress(encoder.buffer) : bun.zstdCompress(encoder.buffer, { level });
+    const { compress, compressionLevelParam } = await loadZstd();
     if (level == null) return compress(encoder.buffer);
-    return compress(encoder.buffer, { params: { [zlibConstants.ZSTD_c_compressionLevel]: level } });
+    return compress(encoder.buffer, { params: { [compressionLevelParam]: level } });
   },
   async decompress(buffer) {
     return decompressZstd(buffer);

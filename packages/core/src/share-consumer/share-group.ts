@@ -44,7 +44,7 @@ export class ShareGroup {
     this.rackId = rackId;
     this.#topicNames = new TopicIdNames({
       subscribedTopics: () => this.topicsSubscribed,
-      hasPattern: () => false,
+      hasPattern: false,
       describeAssignedTopics: () => this.#describeAssignedTopics(),
     });
   }
@@ -53,16 +53,8 @@ export class ShareGroup {
     return this.member.memberId;
   }
 
-  get memberEpoch(): number {
-    return this.member.memberEpoch;
-  }
-
   get heartbeatIntervalMs(): number | null {
     return this.member.heartbeatIntervalMs;
-  }
-
-  get joined(): boolean {
-    return this.member.isJoined;
   }
 
   async connect(): Promise<void> {
@@ -70,7 +62,7 @@ export class ShareGroup {
   }
 
   async disconnect(): Promise<void> {
-    if (this.joined) await this.leave();
+    if (this.member.isJoined) await this.leave();
     await this.cluster.disconnect();
   }
 
@@ -86,13 +78,13 @@ export class ShareGroup {
       await this.#heartbeat({ force: true });
 
       const deadline = Date.now() + JOIN_DEADLINE_MS;
-      while (!this.joined && !this.shuttingDown && Date.now() < deadline) {
+      while (!this.member.isJoined && !this.shuttingDown && Date.now() < deadline) {
         const waitMs = this.heartbeatIntervalMs ?? 500;
         await sleep(Math.max(50, waitMs));
         await this.#heartbeat({ force: true });
       }
 
-      if (!this.joined && !this.shuttingDown) {
+      if (!this.member.isJoined && !this.shuttingDown) {
         throw new KafkaError(`Share group join timed out for group ${this.groupId}`);
       }
     });
@@ -141,7 +133,7 @@ export class ShareGroup {
       return this.coordinator.shareGroupHeartbeat({
         groupId: this.groupId,
         memberId,
-        memberEpoch: this.memberEpoch,
+        memberEpoch: this.member.memberEpoch,
         rackId: sendsJoinFields && this.rackId !== '' ? this.rackId : null,
         subscribedTopicNames: sendsJoinFields ? [...this.topicsSubscribed] : null,
       });
@@ -163,7 +155,7 @@ export class ShareGroup {
     this.#logger.debug('Received share-group assignment', {
       groupId: this.groupId,
       memberId: this.memberId,
-      memberEpoch: this.memberEpoch,
+      memberEpoch: this.member.memberEpoch,
       assignment: this.assignment,
     });
   }

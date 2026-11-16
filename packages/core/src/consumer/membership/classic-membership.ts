@@ -3,7 +3,7 @@ import { KafkaNonRetriableError } from '../../errors';
 import { arrayDiff } from '../../utils/array-diff';
 import { MemberAssignment } from '../assigner-protocol';
 import { HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from '../instrumentation-events';
-import type { MemberAssignment as MemberAssignmentMap, TopicPartitions } from '../types';
+import type { TopicPartitions } from '../types';
 import { partitionsNotIn, type GroupMembership, type MembershipHost } from './group-membership';
 
 export interface ClassicMembershipOptions {
@@ -76,8 +76,8 @@ export class ClassicMembership implements GroupMembership {
     this.#updateNextHeartbeatAt();
   }
 
-  resetFencedMember(error: { type?: string }): void {
-    if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
+  resetRejectedMember({ forgetMemberId }: { forgetMemberId: boolean }): void {
+    if (forgetMemberId) this.memberId = null;
     this.#updateNextHeartbeatAt();
   }
 
@@ -184,11 +184,7 @@ export class ClassicMembership implements GroupMembership {
       assignment: nextAssignment,
       revoked: isCooperative ? partitionsToRevoke : previousAssignment,
       gained: isCooperative ? partitionsNotIn(nextAssignment, previousAssignment) : nextAssignment,
-      onInstalled: () => {
-        const partitionsByTopic: MemberAssignmentMap = Object.create(null) as MemberAssignmentMap;
-        for (const { topic, partitions } of nextAssignment) partitionsByTopic[topic] = partitions;
-        selectedAssigner?.onAssignment?.(partitionsByTopic);
-      },
+      onInstalled: (partitionsByTopic) => selectedAssigner?.onAssignment?.(partitionsByTopic),
     });
 
     if (partitionsToRevoke.length > 0) {

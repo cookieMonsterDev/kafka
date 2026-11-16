@@ -47,9 +47,9 @@ describe('share-consumer/share-group', () => {
     group.subscribe(['events']);
     await group.joinAndSync();
 
-    expect(group.joined).toBe(true);
+    expect(group.member.isJoined).toBe(true);
     expect(group.memberId).toBe('member-1');
-    expect(group.memberEpoch).toBe(1);
+    expect(group.member.memberEpoch).toBe(1);
     expect(group.assigned()).toEqual([{ topic: 'events', partitions: [0, 1] }]);
     expect(shareGroupHeartbeat).toHaveBeenCalledTimes(2);
   });
@@ -76,7 +76,7 @@ describe('share-consumer/share-group', () => {
     expect(shareGroupHeartbeat).toHaveBeenCalledWith(
       expect.objectContaining({ groupId: 'share-1', memberId: 'member-1', memberEpoch: -1 }),
     );
-    expect(group.joined).toBe(false);
+    expect(group.member.isJoined).toBe(false);
   });
 
   it('connects and disconnects through the cluster, leaving when joined', async () => {
@@ -104,7 +104,7 @@ describe('share-consumer/share-group', () => {
     expect(connect).toHaveBeenCalled();
     expect(shareGroupHeartbeat).toHaveBeenCalled();
     expect(disconnect).toHaveBeenCalled();
-    expect(group.joined).toBe(false);
+    expect(group.member.isJoined).toBe(false);
   });
 
   it('leave is a no-op without a coordinator or member id', async () => {
@@ -122,8 +122,8 @@ describe('share-consumer/share-group', () => {
     group.member.isJoined = true;
 
     await group.leave();
-    expect(group.joined).toBe(false);
-    expect(group.memberEpoch).toBe(SHARE_GROUP_JOIN_EPOCH);
+    expect(group.member.isJoined).toBe(false);
+    expect(group.member.memberEpoch).toBe(SHARE_GROUP_JOIN_EPOCH);
   });
 
   it('heartbeatDue is false without a coordinator and true after the interval elapses', () => {

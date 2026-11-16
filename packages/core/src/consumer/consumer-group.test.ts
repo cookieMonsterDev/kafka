@@ -728,7 +728,7 @@ describe('consumer/consumer-group', () => {
     await consumerGroup.joinAndSync();
 
     const fenced = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'FENCED_MEMBER_EPOCH')!.code);
-    await consumerGroup.recoverFencedMember(fenced);
+    await consumerGroup.recoverRejectedMember(fenced);
     await consumerGroup.joinAndSync();
 
     expect(onPartitionsLost).toHaveBeenCalledWith([

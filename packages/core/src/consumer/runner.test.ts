@@ -77,7 +77,7 @@ describe('consumer/runner', () => {
       pause: vi.fn(),
       resume: vi.fn(),
       hasSeekOffset: vi.fn().mockReturnValue(false),
-      recoverFencedMember: vi.fn(async () => undefined),
+      recoverRejectedMember: vi.fn(async () => undefined),
       position: vi.fn(() => null),
       ...overrides,
     } as unknown as ConsumerGroupHandle;
@@ -128,10 +128,10 @@ describe('consumer/runner', () => {
     expect(rebalancingEvents).toHaveLength(1);
     // REBALANCE_IN_PROGRESS is a normal mid-membership signal to rejoin, not a fenced/kicked
     // member - the current assignment must not be reported lost for it.
-    expect(consumerGroup.recoverFencedMember).not.toHaveBeenCalled();
+    expect(consumerGroup.recoverRejectedMember).not.toHaveBeenCalled();
   });
 
-  it('asks the group to recover a fenced member before rejoining after UNKNOWN_MEMBER_ID', async () => {
+  it('asks the group to recover the rejected member before rejoining after UNKNOWN_MEMBER_ID', async () => {
     const error = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
     const consumerGroup = fakeConsumerGroup({
       fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
@@ -149,8 +149,8 @@ describe('consumer/runner', () => {
     await runner.start();
     await waitFor(() => vi.mocked(consumerGroup.joinAndSync).mock.calls.length > 1 || false);
 
-    expect(consumerGroup.recoverFencedMember).toHaveBeenCalledExactlyOnceWith(error);
-    expect(vi.mocked(consumerGroup.recoverFencedMember).mock.invocationCallOrder[0]).toBeLessThan(
+    expect(consumerGroup.recoverRejectedMember).toHaveBeenCalledExactlyOnceWith(error);
+    expect(vi.mocked(consumerGroup.recoverRejectedMember).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(consumerGroup.joinAndSync).mock.invocationCallOrder[1]!,
     );
   });

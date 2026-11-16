@@ -30,8 +30,8 @@ export interface ConsumerProtocolMembershipOptions {
 export class ConsumerProtocolMembership implements GroupMembership {
   readonly isGroupMember = true;
   readonly leaderId = null;
+  readonly groupProtocol = 'consumer';
   coordinator: Broker | null = null;
-  groupProtocol: string | null = null;
   nextHeartbeatAt = Infinity;
 
   readonly #host: MembershipHost;
@@ -40,14 +40,14 @@ export class ConsumerProtocolMembership implements GroupMembership {
   readonly #topicNames: TopicIdNames;
   #ownedTopicPartitions: ConsumerGroupHeartbeatTopicPartitions[] = [];
   /** The owned partitions changed since the last heartbeat, which has to report them. */
-  #ownedPartitionsDirty = false;
+  #hasUnreportedPartitions = false;
 
   constructor(host: MembershipHost, options: ConsumerProtocolMembershipOptions) {
     this.#host = host;
     this.#options = options;
     this.#topicNames = new TopicIdNames({
       subscribedTopics: () => this.#host.topicsSubscribed,
-      hasPattern: () => this.#options.subscribedTopicRegex != null,
+      hasPattern: options.subscribedTopicRegex != null,
       describeAssignedTopics: () => this.#describeAssignedTopics(),
     });
   }
@@ -67,7 +67,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
     }
     this.coordinator = await cluster.findGroupCoordinator({ groupId });
     this.#member.startJoin();
-    this.#ownedPartitionsDirty = false;
+    this.#hasUnreportedPartitions = false;
     this.#ownedTopicPartitions = [];
     await cluster.refreshMetadata();
 
@@ -80,7 +80,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
     }
 
     attempts = 0;
-    while (this.#ownedPartitionsDirty && !this.#host.shuttingDown && attempts < MAX_IMMEDIATE_HEARTBEATS) {
+    while (this.#hasUnreportedPartitions && !this.#host.shuttingDown && attempts < MAX_IMMEDIATE_HEARTBEATS) {
       attempts += 1;
       await this.#heartbeat();
     }
@@ -106,13 +106,13 @@ export class ConsumerProtocolMembership implements GroupMembership {
     }
     this.#member.reset();
     this.#ownedTopicPartitions = [];
-    this.#ownedPartitionsDirty = false;
+    this.#hasUnreportedPartitions = false;
     this.nextHeartbeatAt = Infinity;
   }
 
-  resetFencedMember(error: { type?: string }): void {
+  resetRejectedMember({ forgetMemberId }: { forgetMemberId: boolean }): void {
     // A member with an unknown id joins as a new member; a fenced one rejoins under its own id.
-    this.#member.reset({ forgetMemberId: error.type === 'UNKNOWN_MEMBER_ID' });
+    this.#member.reset({ forgetMemberId });
   }
 
   async #heartbeat(ackDepth = 0): Promise<void> {
@@ -144,7 +144,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
       topicPartitions: this.#reportedPartitions(isJoining),
     });
 
-    this.#ownedPartitionsDirty = false;
+    this.#hasUnreportedPartitions = false;
     member.applyResponse(response);
     this.nextHeartbeatAt = member.nextHeartbeatAt(this.#options.heartbeatInterval);
     instrumentationEmitter.emit(HEARTBEAT, {
@@ -158,7 +158,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
 
     // Ack the new assignment on the next heartbeat immediately. The broker will not give
     // revoked partitions to other members until this member reports the updated owned set.
-    if (this.#ownedPartitionsDirty && ackDepth < MAX_IMMEDIATE_HEARTBEATS) {
+    if (this.#hasUnreportedPartitions && ackDepth < MAX_IMMEDIATE_HEARTBEATS) {
       await this.#heartbeat(ackDepth + 1);
     }
   }
@@ -166,15 +166,14 @@ export class ConsumerProtocolMembership implements GroupMembership {
   /** An empty list on a join, the owned partitions after they changed, `null` ("unchanged") otherwise. */
   #reportedPartitions(isJoining: boolean): ConsumerGroupHeartbeatTopicPartitions[] | null {
     if (isJoining) return [];
-    return this.#ownedPartitionsDirty ? this.#ownedTopicPartitions : null;
+    return this.#hasUnreportedPartitions ? this.#ownedTopicPartitions : null;
   }
 
   async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body, wasJoined: boolean): Promise<void> {
     const host = this.#host;
     // The epoch can advance without a new assignment (so no new OffsetManager); commits must carry
     // the current epoch or the broker rejects them with STALE_MEMBER_EPOCH.
-    host.updateCommitGeneration(response.memberEpoch);
-    this.groupProtocol = 'consumer';
+    host.updateMemberEpoch(response.memberEpoch);
 
     if (!response.assignment) return;
 
@@ -210,10 +209,11 @@ export class ConsumerProtocolMembership implements GroupMembership {
       gained: partitionsNotIn(assignment, previousAssignment),
       onInstalled: () => {
         this.#ownedTopicPartitions = owned;
-        this.#ownedPartitionsDirty = true;
+        this.#hasUnreportedPartitions = true;
       },
     });
 
+    // A reassignment while already in the group took no join, so it reports a zero duration.
     if (wasJoined) host.emitGroupJoin(0);
   }
 

@@ -3,7 +3,7 @@ import type { Cluster } from '../../cluster/index';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import type { Logger } from '../../loggers/index';
 import type { TopicOffsetConfiguration } from '../offset-reset';
-import type { Assigner, TopicPartitions } from '../types';
+import type { Assigner, MemberAssignment as MemberAssignmentMap, TopicPartitions } from '../types';
 
 /**
  * How a consumer takes part in its group: the classic protocol, the consumer protocol (KIP-848),
@@ -31,9 +31,10 @@ export interface GroupMembership {
   leave(): Promise<void>;
   /**
    * Forgets the member state the coordinator rejected with `UNKNOWN_MEMBER_ID` or
-   * `FENCED_MEMBER_EPOCH`, so the next {@link join} starts over.
+   * `FENCED_MEMBER_EPOCH`, so the next {@link join} starts over. `forgetMemberId` also drops the
+   * member id, which the coordinator no longer knows after `UNKNOWN_MEMBER_ID`.
    */
-  resetFencedMember(error: { type?: string }): void;
+  resetRejectedMember(options: { forgetMemberId: boolean }): void;
 }
 
 /** One change of the member's assignment, with the partitions it revokes and gains. */
@@ -43,7 +44,7 @@ export interface AssignmentChange {
   revoked: readonly TopicPartitions[];
   gained: readonly TopicPartitions[];
   /** Runs once the assignment is installed, before `onPartitionsAssigned` is called. */
-  onInstalled?: () => void;
+  onInstalled?: (partitionsByTopic: MemberAssignmentMap) => void;
 }
 
 /** The consumer group state and callbacks a {@link GroupMembership} works with. */
@@ -62,9 +63,16 @@ export interface MembershipHost {
    * calls `onPartitionsAssigned` with the gained ones.
    */
   changeAssignment(change: AssignmentChange): Promise<void>;
-  /** Tags later commits with `generationId`, which can change without a new assignment. */
-  updateCommitGeneration(generationId: number): void;
+  /** Tags later commits with the consumer protocol's `memberEpoch`, which can change without a new assignment. */
+  updateMemberEpoch(memberEpoch: number): void;
   emitGroupJoin(durationMs: number): void;
+}
+
+/** `{ topic, partitions }[]` -> `{ [topic]: partitions }`, without a prototype so any topic name is a safe key. */
+export function toPartitionsByTopic(assignment: readonly TopicPartitions[]): MemberAssignmentMap {
+  const partitionsByTopic = Object.create(null) as MemberAssignmentMap;
+  for (const { topic, partitions } of assignment) partitionsByTopic[topic] = partitions;
+  return partitionsByTopic;
 }
 
 /** The partitions of `assignment` that `other` does not contain. */
@@ -82,7 +90,10 @@ export function partitionsNotIn(
     .filter(({ partitions }) => partitions.length > 0);
 }
 
-/** `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`: the coordinator no longer accepts this member. */
-export function isFencedMemberError(error: { type?: string }): boolean {
+/**
+ * `UNKNOWN_MEMBER_ID` (the session expired) or `FENCED_MEMBER_EPOCH` (the member was fenced): the
+ * coordinator no longer accepts this member, so its assignment is lost.
+ */
+export function isRejectedMemberError(error: { type?: string }): boolean {
   return error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH';
 }

@@ -10,7 +10,7 @@ export interface TopicIdNamesOptions {
   /** The topic names the member subscribed to. */
   subscribedTopics: () => readonly string[];
   /** Whether the member also subscribed with a pattern, so the broker can assign topics it did not name. */
-  hasPattern: () => boolean;
+  hasPattern: boolean;
   /** Describes the group and returns the topics of this member's assignments. */
   describeAssignedTopics: () => Promise<Iterable<DescribedTopic>>;
 }
@@ -39,7 +39,7 @@ export class TopicIdNames {
 
     const subscribedTopics = this.#options.subscribedTopics();
     const [onlyTopic] = subscribedTopics;
-    if (subscribedTopics.length === 1 && onlyTopic != null && !this.#options.hasPattern()) {
+    if (subscribedTopics.length === 1 && onlyTopic != null && !this.#options.hasPattern) {
       this.#namesById.set(key, onlyTopic);
       return onlyTopic;
     }

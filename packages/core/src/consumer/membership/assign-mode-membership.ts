@@ -34,5 +34,5 @@ export class AssignModeMembership implements GroupMembership {
 
   async leave(): Promise<void> {}
 
-  resetFencedMember(): void {}
+  resetRejectedMember(): void {}
 }

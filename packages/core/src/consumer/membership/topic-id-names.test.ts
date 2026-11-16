@@ -17,7 +17,7 @@ function createTopicIdNames({
   const describeAssignedTopics = vi.fn(async () => described);
   const topicIdNames = new TopicIdNames({
     subscribedTopics: () => subscribedTopics,
-    hasPattern: () => hasPattern,
+    hasPattern,
     describeAssignedTopics,
   });
   return { topicIdNames, describeAssignedTopics };

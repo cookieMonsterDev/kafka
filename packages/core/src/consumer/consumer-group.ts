@@ -15,7 +15,8 @@ import { AssignModeMembership } from './membership/assign-mode-membership';
 import { ClassicMembership } from './membership/classic-membership';
 import { ConsumerProtocolMembership } from './membership/consumer-protocol-membership';
 import {
-  isFencedMemberError,
+  isRejectedMemberError,
+  toPartitionsByTopic,
   type AssignmentChange,
   type GroupMembership,
   type MembershipHost,
@@ -237,9 +238,9 @@ export interface ConsumerGroupHandle {
   hasSeekOffset: (topicPartition: TopicPartition) => boolean;
   /**
    * Reports the current assignment lost and resets the member after `UNKNOWN_MEMBER_ID` /
-   * `FENCED_MEMBER_EPOCH`. Callers invoke this as soon as they detect fencing, before rejoining.
+   * `FENCED_MEMBER_EPOCH`. Callers invoke this as soon as they see either error, before rejoining.
    */
-  recoverFencedMember: (error: { type?: string }) => Promise<void>;
+  recoverRejectedMember: (error: { type?: string }) => Promise<void>;
   /** Next fetch offset for `topic`/`partition`, or `null` when it isn't currently assigned. */
   position: (topic: string, partition: number) => bigint | null;
   /** Latest high watermark seen on a Fetch response for `topic`/`partition`, or `null` if none yet. */
@@ -485,29 +486,30 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   }
 
   /**
-   * Recovers from `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`: the coordinator no longer
-   * recognizes this member (session timeout, or another member took its generation), so it was
-   * fenced out before it could leave and revoke cleanly. Reports the current assignment lost and
-   * resets the membership so the next {@link joinAndSync} rejoins from scratch. Every path that
-   * detects fencing calls this before rejoining.
+   * Recovers from `UNKNOWN_MEMBER_ID` (the session expired) or `FENCED_MEMBER_EPOCH` (the member
+   * was fenced): the coordinator rejected the member before it could leave and revoke cleanly.
+   * Reports the current assignment lost and resets the membership so the next
+   * {@link joinAndSync} rejoins from scratch. Every path that sees either error calls this before
+   * rejoining.
    */
-  async recoverFencedMember(error: { type?: string }): Promise<void> {
+  async recoverRejectedMember(error: { type?: string }): Promise<void> {
     await this.notifyPartitionsLost();
-    this.#membership.resetFencedMember(error);
+    this.#membership.resetRejectedMember({ forgetMemberId: error.type === 'UNKNOWN_MEMBER_ID' });
   }
 
   async changeAssignment({ assignment, revoked, gained, onInstalled }: AssignmentChange): Promise<void> {
     await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
-    await this.#installAssignment(assignment);
-    onInstalled?.();
+    const partitionsByTopic = await this.#installAssignment(assignment);
+    onInstalled?.(partitionsByTopic);
     await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
   }
 
-  updateCommitGeneration(generationId: number): void {
-    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = generationId;
+  updateMemberEpoch(memberEpoch: number): void {
+    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = memberEpoch;
   }
 
-  async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
+  /** Installs the member's new assignment and returns it keyed by topic. */
+  async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<MemberAssignmentMap> {
     const { groupId, generationId, memberId, coordinator } = this;
     const isGroupMember = this.#membership.isGroupMember;
     if (isGroupMember && (!coordinator || generationId == null || memberId == null)) {
@@ -544,13 +546,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     this.#invalidateActiveTopicPartitions();
     this.#prefetches.clear();
 
-    const memberAssignment = currentMemberAssignment.reduce<MemberAssignmentMap>(
-      (partitionsByTopic, { topic, partitions }) => {
-        partitionsByTopic[topic] = partitions;
-        return partitionsByTopic;
-      },
-      {},
-    );
+    const memberAssignment = toPartitionsByTopic(currentMemberAssignment);
 
     if (!isGroupMember) {
       if (this.offsetManager instanceof AssignedOffsetManager) {
@@ -564,7 +560,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
           instrumentationEmitter: this.instrumentationEmitter,
         });
       }
-      return;
+      return memberAssignment;
     }
 
     const previousOffsetManager = this.offsetManager;
@@ -601,13 +597,11 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     }
 
     this.offsetManager = offsetManager;
+    return memberAssignment;
   }
 
   emitGroupJoin(durationMs: number): void {
-    const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
-      result[topic] = partitions;
-      return result;
-    }, {});
+    const memberAssignment = toPartitionsByTopic(this.assigned());
     this.instrumentationEmitter.emit(GROUP_JOIN, {
       groupId: this.groupId,
       memberId: this.memberId,
@@ -645,8 +639,8 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
           throw new KafkaError(error);
         }
 
-        if (isFencedMemberError(error)) {
-          await this.recoverFencedMember(error);
+        if (isRejectedMemberError(error)) {
+          await this.recoverRejectedMember(error);
           throw new KafkaError(error);
         }
 

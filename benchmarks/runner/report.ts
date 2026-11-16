@@ -55,8 +55,7 @@ export function formatNativeAddon(footprint: Footprint): string {
  */
 export function footprintTotal(footprint: Footprint): { bytes: number; dependencyCount: number } | null {
   if (footprint.unsplitTotal !== undefined) {
-    const { bytes, dependencyCount } = footprint.unsplitTotal;
-    return { bytes, dependencyCount };
+    return footprint.unsplitTotal;
   }
   const { required, optional } = footprint;
   if (required === null || optional === null) {
@@ -73,10 +72,10 @@ export function hasUnsplitFootprint(footprints: readonly Footprint[]): boolean {
   return footprints.some((footprint) => footprint.unsplitTotal !== undefined);
 }
 
-function footprintPartCells(part: FootprintPart | null, footprint: Footprint): string[] {
+/** `missingText` fills the cells of a part that is null. */
+function footprintPartCells(part: FootprintPart | null, missingText: string): string[] {
   if (part === null) {
-    const missing = footprint.unsplitTotal === undefined ? 'n/a' : 'not split';
-    return [missing, missing, missing];
+    return [missingText, missingText, missingText];
   }
   return [formatNumber(part.bytes / 1_048_576, 1), String(part.dependencyCount), formatNumber(part.fileCount)];
 }
@@ -297,14 +296,17 @@ function renderFootprints(summary: SessionSummary): string {
     return '';
   }
   const hasTotals = hasUnsplitFootprint(summary.footprints);
-  const rows = summary.footprints.map((footprint) => [
-    footprint.packageName,
-    footprint.version ?? 'n/a',
-    ...(hasTotals ? footprintTotalCells(footprint) : []),
-    ...footprintPartCells(footprint.required, footprint),
-    ...footprintPartCells(footprint.optional, footprint),
-    formatNativeAddon(footprint),
-  ]);
+  const rows = summary.footprints.map((footprint) => {
+    const missingPartText = footprint.unsplitTotal === undefined ? 'n/a' : 'not split';
+    return [
+      footprint.packageName,
+      footprint.version ?? 'n/a',
+      ...(hasTotals ? footprintTotalCells(footprint) : []),
+      ...footprintPartCells(footprint.required, missingPartText),
+      ...footprintPartCells(footprint.optional, missingPartText),
+      formatNativeAddon(footprint),
+    ];
+  });
   const header = [
     'Package',
     'Version',

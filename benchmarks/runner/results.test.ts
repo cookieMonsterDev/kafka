@@ -432,7 +432,7 @@ describe('F1 footprints', () => {
     assert.match(report, /\| @confluentinc\/kafka-javascript \| n\/a \|( n\/a \|){9}/);
   });
 
-  it('totals the required and optional parts like an unsplit footprint', () => {
+  it('totals a split footprint and places its native addon', () => {
     const [split, notInstalled] = footprints;
     assert.ok(split && notInstalled);
 

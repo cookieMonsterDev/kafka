@@ -413,23 +413,21 @@ function declaredGaps(chart, sources) {
 
 /**
  * One install-size entry per client. A session recorded before F1 split required and optional dependencies
- * gives an `unsplit` entry that keeps only the measured total.
+ * gives an entry with only `unsplitTotal`, and null parts.
  */
 function buildFootprints(sources) {
   return CLIENTS.map(({ id }) => {
     for (const [source, session] of sessionCandidates(id, sources)) {
       const footprint = session.summary.footprints?.find((entry) => entry.client === id);
-      if (footprint === undefined) continue;
-      const isUnsplit = footprint.unsplitTotal !== undefined;
-      if (footprint.required === null && !isUnsplit) continue;
+      if (footprint === undefined || footprintTotal(footprint) === null) continue;
       return {
         client: id,
-        status: isUnsplit ? 'unsplit' : 'ok',
+        status: 'ok',
         packageName: footprint.packageName,
         version: footprint.version,
         required: footprint.required,
         optional: footprint.optional,
-        ...(isUnsplit ? { unsplitTotal: footprint.unsplitTotal } : {}),
+        ...(footprint.unsplitTotal === undefined ? {} : { unsplitTotal: footprint.unsplitTotal }),
         source,
         sessionId: session.summary.sessionId,
         ...(id === CORE_CLIENT_ID ? { coreSha: session.summary.manifest.core.sha } : {}),
@@ -803,10 +801,6 @@ function footprintTotalCells(footprint) {
   return [formatMegabytes(bytes), String(dependencyCount)];
 }
 
-function isFootprintMeasured(footprint) {
-  return footprint.status === 'ok' || footprint.status === 'unsplit';
-}
-
 /**
  * Install size as information only: no chart, verdict or winner, because a client's size follows what it
  * implements and bundles. It does not depend on the payload, so it shows the first dataset that measured it.
@@ -820,7 +814,9 @@ function installSizeText(comparison) {
     `This is information, not a ranking, because size follows what each client implements and bundles: ${CLIENT_COVERAGE}.`,
     '',
   ];
-  const dataset = orderedDatasets(comparison).find((entry) => entry.footprints.some(isFootprintMeasured));
+  const dataset = orderedDatasets(comparison).find((entry) =>
+    entry.footprints.some((footprint) => footprint.status === 'ok'),
+  );
   if (dataset === undefined) return [...lines, 'Not measured in the published sessions yet.'];
   // Split rows show their totals too, so the total columns have a value for every measured client.
   const hasTotals = hasUnsplitFootprint(dataset.footprints);
@@ -838,7 +834,7 @@ function installSizeText(comparison) {
   ];
   const rows = dataset.footprints.map((footprint) => {
     const client = clientLabel(footprint.client);
-    if (!isFootprintMeasured(footprint)) return [client, 'not measured', ...Array(header.length - 2).fill('—')];
+    if (footprint.status !== 'ok') return [client, 'not measured', ...Array(header.length - 2).fill('—')];
     return [
       client,
       footprint.version ?? '—',

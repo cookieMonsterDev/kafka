@@ -6,14 +6,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+const REPO_SCRIPTS_DIR = resolve(PACKAGE_ROOT, '../../scripts');
 
 /**
- * Headroom above the 821 files this suite packs (dist, README, package.json). It catches a
- * regression such as re-enabled maps, test files back in the declaration build or a return to one
- * JavaScript file per source module, not ordinary growth. Lower it when a build change shrinks the
- * file count.
+ * Headroom above the 290 files this suite packs (dist, README, package.json). It catches a
+ * regression such as re-enabled maps, test files back in the declaration build, unreachable
+ * declarations no longer pruned or a return to one JavaScript file per source module, not ordinary
+ * growth. Lower it when a build change shrinks the file count.
  */
-const FILE_COUNT_CEILING = 900;
+const FILE_COUNT_CEILING = 350;
 
 /** The bundled build emits only these JavaScript files; a per-module build would emit ~800. */
 const JS_FILES = [
@@ -57,6 +58,10 @@ describe('published file count', () => {
     execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--outDir', distDir], {
       cwd: PACKAGE_ROOT,
     });
+    // The rest of `build:types`, so the declarations packed here are the ones that get published.
+    for (const script of ['add-declaration-extensions.mjs', 'prune-unreachable-declarations.mjs']) {
+      execFileSync(process.execPath, [join(REPO_SCRIPTS_DIR, script), distDir]);
+    }
     cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
     cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));
 
@@ -125,6 +130,29 @@ describe('published file count', () => {
     const entry = readFileSync(join(packSource, 'dist', 'index.js'), 'utf8');
     expect(entry).not.toMatch(/(?:from|import)\s*["']\.\/lazy-requests\.js["']/);
     expect(entry).toMatch(/import\(\s*["']\.\/lazy-requests\.js["']\s*\)/);
+  });
+
+  // Only TLS, compression or SCRAM need these, so the entry loads them on first use. `node:util`
+  // is listed because it loads `node:worker_threads` on Node.js 26.
+  it('statically imports no builtin or codec pool that only some applications need', () => {
+    const lazySpecifiers = [
+      'node:crypto',
+      'node:tls',
+      'node:util',
+      'node:worker_threads',
+      'node:zlib',
+      './protocol/compression/off-thread.js',
+    ];
+    // `shared.js` is the only chunk `index.js` imports statically; the JS_FILES test above lists every chunk.
+    const staticImports = ['index.js', 'shared.js'].flatMap((file) => {
+      const source = readFileSync(join(packSource, 'dist', file), 'utf8');
+      return [...source.matchAll(/^(?:import|export)\s(?:[^'";]*?\sfrom\s*)?["']([^"']+)["']/gm)].map(
+        (match) => match[1] ?? '',
+      );
+    });
+    // Guards the pattern itself: an empty match list would pass the check below vacuously.
+    expect(staticImports).toEqual(expect.arrayContaining(['./shared.js', 'node:net']));
+    expect(staticImports.filter((specifier) => lazySpecifiers.includes(specifier))).toEqual([]);
   });
 
   it('exports from the built entry what src/index.ts exports', async () => {

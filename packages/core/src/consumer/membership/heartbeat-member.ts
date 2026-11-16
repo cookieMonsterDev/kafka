@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { CONSUMER_GROUP_JOIN_EPOCH } from '../../protocol/requests/consumer-group-heartbeat/index';
 
 /** ConsumerGroupHeartbeat (KIP-848) and ShareGroupHeartbeat (KIP-932) both join at member epoch 0. */
@@ -29,7 +28,7 @@ export class HeartbeatMember {
 
   /** The member id to send; the client picks one before its first heartbeat (KIP-1082). */
   ensureMemberId(): string {
-    this.memberId ??= randomUUID();
+    this.memberId ??= globalThis.crypto.randomUUID();
     return this.memberId;
   }
 

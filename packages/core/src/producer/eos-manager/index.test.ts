@@ -55,9 +55,8 @@ describe('producer/eosManager', () => {
       transactionTimeout: 30_000,
     });
 
-    expect(eosManager.getProducerId()).toBe(-1n);
-    expect(eosManager.getProducerEpoch()).toBe(0);
-    expect(eosManager.getSequence(topic, 1)).toBe(0);
+    expect(eosManager.ledger.getProducerId()).toBe(-1n);
+    expect(eosManager.ledger.getProducerEpoch()).toBe(0);
     expect(eosManager.isInitialized()).toBe(false);
 
     await eosManager.initProducerId();
@@ -70,37 +69,9 @@ describe('producer/eosManager', () => {
       producerEpoch: -1,
     });
 
-    expect(eosManager.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
-    expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+    expect(eosManager.ledger.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
+    expect(eosManager.ledger.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
     expect(eosManager.isInitialized()).toBe(true);
-  });
-
-  it('gets and updates the sequence per topic-partition, rotating past the int32 max', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-
-    expect(eosManager.getSequence(topic, 1)).toBe(0);
-    eosManager.updateSequence(topic, 1, 10); // No effect before initialization.
-    expect(eosManager.getSequence(topic, 1)).toBe(0);
-
-    await eosManager.initProducerId();
-
-    expect(eosManager.getSequence(topic, 1)).toBe(0);
-    eosManager.updateSequence(topic, 1, 5);
-    eosManager.updateSequence(topic, 1, 10);
-    expect(eosManager.getSequence(topic, 1)).toBe(15);
-
-    expect(eosManager.getSequence(topic, 2)).toBe(0); // Different partition.
-    expect(eosManager.getSequence('foobar', 1)).toBe(0); // Different topic.
-
-    eosManager.updateSequence(topic, 3, 2 ** 31 - 1);
-    expect(eosManager.getSequence(topic, 3)).toBe(2 ** 31 - 1); // Int32 max is a valid sequence.
-    eosManager.updateSequence(topic, 3, 1);
-    expect(eosManager.getSequence(topic, 3)).toBe(0); // Rotated only after exceeding int32 max.
-
-    await eosManager.initProducerId();
-    expect(eosManager.getSequence(topic, 1)).toBe(0); // Sequences reset by initProducerId.
   });
 
   it('passes the current producer id and epoch on later InitProducerId calls', async () => {
@@ -155,7 +126,7 @@ describe('producer/eosManager', () => {
         producerId: -1n,
         producerEpoch: -1,
       });
-      expect(eosManager.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
+      expect(eosManager.ledger.getProducerId()).toBe(mockInitProducerIdResponse.producerId);
     });
 
     it('adds partitions to the transaction, skipping partitions already added', async () => {
@@ -254,7 +225,7 @@ describe('producer/eosManager', () => {
       await eosManager.commit();
 
       expect(broker.initProducerId).toHaveBeenCalledTimes(2);
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(eosManager.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
 
     it('does not bump the producer epoch when the broker predates transaction V2', async () => {
@@ -273,7 +244,7 @@ describe('producer/eosManager', () => {
       await eosManager.commit();
 
       expect(broker.initProducerId).toHaveBeenCalledTimes(1);
-      expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+      expect(eosManager.ledger.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
     });
 
     it('marks the transaction abort-only after TRANSACTION_ABORTABLE, rejecting commit but allowing abort', async () => {
@@ -480,10 +451,10 @@ describe('producer/eosManager', () => {
 
       await expect(eosManager.commit()).resolves.toBeUndefined();
       expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
-      expect(eosManager.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
+      expect(eosManager.ledger.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
 
-      await eosManager.bumpEpochIfRequested();
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      await eosManager.ledger.bumpEpochIfRequested();
+      expect(eosManager.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
 
     it('does not send EndTxn when aborting/committing a transaction with no operations', async () => {
@@ -634,266 +605,7 @@ describe('producer/eosManager', () => {
     });
   });
 
-  it('is a no-op for partition gates until initialized', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-
-    await expect(eosManager.acquirePartitionGates([{ topic, partition: 0 }])).resolves.toBeUndefined();
-    await expect(eosManager.releasePartitionGates([{ topic, partition: 0 }])).resolves.toBeUndefined();
-  });
-
-  it('allows overlapping Produce gates for different partitions after init', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-    await eosManager.initProducerId();
-
-    let partition0Held = false;
-    let releasePartition0!: () => void;
-    const holdingPartition0 = new Promise<void>((resolve) => {
-      releasePartition0 = resolve;
-    });
-    let startedHolding0!: () => void;
-    const holding0Started = new Promise<void>((resolve) => {
-      startedHolding0 = resolve;
-    });
-
-    const first = (async () => {
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-      partition0Held = true;
-      startedHolding0();
-      await holdingPartition0;
-      partition0Held = false;
-      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
-    })();
-
-    await holding0Started;
-    await eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
-    expect(partition0Held).toBe(true);
-    await eosManager.releasePartitionGates([{ topic, partition: 1 }]);
-    releasePartition0();
-    await first;
-  });
-
-  it('serializes Produce gates for the same partition so sequences stay monotonic', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-    await eosManager.initProducerId();
-
-    const sequences: number[] = [];
-    let concurrent = 0;
-    let maxConcurrent = 0;
-
-    async function produce(count: number): Promise<void> {
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-      concurrent += 1;
-      maxConcurrent = Math.max(maxConcurrent, concurrent);
-      sequences.push(eosManager.getSequence(topic, 0));
-      eosManager.updateSequence(topic, 0, count);
-      await Promise.resolve();
-      concurrent -= 1;
-      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
-    }
-
-    await Promise.all([produce(3), produce(5)]);
-    expect(maxConcurrent).toBe(1);
-    expect(sequences).toEqual([0, 3]);
-    expect(eosManager.getSequence(topic, 0)).toBe(8);
-  });
-
-  it('acquires multiple partitions in a stable order without deadlock', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-    await eosManager.initProducerId();
-
-    await expect(
-      Promise.all([
-        (async () => {
-          await eosManager.acquirePartitionGates([
-            { topic, partition: 1 },
-            { topic, partition: 0 },
-          ]);
-          await eosManager.releasePartitionGates([
-            { topic, partition: 1 },
-            { topic, partition: 0 },
-          ]);
-        })(),
-        (async () => {
-          await eosManager.acquirePartitionGates([
-            { topic, partition: 0 },
-            { topic, partition: 1 },
-          ]);
-          await eosManager.releasePartitionGates([
-            { topic, partition: 0 },
-            { topic, partition: 1 },
-          ]);
-        })(),
-      ]),
-    ).resolves.toEqual([undefined, undefined]);
-  });
-
-  it('keeps sequences independent across partitions under concurrent gates', async () => {
-    const broker = fakeBroker();
-    const cluster = fakeCluster(broker);
-    const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-    await eosManager.initProducerId();
-
-    await Promise.all([
-      (async () => {
-        await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-        eosManager.updateSequence(topic, 0, 4);
-        await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
-      })(),
-      (async () => {
-        await eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
-        eosManager.updateSequence(topic, 1, 7);
-        await eosManager.releasePartitionGates([{ topic, partition: 1 }]);
-      })(),
-    ]);
-
-    expect(eosManager.getSequence(topic, 0)).toBe(4);
-    expect(eosManager.getSequence(topic, 1)).toBe(7);
-  });
-
-  it('keeps a queued Produce waiting on its partition gate past the lock timeout, until its signal aborts', async () => {
-    vi.useFakeTimers();
-    try {
-      const broker = fakeBroker();
-      const cluster = fakeCluster(broker);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: cluster as unknown as Cluster });
-      await eosManager.initProducerId();
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-
-      const controller = new AbortController();
-      let settled = false;
-      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 0 }], { signal: controller.signal });
-      waiting.then(
-        () => (settled = true),
-        () => (settled = true),
-      );
-
-      // A leader outage longer than the old 0xffff ms lock timeout must not fail queued sends.
-      await vi.advanceTimersByTimeAsync(5 * 60_000);
-      expect(settled).toBe(false);
-
-      controller.abort(new Error('delivery deadline'));
-      await expect(waiting).rejects.toThrow('delivery deadline');
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   describe('epoch bump requests', () => {
-    it('bumps the epoch once on the next send after a request, then not again', async () => {
-      const broker = fakeBroker();
-      broker.initProducerId
-        .mockResolvedValueOnce(mockInitProducerIdResponse)
-        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
-      await eosManager.initProducerId();
-      eosManager.updateSequence(topic, 0, 5);
-
-      await eosManager.bumpEpochIfRequested();
-      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
-
-      eosManager.requestEpochBump();
-      await Promise.all([eosManager.bumpEpochIfRequested(), eosManager.bumpEpochIfRequested()]);
-      await eosManager.bumpEpochIfRequested();
-
-      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
-      expect(eosManager.getSequence(topic, 0)).toBe(0);
-    });
-
-    it('keeps the request when the bump fails so the next send tries again', async () => {
-      const broker = fakeBroker();
-      broker.initProducerId
-        .mockResolvedValueOnce(mockInitProducerIdResponse)
-        .mockRejectedValueOnce(new Error('coordinator down'))
-        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
-      await eosManager.initProducerId();
-
-      eosManager.requestEpochBump();
-      await expect(eosManager.bumpEpochIfRequested()).rejects.toThrow('coordinator down');
-      await eosManager.bumpEpochIfRequested();
-
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
-    });
-
-    function bumpingEosManager() {
-      const broker = fakeBroker();
-      broker.initProducerId
-        .mockResolvedValueOnce(mockInitProducerIdResponse)
-        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
-      const eosManager = createEosManager({ logger: silentLogger, cluster: fakeCluster(broker) as unknown as Cluster });
-      return { broker, eosManager };
-    }
-
-    function track(promise: Promise<void>): { settled: () => boolean } {
-      let settled = false;
-      promise.then(
-        () => (settled = true),
-        () => (settled = true),
-      );
-      return { settled: () => settled };
-    }
-
-    it('holds new sends back until the sends holding gates settle, then bumps once', async () => {
-      const { broker, eosManager } = bumpingEosManager();
-      await eosManager.initProducerId();
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-
-      eosManager.requestEpochBump();
-      // Partition 1 is free, but its send must not start while partition 0's old-epoch send is in flight.
-      const second = eosManager.acquirePartitionGates([{ topic, partition: 1 }]);
-      const third = eosManager.acquirePartitionGates([{ topic, partition: 2 }]);
-      const secondState = track(second);
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(secondState.settled()).toBe(false);
-      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
-
-      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
-      await Promise.all([second, third]);
-
-      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
-    });
-
-    it('does not let a send queued on a gate slip in ahead of the bump its holder requested', async () => {
-      const { eosManager } = bumpingEosManager();
-      await eosManager.initProducerId();
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-
-      let epochWhenAcquired: number | undefined;
-      const queued = eosManager
-        .acquirePartitionGates([{ topic, partition: 0 }])
-        .then(() => (epochWhenAcquired = eosManager.getProducerEpoch()));
-
-      eosManager.requestEpochBump();
-      await eosManager.releasePartitionGates([{ topic, partition: 0 }]);
-      await queued;
-
-      expect(epochWhenAcquired).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
-    });
-
-    it('gives up waiting for the drain when the send is aborted', async () => {
-      const { broker, eosManager } = bumpingEosManager();
-      await eosManager.initProducerId();
-      await eosManager.acquirePartitionGates([{ topic, partition: 0 }]);
-      eosManager.requestEpochBump();
-
-      const controller = new AbortController();
-      const waiting = eosManager.acquirePartitionGates([{ topic, partition: 1 }], { signal: controller.signal });
-      controller.abort(new Error('delivery deadline'));
-
-      await expect(waiting).rejects.toThrow('delivery deadline');
-      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
-    });
-
     it('defers a transactional bump until the transaction is aborted', async () => {
       const broker = fakeBroker();
       broker.initProducerId
@@ -909,9 +621,9 @@ describe('producer/eosManager', () => {
       eosManager.beginTransaction();
       await eosManager.addPartitionsToTransaction([{ topic, partitions: [{ partition: 0 }] }]);
 
-      eosManager.requestEpochBump();
+      eosManager.ledger.requestEpochBump();
       eosManager.markTransactionAbortable();
-      await eosManager.bumpEpochIfRequested();
+      await eosManager.ledger.bumpEpochIfRequested();
       expect(broker.initProducerId).toHaveBeenCalledTimes(1);
 
       await eosManager.abort();
@@ -919,7 +631,7 @@ describe('producer/eosManager', () => {
         expect.objectContaining({ producerEpoch: mockInitProducerIdResponse.producerEpoch, transactionResult: false }),
       );
       expect(broker.initProducerId).toHaveBeenCalledTimes(2);
-      expect(eosManager.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(eosManager.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
   });
 });

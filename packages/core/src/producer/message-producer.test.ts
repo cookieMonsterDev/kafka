@@ -12,6 +12,7 @@ import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { retrier } from '../retry/index';
 import type { EosManager } from './eos-manager/index';
+import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
 import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
 
@@ -48,21 +49,34 @@ function fakePartitionMetadata(): PartitionMetadata {
   };
 }
 
-function fakeEosManager() {
+/** Transaction calls are mocked; sequences and gates run on a real ledger with an in-memory InitProducerId. */
+function fakeEosManager(
+  ledger: IdempotenceLedger = createIdempotenceLedger({
+    logger: silentLogger,
+    initProducerId: (current: ProducerIdentity) =>
+      Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
+  }),
+) {
   return {
-    getProducerId: vi.fn().mockReturnValue(-1n),
-    getProducerEpoch: vi.fn().mockReturnValue(-1),
-    getSequence: vi.fn().mockReturnValue(0),
+    ledger,
     getTransactionalId: vi.fn().mockReturnValue(undefined),
-    updateSequence: vi.fn(),
     isTransactional: vi.fn().mockReturnValue(false),
-    isInitialized: vi.fn().mockReturnValue(true),
     addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-    requestEpochBump: vi.fn(),
-    bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
-    acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
-    releasePartitionGates: vi.fn().mockResolvedValue(undefined),
   } as unknown as EosManager;
+}
+
+/** An idempotent producer's EOS manager, its producer id already initialized. */
+async function idempotentEosManager(): Promise<EosManager> {
+  const eosManager = fakeEosManager();
+  await eosManager.ledger.initProducerId();
+  return eosManager;
+}
+
+function sentFirstSequences(broker: ReturnType<typeof fakeBroker>): (number | undefined)[] {
+  return broker.produce.mock.calls.map((call) => {
+    const request = call[0] as { topicData: { partitions: { firstSequence?: number }[] }[] };
+    return request.topicData[0]?.partitions[0]?.firstSequence;
+  });
 }
 
 function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
@@ -473,23 +487,21 @@ describe('producer/messageProducer', () => {
 
     it('assigns one sequence range to same-turn calls of an idempotent producer', async () => {
       const broker = fakeBroker(1);
-      const eosManager = fakeEosManager();
+      const eosManager = await idempotentEosManager();
       const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
 
       await Promise.all([
         producer.send({ topic, messages: [{ value: 'a' }] }),
         producer.send({ topic, messages: [{ value: 'b' }, { value: 'c' }] }),
       ]);
+      await producer.send({ topic, messages: [{ value: 'd' }] });
 
-      expect(broker.produce).toHaveBeenCalledTimes(1);
-      expect(eosManager.acquirePartitionGates).toHaveBeenCalledTimes(1);
-      expect(eosManager.updateSequence).toHaveBeenCalledTimes(1);
-      expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 3);
+      expect(sentFirstSequences(broker)).toEqual([0, 3]);
     });
 
     it('adds the partitions of same-turn transactional calls to the transaction once', async () => {
       const broker = fakeBroker(1);
-      const eosManager = fakeEosManager();
+      const eosManager = await idempotentEosManager();
       vi.mocked(eosManager.isTransactional).mockReturnValue(true);
       vi.mocked(eosManager.getTransactionalId).mockReturnValue('transactional-id');
       const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
@@ -576,9 +588,8 @@ describe('producer/messageProducer', () => {
       vi.useFakeTimers();
       const broker = fakeBroker(1);
       broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
-      const eosManager = fakeEosManager();
       const producer = createTestProducer(broker, {
-        eosManager,
+        eosManager: await idempotentEosManager(),
         retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
         deliveryTimeoutMs: 500,
       });
@@ -588,11 +599,16 @@ describe('producer/messageProducer', () => {
       const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
       await vi.advanceTimersByTimeAsync(500);
       await assertion;
-      expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
 
       // The caller was told the send failed, so it must not keep retrying in the background.
       await vi.advanceTimersByTimeAsync(20_000);
       expect(broker.produce).toHaveBeenCalledTimes(1);
+
+      // A gate still held would keep the next send on the partition waiting until its own deadline.
+      broker.produce.mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+      const nextSend = producer.send({ topic, messages: [{ value: 'b' }] });
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(nextSend).resolves.toHaveLength(1);
     });
 
     describe('without linger', () => {
@@ -636,9 +652,8 @@ describe('producer/messageProducer', () => {
         vi.useFakeTimers();
         const broker = fakeBroker(1);
         broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
-        const eosManager = fakeEosManager();
         const producer = createTestProducer(broker, {
-          eosManager,
+          eosManager: await idempotentEosManager(),
           lingerMs: 0,
           retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
           deliveryTimeoutMs: 500,
@@ -649,11 +664,16 @@ describe('producer/messageProducer', () => {
         const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
         await vi.advanceTimersByTimeAsync(500);
         await assertion;
-        expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
 
         await vi.advanceTimersByTimeAsync(20_000);
         expect(broker.produce).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
+
+        // A gate still held would keep the next send on the partition waiting until its own deadline.
+        broker.produce.mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+        const nextSend = producer.send({ topic, messages: [{ value: 'b' }] });
+        await vi.advanceTimersByTimeAsync(10);
+        await expect(nextSend).resolves.toHaveLength(1);
       });
 
       it('arms no deadline timer when deliveryTimeoutMs is not positive', async () => {

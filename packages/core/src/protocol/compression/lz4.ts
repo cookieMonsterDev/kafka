@@ -1,7 +1,7 @@
 import { KafkaNonRetriableError } from '../../errors';
 import type { CompressionCodec } from './index';
 import { MAX_DECOMPRESSED_SIZE } from './limits';
-import { runCodecOp } from './off-thread';
+import { runCodecOp } from './off-thread-loader';
 import { resolveOptionalNativeLz4 } from './optional-native';
 
 function rethrowCodecError(error: unknown, maxOutputLength: number): never {

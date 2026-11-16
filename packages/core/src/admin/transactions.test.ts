@@ -3,27 +3,28 @@ import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import { createTransactionsApi } from './transactions';
+import { withSend } from '../broker/test-send';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/transactions', () => {
   it('groups transactional IDs by transaction coordinator', async () => {
-    const firstCoordinator = {
+    const firstCoordinator = withSend({
       nodeId: 1,
       describeTransactions: vi.fn(async ({ transactionalIds }: { transactionalIds: string[] }) => ({
         transactionStates: transactionalIds.map((transactionalId) => ({ transactionalId })),
       })),
-    };
-    const secondCoordinator = {
+    });
+    const secondCoordinator = withSend({
       nodeId: 2,
       describeTransactions: vi.fn(async ({ transactionalIds }: { transactionalIds: string[] }) => ({
         transactionStates: transactionalIds.map((transactionalId) => ({ transactionalId })),
       })),
-    };
+    });
     const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
       groupId === 'tx-c' ? secondCoordinator : firstCoordinator,
     );
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     const result = await api.describeTransactions(['tx-a', 'tx-b', 'tx-c']);
@@ -40,7 +41,7 @@ describe('admin/transactions', () => {
 
   it('returns immediately for an empty list', async () => {
     const findGroupCoordinator = vi.fn();
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     await expect(api.describeTransactions([])).resolves.toEqual({ transactionStates: [] });
@@ -56,22 +57,22 @@ describe('admin/transactions', () => {
   });
 
   it('fans listTransactions out to every broker and unique-merges by transactionalId', async () => {
-    const firstBroker = {
+    const firstBroker = withSend({
       listTransactions: vi.fn(async () => ({
         transactionStates: [
           { transactionalId: 'tx-a', producerId: 1n, transactionState: 'Ongoing' },
           { transactionalId: 'tx-shared', producerId: 3n, transactionState: 'Empty' },
         ],
       })),
-    };
-    const secondBroker = {
+    });
+    const secondBroker = withSend({
       listTransactions: vi.fn(async () => ({
         transactionStates: [
           { transactionalId: 'tx-b', producerId: 2n, transactionState: 'Ongoing' },
           { transactionalId: 'tx-shared', producerId: 3n, transactionState: 'Empty' },
         ],
       })),
-    };
+    });
     const refreshMetadata = vi.fn().mockResolvedValue(undefined);
     const cluster = {
       refreshMetadata,
@@ -99,9 +100,9 @@ describe('admin/transactions', () => {
   });
 
   it('queries all brokers when listTransactions filters are omitted', async () => {
-    const broker = {
+    const broker = withSend({
       listTransactions: vi.fn(async () => ({ transactionStates: [] })),
-    };
+    });
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       getNodeIds: vi.fn(() => ['1']),
@@ -127,11 +128,11 @@ describe('admin/transactions', () => {
   });
 
   it('fences producers through their transaction coordinators', async () => {
-    const coordinator = {
+    const coordinator = withSend({
       initProducerId: vi.fn(async () => ({ producerId: 7n, producerEpoch: 0, errorCode: 0 })),
-    };
+    });
     const findGroupCoordinator = vi.fn(async () => coordinator);
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
@@ -153,16 +154,16 @@ describe('admin/transactions', () => {
 
   it('retries fenceProducers when the coordinator returns CONCURRENT_TRANSACTIONS', async () => {
     const { KafkaProtocolError } = await import('../errors');
-    const coordinator = {
+    const coordinator = withSend({
       initProducerId: vi
         .fn()
         .mockRejectedValueOnce(
           new KafkaProtocolError({ message: 'Concurrent txn', type: 'CONCURRENT_TRANSACTIONS', code: 51 }),
         )
         .mockResolvedValueOnce({ producerId: 7n, producerEpoch: 1, errorCode: 0 }),
-    };
+    });
     const findGroupCoordinator = vi.fn(async () => coordinator);
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const api = createTransactionsApi({
       cluster,
       logger,
@@ -178,16 +179,16 @@ describe('admin/transactions', () => {
   });
 
   it('writes an abort marker to the partition leader', async () => {
-    const leader = {
+    const leader = withSend({
       writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
       describeProducers: vi.fn(),
-    };
-    const cluster = {
+    });
+    const cluster = withSend({
       metadata: vi.fn(async () => ({ topics: [] })),
       findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
       findBroker: vi.fn(async () => leader),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     await api.abortTransaction({
@@ -213,7 +214,7 @@ describe('admin/transactions', () => {
   });
 
   it('resolves coordinatorEpoch from describeProducers when omitted', async () => {
-    const leader = {
+    const leader = withSend({
       writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
       describeProducers: vi.fn(async () => ({
         topics: [
@@ -223,13 +224,13 @@ describe('admin/transactions', () => {
           },
         ],
       })),
-    };
-    const cluster = {
+    });
+    const cluster = withSend({
       metadata: vi.fn(async () => ({ topics: [] })),
       findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
       findBroker: vi.fn(async () => leader),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     await api.abortTransaction({
@@ -248,12 +249,12 @@ describe('admin/transactions', () => {
   });
 
   it('forceTerminateTransaction delegates to fenceProducers', async () => {
-    const coordinator = {
+    const coordinator = withSend({
       initProducerId: vi.fn(async () => ({ producerId: 3n, producerEpoch: 0, errorCode: 0 })),
-    };
-    const cluster = {
+    });
+    const cluster = withSend({
       findGroupCoordinator: vi.fn(async () => coordinator),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
 
     const result = await api.forceTerminateTransaction({ transactionalId: 'tx-z' });

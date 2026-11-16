@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import type { DescribeQuorumTopicInput } from './v0/request';
 import { describeQuorumRequestV0 } from './v0/request';
 import { describeQuorumResponseV0 } from './v0/response';
@@ -42,7 +43,7 @@ export interface DescribeQuorumOptions {
   topics?: DescribeQuorumTopicInput[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeQuorumOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeQuorumRequestV0({ topics: options.topics ?? [] }),
     response: describeQuorumResponseV0,
@@ -55,13 +56,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeQuorumOptions>>>
     request: describeQuorumRequestV2({ topics: options.topics ?? [] }),
     response: describeQuorumResponseV2,
   }),
-};
+} satisfies VersionFactories<DescribeQuorumOptions>;
 
-export const DescribeQuorum: RequestFamily<DescribeQuorumOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeQuorum protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeQuorum = defineRequestFamily(KAFKA_APIS.DescribeQuorum, VERSIONS);

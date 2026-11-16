@@ -31,6 +31,10 @@ import {
 import { ACKNOWLEDGE } from './instrumentation-events';
 import { ShareBatch } from './share-batch';
 import { ShareSessionHandler, type ShareSessionTopic } from './share-session';
+import { ShareGroupDescribe } from '../protocol/requests/lazy-families';
+import { ShareAcknowledge } from '../protocol/requests/share-acknowledge/index';
+import { ShareFetch } from '../protocol/requests/share-fetch/index';
+import { ShareGroupHeartbeat } from '../protocol/requests/share-group-heartbeat/index';
 
 const JOIN_DEADLINE_MS = 30_000;
 const DEFAULT_MAX_WAIT_MS = 5000;
@@ -186,7 +190,7 @@ export class ShareGroup {
     if (!this.coordinator || !memberId) return;
     this.shuttingDown = true;
     try {
-      await this.coordinator.shareGroupHeartbeat({
+      await this.coordinator.send(ShareGroupHeartbeat, {
         groupId: this.groupId,
         memberId,
         memberEpoch: SHARE_GROUP_LEAVE_EPOCH,
@@ -221,7 +225,7 @@ export class ShareGroup {
 
     const response = await this.#retrier(() => {
       if (!this.coordinator) throw new KafkaNonRetriableError('Share group coordinator is not set');
-      return this.coordinator.shareGroupHeartbeat({
+      return this.coordinator.send(ShareGroupHeartbeat, {
         groupId: this.groupId,
         memberId,
         memberEpoch: this.member.memberEpoch,
@@ -255,7 +259,7 @@ export class ShareGroup {
     const { coordinator, groupId } = this;
     if (!coordinator) return [];
 
-    const { groups } = await coordinator.shareGroupDescribe({
+    const { groups } = await coordinator.send(ShareGroupDescribe, {
       groupIds: [groupId],
       includeAuthorizedOperations: false,
     });
@@ -355,7 +359,7 @@ export class ShareGroup {
         const isRetry = attempts++ > 0;
         if (isRetry) session.reset();
         const { shareSessionEpoch, forgottenTopics } = session.buildRequest(sessionTopics);
-        return broker.shareFetch({
+        return broker.send(ShareFetch, {
           groupId: this.groupId,
           memberId,
           shareSessionEpoch,
@@ -460,7 +464,7 @@ export class ShareGroup {
     }
 
     const broker = await this.cluster.findBroker({ nodeId });
-    const response = await broker.shareAcknowledge({
+    const response = await broker.send(ShareAcknowledge, {
       groupId: this.groupId,
       memberId,
       shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,

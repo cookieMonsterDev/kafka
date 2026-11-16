@@ -5,6 +5,7 @@ import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/req
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
+import { AlterUserScramCredentials, DescribeUserScramCredentials } from '../protocol/requests/lazy-families';
 
 const DEFAULT_ITERATIONS = 4096;
 const DEFAULT_SALT_BYTES = 16;
@@ -98,7 +99,7 @@ export function createScramApi({ cluster, logger, retry }: AdminContext): ScramA
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { results } = await broker.describeUserScramCredentials({ users: options.users });
+        const { results } = await broker.send(DescribeUserScramCredentials, { users: options.users });
         return { results };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
@@ -145,7 +146,7 @@ export function createScramApi({ cluster, logger, retry }: AdminContext): ScramA
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { results } = await broker.alterUserScramCredentials({ deletions, upsertions: wireUpsertions });
+        const { results } = await broker.send(AlterUserScramCredentials, { deletions, upsertions: wireUpsertions });
         return { results };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {

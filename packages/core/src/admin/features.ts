@@ -9,6 +9,7 @@ import {
   type UpdateFeaturesOptions,
   type UpdateFeaturesResult,
 } from './types';
+import { UpdateFeatures } from '../protocol/requests/lazy-families';
 
 export interface FeaturesApi {
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
@@ -65,7 +66,7 @@ export function createFeaturesApi({ cluster, logger, retry }: AdminContext): Fea
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { results } = await broker.updateFeatures({
+        const { results } = await broker.send(UpdateFeatures, {
           featureUpdates: normalized,
           timeout,
           validateOnly,

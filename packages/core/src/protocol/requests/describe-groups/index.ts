@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { describeGroupsRequestV0 } from './v0/request';
 import { describeGroupsResponseV0 } from './v0/response';
 import { describeGroupsRequestV1 } from './v1/request';
@@ -24,7 +25,7 @@ function withAuthorizedOperations(options: DescribeGroupsOptions) {
   };
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeGroupsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: describeGroupsRequestV0(options), response: describeGroupsResponseV0 }),
   1: (options) => ({ request: describeGroupsRequestV1(options), response: describeGroupsResponseV1 }),
   2: (options) => ({ request: describeGroupsRequestV2(options), response: describeGroupsResponseV2 }),
@@ -40,13 +41,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeGroupsOptions>>>
     request: describeGroupsRequestV5(withAuthorizedOperations(options)),
     response: describeGroupsResponseV5,
   }),
-};
+} satisfies VersionFactories<DescribeGroupsOptions>;
 
-export const DescribeGroups: RequestFamily<DescribeGroupsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeGroups protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeGroups = defineRequestFamily(KAFKA_APIS.DescribeGroups, VERSIONS);

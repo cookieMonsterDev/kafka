@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { getTelemetrySubscriptionsRequestV0, ZERO_CLIENT_INSTANCE_ID } from './v0/request';
 import { getTelemetrySubscriptionsResponseV0 } from './v0/response';
 
@@ -11,20 +12,13 @@ export interface GetTelemetrySubscriptionsOptions {
   clientInstanceId?: Buffer;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<GetTelemetrySubscriptionsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: getTelemetrySubscriptionsRequestV0({
       clientInstanceId: options.clientInstanceId ?? ZERO_CLIENT_INSTANCE_ID,
     }),
     response: getTelemetrySubscriptionsResponseV0,
   }),
-};
+} satisfies VersionFactories<GetTelemetrySubscriptionsOptions>;
 
-export const GetTelemetrySubscriptions: RequestFamily<GetTelemetrySubscriptionsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no GetTelemetrySubscriptions protocol for version ${version}`);
-    return factory;
-  },
-});
+export const GetTelemetrySubscriptions = defineRequestFamily(KAFKA_APIS.GetTelemetrySubscriptions, VERSIONS);

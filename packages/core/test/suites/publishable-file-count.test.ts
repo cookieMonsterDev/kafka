@@ -28,6 +28,20 @@ const JS_FILES = [
 /** `new Worker(...)` loads this file by path at runtime, so it must survive any build change. */
 const CODEC_WORKER_PATH = 'dist/protocol/compression/codec-worker.js';
 
+/** Request family directories the `lazy-requests` chunk holds, as `src/protocol/requests/lazy-requests.ts` lists them. */
+const LAZY_FAMILY_DIRECTORIES = [
+  ...readFileSync(join(PACKAGE_ROOT, 'src/protocol/requests/lazy-requests.ts'), 'utf8').matchAll(
+    /from '\.\/([a-z-]+)\/index'/g,
+  ),
+].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
+
+interface OutputChunk {
+  type: 'chunk';
+  fileName: string;
+  imports: string[];
+  modules: Record<string, { renderedLength: number }>;
+}
+
 interface PackedFile {
   path: string;
 }
@@ -39,6 +53,7 @@ interface PackResult {
 describe('published file count', () => {
   let packSource: string;
   let packed: PackResult;
+  let chunks: Map<string, OutputChunk>;
 
   beforeAll(async () => {
     // Self-contained, into an isolated temp dir — never the package's own `dist/` — so this
@@ -50,11 +65,18 @@ describe('published file count', () => {
     const distDir = join(packSource, 'dist');
 
     const { build } = await import('vite');
-    await build({
+    const buildResult = await build({
       configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
       logLevel: 'silent',
       build: { outDir: distDir, emptyOutDir: true },
     });
+    const outputs = (Array.isArray(buildResult) ? buildResult : [buildResult]) as { output?: { type: string }[] }[];
+    chunks = new Map(
+      outputs
+        .flatMap((result) => result.output ?? [])
+        .filter((file): file is OutputChunk => file.type === 'chunk')
+        .map((chunk) => [chunk.fileName, chunk]),
+    );
     execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--outDir', distDir], {
       cwd: PACKAGE_ROOT,
     });
@@ -130,6 +152,36 @@ describe('published file count', () => {
     const entry = readFileSync(join(packSource, 'dist', 'index.js'), 'utf8');
     expect(entry).not.toMatch(/(?:from|import)\s*["']\.\/lazy-requests\.js["']/);
     expect(entry).toMatch(/import\(\s*["']\.\/lazy-requests\.js["']\s*\)/);
+  });
+
+  // Admin-only codecs load through the lazy family stubs. A static import of one of those families
+  // from code the entry reaches would pull its codecs into the startup graph, with no error.
+  it('keeps the lazily loaded request families out of the startup chunk graph', () => {
+    expect(LAZY_FAMILY_DIRECTORIES).toEqual(expect.arrayContaining(['create-topics', 'describe-configs']));
+
+    const startupChunks = new Set<string>();
+    const pending = ['index.js'];
+    for (let fileName = pending.pop(); fileName !== undefined; fileName = pending.pop()) {
+      const chunk = chunks.get(fileName);
+      if (chunk === undefined || startupChunks.has(fileName)) continue;
+      startupChunks.add(fileName);
+      pending.push(...chunk.imports);
+    }
+    expect([...startupChunks].sort()).toEqual(['index.js', 'shared.js']);
+
+    const lazyFamilyModule = new RegExp(
+      `[\\\\/]src[\\\\/]protocol[\\\\/]requests[\\\\/](${LAZY_FAMILY_DIRECTORIES.join('|')})[\\\\/]`,
+    );
+    const startupModules = [...startupChunks].flatMap((fileName) =>
+      Object.entries(chunks.get(fileName)?.modules ?? {})
+        .filter(([, module]) => module.renderedLength > 0)
+        .map(([id]) => id),
+    );
+    expect(startupModules.length).toBeGreaterThan(0);
+    expect(startupModules.filter((id) => lazyFamilyModule.test(id))).toEqual([]);
+
+    const lazyModules = Object.keys(chunks.get('lazy-requests.js')?.modules ?? {});
+    expect(lazyModules.some((id) => lazyFamilyModule.test(id))).toBe(true);
   });
 
   // Only TLS, compression or SCRAM need these, so the entry loads them on first use. `node:util`

@@ -3,12 +3,13 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createUnregisterBrokerApi } from './unregister-broker';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/unregister-broker', () => {
   it('targets the active controller with the broker id', async () => {
-    const broker = { unregisterBroker: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) };
+    const broker = withSend({ unregisterBroker: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) });
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       findControllerBroker: vi.fn().mockResolvedValue(broker),

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import {
   alterUserScramCredentialsRequestV0,
   type ScramCredentialDeletion,
@@ -13,7 +14,7 @@ export interface AlterUserScramCredentialsOptions {
   upsertions?: ScramCredentialUpsertion[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterUserScramCredentialsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: alterUserScramCredentialsRequestV0({
       deletions: options.deletions ?? [],
@@ -21,15 +22,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterUserScramCredential
     }),
     response: alterUserScramCredentialsResponseV0,
   }),
-};
+} satisfies VersionFactories<AlterUserScramCredentialsOptions>;
 
-export const AlterUserScramCredentials: RequestFamily<AlterUserScramCredentialsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) {
-      throw new Error(`Invariant violated: no AlterUserScramCredentials protocol for version ${version}`);
-    }
-    return factory;
-  },
-});
+export const AlterUserScramCredentials = defineRequestFamily(KAFKA_APIS.AlterUserScramCredentials, VERSIONS);

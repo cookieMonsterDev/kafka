@@ -4,14 +4,15 @@ import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { SCRAM_MECHANISMS } from '../protocol/enums/scram-mechanisms';
 import { createScramApi } from './scram';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeCluster(
-  broker: Record<string, ReturnType<typeof vi.fn>> = {
+  broker: Record<string, ReturnType<typeof vi.fn>> = withSend({
     describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
     alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
-  },
+  }),
 ) {
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
@@ -23,7 +24,9 @@ function fakeCluster(
 describe('admin/scram', () => {
   describe('describeUserScramCredentials', () => {
     it('lists credentials through the active controller', async () => {
-      const broker = { describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice' }] }) };
+      const broker = withSend({
+        describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice' }] }),
+      });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -37,7 +40,7 @@ describe('admin/scram', () => {
     });
 
     it('forwards the users filter to the controller broker', async () => {
-      const broker = { describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) };
+      const broker = withSend({ describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -52,7 +55,7 @@ describe('admin/scram', () => {
 
     it('retries and rethrows on NOT_CONTROLLER, refreshing metadata again', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const broker = { describeUserScramCredentials: vi.fn().mockRejectedValue(error) };
+      const broker = withSend({ describeUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -67,7 +70,7 @@ describe('admin/scram', () => {
 
     it('bails immediately on a non-retriable broker error', async () => {
       const error = new Error('boom');
-      const broker = { describeUserScramCredentials: vi.fn().mockRejectedValue(error) };
+      const broker = withSend({ describeUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -184,7 +187,7 @@ describe('admin/scram', () => {
     });
 
     it('derives the salted password via PBKDF2 for a SHA-256 password upsertion', async () => {
-      const broker = { alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) };
+      const broker = withSend({ alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -215,7 +218,7 @@ describe('admin/scram', () => {
     });
 
     it('derives the salted password via PBKDF2 for a SHA-512 password upsertion with custom iterations', async () => {
-      const broker = { alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) };
+      const broker = withSend({ alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -254,7 +257,7 @@ describe('admin/scram', () => {
     });
 
     it('passes a pre-salted upsertion straight through without hashing', async () => {
-      const broker = { alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) };
+      const broker = withSend({ alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -279,9 +282,9 @@ describe('admin/scram', () => {
     });
 
     it('sends deletions alongside upsertions and returns the broker results', async () => {
-      const broker = {
+      const broker = withSend({
         alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', errorCode: 0 }] }),
-      };
+      });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -302,7 +305,7 @@ describe('admin/scram', () => {
 
     it('retries and rethrows on NOT_CONTROLLER, refreshing metadata again', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const broker = { alterUserScramCredentials: vi.fn().mockRejectedValue(error) };
+      const broker = withSend({ alterUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,
@@ -319,7 +322,7 @@ describe('admin/scram', () => {
 
     it('bails immediately on a non-retriable broker error', async () => {
       const error = new Error('boom');
-      const broker = { alterUserScramCredentials: vi.fn().mockRejectedValue(error) };
+      const broker = withSend({ alterUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
       const api = createScramApi({
         cluster: cluster as unknown as Cluster,

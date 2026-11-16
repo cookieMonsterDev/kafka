@@ -9,6 +9,8 @@ import type { TopicPartitions } from '../types';
 import { partitionsNotIn, type GroupMembership, type MembershipHost } from './group-membership';
 import { HeartbeatMember } from './heartbeat-member';
 import { TopicIdNames, type DescribedTopic } from './topic-id-names';
+import { ConsumerGroupDescribe } from '../../protocol/requests/lazy-families';
+import { ConsumerGroupHeartbeat } from '../../protocol/requests/consumer-group-heartbeat/index';
 
 /** Upper bound on the back-to-back heartbeats one join or one assignment acknowledgement sends. */
 const MAX_IMMEDIATE_HEARTBEATS = 8;
@@ -97,7 +99,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
     if (!memberId || !coordinator || !groupId) return;
 
     if (this.#member.isJoined) {
-      await coordinator.consumerGroupHeartbeat({
+      await coordinator.send(ConsumerGroupHeartbeat, {
         groupId,
         memberId,
         memberEpoch: CONSUMER_GROUP_LEAVE_EPOCH,
@@ -131,7 +133,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
     const isJoining = member.isJoining;
     const sendsJoinFields = member.sendsJoinFields;
     const { groupInstanceId, rackId } = this.#options;
-    const response = await coordinator.consumerGroupHeartbeat({
+    const response = await coordinator.send(ConsumerGroupHeartbeat, {
       groupId,
       memberId,
       memberEpoch: member.memberEpoch,
@@ -218,7 +220,7 @@ export class ConsumerProtocolMembership implements GroupMembership {
     const { coordinator, memberId } = this;
     if (!coordinator || !groupId) return [];
 
-    const { groups } = await coordinator.consumerGroupDescribe({
+    const { groups } = await coordinator.send(ConsumerGroupDescribe, {
       groupIds: [groupId],
       includeAuthorizedOperations: false,
     });

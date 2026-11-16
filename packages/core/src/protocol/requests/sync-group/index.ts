@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { syncGroupRequestV0 } from './v0/request';
 import { syncGroupResponseV0 } from './v0/response';
 import { syncGroupRequestV1 } from './v1/request';
@@ -27,7 +28,7 @@ export interface SyncGroupOptions {
   groupAssignment: SyncGroupAssignment[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<SyncGroupOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: syncGroupRequestV0(options), response: syncGroupResponseV0 }),
   1: (options) => ({ request: syncGroupRequestV1(options), response: syncGroupResponseV1 }),
   2: (options) => ({ request: syncGroupRequestV2(options), response: syncGroupResponseV2 }),
@@ -48,13 +49,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<SyncGroupOptions>>> = {
     }),
     response: syncGroupResponseV5,
   }),
-};
+} satisfies VersionFactories<SyncGroupOptions>;
 
-export const SyncGroup: RequestFamily<SyncGroupOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no SyncGroup protocol for version ${version}`);
-    return factory;
-  },
-});
+export const SyncGroup = defineRequestFamily(KAFKA_APIS.SyncGroup, VERSIONS);

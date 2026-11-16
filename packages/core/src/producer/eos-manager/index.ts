@@ -8,6 +8,11 @@ import { retrier, type RetryOptions } from '../../retry/index';
 import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from '../idempotence-ledger';
 import { TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
 import { TRANSACTION_STATES } from './transaction-states';
+import { AddOffsetsToTxn } from '../../protocol/requests/add-offsets-to-txn/index';
+import { AddPartitionsToTxn } from '../../protocol/requests/add-partitions-to-txn/index';
+import { EndTxn } from '../../protocol/requests/end-txn/index';
+import { InitProducerId } from '../../protocol/requests/init-producer-id/index';
+import { TxnOffsetCommit } from '../../protocol/requests/txn-offset-commit/index';
 
 const INIT_PRODUCER_RETRIABLE_PROTOCOL_ERRORS = new Set([
   'NOT_COORDINATOR_FOR_GROUP',
@@ -145,7 +150,7 @@ export function createEosManager({
         // If non-transactional, we can request the producer id from any broker.
         const broker = transactional ? await findTransactionCoordinator() : await cluster.findControllerBroker();
 
-        const { producerId, producerEpoch } = await broker.initProducerId({
+        const { producerId, producerEpoch } = await broker.send(InitProducerId, {
           transactionalId: transactional ? transactionalId! : null,
           transactionTimeout,
           producerId: current.producerId,
@@ -213,7 +218,7 @@ export function createEosManager({
     // partitions are marked below without the extra round trip to the transaction coordinator.
     if (topics.length > 0 && !isTransactionV2Enabled()) {
       const broker = await findTransactionCoordinator();
-      await broker.addPartitionsToTxn({
+      await broker.send(AddPartitionsToTxn, {
         transactionalId: transactionalId!,
         producerId: ledger.getProducerId(),
         producerEpoch: ledger.getProducerEpoch(),
@@ -253,7 +258,7 @@ export function createEosManager({
       try {
         // Looked up on every attempt so a moved coordinator (NOT_COORDINATOR, disconnect) is re-discovered.
         const broker = await findTransactionCoordinator();
-        await broker.endTxn({
+        await broker.send(EndTxn, {
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),
           transactionalId: transactionalId!,
@@ -317,7 +322,7 @@ export function createEosManager({
   }): Promise<void> {
     const transactionCoordinator = await findTransactionCoordinator();
 
-    await transactionCoordinator.addOffsetsToTxn({
+    await transactionCoordinator.send(AddOffsetsToTxn, {
       transactionalId: transactionalId!,
       producerId: ledger.getProducerId(),
       producerEpoch: ledger.getProducerEpoch(),
@@ -338,7 +343,7 @@ export function createEosManager({
 
     await retry(async (bail, retryCount, retryTime) => {
       try {
-        await groupCoordinator.txnOffsetCommit({
+        await groupCoordinator.send(TxnOffsetCommit, {
           transactionalId: transactionalId!,
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),

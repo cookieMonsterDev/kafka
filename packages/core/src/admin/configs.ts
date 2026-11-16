@@ -9,6 +9,12 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { groupResourcesByBroker, protocolType, formatUnknown } from './helpers';
 import type { IncrementalResourceConfig, ResourceConfig, ResourceConfigQuery } from './types';
+import {
+  AlterConfigs,
+  DescribeConfigs,
+  IncrementalAlterConfigs,
+  ListConfigResources,
+} from '../protocol/requests/lazy-families';
 
 export interface ConfigsApi {
   describeConfigs: (options: {
@@ -80,7 +86,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         const responses = await Promise.all(
           brokers.map(async (broker) => {
             const targetBroker = broker || controller;
-            return targetBroker.describeConfigs({
+            return targetBroker.send(DescribeConfigs, {
               resources: resourcesByBroker.get(targetBroker) ?? [],
               includeSynonyms,
               includeDocumentation,
@@ -155,7 +161,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         const responses = await Promise.all(
           brokers.map(async (broker) => {
             const targetBroker = broker || controller;
-            return targetBroker.alterConfigs({
+            return targetBroker.send(AlterConfigs, {
               resources: resourcesByBroker.get(targetBroker) ?? [],
               validateOnly: !!validateOnly,
             });
@@ -234,7 +240,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         const responses = await Promise.all(
           brokers.map(async (broker) => {
             const targetBroker = broker || controller;
-            return targetBroker.incrementalAlterConfigs({
+            return targetBroker.send(IncrementalAlterConfigs, {
               resources: resourcesByBroker.get(targetBroker) ?? [],
               validateOnly: !!validateOnly,
             });
@@ -277,7 +283,7 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { configResources } = await broker.listConfigResources({ resourceTypes });
+        const { configResources } = await broker.send(ListConfigResources, { resourceTypes });
         return { resources: configResources };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {

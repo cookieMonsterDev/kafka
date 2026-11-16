@@ -8,6 +8,8 @@ import { ZERO_CLIENT_INSTANCE_ID } from '../protocol/requests/get-telemetry-subs
 import type { GetTelemetrySubscriptionsResponseV0Body } from '../protocol/requests/get-telemetry-subscriptions/v0/response';
 import type { ProduceMetrics } from './metrics';
 import type { TelemetrySnapshot } from './telemetry-snapshot';
+import { GetTelemetrySubscriptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import { PushTelemetry } from '../protocol/requests/push-telemetry/index';
 
 const SOFTWARE_NAME = '@cookiemonsterdev/kafka-core';
 const SOFTWARE_VERSION = '1.2.0';
@@ -120,7 +122,7 @@ export class ClientTelemetryReporter {
       return;
     }
 
-    const response = await broker.getTelemetrySubscriptions({
+    const response = await broker.send(GetTelemetrySubscriptions, {
       clientInstanceId: this.#clientInstanceId ?? ZERO_CLIENT_INSTANCE_ID,
     });
 
@@ -165,7 +167,7 @@ export class ClientTelemetryReporter {
 
     const broker = await this.#getBroker();
     try {
-      await broker.pushTelemetry({
+      await broker.send(PushTelemetry, {
         clientInstanceId,
         subscriptionId: subscription.subscriptionId,
         terminating,

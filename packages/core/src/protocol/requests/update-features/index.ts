@@ -1,5 +1,6 @@
 import { KafkaNonRetriableError } from '../../../errors';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { updateFeaturesRequestV0 } from './v0/request';
 import { updateFeaturesResponseV0 } from './v0/response';
 import { updateFeaturesRequestV1 } from './v1/request';
@@ -27,7 +28,7 @@ const modernFields = (options: UpdateFeaturesOptions) => ({
   validateOnly: options.validateOnly ?? false,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<UpdateFeaturesOptions>>> = {
+const VERSIONS = {
   0: (options) => {
     if (options.validateOnly === true) {
       throw new KafkaNonRetriableError(
@@ -59,13 +60,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<UpdateFeaturesOptions>>>
     request: updateFeaturesRequestV2(modernFields(options)),
     response: updateFeaturesResponseV2,
   }),
-};
+} satisfies VersionFactories<UpdateFeaturesOptions>;
 
-export const UpdateFeatures: RequestFamily<UpdateFeaturesOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no UpdateFeatures protocol for version ${version}`);
-    return factory;
-  },
-});
+export const UpdateFeatures = defineRequestFamily(KAFKA_APIS.UpdateFeatures, VERSIONS);

@@ -10,6 +10,10 @@ import {
   secureRandom,
   testIfKafkaAtLeast_0_11,
 } from '../../helpers/index';
+import { AddPartitionsToTxn } from '../../../src/protocol/requests/add-partitions-to-txn/index';
+import { EndTxn } from '../../../src/protocol/requests/end-txn/index';
+import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
+import { InitProducerId } from '../../../src/protocol/requests/init-producer-id/index';
 
 describe('broker.transactions', () => {
   let transactionalId: string;
@@ -25,7 +29,7 @@ describe('broker.transactions', () => {
     await createTopic({ topic: topicName });
 
     const dest = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
-      seedBroker!.findGroupCoordinator({
+      seedBroker!.send(FindCoordinator, {
         coordinatorKey: transactionalId,
         coordinatorType: COORDINATOR_TYPES.TRANSACTION,
       }),
@@ -44,13 +48,13 @@ describe('broker.transactions', () => {
 
   testIfKafkaAtLeast_0_11('allocates a producer id and runs a transaction', async () => {
     const init = await retryProtocol(['GROUP_LOAD_IN_PROGRESS', 'NOT_COORDINATOR_FOR_GROUP'], () =>
-      coordinator!.initProducerId({ transactionalId, transactionTimeout: 30_000 }),
+      coordinator!.send(InitProducerId, { transactionalId, transactionTimeout: 30_000 }),
     );
     expect(init.errorCode).toBe(0);
     expect(typeof init.producerId).toBe('bigint');
     expect(init.producerEpoch).toEqual(expect.any(Number));
 
-    const added = await coordinator!.addPartitionsToTxn({
+    const added = await coordinator!.send(AddPartitionsToTxn, {
       transactionalId,
       producerId: init.producerId,
       producerEpoch: init.producerEpoch,
@@ -58,7 +62,7 @@ describe('broker.transactions', () => {
     });
     expect(added.errors[0]?.partitionErrors[0]?.errorCode).toBe(0);
 
-    const ended = await coordinator!.endTxn({
+    const ended = await coordinator!.send(EndTxn, {
       transactionalId,
       producerId: init.producerId,
       producerEpoch: init.producerEpoch,
@@ -69,7 +73,7 @@ describe('broker.transactions', () => {
 
   testIfKafkaAtLeast_0_11('allocates a producer id without a transactional id', async () => {
     const init = await retryProtocol(['GROUP_LOAD_IN_PROGRESS', 'NOT_COORDINATOR_FOR_GROUP'], () =>
-      coordinator!.initProducerId({ transactionalId: null, transactionTimeout: 30_000 }),
+      coordinator!.send(InitProducerId, { transactionalId: null, transactionTimeout: 30_000 }),
     );
     expect(init.errorCode).toBe(0);
     expect(typeof init.producerId).toBe('bigint');

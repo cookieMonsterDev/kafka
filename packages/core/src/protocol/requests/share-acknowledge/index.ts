@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { shareAcknowledgeRequestV1 } from './v1/request';
 import { shareAcknowledgeResponseV1 } from './v1/response';
 import { shareAcknowledgeRequestV2 } from './v2/request';
@@ -57,7 +58,7 @@ const v2Fields = (options: ShareAcknowledgeOptions) => ({
   isRenewAck: options.isRenewAck ?? false,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareAcknowledgeOptions>>> = {
+const VERSIONS = {
   1: (options) => ({
     request: shareAcknowledgeRequestV1(fields(options)),
     response: shareAcknowledgeResponseV1,
@@ -66,13 +67,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareAcknowledgeOptions>
     request: shareAcknowledgeRequestV2(v2Fields(options)),
     response: shareAcknowledgeResponseV2,
   }),
-};
+} satisfies VersionFactories<ShareAcknowledgeOptions>;
 
-export const ShareAcknowledge: RequestFamily<ShareAcknowledgeOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ShareAcknowledge protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ShareAcknowledge = defineRequestFamily(KAFKA_APIS.ShareAcknowledge, VERSIONS);

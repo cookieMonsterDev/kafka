@@ -1,5 +1,6 @@
 import { assertNoPrefixedAclOnV0 } from '../acl-v0';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { deleteAclsRequestV0 } from './v0/request';
 import { deleteAclsResponseV0 } from './v0/response';
 import { deleteAclsRequestV1 } from './v1/request';
@@ -21,7 +22,7 @@ export interface DeleteAclsOptions {
   }[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteAclsOptions>>> = {
+const VERSIONS = {
   0: (values) => {
     for (const filter of values.filters) {
       assertNoPrefixedAclOnV0(filter.resourcePatternType);
@@ -43,13 +44,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteAclsOptions>>> = {
   1: (values) => ({ request: deleteAclsRequestV1(values), response: deleteAclsResponseV1 }),
   2: (values) => ({ request: deleteAclsRequestV2(values), response: deleteAclsResponseV2 }),
   3: (values) => ({ request: deleteAclsRequestV3(values), response: deleteAclsResponseV3 }),
-};
+} satisfies VersionFactories<DeleteAclsOptions>;
 
-export const DeleteAcls: RequestFamily<DeleteAclsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DeleteAcls protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DeleteAcls = defineRequestFamily(KAFKA_APIS.DeleteAcls, VERSIONS);

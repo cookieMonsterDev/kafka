@@ -9,6 +9,7 @@ import type { TopicOffsetConfiguration } from '../offset-reset';
 import type { ConsumerHooks, MemberAssignment } from '../types';
 import { AssignModeCommitTarget, GroupMemberCommitTarget, type CommitTarget } from './commit-target';
 import { OffsetTracker } from './offset-tracker';
+import { withSend } from '../../broker/test-send';
 
 const NOT_COORDINATOR_FOR_GROUP_CODE = 16;
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -57,14 +58,14 @@ function committedOffsetCalls(): Pick<Cluster, 'committedOffset' | 'markOffsetAs
 function createTracker(options: TrackerOptions = {}): Harness {
   const offsetCommit = vi.fn(async () => undefined);
   const offsetFetch = vi.fn(async () => ({ responses: [] }));
-  const coordinator = {
+  const coordinator = withSend({
     nodeId: 1,
     isConnected: vi.fn(() => true),
     offsetCommit,
     offsetFetch,
     ...options.coordinator,
-  } as unknown as Broker;
-  const cluster = {
+  }) as unknown as Broker;
+  const cluster = withSend({
     ...committedOffsetCalls(),
     findGroupCoordinator: vi.fn(async () => coordinator),
     findBroker: vi.fn(async () => coordinator),
@@ -72,7 +73,7 @@ function createTracker(options: TrackerOptions = {}): Harness {
     defaultOffset: vi.fn(() => -1n),
     fetchTopicsOffset: vi.fn(async () => []),
     ...options.cluster,
-  } as unknown as Cluster;
+  }) as unknown as Cluster;
   const membership: Harness['membership'] = { coordinator, memberId: 'memberId', generationId: 1 };
   const target =
     options.target === 'assign mode'
@@ -92,14 +93,14 @@ function createTracker(options: TrackerOptions = {}): Harness {
   });
   tracker.updateAssignment(options.assignment ?? { topic1: [0, 1, 2, 3], topic2: [0, 1, 2, 3, 4, 5] });
 
-  return {
+  return withSend({
     tracker,
     target,
     cluster,
     membership,
     offsetCommit: offsetCommit,
     offsetFetch: offsetFetch,
-  };
+  });
 }
 
 const IDENTITY: Record<TargetKind, { memberId: string; groupGenerationId: number }> = {
@@ -169,7 +170,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const { tracker } = create({
           assignment: { events: [0] },
           cluster: { fetchTopicsOffset },
-          coordinator: { offsetFetch },
+          coordinator: withSend({ offsetFetch }),
         });
 
         expect(tracker.nextOffset('events', 0)).toBe(0n);
@@ -222,7 +223,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const offsetFetch = vi.fn(async () => ({
           responses: [{ topic: 'events', partitions: [{ partition: 2, offset: 7n }] }],
         }));
-        const { tracker, target } = create({ assignment: { events: [0, 1] }, coordinator: { offsetFetch } });
+        const { tracker, target } = create({ assignment: { events: [0, 1] }, coordinator: withSend({ offsetFetch }) });
         target.setCommittedOffset('events', 0, 10n);
         target.setCommittedOffset('events', 1, 20n);
         tracker.resolveOffset({ topic: 'events', partition: 0, offset: 14n });
@@ -247,7 +248,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const offsetFetch = vi.fn(async () => ({
           responses: [{ topic: 'events', partitions: [{ partition: 1, offset: 30n }] }],
         }));
-        const { tracker, target } = create({ assignment: { events: [0] }, coordinator: { offsetFetch } });
+        const { tracker, target } = create({ assignment: { events: [0] }, coordinator: withSend({ offsetFetch }) });
         // Left over from an earlier owner or an earlier run on the same client.
         target.setCommittedOffset('events', 1, 12n);
 
@@ -354,11 +355,11 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const onCommit = vi.fn();
         const { tracker } = create({
           assignment: { 'topic-1': [0] },
-          coordinator: {
+          coordinator: withSend({
             offsetCommit: vi.fn(() => {
               throw commitError;
             }),
-          },
+          }),
           hooks: { onCommit: [onCommit] },
         });
 
@@ -390,11 +391,11 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const { tracker } = create({
           assignment: { 'topic-1': [0] },
           cluster: { refreshMetadata },
-          coordinator: {
+          coordinator: withSend({
             offsetCommit: vi.fn(() => {
               throw createErrorFromCode(NOT_COORDINATOR_FOR_GROUP_CODE);
             }),
-          },
+          }),
         });
 
         const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 1n }] }] };
@@ -457,7 +458,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'none' } },
           cluster: { fetchTopicsOffset },
-          coordinator: { offsetFetch },
+          coordinator: withSend({ offsetFetch }),
         });
 
         await expect(tracker.resolveOffsets()).rejects.toThrow(
@@ -475,7 +476,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'none' } },
           cluster: { fetchTopicsOffset },
-          coordinator: { offsetFetch },
+          coordinator: withSend({ offsetFetch }),
         });
 
         await tracker.resolveOffsets();
@@ -497,7 +498,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'earliest' } },
           cluster: { fetchTopicsOffset },
-          coordinator: { offsetFetch },
+          coordinator: withSend({ offsetFetch }),
         });
 
         await tracker.resolveOffsets();
@@ -517,7 +518,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT1H' } },
           cluster: { fetchTopicsOffset },
-          coordinator: { offsetFetch },
+          coordinator: withSend({ offsetFetch }),
         });
 
         await tracker.resolveOffsets();
@@ -535,7 +536,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
         const offsetFetch = vi.fn(async () => ({
           responses: [{ topic: 'events', partitions: [{ partition: 0, offset: 7n }] }],
         }));
-        const { tracker } = create({ assignment: { events: [0] }, coordinator: { offsetFetch } });
+        const { tracker } = create({ assignment: { events: [0] }, coordinator: withSend({ offsetFetch }) });
 
         await tracker.resolveOffsets();
         await tracker.resolveOffsets();
@@ -619,7 +620,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
     it('finds the coordinator broker again once the joined one is disconnected', async () => {
       const offsetCommit = vi.fn(async () => undefined);
-      const reconnected = { offsetCommit };
+      const reconnected = withSend({ offsetCommit });
       const findBroker = vi.fn(async () => reconnected);
       const { tracker } = createTracker({
         assignment: { events: [0] },
@@ -686,7 +687,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
       const { tracker, offsetCommit } = createTracker({
         target: 'assign mode',
         assignment: { events: [0] },
-        cluster: { findGroupCoordinator },
+        cluster: withSend({ findGroupCoordinator }),
       });
       tracker.resolveOffset({ topic: 'events', partition: 0, offset: 30n });
 
@@ -716,7 +717,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
       it('resolves from autoOffsetReset (default latest) without OffsetFetch', async () => {
         const findGroupCoordinator = vi.fn();
         const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 99n }] }]);
-        const { tracker, offsetFetch } = createWithoutGroup({ cluster: { fetchTopicsOffset, findGroupCoordinator } });
+        const { tracker, offsetFetch } = createWithoutGroup({
+          cluster: withSend({ fetchTopicsOffset, findGroupCoordinator }),
+        });
 
         await tracker.resolveOffsets();
 

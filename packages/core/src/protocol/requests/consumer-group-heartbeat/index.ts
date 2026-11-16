@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { consumerGroupHeartbeatRequestV0 } from './v0/request';
 import { consumerGroupHeartbeatResponseV0 } from './v0/response';
 import { consumerGroupHeartbeatRequestV1 } from './v1/request';
@@ -41,7 +42,7 @@ const v0Fields = (options: ConsumerGroupHeartbeatOptions) => ({
   topicPartitions: options.topicPartitions ?? null,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ConsumerGroupHeartbeatOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: consumerGroupHeartbeatRequestV0(v0Fields(options)),
     response: consumerGroupHeartbeatResponseV0,
@@ -53,13 +54,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ConsumerGroupHeartbeatOp
     }),
     response: consumerGroupHeartbeatResponseV1,
   }),
-};
+} satisfies VersionFactories<ConsumerGroupHeartbeatOptions>;
 
-export const ConsumerGroupHeartbeat: RequestFamily<ConsumerGroupHeartbeatOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ConsumerGroupHeartbeat protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ConsumerGroupHeartbeat = defineRequestFamily(KAFKA_APIS.ConsumerGroupHeartbeat, VERSIONS);

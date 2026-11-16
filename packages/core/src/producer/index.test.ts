@@ -8,11 +8,12 @@ import { API_KEYS } from '../protocol/requests/api-keys';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createProducer } from './index';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeBroker() {
-  return {
+  return withSend({
     nodeId: 1,
     initProducerId: vi.fn().mockResolvedValue({
       producerId: 1000n,
@@ -21,12 +22,12 @@ function fakeBroker() {
       throttleTime: 0,
       clientSideThrottleTime: 0,
     }),
-  };
+  });
 }
 
 function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
   const broker = fakeBroker();
-  return {
+  return withSend({
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -44,7 +45,7 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
       },
     },
     ...overrides,
-  };
+  });
 }
 
 describe('producer', () => {
@@ -277,7 +278,7 @@ describe('producer', () => {
         },
       ],
     });
-    const broker = { nodeId: 1, produce };
+    const broker = withSend({ nodeId: 1, produce });
     const cluster = fakeCluster({
       addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
       hasLoadedTargetTopics: vi.fn().mockReturnValue(false),
@@ -373,14 +374,16 @@ describe('producer', () => {
     });
 
     it('lets a commit whose EndTxn failed be retried', async () => {
-      const coordinator = {
+      const coordinator = withSend({
         ...fakeBroker(),
         addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
         txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
         endTxn: vi.fn().mockRejectedValueOnce(new Error('connection lost')).mockResolvedValue(undefined),
-      };
+      });
       const producer = createProducer({
-        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        cluster: fakeCluster(
+          withSend({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }),
+        ) as unknown as Cluster,
         logger: silentLogger,
         transactionalId: 'txn-id',
       });
@@ -396,16 +399,18 @@ describe('producer', () => {
     });
 
     it('rejects every transaction call with a fenced error once EndTxn is fenced', async () => {
-      const coordinator = {
+      const coordinator = withSend({
         ...fakeBroker(),
         addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
         txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
         endTxn: vi
           .fn()
           .mockRejectedValue(createErrorFromCode(ERROR_CODES.find(({ type }) => type === 'PRODUCER_FENCED')!.code)),
-      };
+      });
       const producer = createProducer({
-        cluster: fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
+        cluster: fakeCluster(
+          withSend({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }),
+        ) as unknown as Cluster,
         logger: silentLogger,
         transactionalId: 'txn-id',
       });
@@ -422,18 +427,18 @@ describe('producer', () => {
     });
 
     it('bumps the epoch before the next transaction when the bump after a V2 commit failed', async () => {
-      const coordinator = {
+      const coordinator = withSend({
         ...fakeBroker(),
         addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
         txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
         endTxn: vi.fn().mockResolvedValue(undefined),
-      };
+      });
       const initProducerIdResponse = { producerId: 1000n, producerEpoch: 1 };
       coordinator.initProducerId
         .mockResolvedValueOnce(initProducerIdResponse)
         .mockRejectedValueOnce(new Error('coordinator down'))
         .mockResolvedValueOnce({ ...initProducerIdResponse, producerEpoch: 2 });
-      const cluster = fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) });
+      const cluster = fakeCluster(withSend({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }));
       cluster.brokerPool.versions[API_KEYS.Produce].maxVersion = 12;
       const producer = createProducer({
         cluster: cluster as unknown as Cluster,

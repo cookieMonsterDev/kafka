@@ -7,6 +7,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { findTopicPartitions, isConsumerGroupIdle, protocolType } from './helpers';
 import type { FetchOffsetsPartition, SeekEntry, SeekInput, TopicOffset } from './types';
+import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
 
 export interface OffsetsApi {
   fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
@@ -235,7 +236,7 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
       }),
     );
 
-    let { responses: consumerOffsets } = await coordinator.offsetFetch({
+    let { responses: consumerOffsets } = await coordinator.send(OffsetFetch, {
       groupId,
       topics: topicsToFetch,
     });

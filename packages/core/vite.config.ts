@@ -65,9 +65,9 @@ export default defineConfig({
               test: (id) => !/[\\/]protocol[\\/]compression[\\/](off-thread|codec-worker)\.ts$/.test(id),
               minShareCount: 2,
             },
-            // Request families that `Broker` imports on first use (see `src/broker/lazy-requests.ts`),
+            // Request families that their stubs import on first use (see `src/protocol/requests/lazy-families.ts`),
             // with their dependencies that `shared` did not take.
-            { name: 'lazy-requests', test: /[\\/]src[\\/]broker[\\/]lazy-requests\.ts$/ },
+            { name: 'lazy-requests', test: /[\\/]src[\\/]protocol[\\/]requests[\\/]lazy-requests\.ts$/ },
           ],
         },
       },

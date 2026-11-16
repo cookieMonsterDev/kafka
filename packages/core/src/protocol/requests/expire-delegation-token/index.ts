@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { expireDelegationTokenRequestV0 } from './v0/request';
 import { expireDelegationTokenResponseV0 } from './v0/response';
 import { expireDelegationTokenRequestV1 } from './v1/request';
@@ -18,7 +19,7 @@ function fields(options: ExpireDelegationTokenOptions) {
   return { hmac: options.hmac, expiryTimePeriodMs: options.expiryTimePeriodMs ?? EXPIRE_IMMEDIATELY_MS };
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ExpireDelegationTokenOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: expireDelegationTokenRequestV0(fields(options)),
     response: expireDelegationTokenResponseV0,
@@ -31,13 +32,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ExpireDelegationTokenOpt
     request: expireDelegationTokenRequestV2(fields(options)),
     response: expireDelegationTokenResponseV2,
   }),
-};
+} satisfies VersionFactories<ExpireDelegationTokenOptions>;
 
-export const ExpireDelegationToken: RequestFamily<ExpireDelegationTokenOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ExpireDelegationToken protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ExpireDelegationToken = defineRequestFamily(KAFKA_APIS.ExpireDelegationToken, VERSIONS);

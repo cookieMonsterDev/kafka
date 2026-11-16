@@ -1,5 +1,5 @@
 import { Encoder } from './encoder';
-import { usesFlexibleRequestHeader } from './flexible';
+import { usesFlexibleRequestHeader } from './requests/kafka-apis';
 
 export interface CreateRequestOptions {
   correlationId: number;

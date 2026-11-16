@@ -5,6 +5,11 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { protocolType, formatUnknown } from './helpers';
 import type { PartitionReassignment, TopicPartitions } from './types';
+import {
+  AlterPartitionReassignments,
+  ElectLeaders,
+  ListPartitionReassignments,
+} from '../protocol/requests/lazy-families';
 
 export interface ReassignmentsApi {
   alterPartitionReassignments: (options: { topics: PartitionReassignment[]; timeout?: number }) => Promise<void>;
@@ -70,7 +75,7 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.alterPartitionReassignments({ topics, timeout });
+        await broker.send(AlterPartitionReassignments, { topics, timeout });
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
           logger.warn('Could not reassign partitions', {
@@ -124,7 +129,7 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const response = await broker.listPartitionReassignments({ topics, timeout });
+        const response = await broker.send(ListPartitionReassignments, { topics, timeout });
         return { topics: response.topics };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
@@ -184,7 +189,7 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const response = await broker.electLeaders({ topicPartitions, electionType, timeout });
+        const response = await broker.send(ElectLeaders, { topicPartitions, electionType, timeout });
         return { results: response.results };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {

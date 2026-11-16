@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { assignReplicasToDirsRequestV0, type AssignReplicasToDirsDirectory } from './v0/request';
 import { assignReplicasToDirsResponseV0 } from './v0/response';
 
@@ -13,7 +14,7 @@ export interface AssignReplicasToDirsOptions {
 
 const DEFAULT_BROKER_EPOCH = -1n;
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AssignReplicasToDirsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: assignReplicasToDirsRequestV0({
       brokerId: options.brokerId,
@@ -22,13 +23,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AssignReplicasToDirsOpti
     }),
     response: assignReplicasToDirsResponseV0,
   }),
-};
+} satisfies VersionFactories<AssignReplicasToDirsOptions>;
 
-export const AssignReplicasToDirs: RequestFamily<AssignReplicasToDirsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AssignReplicasToDirs protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AssignReplicasToDirs = defineRequestFamily(KAFKA_APIS.AssignReplicasToDirs, VERSIONS);

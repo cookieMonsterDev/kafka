@@ -15,6 +15,7 @@ import type { EosManager } from './eos-manager/index';
 import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
 import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -35,7 +36,10 @@ function fakeProduceResponse(topicName: string, partition: number) {
 }
 
 function fakeBroker(nodeId: number) {
-  return { nodeId, produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))) };
+  return withSend({
+    nodeId,
+    produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))),
+  });
 }
 
 function fakePartitionMetadata(): PartitionMetadata {
@@ -51,11 +55,13 @@ function fakePartitionMetadata(): PartitionMetadata {
 
 /** Transaction calls are mocked; sequences and gates run on a real ledger with an in-memory InitProducerId. */
 function fakeEosManager(
-  ledger: IdempotenceLedger = createIdempotenceLedger({
-    logger: silentLogger,
-    initProducerId: (current: ProducerIdentity) =>
-      Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
-  }),
+  ledger: IdempotenceLedger = createIdempotenceLedger(
+    withSend({
+      logger: silentLogger,
+      initProducerId: (current: ProducerIdentity) =>
+        Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
+    }),
+  ),
 ) {
   return {
     ledger,

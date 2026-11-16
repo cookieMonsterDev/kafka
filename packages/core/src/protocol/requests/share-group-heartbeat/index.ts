@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { shareGroupHeartbeatRequestV1 } from './v1/request';
 import { shareGroupHeartbeatResponseV1 } from './v1/response';
 
@@ -26,18 +27,11 @@ const fields = (options: ShareGroupHeartbeatOptions) => ({
   subscribedTopicNames: options.subscribedTopicNames ?? null,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareGroupHeartbeatOptions>>> = {
+const VERSIONS = {
   1: (options) => ({
     request: shareGroupHeartbeatRequestV1(fields(options)),
     response: shareGroupHeartbeatResponseV1,
   }),
-};
+} satisfies VersionFactories<ShareGroupHeartbeatOptions>;
 
-export const ShareGroupHeartbeat: RequestFamily<ShareGroupHeartbeatOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ShareGroupHeartbeat protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ShareGroupHeartbeat = defineRequestFamily(KAFKA_APIS.ShareGroupHeartbeat, VERSIONS);

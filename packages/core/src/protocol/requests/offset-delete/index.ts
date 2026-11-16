@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { offsetDeleteRequestV0 } from './v0/request';
 import { offsetDeleteResponseV0 } from './v0/response';
 import { offsetDeleteRequestV1 } from './v1/request';
@@ -21,7 +22,7 @@ function toRequestTopics(topics: OffsetDeleteTopicInput[]) {
   }));
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetDeleteOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: offsetDeleteRequestV0({ groupId: options.groupId, topics: toRequestTopics(options.topics) }),
     response: offsetDeleteResponseV0,
@@ -30,13 +31,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetDeleteOptions>>> =
     request: offsetDeleteRequestV1({ groupId: options.groupId, topics: toRequestTopics(options.topics) }),
     response: offsetDeleteResponseV1,
   }),
-};
+} satisfies VersionFactories<OffsetDeleteOptions>;
 
-export const OffsetDelete: RequestFamily<OffsetDeleteOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no OffsetDelete protocol for version ${version}`);
-    return factory;
-  },
-});
+export const OffsetDelete = defineRequestFamily(KAFKA_APIS.OffsetDelete, VERSIONS);

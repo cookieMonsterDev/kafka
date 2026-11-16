@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { describeClusterRequestV0 } from './v0/request';
 import { describeClusterResponseV0 } from './v0/response';
 import { describeClusterRequestV1 } from './v1/request';
@@ -24,7 +25,7 @@ export interface DescribeClusterOptions {
   includeFencedBrokers?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeClusterOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeClusterRequestV0({
       includeClusterAuthorizedOperations: options.includeClusterAuthorizedOperations ?? false,
@@ -46,13 +47,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeClusterOptions>>
     }),
     response: describeClusterResponseV2,
   }),
-};
+} satisfies VersionFactories<DescribeClusterOptions>;
 
-export const DescribeCluster: RequestFamily<DescribeClusterOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeCluster protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeCluster = defineRequestFamily(KAFKA_APIS.DescribeCluster, VERSIONS);

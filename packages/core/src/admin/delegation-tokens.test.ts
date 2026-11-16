@@ -4,6 +4,7 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDelegationTokensApi } from './delegation-tokens';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -32,12 +33,12 @@ function fakeCluster(
     describeDelegationToken?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
-  const broker = {
+  const broker = withSend({
     createDelegationToken: methods.createDelegationToken ?? vi.fn().mockResolvedValue(created),
     renewDelegationToken: methods.renewDelegationToken ?? vi.fn().mockResolvedValue({ expiryTimestampMs: 1n }),
     expireDelegationToken: methods.expireDelegationToken ?? vi.fn().mockResolvedValue({ expiryTimestampMs: 2n }),
     describeDelegationToken: methods.describeDelegationToken ?? vi.fn().mockResolvedValue({ tokens: [] }),
-  };
+  });
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -98,24 +99,26 @@ describe('admin/delegation-tokens', () => {
   });
 
   it('describes tokens and maps renewers', async () => {
-    const cluster = fakeCluster({
-      describeDelegationToken: vi.fn().mockResolvedValue({
-        tokens: [
-          {
-            principalType: 'User',
-            principalName: ownerName,
-            tokenRequesterPrincipalType: 'User',
-            tokenRequesterPrincipalName: requesterName,
-            issueTimestamp: 1n,
-            expiryTimestamp: 2n,
-            maxTimestamp: 3n,
-            tokenId,
-            hmac,
-            renewers: [{ principalType: 'User', name: renewerName }],
-          },
-        ],
+    const cluster = fakeCluster(
+      withSend({
+        describeDelegationToken: vi.fn().mockResolvedValue({
+          tokens: [
+            {
+              principalType: 'User',
+              principalName: ownerName,
+              tokenRequesterPrincipalType: 'User',
+              tokenRequesterPrincipalName: requesterName,
+              issueTimestamp: 1n,
+              expiryTimestamp: 2n,
+              maxTimestamp: 3n,
+              tokenId,
+              hmac,
+              renewers: [{ principalType: 'User', name: renewerName }],
+            },
+          ],
+        }),
       }),
-    });
+    );
     const api = apiFor(cluster);
 
     await expect(

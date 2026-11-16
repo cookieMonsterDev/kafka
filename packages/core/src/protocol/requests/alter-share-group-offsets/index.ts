@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { alterShareGroupOffsetsRequestV0 } from './v0/request';
 import { alterShareGroupOffsetsResponseV0 } from './v0/response';
 
@@ -19,7 +20,7 @@ export interface AlterShareGroupOffsetsOptions {
   topics: AlterShareGroupOffsetsTopicInput[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterShareGroupOffsetsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: alterShareGroupOffsetsRequestV0({
       groupId: options.groupId,
@@ -30,13 +31,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterShareGroupOffsetsOp
     }),
     response: alterShareGroupOffsetsResponseV0,
   }),
-};
+} satisfies VersionFactories<AlterShareGroupOffsetsOptions>;
 
-export const AlterShareGroupOffsets: RequestFamily<AlterShareGroupOffsetsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AlterShareGroupOffsets protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AlterShareGroupOffsets = defineRequestFamily(KAFKA_APIS.AlterShareGroupOffsets, VERSIONS);

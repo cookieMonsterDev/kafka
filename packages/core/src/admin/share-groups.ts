@@ -13,6 +13,12 @@ import type {
   DescribeShareGroupOffsetsOptions,
   ListShareGroupOffsetsOptions,
 } from './types';
+import {
+  AlterShareGroupOffsets,
+  DeleteShareGroupOffsets,
+  DescribeShareGroupOffsets,
+  ShareGroupDescribe,
+} from '../protocol/requests/lazy-families';
 
 export interface ShareGroupsApi {
   describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescribeGroupV1[] }>;
@@ -47,7 +53,7 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
         cluster,
         retry,
         groupIds,
-        describe: (coordinator, ids) => coordinator.shareGroupDescribe({ groupIds: ids }),
+        describe: (coordinator, ids) => coordinator.send(ShareGroupDescribe, { groupIds: ids }),
       }),
     };
   };
@@ -91,19 +97,21 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
 
     const responses = await Promise.all(
       [...groupsByCoordinator.values()].map(async ({ coordinator, groups: grouped }) => {
-        const { groups: resultGroups } = await retrier(retry)(() =>
-          coordinator.describeShareGroupOffsets({
-            groups: grouped.map(({ groupId, topics }) => ({
-              groupId,
-              topics:
-                topics == null
-                  ? null
-                  : topics.map(({ topicName, partitions }) => ({
-                      topicName,
-                      partitions: partitions ?? [],
-                    })),
-            })),
-          }),
+        // DescribeShareGroupOffsets v0 partitions carry no `lag` (KIP-1226), which the result types as present.
+        const { groups: resultGroups } = await retrier(retry)(
+          async () =>
+            (await coordinator.send(DescribeShareGroupOffsets, {
+              groups: grouped.map(({ groupId, topics }) => ({
+                groupId,
+                topics:
+                  topics == null
+                    ? null
+                    : topics.map(({ topicName, partitions }) => ({
+                        topicName,
+                        partitions: partitions ?? [],
+                      })),
+              })),
+            })) as DescribeShareGroupOffsetsResponseV1Body,
         );
         return resultGroups;
       }),
@@ -127,7 +135,7 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
       try {
         await cluster.refreshMetadata();
         const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const { responses } = await coordinator.alterShareGroupOffsets({ groupId, topics });
+        const { responses } = await coordinator.send(AlterShareGroupOffsets, { groupId, topics });
         return { responses };
       } catch (error) {
         const type = protocolType(error);
@@ -161,7 +169,7 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
       try {
         await cluster.refreshMetadata();
         const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const { responses } = await coordinator.deleteShareGroupOffsets({
+        const { responses } = await coordinator.send(DeleteShareGroupOffsets, {
           groupId,
           topics,
         });

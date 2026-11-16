@@ -13,6 +13,7 @@ import { partitionKey } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
+import { Produce } from '../protocol/requests/produce/index';
 
 export interface SendMessagesOptions {
   logger: Logger;
@@ -216,7 +217,7 @@ export function createSendMessages({
 
         const producedAt = Date.now();
         const response = await broker
-          .produce({
+          .send(Produce, {
             transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
             producerId: ledger.getProducerId(),
             producerEpoch: ledger.getProducerEpoch(),

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { electLeadersRequestV0, type ElectLeadersTopicPartitions } from './v0/request';
 import { electLeadersResponseV0 } from './v0/response';
 import { electLeadersRequestV1 } from './v1/request';
@@ -15,7 +16,7 @@ export interface ElectLeadersOptions {
 const DEFAULT_TIMEOUT = 5000;
 const PREFERRED_ELECTION = 0;
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ElectLeadersOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: electLeadersRequestV0({
       timeout: options.timeout ?? DEFAULT_TIMEOUT,
@@ -39,13 +40,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ElectLeadersOptions>>> =
     }),
     response: electLeadersResponseV2,
   }),
-};
+} satisfies VersionFactories<ElectLeadersOptions>;
 
-export const ElectLeaders: RequestFamily<ElectLeadersOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ElectLeaders protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ElectLeaders = defineRequestFamily(KAFKA_APIS.ElectLeaders, VERSIONS);

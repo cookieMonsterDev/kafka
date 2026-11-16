@@ -24,6 +24,8 @@ import type { CommitTarget } from './commit-target';
 import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
 import { ResolvedOffsets } from './resolved-offsets';
+import { OffsetCommit } from '../../protocol/requests/offset-commit/index';
+import { OffsetFetch } from '../../protocol/requests/offset-fetch/index';
 
 export interface OffsetTrackerOptions {
   cluster: Cluster;
@@ -263,7 +265,7 @@ export class OffsetTracker {
 
     try {
       const coordinator = await this.#target.coordinator();
-      await coordinator.offsetCommit(payload);
+      await coordinator.send(OffsetCommit, payload);
       this.#instrumentationEmitter.emit(COMMIT_OFFSETS, payload);
       this.#markCommitted(topics);
 
@@ -307,7 +309,7 @@ export class OffsetTracker {
     const { groupId } = this.#target;
     if (groupId !== null) {
       const coordinator = await this.#target.coordinator();
-      ({ responses: consumerOffsets } = await coordinator.offsetFetch({ groupId, topics: pendingPartitions }));
+      ({ responses: consumerOffsets } = await coordinator.send(OffsetFetch, { groupId, topics: pendingPartitions }));
     } else {
       consumerOffsets = pendingPartitions.map(({ topic, partitions }) => ({
         topic,
@@ -360,7 +362,7 @@ export class OffsetTracker {
    */
   async #sendCommit(groupId: string, topics: TopicOffsets[]): Promise<void> {
     const coordinator = await this.#target.coordinator();
-    await coordinator.offsetCommit({ groupId, ...this.#target.commitIdentity(), topics });
+    await coordinator.send(OffsetCommit, { groupId, ...this.#target.commitIdentity(), topics });
   }
 
   #markCommitted(topics: readonly TopicOffsets[]): void {

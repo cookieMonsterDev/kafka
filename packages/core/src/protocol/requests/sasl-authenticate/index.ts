@@ -1,5 +1,6 @@
 import { Encoder } from '../../encoder';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { saslAuthenticateRequestV0 } from './v0/request';
 import { saslAuthenticateResponseV0 } from './v0/response';
 import { saslAuthenticateRequestV1 } from './v1/request';
@@ -35,20 +36,13 @@ const saslAuthenticateResponseV2ForAuthenticator = {
   parse: async (data: SaslAuthenticateResponseV1Body) => saslAuthenticateResponseV2.parse(data),
 };
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<SaslAuthenticateOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: saslAuthenticateRequestV0(options), response: saslAuthenticateResponseV0 }),
   1: (options) => ({ request: saslAuthenticateRequestV1(options), response: saslAuthenticateResponseV1 }),
   2: (options) => ({
     request: saslAuthenticateRequestV2({ authBytes: unwrapLengthPrefixed(options.authBytes) }),
     response: saslAuthenticateResponseV2ForAuthenticator,
   }),
-};
+} satisfies VersionFactories<SaslAuthenticateOptions>;
 
-export const SaslAuthenticate: RequestFamily<SaslAuthenticateOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no SaslAuthenticate protocol for version ${version}`);
-    return factory;
-  },
-});
+export const SaslAuthenticate = defineRequestFamily(KAFKA_APIS.SaslAuthenticate, VERSIONS);

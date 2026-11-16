@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { addPartitionsToTxnRequestV0 } from './v0/request';
 import { addPartitionsToTxnResponseV0 } from './v0/response';
 import { addPartitionsToTxnRequestV1 } from './v1/request';
@@ -15,18 +16,11 @@ export interface AddPartitionsToTxnOptions {
   topics: { topic: string; partitions: number[] }[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AddPartitionsToTxnOptions>>> = {
+const VERSIONS = {
   0: (values) => ({ request: addPartitionsToTxnRequestV0(values), response: addPartitionsToTxnResponseV0 }),
   1: (values) => ({ request: addPartitionsToTxnRequestV1(values), response: addPartitionsToTxnResponseV1 }),
   2: (values) => ({ request: addPartitionsToTxnRequestV2(values), response: addPartitionsToTxnResponseV2 }),
   3: (values) => ({ request: addPartitionsToTxnRequestV3(values), response: addPartitionsToTxnResponseV3 }),
-};
+} satisfies VersionFactories<AddPartitionsToTxnOptions>;
 
-export const AddPartitionsToTxn: RequestFamily<AddPartitionsToTxnOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AddPartitionsToTxn protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AddPartitionsToTxn = defineRequestFamily(KAFKA_APIS.AddPartitionsToTxn, VERSIONS);

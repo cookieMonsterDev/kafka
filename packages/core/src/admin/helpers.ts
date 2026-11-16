@@ -9,6 +9,7 @@ import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { retrier, type RetryOptions } from '../retry/index';
 import { groupBy } from '../utils/group-by';
 import { waitFor, type WaitForOptions } from '../utils/wait';
+import { DeleteGroups } from '../protocol/requests/lazy-families';
 
 export interface AdminContext {
   cluster: Cluster;
@@ -167,7 +168,7 @@ export function deleteGroupsViaCoordinators({
 
       const responses = await Promise.all(
         [...brokerByNode.entries()].map(async ([nodeId, broker]) =>
-          broker.deleteGroups({ groupIds: groupsByNode.get(nodeId) ?? [] }),
+          broker.send(DeleteGroups, { groupIds: groupsByNode.get(nodeId) ?? [] }),
         ),
       );
 

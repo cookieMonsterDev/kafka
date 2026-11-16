@@ -6,6 +6,7 @@ import { createErrorFromCode, ERROR_CODES } from '../../protocol/error-codes';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { createEosManager } from './index';
+import { withSend } from '../../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -24,23 +25,23 @@ const mockBumpedInitProducerIdResponse = {
 };
 
 function fakeBroker() {
-  return {
+  return withSend({
     initProducerId: vi.fn().mockResolvedValue(mockInitProducerIdResponse),
     addPartitionsToTxn: vi.fn().mockResolvedValue(undefined),
     endTxn: vi.fn().mockResolvedValue(undefined),
     addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
     txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
-  };
+  });
 }
 
 /** `transactionV2` mirrors a broker advertising Produce v12 (Kafka 4.0+, KIP-890 part 2). */
 function fakeCluster(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
-  return {
+  return withSend({
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     brokerPool: { versions: transactionV2 ? { [API_KEYS.Produce]: { maxVersion: 12 } } : undefined },
-  };
+  });
 }
 
 describe('producer/eosManager', () => {

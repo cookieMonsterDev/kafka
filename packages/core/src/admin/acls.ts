@@ -9,6 +9,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { protocolType, formatUnknown } from './helpers';
 import type { AclEntry, AclFilter } from './types';
+import { CreateAcls, DeleteAcls, DescribeAcls } from '../protocol/requests/lazy-families';
 
 export interface AclsApi {
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
@@ -80,7 +81,7 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.createAcls({ creations: acl });
+        await broker.send(CreateAcls, { creations: acl });
         return true;
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
@@ -139,7 +140,7 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { resources } = await broker.describeAcls({
+        const { resources } = await broker.send(DescribeAcls, {
           resourceType,
           resourceName: resourceName ?? null,
           resourcePatternType,
@@ -222,7 +223,7 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { filterResponses } = await broker.deleteAcls({
+        const { filterResponses } = await broker.send(DeleteAcls, {
           filters: filters.map((filter) => ({
             resourceType: filter.resourceType,
             resourceName: filter.resourceName ?? null,

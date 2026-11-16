@@ -9,6 +9,7 @@ import { createIdempotenceLedger, type ProducerIdentity } from './idempotence-le
 import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages } from './send-messages';
 import type { PartitionerArgs } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -29,7 +30,10 @@ function fakeProduceResponse(topicName: string, partition: number) {
 }
 
 function fakeBroker(nodeId: number) {
-  return { nodeId, produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, nodeId - 1))) };
+  return withSend({
+    nodeId,
+    produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, nodeId - 1))),
+  });
 }
 
 function fakePartitionMetadata(partitionId: number): PartitionMetadata {
@@ -48,7 +52,10 @@ function inMemoryLedger() {
   const initProducerId = vi.fn((current: ProducerIdentity) =>
     Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
   );
-  return { ledger: createIdempotenceLedger({ logger: silentLogger, initProducerId }), initProducerId };
+  return withSend({
+    ledger: createIdempotenceLedger(withSend({ logger: silentLogger, initProducerId })),
+    initProducerId,
+  });
 }
 
 /** Transaction calls are mocked; sequences and gates run on a real ledger, uninitialized unless one is passed. */
@@ -67,7 +74,7 @@ function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = 
 async function idempotentEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = {}) {
   const { ledger, initProducerId } = inMemoryLedger();
   await ledger.initProducerId();
-  return { eosManager: fakeEosManager({ ledger, ...overrides }), ledger, initProducerId };
+  return withSend({ eosManager: fakeEosManager({ ledger, ...overrides }), ledger, initProducerId });
 }
 
 interface SequencedProduceRequest {
@@ -964,18 +971,18 @@ describe('producer/sendMessages', () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
       brokers[1].produce.mockRejectedValue(createErrorFromCode(unknownProducerIdCode));
       let epoch = -1;
-      const coordinator = {
+      const coordinator = withSend({
         initProducerId: vi.fn(() => Promise.resolve({ producerId: 1000n, producerEpoch: (epoch += 1) })),
         addPartitionsToTxn: vi.fn().mockResolvedValue(undefined),
         endTxn: vi.fn().mockResolvedValue(undefined),
-      };
+      });
       const eosManager = createEosManager({
         logger: silentLogger,
-        cluster: {
+        cluster: withSend({
           refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
           findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
           brokerPool: { versions: undefined },
-        } as unknown as Cluster,
+        }) as unknown as Cluster,
         transactional: true,
         transactionalId: 'transactional-id',
       });

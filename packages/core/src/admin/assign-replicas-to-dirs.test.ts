@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createAssignReplicasToDirsApi } from './assign-replicas-to-dirs';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const directoryA = Buffer.alloc(16, 1);
@@ -12,7 +13,7 @@ const logsTopicId = Buffer.alloc(16, 8);
 
 describe('admin/assign-replicas-to-dirs', () => {
   it('groups replicas by directory and topic then targets the controller', async () => {
-    const broker = { assignReplicasToDirs: vi.fn().mockResolvedValue({ errorCode: 0, directories: [] }) };
+    const broker = withSend({ assignReplicasToDirs: vi.fn().mockResolvedValue({ errorCode: 0, directories: [] }) });
     const addMultipleTargetTopics = vi.fn().mockResolvedValue(undefined);
     const cluster = {
       addMultipleTargetTopics,

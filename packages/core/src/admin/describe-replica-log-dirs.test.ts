@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createLogDirsApi } from './log-dirs';
+import { withSend } from '../broker/test-send';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/describeReplicaLogDirs', () => {
   it('queries each broker with a filtered topic list and maps partitions back to replicas', async () => {
-    const broker = {
+    const broker = withSend({
       describeLogDirs: vi.fn(async () => ({
         logDirs: [
           {
@@ -22,7 +23,7 @@ describe('admin/describeReplicaLogDirs', () => {
           },
         ],
       })),
-    };
+    });
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       findBroker: vi.fn(async () => broker),

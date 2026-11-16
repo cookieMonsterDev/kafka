@@ -11,6 +11,7 @@ import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
 import { ACKNOWLEDGE, type ShareAcknowledgePayload } from './instrumentation-events';
 import { ShareBatch } from './share-batch';
 import { ShareGroup } from './share-group';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const TOPIC_ID = Buffer.alloc(16, 9);
@@ -105,7 +106,7 @@ function createFetchingGroup({
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-    findBroker: findBroker ?? vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge }),
+    findBroker: findBroker ?? vi.fn().mockResolvedValue(withSend({ shareFetch, shareAcknowledge })),
     findLeaderForPartitions: vi.fn((_topic: string, assigned: number[]) => ({ 1: assigned })),
   };
   const instrumentationEmitter = new InstrumentationEventEmitter();
@@ -124,7 +125,7 @@ function createFetchingGroup({
   });
   group.member.memberId = 'member-1';
   group.assignment = [{ topic: 'events', partitions }];
-  return { group, cluster, shareFetch, shareAcknowledge, acknowledged };
+  return withSend({ group, cluster, shareFetch, shareAcknowledge, acknowledged });
 }
 
 function acquiredBatch(partition = 0): ShareBatch {
@@ -160,13 +161,13 @@ describe('share-consumer/share-group', () => {
         heartbeatIntervalMs: 50,
         assignment: { topicPartitions: [{ topicId, partitions: [0, 1] }] },
       });
-    const coordinator = { shareGroupHeartbeat };
-    const cluster = {
+    const coordinator = withSend({ shareGroupHeartbeat });
+    const cluster = withSend({
       connect: vi.fn(),
       disconnect: vi.fn(),
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
 
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events']);
@@ -187,9 +188,9 @@ describe('share-consumer/share-group', () => {
       heartbeatIntervalMs: 3000,
       assignment: null,
     });
-    const coordinator = { shareGroupHeartbeat, nodeId: 1 };
+    const coordinator = withSend({ shareGroupHeartbeat, nodeId: 1 });
     const group = new ShareGroup({
-      cluster: { findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) } as unknown as Cluster,
+      cluster: withSend({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }) as unknown as Cluster,
       groupId: 'share-1',
       logger: silentLogger,
     });
@@ -214,13 +215,13 @@ describe('share-consumer/share-group', () => {
     });
     const connect = vi.fn();
     const disconnect = vi.fn();
-    const cluster = {
+    const cluster = withSend({
       connect,
       disconnect,
       findGroupCoordinator: vi.fn(),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger });
-    group.coordinator = { shareGroupHeartbeat } as never;
+    group.coordinator = withSend({ shareGroupHeartbeat }) as never;
     group.member.memberId = 'member-1';
     group.member.isJoined = true;
 
@@ -235,14 +236,14 @@ describe('share-consumer/share-group', () => {
   it('leave is a no-op without a coordinator or member id', async () => {
     const group = new ShareGroup({ cluster: {} as Cluster, groupId: 'share-1', logger: silentLogger });
     await expect(group.leave()).resolves.toBeUndefined();
-    group.coordinator = { shareGroupHeartbeat: vi.fn() } as never;
+    group.coordinator = withSend({ shareGroupHeartbeat: vi.fn() }) as never;
     await expect(group.leave()).resolves.toBeUndefined();
   });
 
   it('clears membership when leave heartbeat fails', async () => {
     const shareGroupHeartbeat = vi.fn().mockRejectedValue(new Error('offline'));
     const group = new ShareGroup({ cluster: {} as Cluster, groupId: 'share-1', logger: silentLogger });
-    group.coordinator = { shareGroupHeartbeat } as never;
+    group.coordinator = withSend({ shareGroupHeartbeat }) as never;
     group.member.memberId = 'member-1';
     group.member.isJoined = true;
 
@@ -254,7 +255,7 @@ describe('share-consumer/share-group', () => {
   it('heartbeatDue is false without a coordinator and true after the interval elapses', () => {
     const group = new ShareGroup({ cluster: {} as Cluster, groupId: 'share-1', logger: silentLogger });
     expect(group.heartbeatDue(10)).toBe(false);
-    group.coordinator = { shareGroupHeartbeat: vi.fn() } as never;
+    group.coordinator = withSend({ shareGroupHeartbeat: vi.fn() }) as never;
     group.member.lastHeartbeatAt = 0;
     group.member.heartbeatIntervalMs = 1;
     expect(group.heartbeatDue(10_000)).toBe(true);
@@ -272,7 +273,7 @@ describe('share-consumer/share-group', () => {
       assignment: null,
     });
     const group = new ShareGroup({ cluster: {} as Cluster, groupId: 'share-1', logger: silentLogger });
-    group.coordinator = { shareGroupHeartbeat } as never;
+    group.coordinator = withSend({ shareGroupHeartbeat }) as never;
     group.member.memberId = 'member-1';
     group.member.memberEpoch = 1;
     group.member.lastHeartbeatAt = Date.now();
@@ -301,12 +302,12 @@ describe('share-consumer/share-group', () => {
         },
       ],
     });
-    const coordinator = { shareGroupHeartbeat, shareGroupDescribe };
-    const cluster = {
+    const coordinator = withSend({ shareGroupHeartbeat, shareGroupDescribe });
+    const cluster = withSend({
       connect: vi.fn(),
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
     await group.joinAndSync();
@@ -343,11 +344,11 @@ describe('share-consumer/share-group', () => {
         },
       ],
     });
-    const coordinator = { shareGroupHeartbeat, shareGroupDescribe };
-    const cluster = {
+    const coordinator = withSend({ shareGroupHeartbeat, shareGroupDescribe });
+    const cluster = withSend({
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
     await group.joinAndSync();
@@ -366,11 +367,11 @@ describe('share-consumer/share-group', () => {
       assignment: { topicPartitions: [{ topicId, partitions: [0] }] },
     });
     const shareGroupDescribe = vi.fn().mockResolvedValue({ groups: [] });
-    const coordinator = { shareGroupHeartbeat, shareGroupDescribe };
-    const cluster = {
+    const coordinator = withSend({ shareGroupHeartbeat, shareGroupDescribe });
+    const cluster = withSend({
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
     await expect(group.joinAndSync()).rejects.toThrow('Unable to resolve topic id');
@@ -399,9 +400,9 @@ describe('share-consumer/share-group', () => {
   });
 
   it('re-finds the coordinator on NOT_COORDINATOR_FOR_GROUP during fetch recovery', async () => {
-    const coordinator = { shareGroupHeartbeat: vi.fn() };
+    const coordinator = withSend({ shareGroupHeartbeat: vi.fn() });
     const findGroupCoordinator = vi.fn().mockResolvedValue(coordinator);
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger });
 
     // Resolves rather than rethrowing, so the fetch loop can apply its own retry/crash policy.
@@ -414,7 +415,7 @@ describe('share-consumer/share-group', () => {
 
   it('ignores unrelated fetch errors during recovery', async () => {
     const findGroupCoordinator = vi.fn();
-    const cluster = { findGroupCoordinator } as unknown as Cluster;
+    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger });
     await expect(
       group.recoverFromFetch(Object.assign(new Error('range'), { type: 'OFFSET_OUT_OF_RANGE' })),
@@ -428,7 +429,7 @@ describe('share-consumer/share-group', () => {
         .fn()
         .mockResolvedValueOnce(shareFetchResponse(partitionResponse()))
         .mockResolvedValue(EMPTY_RESPONSE);
-      const { group, acknowledged } = createFetchingGroup({ shareFetch });
+      const { group, acknowledged } = createFetchingGroup(withSend({ shareFetch }));
 
       const [batch, ...rest] = await group.fetch('1');
       expect(rest).toEqual([]);
@@ -516,7 +517,7 @@ describe('share-consumer/share-group', () => {
         .mockResolvedValueOnce(EMPTY_RESPONSE)
         .mockRejectedValueOnce(createErrorFromCode(code))
         .mockResolvedValue(EMPTY_RESPONSE);
-      const { group } = createFetchingGroup({ shareFetch });
+      const { group } = createFetchingGroup(withSend({ shareFetch }));
 
       await group.fetch('1');
       group.acknowledge(acquiredBatch(), ACCEPT);
@@ -536,10 +537,12 @@ describe('share-consumer/share-group', () => {
         .mockResolvedValueOnce(EMPTY_RESPONSE)
         .mockRejectedValueOnce(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' }))
         .mockResolvedValue(EMPTY_RESPONSE);
-      const { group, acknowledged } = createFetchingGroup({
-        shareFetch,
-        retry: { retries: 1, initialRetryTime: 1, maxRetryTime: 5 },
-      });
+      const { group, acknowledged } = createFetchingGroup(
+        withSend({
+          shareFetch,
+          retry: { retries: 1, initialRetryTime: 1, maxRetryTime: 5 },
+        }),
+      );
 
       await group.fetch('1');
       group.acknowledge(acquiredBatch(), RENEW);
@@ -559,13 +562,13 @@ describe('share-consumer/share-group', () => {
 
     it('keeps acknowledgements for the next ShareFetch when a request never went out', async () => {
       const shareFetch = vi.fn().mockResolvedValue(EMPTY_RESPONSE);
-      const broker = { shareFetch, shareAcknowledge: vi.fn() };
+      const broker = withSend({ shareFetch, shareAcknowledge: vi.fn() });
       const findBroker = vi
         .fn()
         .mockResolvedValueOnce(broker)
         .mockRejectedValueOnce(new Error('no broker'))
         .mockResolvedValue(broker);
-      const { group } = createFetchingGroup({ shareFetch, findBroker });
+      const { group } = createFetchingGroup(withSend({ shareFetch, findBroker }));
 
       await group.fetch('1');
       group.acknowledge(acquiredBatch(), ACCEPT);
@@ -598,7 +601,7 @@ describe('share-consumer/share-group', () => {
           ({ log: { message: _message, ...extra } }) =>
             warnings.push(extra),
       });
-      const { group, cluster } = createFetchingGroup({ shareFetch, partitions: [0, 1], logger });
+      const { group, cluster } = createFetchingGroup(withSend({ shareFetch, partitions: [0, 1], logger }));
 
       const batches = await group.fetch('1');
       expect(batches.map(({ partition }) => partition)).toEqual([1]);
@@ -619,7 +622,7 @@ describe('share-consumer/share-group', () => {
         errorCode: 0,
         responses: [{ topicId: Buffer.alloc(16, 7), partitions: [partitionResponse()] }],
       });
-      const { group } = createFetchingGroup({ shareFetch });
+      const { group } = createFetchingGroup(withSend({ shareFetch }));
 
       await expect(group.fetch('1')).rejects.toThrow('Unknown topic id in share response');
     });
@@ -631,7 +634,7 @@ describe('share-consumer/share-group', () => {
           partitionResponse({ partitionIndex: 1 }),
         ),
       );
-      const { group, shareAcknowledge } = createFetchingGroup({ shareFetch, partitions: [0, 1] });
+      const { group, shareAcknowledge } = createFetchingGroup(withSend({ shareFetch, partitions: [0, 1] }));
 
       await expect(group.fetch('1')).rejects.toEqual(expect.objectContaining({ type: 'TOPIC_AUTHORIZATION_FAILED' }));
       await group.closeShareSessions();

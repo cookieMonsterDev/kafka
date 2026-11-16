@@ -5,6 +5,10 @@ import { MemberAssignment } from '../assigner-protocol';
 import { HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from '../instrumentation-events';
 import type { TopicPartitions } from '../types';
 import { partitionsNotIn, type GroupMembership, type MembershipHost } from './group-membership';
+import { Heartbeat } from '../../protocol/requests/heartbeat/index';
+import { JoinGroup } from '../../protocol/requests/join-group/index';
+import { LeaveGroup } from '../../protocol/requests/leave-group/index';
+import { SyncGroup } from '../../protocol/requests/sync-group/index';
 
 export interface ClassicMembershipOptions {
   sessionTimeout: number;
@@ -60,7 +64,7 @@ export class ClassicMembership implements GroupMembership {
       groupGenerationId: generationId,
       groupInstanceId: this.#options.groupInstanceId,
     };
-    await coordinator.heartbeat(payload);
+    await coordinator.send(Heartbeat, payload);
     this.#host.instrumentationEmitter.emit(HEARTBEAT, payload);
     this.#lastHeartbeatAt = Date.now();
     this.#updateNextHeartbeatAt();
@@ -71,7 +75,7 @@ export class ClassicMembership implements GroupMembership {
     const { memberId, coordinator } = this;
     if (!memberId || !coordinator || !groupId) return;
 
-    await coordinator.leaveGroup({ groupId, memberId, groupInstanceId: this.#options.groupInstanceId });
+    await coordinator.send(LeaveGroup, { groupId, memberId, groupInstanceId: this.#options.groupInstanceId });
     this.memberId = null;
     this.#updateNextHeartbeatAt();
   }
@@ -97,7 +101,7 @@ export class ClassicMembership implements GroupMembership {
     }
     this.coordinator = await cluster.findGroupCoordinator({ groupId });
 
-    const groupData = await this.coordinator.joinGroup({
+    const groupData = await this.coordinator.send(JoinGroup, {
       groupId,
       sessionTimeout: this.#options.sessionTimeout,
       rebalanceTimeout: this.#options.rebalanceTimeout,
@@ -143,7 +147,7 @@ export class ClassicMembership implements GroupMembership {
       logger.debug('Group assignment', { groupId, generationId, groupProtocol, assignment, topics: topicsSubscribed });
     }
 
-    const { memberAssignment } = await coordinator.syncGroup({
+    const { memberAssignment } = await coordinator.send(SyncGroup, {
       groupId,
       generationId,
       memberId,

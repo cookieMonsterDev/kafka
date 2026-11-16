@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import {
   RETENTION_TIME,
   type OffsetCommitTopicOptions,
@@ -35,7 +36,7 @@ export interface OffsetCommitOptions {
   topics: OffsetCommitTopicOptions[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetCommitOptions>>> = {
+const VERSIONS = {
   0: ({ groupId, topics }) => ({
     request: offsetCommitRequestV0({ groupId, topics: withDefaultMetadata(topics) }),
     response: offsetCommitResponseV0,
@@ -117,13 +118,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetCommitOptions>>> =
     }),
     response: offsetCommitResponseV9,
   }),
-};
+} satisfies VersionFactories<OffsetCommitOptions>;
 
-export const OffsetCommit: RequestFamily<OffsetCommitOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no OffsetCommit protocol for version ${version}`);
-    return factory;
-  },
-});
+export const OffsetCommit = defineRequestFamily(KAFKA_APIS.OffsetCommit, VERSIONS);

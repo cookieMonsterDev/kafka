@@ -1,4 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { shuffle } from '../../../utils/shuffle';
+import { failure } from '../../error-codes';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
+import type { ClusterMetadata } from './shared';
 import { metadataRequestV0 } from './v0/request';
 import { metadataResponseV0 } from './v0/response';
 import { metadataRequestV1 } from './v1/request';
@@ -36,7 +40,7 @@ export interface MetadataOptions {
   includeTopicAuthorizedOperations?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
+const VERSIONS = {
   0: ({ topics = [] }) => ({ request: metadataRequestV0({ topics }), response: metadataResponseV0 }),
   1: ({ topics = [] }) => ({ request: metadataRequestV1({ topics }), response: metadataResponseV1 }),
   2: ({ topics = [] }) => ({ request: metadataRequestV2({ topics }), response: metadataResponseV2 }),
@@ -128,13 +132,26 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
     }),
     response: metadataResponseV13,
   }),
-};
+} satisfies VersionFactories<MetadataOptions>;
 
-export const Metadata: RequestFamily<MetadataOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no Metadata protocol for version ${version}`);
-    return factory;
-  },
+/**
+ * Asked for every topic, topics deleted or still being created in the meantime can carry
+ * UNKNOWN_TOPIC_OR_PARTITION; leave those out rather than failing the whole response.
+ */
+function withoutFailedTopics(body: ClusterMetadata): ClusterMetadata {
+  const topicMetadata = body.topicMetadata.filter(
+    (topic) =>
+      !failure(topic.topicErrorCode) &&
+      !topic.partitionMetadata.some((partition) => failure(partition.partitionErrorCode)),
+  );
+  return { ...body, topicMetadata };
+}
+
+export const Metadata = defineRequestFamily(KAFKA_APIS.Metadata, VERSIONS, {
+  prepareOptions: (options) => ({ ...options, topics: shuffle(options.topics ?? []) }),
+  parseResponse: async (body, options, parse) =>
+    // No topic names and no topic ids asks for every topic.
+    options.topics?.length === 0 && (options.topicIds ?? []).length === 0
+      ? withoutFailedTopics(body as ClusterMetadata)
+      : ((await parse(body)) as ClusterMetadata),
 });

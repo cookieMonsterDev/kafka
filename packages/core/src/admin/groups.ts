@@ -10,6 +10,9 @@ import type { AdminContext } from './helpers';
 import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, protocolType, formatUnknown } from './helpers';
 import type { RemoveMembersFromConsumerGroupOptions, RemoveMembersFromConsumerGroupResult } from './types';
 import type { TopicPartitions } from './types';
+import { ConsumerGroupDescribe, ListGroups, OffsetDelete } from '../protocol/requests/lazy-families';
+import { DescribeGroups } from '../protocol/requests/describe-groups/index';
+import { LeaveGroupMembers } from '../protocol/requests/leave-group/index';
 
 export interface GroupsApi {
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
@@ -33,7 +36,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
     const responses = await Promise.all(
       Object.keys(cluster.brokerPool.brokers).map(async (nodeId) => {
         const broker = await cluster.findBroker({ nodeId });
-        return broker.listGroups();
+        return broker.send(ListGroups, {});
       }),
     );
 
@@ -46,7 +49,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         cluster,
         retry,
         groupIds,
-        describe: (coordinator, ids) => coordinator.describeGroups({ groupIds: ids }),
+        describe: (coordinator, ids) => coordinator.send(DescribeGroups, { groupIds: ids }),
       }),
     };
   };
@@ -69,7 +72,11 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         cluster,
         retry,
         groupIds,
-        describe: (coordinator, ids) => coordinator.consumerGroupDescribe({ groupIds: ids }),
+        // ConsumerGroupDescribe v0 members carry no `memberType`, which `ConsumerGroupDescription` types as present.
+        describe: async (coordinator, ids) =>
+          (await coordinator.send(ConsumerGroupDescribe, { groupIds: ids })) as {
+            groups: ConsumerGroupDescribeGroupV1[];
+          },
       }),
     };
   };
@@ -129,7 +136,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
       try {
         await cluster.refreshMetadata();
         const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const response = await coordinator.offsetDelete({ groupId, topics });
+        const response = await coordinator.send(OffsetDelete, { groupId, topics });
         return { topics: response.topics };
       } catch (error) {
         const type = protocolType(error);
@@ -181,7 +188,10 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
       try {
         await cluster.refreshMetadata();
         const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const { members: responseMembers } = await coordinator.leaveGroupMembers({ groupId, members: leaveMembers });
+        const { members: responseMembers } = await coordinator.send(LeaveGroupMembers, {
+          groupId,
+          members: leaveMembers,
+        });
         return {
           members: responseMembers.map(({ memberId, groupInstanceId, errorCode }) => ({
             memberId,

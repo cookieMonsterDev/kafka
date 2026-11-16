@@ -50,7 +50,7 @@ These defaults are product choices.
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `idempotent`          | `false` — explicit opt-in for idempotent producing                                                                                                                            |
 | `readUncommitted`     | `false` (isolation defaults to `read_committed`)                                                                                                                              |
-| `lingerMs`            | `5`; pass `0` for one Produce per `send()`                                                                                                                                    |
+| `lingerMs`            | `5`; `0` adds no delay, but calls made in the same event-loop turn still share a Produce request ([details](../producer/#linger-0-and-same-turn-sends))                       |
 | `batchSize`           | `16384`; pass `0` to not batch by size                                                                                                                                        |
 | `maxInFlightRequests` | `5` on the producer; pass `null` to uncap. Consumer/admin connections stay uncapped unless set                                                                                |
 | Partitioner           | murmur2 by default; KIP-794 `Partitioners.StickyPartitioner` is opt-in (the preset enables it). Once enabled, its latency-adaptive rotation defaults to on (`adaptive: true`) |
@@ -93,7 +93,7 @@ batch size, and in-flight caps are already constructor defaults (`lingerMs: 5`,
 `partitionsConsumedConcurrently: 4` on `run()` (not on `kafka.consumer()`).
 
 `eachBatch` plus `partitionsConsumedConcurrently` is the heavy-load consume
-API. Pass `lingerMs: 0` for one Produce per `send()`. Compression: GZIP and
+API. Compression: GZIP and
 ZSTD already use the zlib threadpool; Snappy and LZ4 are off-thread as well
 (optional native packages if installed).
 

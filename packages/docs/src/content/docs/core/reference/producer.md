@@ -37,6 +37,28 @@ Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-co
 for several topics. `compressionLevel` overrides the producer's own default
 for that one call; see [Throughput](../../guides/throughput/#compression-level).
 
+### Linger 0 and same-turn sends
+
+`lingerMs: 0` means no added delay, not one Produce request per `send()`.
+Calls made in the same event-loop turn, such as several `send()` calls before
+the first `await`, leave together once that turn's synchronous code has run.
+They go out as one Produce request per broker, split where the records would
+exceed `maxRequestSize`. A call with a different `acks`, `timeout`,
+`compression`, or `compressionLevel` from the call before it starts a new
+request. Every request of the turn starts at once, in call order. An awaited
+`send()` on its own, as in a sequential loop, is sent alone.
+
+Calls that share a request share its outcome, as calls batched by a positive
+`lingerMs` do:
+
+- A failed request rejects every call in it with the same error.
+- The request stops at the earliest call's `deliveryTimeoutMs` deadline.
+- Each call resolves with the request's `RecordMetadata` for the topics that
+  call sent to.
+
+The Java client and librdkafka also batch records that arrive close together
+with `linger.ms=0`.
+
 ### `Message`
 
 | Field       | Type                       | Notes                                 |

@@ -40,14 +40,16 @@ needs no `trustedDependencies` entry for it.
 
 The client loads the package the first time it checksums a record batch of 4 KiB
 or more, and uses it for every batch after that. Until then, smaller batches use
-the client's built-in JavaScript implementation, so a process that only sends
-small batches doesn't spend the time and memory the package takes to load. If
-the package isn't installed, or has no binary for the platform, the client uses
-the JavaScript implementation for every batch. It processes about 2.8 GB/s on an
-Apple silicon Mac on Node.js and Bun. Both produce the same checksums.
+the client's built-in JavaScript implementation, so a process that only produces
+or consumes small batches doesn't spend the time and memory the package takes to
+load. If the package isn't installed, or has no binary for the platform, the
+client uses the JavaScript implementation for every batch. The JavaScript
+implementation processes about 2.8 GB/s on an Apple silicon Mac on Node.js and
+Bun. Both produce the same checksums.
 
 To see which implementation is in use, call `getCrc32cImplementation()`. It
-returns `'native'` or `'javascript'`, and loads the package if no batch has yet:
+returns `'native'` or `'javascript'`, and loads the package if no record batch
+of 4 KiB or more has loaded it yet:
 
 ```ts
 import { getCrc32cImplementation } from '@cookiemonsterdev/kafka-core';

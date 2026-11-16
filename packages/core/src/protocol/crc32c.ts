@@ -108,21 +108,21 @@ export function selectCrc32c(requireModule: (id: string) => unknown): SelectedCr
 }
 
 /**
- * Batches shorter than this use the JS table until a longer one loads `@node-rs/crc32`. Below it the
- * JS table takes at most about 1.4 µs per batch, about 1.2 µs more than native on Node.js 26 and
- * Bun 1.4 (macOS arm64), while loading the binding takes about 2 ms and adds 1 to 7.5 MiB of memory
- * (#206). A process that only sends small batches skips that load for at most 1.2 µs per batch.
+ * Batches shorter than this use the JS table until one of at least this length loads `@node-rs/crc32`.
+ * Below it the JS table takes at most about 1.4 µs per batch, about 1.2 µs more than native on
+ * Node.js 26 and Bun 1.4 (macOS arm64), while loading the binding takes about 2 ms and adds 1 to
+ * 7.5 MiB of memory (#206), which a process that only checksums small batches never earns back.
  */
 export const NATIVE_CRC32C_MIN_BYTES = 4 * 1024;
 
 interface DeferredCrc32c {
   checksum: Checksum;
-  implementation: () => Crc32cImplementation;
+  resolveImplementation: () => Crc32cImplementation;
 }
 
 /**
  * Checksums with the JS table until a buffer of `NATIVE_CRC32C_MIN_BYTES` or more, or a call to
- * `implementation()`, makes it call `selectCrc32c(requireModule)`. From then on the selected
+ * `resolveImplementation()`, makes it call `selectCrc32c(requireModule)`. From then on the selected
  * implementation checksums every buffer, and `requireModule` is never called again.
  */
 export function createDeferredCrc32c(requireModule: (id: string) => unknown): DeferredCrc32c {
@@ -143,7 +143,7 @@ export function createDeferredCrc32c(requireModule: (id: string) => unknown): De
       }
       return select().checksum(buffer);
     },
-    implementation: () => select().implementation,
+    resolveImplementation: () => select().implementation,
   };
 }
 
@@ -162,5 +162,5 @@ export function crc32c(buffer: Buffer): number {
  * package if no record batch of 4 KiB or more has done so yet; the result doesn't change afterwards.
  */
 export function getCrc32cImplementation(): Crc32cImplementation {
-  return processCrc32c.implementation();
+  return processCrc32c.resolveImplementation();
 }

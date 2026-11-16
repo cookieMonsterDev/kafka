@@ -155,7 +155,8 @@ describe('protocol/crc32c implementation selection', () => {
 });
 
 describe('protocol/crc32c deferred native loading', () => {
-  const smallBatches = [Buffer.alloc(0), Buffer.from('123456789'), Buffer.alloc(NATIVE_CRC32C_MIN_BYTES - 1, 0x5a)];
+  const checkInput = Buffer.from('123456789');
+  const smallBatches = [Buffer.alloc(0), checkInput, Buffer.alloc(NATIVE_CRC32C_MIN_BYTES - 1, 0x5a)];
   const largeBatch = Buffer.from(Array.from({ length: NATIVE_CRC32C_MIN_BYTES }, (_, i) => (i * 151 + 7) & 0xff));
 
   /** A binding that passes the check-value test and counts its calls, standing in for `@node-rs/crc32`. */
@@ -177,7 +178,7 @@ describe('protocol/crc32c deferred native loading', () => {
   it('loads @node-rs/crc32 on the first batch at the threshold and uses it for every batch after', () => {
     const { requireModule, nativeCrc32c } = fakeBinding();
     const deferred = createDeferredCrc32c(requireModule);
-    deferred.checksum(smallBatches[1] as Buffer);
+    deferred.checksum(checkInput);
 
     expect(deferred.checksum(largeBatch)).toBe(crc32cJs(largeBatch));
     expect(requireModule).toHaveBeenCalledTimes(1);
@@ -187,18 +188,18 @@ describe('protocol/crc32c deferred native loading', () => {
       expect(deferred.checksum(batch)).toBe(crc32cJs(batch));
       expect(nativeCrc32c).toHaveBeenLastCalledWith(batch);
     }
-    expect(deferred.implementation()).toBe('native');
+    expect(deferred.resolveImplementation()).toBe('native');
     expect(requireModule).toHaveBeenCalledTimes(1);
   });
 
-  it('loads @node-rs/crc32 when implementation() is called before any large batch', () => {
+  it('loads @node-rs/crc32 when resolveImplementation() is called before any large batch', () => {
     const { requireModule, nativeCrc32c } = fakeBinding();
     const deferred = createDeferredCrc32c(requireModule);
 
-    expect(deferred.implementation()).toBe('native');
+    expect(deferred.resolveImplementation()).toBe('native');
     expect(requireModule).toHaveBeenCalledTimes(1);
-    deferred.checksum(smallBatches[1] as Buffer);
-    expect(nativeCrc32c).toHaveBeenLastCalledWith(smallBatches[1]);
+    deferred.checksum(checkInput);
+    expect(nativeCrc32c).toHaveBeenLastCalledWith(checkInput);
   });
 
   it('keeps the JS table and tries to load only once when @node-rs/crc32 is missing', () => {
@@ -212,7 +213,7 @@ describe('protocol/crc32c deferred native loading', () => {
     for (const batch of smallBatches) {
       expect(deferred.checksum(batch)).toBe(crc32cJs(batch));
     }
-    expect(deferred.implementation()).toBe('javascript');
+    expect(deferred.resolveImplementation()).toBe('javascript');
     expect(requireModule).toHaveBeenCalledTimes(1);
   });
 
@@ -222,7 +223,7 @@ describe('protocol/crc32c deferred native loading', () => {
     const before = smallBatches.map((batch) => deferred.checksum(batch));
     const after = batches.map((batch) => deferred.checksum(batch));
 
-    expect(deferred.implementation()).toBe('native');
+    expect(deferred.resolveImplementation()).toBe('native');
     expect(before).toEqual(smallBatches.map(crc32cJs));
     expect(after).toEqual(batches.map(crc32cJs));
   });

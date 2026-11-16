@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { KafkaDeliveryTimeoutError } from '../errors';
 import { DeliveryDeadlines } from './delivery-deadlines';
 
 describe('producer/DeliveryDeadlines', () => {
@@ -15,7 +16,7 @@ describe('producer/DeliveryDeadlines', () => {
     vi.useRealTimers();
   });
 
-  const createDeadlines = () => new DeliveryDeadlines(() => new Error('delivery timeout'));
+  const createDeadlines = () => new DeliveryDeadlines(1_000);
   const timer = (index = 0) => setTimeoutSpy.mock.results[index]?.value as NodeJS.Timeout;
 
   it('expires a deadline once it passes, passing its error to onExpire', async () => {
@@ -28,7 +29,7 @@ describe('producer/DeliveryDeadlines', () => {
     expect(onExpire).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(deadline.reason).toEqual(new Error('delivery timeout'));
+    expect(deadline.reason).toEqual(new KafkaDeliveryTimeoutError(1_000));
     expect(onExpire).toHaveBeenCalledWith(deadline.reason);
     expect(vi.getTimerCount()).toBe(0);
   });

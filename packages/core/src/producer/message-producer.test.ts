@@ -68,6 +68,9 @@ function fakeEosManager() {
 function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
   return {
     addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
+    hasLoadedTargetTopics: vi.fn().mockReturnValue(false),
+    needsMetadataRefresh: vi.fn().mockReturnValue(true),
+    connectedBroker: vi.fn().mockReturnValue(undefined),
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findTopicPartitionMetadata: vi.fn().mockReturnValue([fakePartitionMetadata()]),

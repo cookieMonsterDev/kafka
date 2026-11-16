@@ -99,6 +99,7 @@ export function createSendMessages({
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
     const produceSize = topicMessagesSize(topicMessages);
+    const topicNames = topicMessages.map(({ topic }) => topic);
     /**
      * Sequences handed to this send, kept across retries like the Java client's in-flight batches:
      * a failed attempt may still have been written, so its retry must reuse the same range and no
@@ -186,7 +187,10 @@ export function createSendMessages({
       for (const { topic } of topicMessages) {
         const messagesPerPartition = assignment.get(topic);
         if (!messagesPerPartition) continue;
-        const partitionIds = [...messagesPerPartition.keys()].sort((a, b) => a - b);
+        const partitionIds =
+          messagesPerPartition.size === 1
+            ? messagesPerPartition.keys()
+            : [...messagesPerPartition.keys()].sort((a, b) => a - b);
         for (const partition of partitionIds) {
           const metadata = metadataByPartition.get(partitionKey(topic, partition));
           if (metadata) result.push(metadata);
@@ -225,7 +229,7 @@ export function createSendMessages({
     }
 
     async function createProducerRequests(): Promise<Promise<void>[]> {
-      await cluster.refreshMetadataIfNecessary();
+      if (cluster.needsMetadataRefresh()) await cluster.refreshMetadataIfNecessary();
       assignMessages();
       const ungatedPartitions = partitionsToGate();
       if (ungatedPartitions) await acquireGates(ungatedPartitions);
@@ -253,7 +257,7 @@ export function createSendMessages({
         const topicId = cluster.findTopicId(topic);
 
         for (const nodeId of Object.keys(partitionsPerLeader)) {
-          const broker = await cluster.findBroker({ nodeId });
+          const broker = cluster.connectedBroker(nodeId) ?? (await cluster.findBroker({ nodeId }));
           const leaderPartitions = (broker.nodeId != null ? partitionsPerLeader[broker.nodeId] : undefined) ?? [];
           const partitions = leaderPartitions.filter((partition) => pendingPartitions.has(partition));
           if (partitions.length === 0) continue;
@@ -278,9 +282,12 @@ export function createSendMessages({
           await eosManager.addPartitionsToTransaction(topicData);
         }
 
-        for (const { topic, partitions } of topicData) {
-          for (const entry of partitions) {
-            entry.firstSequence = firstSequenceFor(topic, entry.partition, entry.messages.length);
+        // Without a producer id, sequences are not tracked and the encoder writes the default.
+        if (eosManager.isInitialized()) {
+          for (const { topic, partitions } of topicData) {
+            for (const entry of partitions) {
+              entry.firstSequence = firstSequenceFor(topic, entry.partition, entry.messages.length);
+            }
           }
         }
 
@@ -327,18 +334,24 @@ export function createSendMessages({
       });
     }
 
+    // `hasLoadedTargetTopics`, `needsMetadataRefresh` and `connectedBroker` repeat the first check of the
+    // async method each guards, so a send with fresh metadata and connected leaders skips those awaits.
     const attempt: Retryable<RecordMetadata[]> = async (bail, retryCount, retryTime) => {
-      const topics = topicMessages.map(({ topic }) => topic);
-      await cluster.addMultipleTargetTopics(topics);
+      if (!cluster.hasLoadedTargetTopics(topicNames)) await cluster.addMultipleTargetTopics(topicNames);
 
       try {
         const requests = await createProducerRequests();
-        const results = await Promise.allSettled(requests);
-        const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-        if (rejection) throw rejection.reason;
+        if (requests.length === 1) {
+          await requests[0];
+        } else {
+          const results = await Promise.allSettled(requests);
+          const rejection = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+          if (rejection) throw rejection.reason;
+        }
         const collected = collectResponse();
-        metrics?.recordProduce({ ...produceSize, retries: retryCount });
-        cluster.recordProduceMetrics?.({ ...produceSize, retries: retryCount });
+        const produceMetrics = { ...produceSize, retries: retryCount };
+        metrics?.recordProduce(produceMetrics);
+        cluster.recordProduceMetrics?.(produceMetrics);
         return collected;
       } catch (e) {
         const error = e as Error & {

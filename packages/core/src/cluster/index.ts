@@ -316,8 +316,26 @@ export class Cluster {
     return this.addMultipleTargetTopics([topic]);
   }
 
+  /**
+   * Whether `topics` are all target topics and metadata is loaded, so `addMultipleTargetTopics`
+   * would return without work. Lets the produce path skip that await.
+   */
+  hasLoadedTargetTopics(topics: readonly string[]): boolean {
+    return this.brokerPool.metadata != null && topics.every((topic) => this.targetTopics.has(topic));
+  }
+
+  /** Whether `refreshMetadataIfNecessary` would fetch metadata for the target topics. */
+  needsMetadataRefresh(): boolean {
+    return this.brokerPool.needsMetadataRefresh(this.targetTopics);
+  }
+
+  /** The broker for `nodeId` when it is already connected; `findBroker` connects or rediscovers it otherwise. */
+  connectedBroker(nodeId: string): Broker | undefined {
+    return this.brokerPool.connectedBroker(nodeId);
+  }
+
   async addMultipleTargetTopics(topics: readonly string[]): Promise<void> {
-    if (this.#hasLoadedTargetTopics(topics)) {
+    if (this.hasLoadedTargetTopics(topics)) {
       return;
     }
 
@@ -325,7 +343,7 @@ export class Cluster {
 
     try {
       // Recheck under the lock so a concurrent first-seen add cannot drop a topic.
-      if (this.#hasLoadedTargetTopics(topics)) {
+      if (this.hasLoadedTargetTopics(topics)) {
         return;
       }
 
@@ -360,10 +378,6 @@ export class Cluster {
     } finally {
       await this.mutatingTargetTopics.release();
     }
-  }
-
-  #hasLoadedTargetTopics(topics: readonly string[]): boolean {
-    return this.brokerPool.metadata != null && topics.every((topic) => this.targetTopics.has(topic));
   }
 
   getNodeIds(): string[] {
@@ -419,17 +433,20 @@ export class Cluster {
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {
     const partitionMetadata = this.findTopicPartitionMetadata(topic);
 
-    return partitions.reduce<Record<number, number[]>>((result, partitionId) => {
+    const partitionsByLeader: Record<number, number[]> = {};
+    for (const partitionId of partitions) {
       const metadata = partitionMetadata.find((p) => p.partitionId === partitionId);
-      if (!metadata) return result;
+      if (!metadata) continue;
 
       if (metadata.leader == null) {
         throw new KafkaError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
       }
 
-      const current = result[metadata.leader] ?? [];
-      return { ...result, [metadata.leader]: [...current, partitionId] };
-    }, {});
+      const leaderPartitions = partitionsByLeader[metadata.leader];
+      if (leaderPartitions) leaderPartitions.push(partitionId);
+      else partitionsByLeader[metadata.leader] = [partitionId];
+    }
+    return partitionsByLeader;
   }
 
   async findGroupCoordinator({

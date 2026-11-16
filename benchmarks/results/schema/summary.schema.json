@@ -221,6 +221,9 @@
           },
           "optional": {
             "$ref": "#/$defs/footprintPart"
+          },
+          "unsplitTotal": {
+            "$ref": "#/$defs/unsplitFootprintTotal"
           }
         }
       }
@@ -473,6 +476,24 @@
           "minimum": 0
         },
         "fileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dependencyCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasNativeAddon": {
+          "type": "boolean"
+        }
+      }
+    },
+    "unsplitFootprintTotal": {
+      "type": "object",
+      "required": ["bytes", "dependencyCount", "hasNativeAddon"],
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
           "type": "integer",
           "minimum": 0
         },

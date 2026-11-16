@@ -31,14 +31,14 @@ import { parseArgs } from 'node:util';
 // The benchmark suite's own definitions, so the page describes exactly the bytes and scenarios it runs.
 import { createRecordPool, headerValueBytes, payloadShapes } from '../benchmarks/client/payload.ts';
 import { payloadSeed, scenarioIds, scenarios as scenarioDefinitions } from '../benchmarks/client/spec.ts';
-import { summarize } from '../benchmarks/runner/aggregate.ts';
+import { effectiveNoiseFloor, findClearBest, summarize, summarySchemaVersion } from '../benchmarks/runner/aggregate.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
 const PAGE_PATH = join(ROOT, 'packages/docs/src/content/docs/core/reference/benchmarks.md');
 const BENCHMARKS_README_URL = 'https://github.com/cookieMonsterDev/kafka/blob/develop/benchmarks/README.md';
 const NEW_ISSUE_URL = 'https://github.com/cookieMonsterDev/kafka/issues/new/choose';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /** Payloads in page order: the headline first. `id` is the runner's `--payload` value. */
 const PAYLOADS = [
@@ -236,6 +236,11 @@ function loadSession(directory) {
   const summaryPath = join(sessionDir, 'summary.json');
   if (!existsSync(summaryPath)) throw new Error(`${sessionDir} has no summary.json; is it a session directory?`);
   const summary = readJson(summaryPath);
+  if (summary.schemaVersion !== summarySchemaVersion) {
+    throw new Error(
+      `${summaryPath} has schemaVersion ${summary.schemaVersion}; re-aggregate it with pnpm benchmarks:report --session ${sessionDir}, repeating any --noise-threshold or --noise-floor it was aggregated with`,
+    );
+  }
   const runtimeVersions = Object.fromEntries(
     summary.manifest.images.map((image) => [image.runtime, image.runtimeVersion]),
   );
@@ -371,6 +376,18 @@ function buildCell({ chart, runtime, client, sources }) {
   return { runtime, client, status: 'not-measured' };
 }
 
+/**
+ * The comparison rule's settings for one chart, the strictest across the sessions it draws from: the lowest
+ * noise threshold, and the largest noise floor (calibrated, or A/A for the chart's scenario and metric).
+ */
+function comparisonSettings(chart, sources) {
+  const summaries = Object.values(sources).map((session) => session.summary);
+  return {
+    noiseThresholdCv: Math.min(...summaries.map((summary) => summary.noiseThresholdCv)),
+    noiseFloor: Math.max(...summaries.map((summary) => effectiveNoiseFloor(summary, chart.scenario, chart.metric))),
+  };
+}
+
 /** Settings each adapter declared it could not express for this scenario, keyed by client. */
 function declaredGaps(chart, sources) {
   const gapsByClient = {};
@@ -489,6 +506,7 @@ function buildDataset(sources) {
     metric: chart.metric,
     unit: METRICS[chart.metric].unit,
     better: chart.better,
+    ...comparisonSettings(chart, sources),
     declaredGaps: declaredGaps(chart, sources),
     cells: RUNTIMES.flatMap((runtime) =>
       CLIENTS.map((client) => buildCell({ chart, runtime: runtime.id, client: client.id, sources })),
@@ -641,6 +659,7 @@ function chartGroups(chart, dataset) {
           median: footprint.installBytes,
           min: footprint.installBytes,
           max: footprint.installBytes,
+          cv: 0,
         })),
       },
     ];
@@ -657,17 +676,29 @@ function markdownTable(header, rows) {
   return [line(header), `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`, ...rows.map(line)].join('\n');
 }
 
+/** The comparison rule for a chart; install size is one exact measurement per client, so any gap counts. */
+function comparisonRule(chart, dataset) {
+  const isLowerBetter = chart.better === 'lower';
+  if (chart.scenario === 'F1') return { noiseThresholdCv: 0, noiseFloor: 0, isLowerBetter };
+  const { noiseThresholdCv, noiseFloor } = chartData(chart, dataset);
+  return { noiseThresholdCv, noiseFloor, isLowerBetter };
+}
+
+/** Per group, the client the comparison rule puts ahead of every other one, or "no clear highest/lowest". */
 function bestPerGroupText(chart, dataset) {
-  const isBetter = (a, b) => (chart.better === 'higher' ? a > b : a < b);
+  const rule = comparisonRule(chart, dataset);
+  const noClearBestText = `no clear ${chart.better === 'higher' ? 'highest' : 'lowest'}`;
+  const unitSuffix = chart.metric === 'recordsPerSecond' ? ' records/s' : '';
   return chartGroups(chart, dataset)
     .map((group) => ({ ...group, rows: group.rows.filter(isMeasured) }))
     .filter((group) => group.rows.length > 0)
     .map((group) => {
-      const best = group.rows.reduce((winner, row) => (isBetter(row.median, winner.median) ? row : winner));
-      const unitSuffix = chart.metric === 'recordsPerSecond' ? ' records/s' : '';
-      const value = `${formatChartValue(best.median, chart.metric)}${unitSuffix}`;
-      if (chart.scenario === 'F1') return `${clientLabel(best.client)} (${value})`;
-      return `${group.label}: ${clientLabel(best.client)} (${value})`;
+      const best = findClearBest(group.rows, rule);
+      const text =
+        best === null
+          ? noClearBestText
+          : `${clientLabel(best.client)} (${formatChartValue(best.median, chart.metric)}${unitSuffix})`;
+      return chart.scenario === 'F1' ? text : `${group.label}: ${text}`;
     })
     .join(', ');
 }

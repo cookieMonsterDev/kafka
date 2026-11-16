@@ -282,7 +282,9 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
   cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
 - ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
 - Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one, and re-check what the
-  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`).
+  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`). The docs
+  generator, `--check` included, fails until `CLIENT_COVERAGE_CHECKED_VERSIONS` there matches the versions
+  pinned in `package.json`.
 - The security workflow scans only the repository's root lockfile. This lockfile is not scanned: these packages
   are never shipped, and at run time they execute only in containers without internet access. They are installed
   with network access during `docker build`, from the frozen lockfile with integrity hashes and pnpm's one-day

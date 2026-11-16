@@ -38,13 +38,20 @@ import { footprintTotal, formatNativeAddon, hasUnsplitFootprint } from '../bench
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
 const PAGE_PATH = join(ROOT, 'packages/docs/src/content/docs/core/reference/benchmarks.md');
+const BENCHMARKS_MANIFEST_PATH = join(ROOT, 'benchmarks/package.json');
 const BENCHMARKS_README_URL = 'https://github.com/cookieMonsterDev/kafka/blob/develop/benchmarks/README.md';
 const COMPATIBILITY_PAGE_URL = '../compatibility/';
 
 /**
- * What each client implements, for the install-size section. Checked against the installed packages of
- * the competitor versions pinned in `benchmarks/package.json`; re-check it when one of them is bumped.
+ * What each client implements, for the install-size section, checked against the installed packages of
+ * `CLIENT_COVERAGE_CHECKED_VERSIONS`. The script refuses to run when `benchmarks/package.json` pins another
+ * competitor version, so a bump cannot leave this sentence unchecked: re-check it, then update both.
  */
+const CLIENT_COVERAGE_CHECKED_VERSIONS = {
+  '@platformatic/kafka': '2.15.0',
+  kafkajs: '2.2.4',
+  '@confluentinc/kafka-javascript': '1.11.0',
+};
 const CLIENT_COVERAGE = `kafka-core implements KIP-848 consumer groups, KIP-932 share groups and transactions (see [Compatibility](${COMPATIBILITY_PAGE_URL})), Platformatic and Confluent's client implement KIP-848 and transactions but not share groups, KafkaJS implements transactions but neither KIP-848 nor share groups, and Confluent's client bundles librdkafka as a native addon`;
 const NEW_ISSUE_URL = 'https://github.com/cookieMonsterDev/kafka/issues/new/choose';
 const SCHEMA_VERSION = 4;
@@ -1270,7 +1277,29 @@ function expectedOutputs(options) {
   ]);
 }
 
+/** Throws when a competitor's pinned version differs from the one `CLIENT_COVERAGE` was checked against. */
+function assertClientCoverageIsCurrent() {
+  const manifest = readJson(BENCHMARKS_MANIFEST_PATH);
+  const pinnedVersions = { ...manifest.dependencies, ...manifest.optionalDependencies };
+  const stale = CLIENTS.filter((client) => client.id !== CORE_CLIENT_ID)
+    .map(({ packageName }) => ({
+      packageName,
+      pinned: pinnedVersions[packageName],
+      checked: CLIENT_COVERAGE_CHECKED_VERSIONS[packageName],
+    }))
+    .filter(({ pinned, checked }) => pinned !== checked);
+  if (stale.length === 0) return;
+  const details = stale.map(
+    ({ packageName, pinned, checked }) =>
+      `${packageName} is pinned at ${pinned ?? 'nothing'}, checked at ${checked ?? 'nothing'}`,
+  );
+  throw new Error(
+    `CLIENT_COVERAGE in scripts/generate-benchmark-docs.mjs is out of date: ${details.join('; ')}. Re-check what each client implements, then update CLIENT_COVERAGE and CLIENT_COVERAGE_CHECKED_VERSIONS.`,
+  );
+}
+
 function main() {
+  assertClientCoverageIsCurrent();
   const options = parseOptions();
   const outputs = expectedOutputs(options);
   if (options.check) {

@@ -85,7 +85,7 @@ describe('admin/topics describeTopicPartitions', () => {
     expect(cluster.findControllerBroker).toHaveBeenCalled();
     expect(cluster.broker.describeTopicPartitions).toHaveBeenCalledWith({
       topics: [{ topic: 'orders' }],
-      responsePartitionLimit: 2000,
+      responsePartitionLimit: undefined,
       cursor: null,
     });
   });
@@ -107,7 +107,7 @@ describe('admin/topics describeTopicPartitions', () => {
 
     expect(cluster.broker.describeTopicPartitions).toHaveBeenCalledWith({
       topics: [{ topic: 'orders' }],
-      responsePartitionLimit: 2000,
+      responsePartitionLimit: undefined,
       cursor: null,
     });
   });

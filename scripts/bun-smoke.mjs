@@ -88,6 +88,14 @@ const checks = [
     },
   ],
   [
+    'core lazy request chunk links',
+    async () => {
+      // `Broker` imports this chunk on the first admin request, so no other check loads it.
+      const chunk = await importDist('core', 'lazy-requests.js');
+      assert.ok(Object.keys(chunk).length > 0, 'core lazy-requests.js has no exports');
+    },
+  ],
+  [
     'studio exports',
     async () => {
       assertExports(await importDist('studio'), ['startStudio'], 'studio');

@@ -108,6 +108,26 @@ export const compactNullableBytes: FieldCodec<Buffer | null> = codec(
 );
 
 /**
+ * A `bytes` field that takes ownership of an `Encoder`: its bytes are copied in, then it is
+ * released to the buffer pool. For one-shot child encoders such as Produce record batches.
+ */
+export const ownedEncoderBytes: FieldCodec<Encoder> = codec(
+  (e, v) => {
+    e.writeBytes(v.buffer);
+    v.release();
+  },
+  (d) => new Encoder().writeBuffer(bytes.read(d)),
+);
+/** Compact (KIP-482) form of {@link ownedEncoderBytes}. */
+export const compactOwnedEncoderBytes: FieldCodec<Encoder> = codec(
+  (e, v) => {
+    e.writeUVarIntBytes(v.buffer);
+    v.release();
+  },
+  (d) => new Encoder().writeBuffer(compactBytes.read(d)),
+);
+
+/**
  * 16-byte Kafka UUID (KIP-516 topic IDs and later Fetch/Metadata versions).
  */
 export const uuid: FieldCodec<Buffer> = codec(

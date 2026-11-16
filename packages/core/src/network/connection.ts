@@ -663,7 +663,9 @@ export class Connection {
             requestTimeout,
             sendRequest: () => {
               this.#touchActivity();
-              this.#socket!.write(requestPayload.buffer, 'binary');
+              // A stream may keep reading a chunk until its write callback runs, so pool the
+              // framing buffer only then. A request that is never sent leaves it to the GC.
+              this.#socket!.write(requestPayload.buffer, 'binary', () => requestPayload.release());
             },
           });
         } catch (e) {

@@ -63,7 +63,11 @@ function createAccumulator(dispatch: RecordAccumulatorOptions['dispatch'], optio
   });
 }
 
-/** A full garbage collection where the runtime lets a test force one (Node), or `undefined`. */
+/**
+ * A full garbage collection where the runtime lets a test force one: Node, but not Bun, where the
+ * test using it is skipped. The flag is set at runtime instead of through Vitest's `execArgv` so
+ * only this file asks for it; it only exposes `gc` to the new context.
+ */
 function forcedGarbageCollection(): (() => void) | undefined {
   try {
     v8.setFlagsFromString('--expose-gc');
@@ -427,19 +431,18 @@ describe('producer/RecordAccumulator once idle', () => {
   it.skipIf(!collectGarbage)(
     'does not keep dispatch reachable through the deadline timer left armed after the last send',
     async () => {
-      let dispatchRef: WeakRef<object> | undefined;
-      await (async () => {
+      const dispatchRef = await (async () => {
         const { dispatch } = recordingDispatch();
-        dispatchRef = new WeakRef(dispatch);
         const accumulator = createAccumulator(dispatch, { lingerMs: 0, deliveryTimeoutMs: 120_000 });
         await accumulator.append(call('a'));
+        return new WeakRef(dispatch);
       })();
 
-      for (let attempt = 0; attempt < 5 && dispatchRef?.deref(); attempt++) {
+      for (let attempt = 0; attempt < 5 && dispatchRef.deref(); attempt++) {
         await new Promise((resolve) => setImmediate(resolve));
-        collectGarbage?.();
+        collectGarbage!();
       }
-      expect(dispatchRef?.deref()).toBeUndefined();
+      expect(dispatchRef.deref()).toBeUndefined();
     },
   );
 });

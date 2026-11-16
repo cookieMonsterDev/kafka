@@ -1,4 +1,5 @@
 import { INT_32_MAX_VALUE } from '../constants';
+import { KafkaDeliveryTimeoutError } from '../errors';
 import { Deadline } from '../utils/deadline';
 
 /** One pending send's delivery deadline, tracked by {@link DeliveryDeadlines}. */
@@ -27,13 +28,13 @@ export class DeliveryDeadline extends Deadline {
  * the timer is armed for the earliest deadline and re-armed only when it fires or a send starts
  * with an earlier deadline, not per send. A settled send leaves the timer armed, so it can fire
  * before any deadline is due. While nothing is tracked the timer is unref'd, so an idle producer
- * doesn't keep the process alive, but it stays armed for up to the delivery timeout and holds
- * `createError` until then: build that outside the owner's scope so the owner can be collected.
+ * doesn't keep the process alive. It still stays armed for up to `deliveryTimeoutMs` after the last
+ * send, holding only this object, so it takes no callback that could keep the producer reachable.
  *
  * Deadlines are `performance.now()` ms, so a wall-clock jump moves none of them.
  */
 export class DeliveryDeadlines {
-  readonly #createError: () => Error;
+  readonly #deliveryTimeoutMs: number;
   readonly #tracked = new Set<DeliveryDeadline>();
   /**
    * Whether `#tracked` iterates in deadline order, so a sweep can stop at the first deadline not
@@ -45,14 +46,14 @@ export class DeliveryDeadlines {
   /** When `#timer` fires; `Infinity` while it is not armed. */
   #timerAt = Number.POSITIVE_INFINITY;
 
-  /** `createError` builds the error each expired deadline gets. */
-  constructor(createError: () => Error) {
-    this.#createError = createError;
+  /** `deliveryTimeoutMs` is reported by the `KafkaDeliveryTimeoutError` each expired deadline gets. */
+  constructor(deliveryTimeoutMs: number) {
+    this.#deliveryTimeoutMs = deliveryTimeoutMs;
   }
 
   /**
    * Tracks a deadline at `performance.now()` ms `at`. Once it passes, the deadline is expired with
-   * a new error, which `onExpire` also receives.
+   * a new `KafkaDeliveryTimeoutError`, which `onExpire` also receives.
    */
   track(at: number, onExpire?: (error: Error) => void): DeliveryDeadline {
     const deadline = new DeliveryDeadline(at, onExpire);
@@ -92,7 +93,7 @@ export class DeliveryDeadlines {
     for (const deadline of this.#tracked) {
       if (deadline.at <= now) {
         this.#tracked.delete(deadline);
-        deadline.expire(this.#createError());
+        deadline.expire(new KafkaDeliveryTimeoutError(this.#deliveryTimeoutMs));
         continue;
       }
       if (this.#isInDeadlineOrder) {

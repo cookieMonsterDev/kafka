@@ -283,6 +283,31 @@ describe('cluster/Cluster', () => {
     });
   });
 
+  describe('produce fast-path checks', () => {
+    it('hasLoadedTargetTopics needs loaded metadata and every topic targeted', () => {
+      const cluster = createCluster();
+      cluster.targetTopics = new Set(['topic-a']);
+      expect(cluster.hasLoadedTargetTopics(['topic-a'])).toBe(false);
+
+      cluster.brokerPool.metadata = fakeMetadata();
+      expect(cluster.hasLoadedTargetTopics(['topic-a'])).toBe(true);
+      expect(cluster.hasLoadedTargetTopics(['topic-a', 'topic-b'])).toBe(false);
+    });
+
+    it('needsMetadataRefresh checks the target topics against the cached metadata', () => {
+      const cluster = createCluster();
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [{ topicErrorCode: 0, topic: 'topic-a', isInternal: false, partitionMetadata: [] }],
+      });
+      cluster.brokerPool.metadataExpireAt = Date.now() + 60_000;
+      cluster.targetTopics = new Set(['topic-a']);
+      expect(cluster.needsMetadataRefresh()).toBe(false);
+
+      cluster.targetTopics.add('topic-b');
+      expect(cluster.needsMetadataRefresh()).toBe(true);
+    });
+  });
+
   describe('findBroker', () => {
     it('refreshes metadata and rethrows when the broker pool reports a stale broker', async () => {
       const cluster = createCluster();

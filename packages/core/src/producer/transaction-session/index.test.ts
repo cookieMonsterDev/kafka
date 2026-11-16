@@ -420,7 +420,7 @@ describe('producer/transactionSession', () => {
     const consumerGroupId = 'consumer-group-id';
     const topics = [{ topic, partitions: [{ partition: 0, offset: 5n }] }];
 
-    it('adds the offsets to the transaction and marks them committed locally', async () => {
+    it('adds the offsets to the transaction and marks them committed locally once it commits', async () => {
       const broker = fakeBroker();
       const cluster = fakeCluster(broker);
       const session = createSession(cluster);
@@ -445,15 +445,47 @@ describe('producer/transactionSession', () => {
         groupId: consumerGroupId,
         topics: [{ topic, partitions: [{ partition: 0, offset: 5n, metadata: null }] }],
       });
-      expect(cluster.markOffsetAsCommitted).toHaveBeenCalledWith({
+      expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
+
+      await txn.commit();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+      expect(cluster.markOffsetAsCommitted).toHaveBeenCalledExactlyOnceWith({
         groupId: consumerGroupId,
         topic,
         partition: 0,
         offset: 5n,
       });
+    });
+
+    it('does not mark offsets committed when the transaction aborts', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker);
+      const session = createSession(cluster);
+      const aborted = await session.begin(fakeSender);
+      await aborted.sendOffsets({ consumerGroupId, topics });
+
+      await aborted.abort();
+      const next = await session.begin(fakeSender);
+      await next.commit();
+
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
+      expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
+    });
+
+    it('marks offsets committed only once a failed commit is retried successfully', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(new Error('connection lost'));
+      const cluster = fakeCluster(broker);
+      const txn = await createSession(cluster).begin(fakeSender);
+      await txn.sendOffsets({ consumerGroupId, topics });
+
+      await expect(txn.commit()).rejects.toThrow('connection lost');
+      expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
 
       await txn.commit();
-      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+      expect(cluster.markOffsetAsCommitted).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ groupId: consumerGroupId, partition: 0, offset: 5n }),
+      );
     });
 
     it('does not mark offsets committed when TxnOffsetCommit fails', async () => {

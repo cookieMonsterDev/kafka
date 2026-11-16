@@ -1,4 +1,4 @@
-import type { Socket } from 'node:net';
+import type { OnReadOpts, Socket } from 'node:net';
 import net from 'node:net';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { INT_32_MAX_VALUE } from '../constants';
@@ -42,6 +42,9 @@ const MIN_RESPONSE_SIZE_BYTES = Decoder.int32Size();
  * huge allocation that no received data backs. Sized above the consumer's 10 MiB default `maxBytes`.
  */
 const MAX_PREALLOCATED_FRAME_BYTES = 16 * 1024 * 1024;
+
+/** Size of the reused buffer for socket reads that don't continue a pending frame; Node's default read size. */
+const READ_BUFFER_BYTES = 64 * 1024;
 
 const NON_AUTHENTICATED_API_KEYS: readonly number[] = [
   API_KEYS.ApiVersions,
@@ -215,10 +218,12 @@ export class Connection {
   #sessionLifetime = 0n;
 
   /**
-   * Receive state. Complete frames are parsed straight from the socket chunk, which the socket hands
-   * over and never writes again, so decoded responses may keep views into it. Only a frame split
-   * across chunks is copied, once, into its own buffer, which is likewise never written after it is
-   * handed on.
+   * Receive state. Complete frames are parsed straight from the chunk `#processData` gets, which is
+   * never written again, so decoded responses may keep views into it. A `'data'` chunk is handed over
+   * by the socket; with `onread` it is a copy of the reused read buffer. A frame split across chunks
+   * gets its own buffer, which is likewise never written after it is handed on. With `onread` the
+   * socket reads the rest of such a frame straight into that buffer; on the `'data'` path each chunk
+   * is copied into it once.
    */
   #pendingFrame: Buffer | null = null;
   #pendingFrameLength = 0;
@@ -229,6 +234,22 @@ export class Connection {
    */
   #deferredReceiveBytes: Buffer | null = null;
   #isReceiveStreamCorrupt = false;
+  /** `onread` target for reads that don't continue a pending frame. Copied out after each read, so reused. */
+  #readBuffer: Buffer | null = null;
+
+  /**
+   * Node's `onread` hook, passed to the socket factory. Node asks `buffer` for the next read's target
+   * after each `callback`. While a frame is pending, the target is the frame's unfilled remainder, so
+   * the kernel copies straight into the frame and a read never runs past the frame's end. Runtimes and
+   * factories that ignore `onread` emit `'data'` instead, which `#processData` handles.
+   */
+  readonly #readOptions: OnReadOpts = {
+    buffer: () => this.#nextReadTarget(),
+    callback: (bytesRead, target) => {
+      this.#handleRead(bytesRead, target);
+      return true;
+    },
+  };
 
   #authenticate = sharedPromiseTo(async (): Promise<void> => {
     if (this.sasl && !this.isAuthenticated()) {
@@ -468,6 +489,7 @@ export class Connection {
               resolveAddress(socket);
             },
             onData,
+            onread: this.#readOptions,
             onEnd,
             // A setup error only fails this candidate (`onSocketError`), so Happy Eyeballs can try
             // the next address; once connected, `#onPostConnectSocketError` takes over.
@@ -882,6 +904,42 @@ export class Connection {
     this.#isReceiveStreamCorrupt = false;
   }
 
+  /**
+   * The rest of the pending frame, or the reused read buffer when no frame is pending. A SASL
+   * exchange or a corrupt stream also gets the read buffer, so `#processData` sees its raw bytes.
+   */
+  #nextReadTarget(): Buffer {
+    if (this.#pendingFrame === null || this.#authHandlers !== null || this.#isReceiveStreamCorrupt) {
+      this.#readBuffer ??= Buffer.allocUnsafe(READ_BUFFER_BYTES);
+      return this.#readBuffer;
+    }
+    // The pending frame is never longer than its size, so this remainder ends at the frame's end.
+    return this.#reservePendingFrame(this.#pendingFrameLength + 1).subarray(this.#pendingFrameLength);
+  }
+
+  #handleRead(bytesRead: number, target: Uint8Array): void {
+    if (target === this.#readBuffer) {
+      this.#processData(Buffer.copyBytesFrom(target, 0, bytesRead));
+      return;
+    }
+    // A read aimed at anything but the pending frame's remainder, such as a frame a reset dropped,
+    // belongs to a socket that is being torn down.
+    const frame = this.#pendingFrame;
+    if (
+      frame === null ||
+      target.buffer !== frame.buffer ||
+      target.byteOffset !== frame.byteOffset + this.#pendingFrameLength
+    ) {
+      return;
+    }
+
+    this.#touchActivity();
+    this.#pendingFrameLength += bytesRead;
+    if (this.#pendingFrameLength < this.#pendingFrameSize) return;
+    // A SASL exchange that started after this read's target was chosen still gets the frame.
+    this.#handOnFrame(this.#takePendingFrame());
+  }
+
   #processData(chunk: Buffer): void {
     this.#touchActivity();
     if (this.#authHandlers && !this.#authExpectResponse) {
@@ -919,15 +977,24 @@ export class Connection {
         offset += frameSize;
       }
 
-      if (this.#authHandlers) {
+      if (this.#authHandlers && offset < data.length) {
         // The SASL exchange sets its next handler asynchronously, so later bytes wait for the next chunk.
-        if (offset < data.length) this.#deferredReceiveBytes = data.subarray(offset);
-        this.#authHandlers.onSuccess(frame);
-        return;
+        this.#deferredReceiveBytes = data.subarray(offset);
       }
-
-      if (!this.#fulfillResponse(frame)) return;
+      if (!this.#handOnFrame(frame)) return;
     }
+  }
+
+  /**
+   * Hands a complete frame to the waiting SASL exchange, or else to its request. Returns `false` when
+   * no further frame should be processed from the current chunk.
+   */
+  #handOnFrame(frame: Buffer): boolean {
+    if (this.#authHandlers) {
+      this.#authHandlers.onSuccess(frame);
+      return false;
+    }
+    return this.#fulfillResponse(frame);
   }
 
   /** Returns the whole frame size (prefix included), or `null` after failing the connection on a corrupt prefix. */
@@ -947,17 +1014,19 @@ export class Connection {
 
   #appendToPendingFrame(data: Buffer, offset: number): number {
     const end = Math.min(data.length, offset + this.#pendingFrameSize - this.#pendingFrameLength);
-    let frame = this.#pendingFrame!;
-    const required = this.#pendingFrameLength + (end - offset);
-    if (required > frame.length) {
-      const capacity = Math.min(this.#pendingFrameSize, Math.max(frame.length * 2, required));
-      const grown = Buffer.allocUnsafe(capacity);
-      frame.copy(grown, 0, 0, this.#pendingFrameLength);
-      frame = grown;
-      this.#pendingFrame = grown;
-    }
+    const frame = this.#reservePendingFrame(this.#pendingFrameLength + (end - offset));
     this.#pendingFrameLength += data.copy(frame, this.#pendingFrameLength, offset, end);
     return end;
+  }
+
+  /** Grows the pending frame, never past its size, until it can hold `required` bytes. */
+  #reservePendingFrame(required: number): Buffer {
+    const frame = this.#pendingFrame!;
+    if (required <= frame.length) return frame;
+    const grown = Buffer.allocUnsafe(Math.min(this.#pendingFrameSize, Math.max(frame.length * 2, required)));
+    frame.copy(grown, 0, 0, this.#pendingFrameLength);
+    this.#pendingFrame = grown;
+    return grown;
   }
 
   #takePendingFrame(): Buffer {

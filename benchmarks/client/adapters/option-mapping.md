@@ -61,6 +61,12 @@ partitions reach `batchSize`. Java's and librdkafka's `batch.size` apply to each
 flushes without waiting out the 5 ms linger, while librdkafka's per-partition batches stay below `batch.size` and
 wait for it. This favours kafka-core in those scenarios; P2 is the produce comparison without this effect.
 
+`lingerMs: 0` adds no delay but does not mean one request per `send()`. kafka-core sends the `send()` calls made in
+one event-loop turn together, as one Produce request per broker, like the Java client and librdkafka do with
+`linger.ms=0`. KafkaJS and Platformatic do not; each of their `send()` calls is its own request. Under the
+`normalized` profile, E1's scheduler issues several sends per timer tick, so kafka-core sends fewer, larger requests
+there. P1 awaits each `send()`, so every request still carries one record.
+
 Default auto-commit cadence: `autoCommitInterval` and `autoCommitThreshold` are unset, so kafka-core commits once
 after each fetched partition batch, for `eachMessage` and `eachBatch` alike. Earlier builds, including the one session
 `20261112113347-fe9c38b14aa8` ran, also committed after every 500-record `eachMessage` slice (`maxRecords`): about

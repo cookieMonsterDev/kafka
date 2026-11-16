@@ -66,7 +66,9 @@ Snappy, LZ4, and ZSTD are built in. Remove `kafkajs-snappy`, `kafkajs-lz4`,
 
 kafkajs sends each `send()` immediately. This client lingers for up to
 `lingerMs: 5` and batches up to `batchSize: 16384` bytes. Pass `lingerMs: 0` to
-keep one Produce request per `send()`. The other defaults are in
+send without added delay. Unlike kafkajs, `send()` calls made in the same
+event-loop turn still share one Produce request; see
+[Producer API](../../reference/producer/#linger-0-and-same-turn-sends). The other defaults are in
 [Compatibility](../../reference/compatibility/#constructor-defaults).
 
 ## What you gain

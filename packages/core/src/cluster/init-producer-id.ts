@@ -14,7 +14,7 @@ import type { Cluster } from './index';
  * up by node id in the cached metadata, which may still map that id to a stale address, so the
  * metadata is refreshed first.
  */
-const MOVED_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
+const STALE_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
   'NOT_COORDINATOR_FOR_GROUP',
   'GROUP_COORDINATOR_NOT_AVAILABLE',
 ]);
@@ -24,7 +24,7 @@ const MOVED_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
  * transactional id's previous transaction. Each is worth another attempt.
  */
 const RETRIABLE_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
-  ...MOVED_COORDINATOR_ERRORS,
+  ...STALE_COORDINATOR_ERRORS,
   'GROUP_LOAD_IN_PROGRESS',
   // The previous producer may have crashed mid-transaction; retrying lets the coordinator abort it.
   // https://github.com/apache/kafka/blob/201da0542726472d954080d54bc585b111aaf86f/clients/src/main/java/org/apache/kafka/clients/producer/internals/TransactionManager.java#L1001-L1002
@@ -72,7 +72,7 @@ export function sendInitProducerId(
           retryCount,
           retryTime,
         });
-        if (MOVED_COORDINATOR_ERRORS.has(error.type)) await cluster.refreshMetadata();
+        if (STALE_COORDINATOR_ERRORS.has(error.type)) await cluster.refreshMetadata();
         throw error;
       }
 

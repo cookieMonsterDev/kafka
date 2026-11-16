@@ -44,8 +44,8 @@ export interface MessageProducerOptions {
   /** Used when send/sendBatch omit compressionLevel. @see ProducerRecord.compressionLevel */
   defaultCompressionLevel?: number;
   /**
-   * Delay in ms to wait for more records before sending a Produce request.
-   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
+   * Delay in ms to wait for more records before sending a Produce request. Default 5. `0` adds no
+   * delay: calls made in the same event-loop turn still leave together, as one Produce per broker.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
@@ -104,7 +104,7 @@ const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 /**
  * Races `promise` against `deliveryTimeoutMs`, so the caller sees the rejection as soon as the
  * deadline is up even while an attempt is still in flight. `dispatch` stops the retries themselves.
- * Used for linger-buffered sends; an unbuffered send lets `dispatch` reject at the deadline instead.
+ * Used for linger-buffered sends; with lingerMs 0, `dispatch` rejects at the deadline instead.
  */
 function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
   if (!(deliveryTimeoutMs > 0)) return promise;
@@ -117,7 +117,6 @@ function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: numb
 
 interface PendingSend {
   topicMessages: TopicMessages[];
-  topics: Set<string>;
   acks: number;
   compression: CompressionType | undefined;
   compressionLevel: number | undefined;
@@ -204,6 +203,8 @@ export function createMessageProducer({
   // in-flight from a previous flush that hasn't released its bufferMemory reservation yet.
   let pendingBytes = 0;
   const bufferWaiters: BufferWaiter[] = [];
+  /** Calls made in the current event-loop turn while lingerMs is 0, sent together on a microtask. */
+  let sameTurnSends: PendingSend[] | null = null;
 
   function validateConnectionStatus(): void {
     const connectionStatus = getConnectionStatus();
@@ -306,7 +307,7 @@ export function createMessageProducer({
    * Sends one Produce request under `deadline`: once it passes, retries stop and the partition
    * gates are released instead of being held by a send nobody is waiting for. One timer covers it.
    * With `rejectAtDeadline`, the returned promise also rejects then, even while an attempt is in
-   * flight. Only an unbuffered send may do that: a linger flush waits for its attempt to settle so
+   * flight. Only a lingerMs 0 send may do that: a linger flush waits for its attempt to settle so
    * the next flush can't overtake it.
    */
   function dispatch(
@@ -448,6 +449,42 @@ export function createMessageProducer({
     return chunks;
   }
 
+  /**
+   * Sends `group` as one merged Produce request and settles each caller with the metadata for its
+   * own topics. A merged request shares one fate, so it stops at its earliest caller's deadline.
+   */
+  async function sendRequest(
+    group: readonly PendingSend[],
+    { rejectAtDeadline }: { rejectAtDeadline: boolean },
+  ): Promise<void> {
+    const first = group[0];
+    if (!first) return;
+
+    try {
+      const metadata = await dispatch(
+        {
+          topicMessages: mergeTopicMessages(group),
+          acks: first.acks,
+          timeout: first.timeout,
+          compression: first.compression,
+          compressionLevel: first.compressionLevel,
+        },
+        {
+          deadline: group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
+          rejectAtDeadline,
+        },
+      );
+      for (const entry of group) {
+        const topics = new Set(entry.topicMessages.map(({ topic }) => topic));
+        entry.resolve(metadata.filter((item) => topics.has(item.topicName)));
+      }
+    } catch (error) {
+      for (const entry of group) {
+        entry.reject(error);
+      }
+    }
+  }
+
   async function sendGrouped(entries: readonly PendingSend[]): Promise<void> {
     const groups = new Map<string, PendingSend[]>();
     for (const entry of entries) {
@@ -460,37 +497,8 @@ export function createMessageProducer({
       }
     }
 
-    await Promise.all(
-      [...groups.values()].map(async (group) => {
-        const first = group[0];
-        if (!first) return;
-
-        try {
-          const metadata = await dispatch(
-            {
-              topicMessages: mergeTopicMessages(group),
-              acks: first.acks,
-              timeout: first.timeout,
-              compression: first.compression,
-              compressionLevel: first.compressionLevel,
-            },
-            {
-              // A merged request shares one fate, so it stops at its earliest caller's deadline.
-              deadline: group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
-              // Each caller's own `rejectOnDeliveryTimeout` already rejects it on time.
-              rejectAtDeadline: false,
-            },
-          );
-          for (const entry of group) {
-            entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
-          }
-        } catch (error) {
-          for (const entry of group) {
-            entry.reject(error);
-          }
-        }
-      }),
-    );
+    // Each caller's own `rejectOnDeliveryTimeout` already rejects it on time.
+    await Promise.all([...groups.values()].map((group) => sendRequest(group, { rejectAtDeadline: false })));
   }
 
   async function doFlush(): Promise<void> {
@@ -536,6 +544,68 @@ export function createMessageProducer({
     }
   }
 
+  /**
+   * Splits same-turn calls into requests of consecutive calls that share request settings and fit in
+   * `maxRequestSize`, so no call is sent ahead of an earlier one.
+   */
+  function splitSameTurnRequests(entries: readonly PendingSend[]): PendingSend[][] {
+    const runs: PendingSend[][] = [];
+    let runKey: string | undefined;
+    for (const entry of entries) {
+      const key = groupKey(entry);
+      const run = runs.at(-1);
+      if (run && key === runKey) {
+        run.push(entry);
+      } else {
+        runs.push([entry]);
+        runKey = key;
+      }
+    }
+    return runs.flatMap((run) => chunkPendingEntries(run));
+  }
+
+  function sendSameTurnSends(): void {
+    const entries = sameTurnSends;
+    sameTurnSends = null;
+    if (!entries) return;
+
+    const [only] = entries;
+    if (entries.length === 1 && only) {
+      // The common sequential case: send it exactly as an uncoalesced call, with one deadline timer.
+      const { topicMessages, acks, timeout, compression, compressionLevel, deadline } = only;
+      dispatch(
+        { topicMessages, acks, timeout, compression, compressionLevel },
+        { deadline, rejectAtDeadline: true },
+      ).then(only.resolve, only.reject);
+      return;
+    }
+
+    // All requests start now, in call order, as separate calls would: waiting for one to settle
+    // before the next would let a later turn's call overtake it on a shared partition.
+    for (const request of splitSameTurnRequests(entries)) {
+      void sendRequest(request, { rejectAtDeadline: true });
+    }
+  }
+
+  /**
+   * Holds the call until the running synchronous code and the microtasks queued before it have run,
+   * so calls made together leave as one Produce per broker without adding a timer.
+   */
+  function queueSameTurnSend(
+    request: Pick<PendingSend, 'topicMessages' | 'acks' | 'timeout' | 'compression' | 'compressionLevel'>,
+    bytes: number,
+  ): Promise<RecordMetadata[]> {
+    if (!sameTurnSends) {
+      sameTurnSends = [];
+      queueMicrotask(sendSameTurnSends);
+    }
+    const entries = sameTurnSends;
+
+    return new Promise<RecordMetadata[]>((resolve, reject) => {
+      entries.push({ ...request, deadline: deliveryDeadline(), resolve, reject, bytes });
+    });
+  }
+
   async function enqueue(
     topicMessages: TopicMessages[],
     acks: number,
@@ -556,7 +626,6 @@ export function createMessageProducer({
 
     pending.push({
       topicMessages,
-      topics: new Set(topicMessages.map(({ topic }) => topic)),
       acks,
       compression,
       compressionLevel,
@@ -608,7 +677,7 @@ export function createMessageProducer({
 
     const produce =
       lingerMs <= 0
-        ? dispatch(
+        ? queueSameTurnSend(
             {
               topicMessages: mergedTopicMessages,
               acks: resolvedAcks,
@@ -616,7 +685,7 @@ export function createMessageProducer({
               compression: resolvedCompression,
               compressionLevel: resolvedCompressionLevel,
             },
-            { deadline: deliveryDeadline(), rejectAtDeadline: true },
+            totalBytes,
           )
         : rejectOnDeliveryTimeout(
             enqueue(

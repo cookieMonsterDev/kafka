@@ -275,8 +275,8 @@ export interface ProducerConfig {
    */
   compressionLevel?: number;
   /**
-   * Delay in ms to wait for more records before sending a Produce request.
-   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
+   * Delay in ms to wait for more records before sending a Produce request. Default 5. `0` adds no
+   * delay: calls made in the same event-loop turn still leave together, as one Produce per broker.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;

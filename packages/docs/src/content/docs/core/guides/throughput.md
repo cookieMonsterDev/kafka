@@ -9,7 +9,7 @@ Constructor defaults batch Produce traffic (`lingerMs: 5`, `batchSize: 16384`,
 `maxInFlightRequests: 5`, murmur2, `partitionsConsumedConcurrently: 1`). For
 10k–100k msgs/s, spread `throughputPreset()` into the producer and into
 `consumer.run()`, use `eachBatch`, and pass `lingerMs: 0` only when you want
-one Produce per `send()`. For measured throughput next to other Kafka clients, see
+no added send delay. For measured throughput next to other Kafka clients, see
 [Benchmarks](../../reference/benchmarks/).
 
 ```ts
@@ -50,8 +50,9 @@ See [Compatibility](../../reference/compatibility/) and
 ## Produce
 
 `lingerMs: 5` (the constructor default) waits briefly so consecutive `send()`
-calls can share a Produce request. Pass `lingerMs: 0` for one Produce per
-`send()`. `flush()` still drains linger-buffered records.
+calls can share a Produce request. `lingerMs: 0` adds no delay, but calls made
+in the same event-loop turn still share a request; see
+[Producer API](../../reference/producer/#linger-0-and-same-turn-sends). `flush()` still drains linger-buffered records.
 
 Prefer **GZIP** or **ZSTD** for compression: both use Node’s zlib threadpool
 (on Bun, ZSTD compression uses Bun's own asynchronous codec; see
@@ -126,9 +127,6 @@ consumer still sends its full topic list each round (it does use
 
 There is no client config for this — it is automatic when the broker
 advertises Fetch sessions.
-
-Pass `lingerMs: 0` when you want one Produce per `send()`. See
-[Breaking changes](../../migration/breaking-changes/).
 
 ### checkCrcs
 

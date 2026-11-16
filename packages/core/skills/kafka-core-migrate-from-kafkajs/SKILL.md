@@ -95,8 +95,9 @@ every `CompressionCodecs[CompressionTypes.X] = …` registration.
 
 kafkajs sends each `send()` immediately. kafka-core defaults to `lingerMs: 5`,
 `batchSize: 16384`, and `maxInFlightRequests: 5`. Keep these for throughput, or pass
-`lingerMs: 0` where code or tests depend on one Produce request per `send()`. Consumers default
-to `read_committed` isolation.
+`lingerMs: 0` to send without added delay. Even then, `send()` calls made in the same event-loop
+turn share one Produce request and its outcome; only an awaited `send()` goes alone. Consumers
+default to `read_committed` isolation.
 
 ## Common Mistakes
 
@@ -106,7 +107,8 @@ to `read_committed` isolation.
 - **HIGH — Serializing messages or offsets to JSON without conversion.** `JSON.stringify` throws
   on `bigint`. Convert at the boundary.
 - **MEDIUM — Tests that assert one broker request per `send()`.** The 5 ms linger batches them.
-  Set `lingerMs: 0` in that test's producer.
+  Set `lingerMs: 0` in that test's producer and `await` each `send()`; calls made in the same
+  event-loop turn share a request even at `lingerMs: 0`.
 
 ## Completion
 

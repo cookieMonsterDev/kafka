@@ -85,8 +85,8 @@ function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
   };
 }
 
-function producedMessages(broker: ReturnType<typeof fakeBroker>) {
-  const arg = broker.produce.mock.calls[0]?.[0] as {
+function producedMessages(broker: ReturnType<typeof fakeBroker>, callIndex = 0) {
+  const arg = broker.produce.mock.calls[callIndex]?.[0] as {
     topicData: Array<{ partitions: Array<{ messages: Array<{ value: unknown }> }> }>;
   };
   return arg.topicData[0]?.partitions[0]?.messages.map((message) => message.value) ?? [];
@@ -347,6 +347,162 @@ describe('producer/messageProducer', () => {
     const assertion = expect(second).rejects.toBeInstanceOf(KafkaTimeout);
     await vi.advanceTimersByTimeAsync(50);
     await assertion;
+  });
+
+  describe('same-turn sends with lingerMs 0', () => {
+    it('sends calls made in the same turn as one Produce request', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 0 });
+
+      const first = producer.send({ topic, messages: [{ value: 'a' }] });
+      const second = producer.send({ topic, messages: [{ value: 'b' }] });
+      expect(broker.produce).not.toHaveBeenCalled();
+      await Promise.all([first, second]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(producedMessages(broker, 0)).toEqual(['a', 'b']);
+    });
+
+    it('sends awaited calls separately, each with a single deadline timer', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+      for (const value of ['a', 'b']) {
+        const sendPromise = producer.send({ topic, messages: [{ value }] });
+        await Promise.resolve();
+        expect(vi.getTimerCount()).toBe(1);
+        await sendPromise;
+        expect(vi.getTimerCount()).toBe(0);
+      }
+
+      expect(broker.produce).toHaveBeenCalledTimes(2);
+      expect(producedMessages(broker, 0)).toEqual(['a']);
+      expect(producedMessages(broker, 1)).toEqual(['b']);
+    });
+
+    it('resolves each caller with the metadata for its own topics', async () => {
+      const otherTopic = 'other-topic';
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() =>
+        Promise.resolve({
+          ...fakeProduceResponse(topic, 0),
+          topics: [...fakeProduceResponse(topic, 0).topics, ...fakeProduceResponse(otherTopic, 0).topics],
+        }),
+      );
+      const producer = createTestProducer(broker, { lingerMs: 0 });
+
+      const [first, second] = await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic: otherTopic, messages: [{ value: 'b' }] }),
+      ]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(first.map(({ topicName }) => topicName)).toEqual([topic]);
+      expect(second.map(({ topicName }) => topicName)).toEqual([otherTopic]);
+    });
+
+    it('splits same-turn calls that would exceed maxRequestSize into requests sent together, none over the cap', async () => {
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => new Promise(() => {}));
+      const producer = createTestProducer(broker, { lingerMs: 0, maxRequestSize: 10 });
+
+      for (const value of ['abcde', 'fghij', 'klmno']) {
+        void producer.send({ topic, messages: [{ value }] }); // 5 bytes each
+      }
+      // Neither request settles, so the second one goes out without waiting for the first.
+      await vi.waitFor(() => expect(broker.produce).toHaveBeenCalledTimes(2));
+      expect(producedMessages(broker, 0)).toEqual(['abcde', 'fghij']);
+      expect(producedMessages(broker, 1)).toEqual(['klmno']);
+    });
+
+    it('merges only consecutive same-turn calls that share acks, keeping call order', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 0 });
+
+      await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }], acks: 1 }),
+        producer.send({ topic, messages: [{ value: 'b' }], acks: 1 }),
+        producer.send({ topic, messages: [{ value: 'c' }], acks: -1 }),
+        producer.send({ topic, messages: [{ value: 'd' }], acks: 1 }),
+      ]);
+
+      expect(broker.produce.mock.calls.map((call) => call[0].acks)).toEqual([1, -1, 1]);
+      expect([0, 1, 2].map((callIndex) => producedMessages(broker, callIndex))).toEqual([['a', 'b'], ['c'], ['d']]);
+    });
+
+    it('rejects every caller in a shared request when it fails', async () => {
+      const broker = fakeBroker(1);
+      const error = new KafkaNonRetriableError('produce failed');
+      broker.produce.mockImplementation(() => Promise.reject(error));
+      const producer = createTestProducer(broker, { lingerMs: 0 });
+
+      const results = await Promise.allSettled([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }] }),
+      ]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(results).toEqual([
+        { status: 'rejected', reason: error },
+        { status: 'rejected', reason: error },
+      ]);
+    });
+
+    it('arms one deadline timer per shared request and rejects every caller in it at the deadline', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => new Promise(() => {}));
+      const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+      const sends = [
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }] }),
+      ];
+      // Attach the matchers before the fake timer fires.
+      const assertions = sends.map((sendPromise) =>
+        expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.all(assertions);
+    });
+
+    it('assigns one sequence range to same-turn calls of an idempotent producer', async () => {
+      const broker = fakeBroker(1);
+      const eosManager = fakeEosManager();
+      const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
+
+      await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }, { value: 'c' }] }),
+      ]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(eosManager.acquirePartitionGates).toHaveBeenCalledTimes(1);
+      expect(eosManager.updateSequence).toHaveBeenCalledTimes(1);
+      expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 3);
+    });
+
+    it('adds the partitions of same-turn transactional calls to the transaction once', async () => {
+      const broker = fakeBroker(1);
+      const eosManager = fakeEosManager();
+      vi.mocked(eosManager.isTransactional).mockReturnValue(true);
+      vi.mocked(eosManager.getTransactionalId).mockReturnValue('transactional-id');
+      const producer = createTestProducer(broker, { lingerMs: 0, eosManager, idempotent: true });
+
+      await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }] }),
+      ]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(broker.produce).toHaveBeenCalledWith(expect.objectContaining({ transactionalId: 'transactional-id' }));
+      expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('deliveryTimeoutMs', () => {

@@ -1,5 +1,5 @@
-// CRC32C throughput: the slicing-by-16 `crc32cJs`, the public `crc32c` (OpenSSL when available),
-// and the byte-at-a-time loop it replaced. Runs directly on both runtimes:
+// CRC32C throughput: the slicing-by-16 `crc32cJs`, the public `crc32c` (`@node-rs/crc32` when it
+// loads), and the byte-at-a-time loop it replaced. Runs directly on both runtimes:
 //
 //   node bench/crc32c.ts
 //   bun bench/crc32c.ts
@@ -72,12 +72,12 @@ function formatSize(bytes: number): string {
 
 export async function benchCrc32c(): Promise<void> {
   // A `.ts` URL rather than a static import, so `node bench/crc32c.ts` resolves it without a loader.
-  const { crc32c, crc32cJs, usesNativeCrc32c } = (await import(
+  const { crc32c, crc32cJs, getCrc32cImplementation } = (await import(
     new URL('../src/protocol/crc32c.ts', import.meta.url).href
   )) as Crc32cModule;
 
   const runtime = process.versions.bun === undefined ? `Node ${process.version}` : `Bun ${process.versions.bun}`;
-  console.log(`CRC32C throughput, ${runtime}, MB/s (median of ${ROUNDS}); public crc32c native: ${usesNativeCrc32c}`);
+  console.log(`CRC32C throughput, ${runtime}, MB/s (median of ${ROUNDS}); public crc32c: ${getCrc32cImplementation()}`);
 
   const implementations: Record<string, (buffer: Buffer) => number> = {
     'byte-at-a-time': crc32cBytewise,

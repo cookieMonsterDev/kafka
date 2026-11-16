@@ -7,6 +7,7 @@ import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
 import { API_KEYS } from '../../protocol/requests/api-keys';
 import { retrier, type RetryOptions } from '../../retry/index';
 import { createTransactionSession, type TransactionSession } from './index';
+import { ABORT_BEFORE_BEGIN_MESSAGE, ABORT_ONLY_MESSAGE } from './transaction-state-machine';
 import { withSend } from '../../broker/test-send';
 import { fakeRunCluster } from '../../cluster/test-run';
 
@@ -129,7 +130,7 @@ describe('producer/transactionSession', () => {
       await session.begin(fakeSender);
       session.sendFailed();
 
-      await expect(session.begin(fakeSender)).rejects.toThrow('There is already an ongoing transaction');
+      await expect(session.begin(fakeSender)).rejects.toThrow(ABORT_BEFORE_BEGIN_MESSAGE);
     });
   });
 
@@ -210,9 +211,7 @@ describe('producer/transactionSession', () => {
 
       expect(txn.isActive()).toBe(false);
       await expect(txn.send({ topic, messages: [] })).rejects.toThrow('can only be aborted');
-      await expect(txn.commit()).rejects.toEqual(
-        new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "ABORTABLE"'),
-      );
+      await expect(txn.commit()).rejects.toEqual(new KafkaNonRetriableError(ABORT_ONLY_MESSAGE));
 
       await txn.abort();
       expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
@@ -243,7 +242,7 @@ describe('producer/transactionSession', () => {
         return Promise.resolve();
       });
 
-      await expect(txn.commit()).rejects.toThrow('Cannot call "commit" in state "ABORTABLE"');
+      await expect(txn.commit()).rejects.toThrow(ABORT_ONLY_MESSAGE);
       expect(broker.endTxn).not.toHaveBeenCalled();
 
       await txn.abort();
@@ -355,7 +354,7 @@ describe('producer/transactionSession', () => {
       const { session, txn } = await transactionWithPartition(broker);
 
       await expect(txn.commit()).rejects.toMatchObject({ type: 'INVALID_TXN_STATE' });
-      await expect(txn.commit()).rejects.toThrow('Cannot call "commit" in state "ABORTABLE"');
+      await expect(txn.commit()).rejects.toThrow(ABORT_ONLY_MESSAGE);
       await txn.abort();
 
       expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: false }));
@@ -582,6 +581,91 @@ describe('producer/transactionSession', () => {
         type: 'INVALID_PRODUCER_EPOCH',
       });
       expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
+    });
+
+    it.each(['CONCURRENT_TRANSACTIONS', 'GROUP_LOAD_IN_PROGRESS'])(
+      'retries AddOffsetsToTxn on %s, as right after the previous transaction ended',
+      async (type) => {
+        const broker = fakeBroker();
+        broker.addOffsetsToTxn.mockRejectedValueOnce(errorOfType(type)).mockResolvedValueOnce(undefined);
+        const txn = await createSession(fakeCluster(broker), { initialRetryTime: 1 }).begin(fakeSender);
+
+        await txn.sendOffsets({ consumerGroupId, topics });
+        expect(broker.addOffsetsToTxn).toHaveBeenCalledTimes(2);
+        expect(broker.txnOffsetCommit).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('sends AddOffsetsToTxn to a fresh transaction coordinator when the current one moved', async () => {
+      const staleBroker = fakeBroker();
+      staleBroker.addOffsetsToTxn.mockRejectedValue(errorOfType('NOT_COORDINATOR_FOR_GROUP'));
+      const freshBroker = fakeBroker();
+      const cluster = fakeCluster(staleBroker);
+      cluster.findGroupCoordinator = vi
+        .fn()
+        .mockResolvedValueOnce(staleBroker) // transaction coordinator lookup, during begin
+        .mockResolvedValueOnce(staleBroker) // transaction coordinator lookup, first AddOffsetsToTxn
+        .mockResolvedValue(freshBroker); // every lookup after the refresh
+      const txn = await createSession(cluster, { initialRetryTime: 1 }).begin(fakeSender);
+
+      await txn.sendOffsets({ consumerGroupId, topics });
+      expect(staleBroker.addOffsetsToTxn).toHaveBeenCalledOnce();
+      expect(freshBroker.addOffsetsToTxn).toHaveBeenCalledOnce();
+      expect(cluster.recover).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['AddOffsetsToTxn', 'addOffsetsToTxn'],
+      ['TxnOffsetCommit', 'txnOffsetCommit'],
+    ] as const)('leaves the transaction abort-only when %s fails', async (_api, request) => {
+      const broker = fakeBroker();
+      broker[request].mockRejectedValue(errorOfType('GROUP_AUTHORIZATION_FAILED'));
+      const { txn } = await transactionWithPartition(broker);
+
+      await expect(txn.sendOffsets({ consumerGroupId, topics })).rejects.toMatchObject({
+        type: 'GROUP_AUTHORIZATION_FAILED',
+      });
+      expect(txn.isActive()).toBe(false);
+      await expect(txn.commit()).rejects.toEqual(new KafkaNonRetriableError(ABORT_ONLY_MESSAGE));
+      expect(broker.endTxn).not.toHaveBeenCalled();
+
+      await txn.abort();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
+    });
+
+    it('rejects the next begin until the transaction whose sendOffsets failed is aborted', async () => {
+      const broker = fakeBroker();
+      broker.txnOffsetCommit.mockRejectedValueOnce(errorOfType('GROUP_AUTHORIZATION_FAILED'));
+      const session = createSession(fakeCluster(broker));
+      const txn = await session.begin(fakeSender);
+      await expect(txn.sendOffsets({ consumerGroupId, topics })).rejects.toThrow();
+
+      await expect(session.begin(fakeSender)).rejects.toEqual(new KafkaNonRetriableError(ABORT_BEFORE_BEGIN_MESSAGE));
+
+      await txn.abort();
+      await expect(session.begin(fakeSender)).resolves.toMatchObject({});
+    });
+
+    it('does not make the next transaction abort-only when a call of an ended one fails late', async () => {
+      const broker = fakeBroker();
+      let failTxnOffsetCommit: ((error: Error) => void) | undefined;
+      broker.txnOffsetCommit.mockImplementationOnce(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            failTxnOffsetCommit = reject;
+          }),
+      );
+      const session = createSession(fakeCluster(broker));
+      const ended = await session.begin(fakeSender);
+      const sending = ended.sendOffsets({ consumerGroupId, topics });
+      await vi.waitFor(() => expect(failTxnOffsetCommit).toBeDefined());
+
+      await ended.abort();
+      const next = await session.begin(fakeSender);
+      failTxnOffsetCommit?.(errorOfType('GROUP_AUTHORIZATION_FAILED'));
+      await expect(sending).rejects.toThrow();
+
+      expect(next.isActive()).toBe(true);
     });
 
     it('retries while the group coordinator is still loading', async () => {

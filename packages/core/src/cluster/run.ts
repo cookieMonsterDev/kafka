@@ -62,7 +62,8 @@ export type Targets = BrokerTarget | (() => readonly BrokerTarget[]);
 /**
  * Resolves `targets`, runs `work` on the resolved brokers, and retries. Each attempt resolves the
  * targets again. An error is retried when the classifier says the target moved or its type is in
- * `retryOn`, after the recovery the classifier picks for it; any other error rejects as is.
+ * `retryOn`, after the recovery the classifier picks for it; any other error rejects as is. A
+ * recovery that fails is logged, and the request's own error is the one retried and reported.
  *
  * With a function, `targets` is read on every attempt (after the optional metadata refresh) and
  * `work` gets the brokers in the same order.
@@ -122,7 +123,16 @@ export function runOnTargets<T>(
       } else {
         context.logger.debug('Request failed, retrying', details);
       }
-      await context.recover(error);
+      try {
+        await context.recover(error);
+      } catch (recoveryError) {
+        // The recovery only prepares the next attempt, which resolves the target again and so
+        // meets a lasting cause itself; the request's own error stays the one retried and reported.
+        context.logger.warn('Recovery before the retry failed', {
+          ...details,
+          recoveryError: recoveryError instanceof Error ? recoveryError.message : String(recoveryError),
+        });
+      }
       throw error;
     }
   });

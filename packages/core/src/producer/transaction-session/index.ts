@@ -5,6 +5,7 @@ import {
   COORDINATOR_LOADING_ERRORS,
   isProducerFenced,
   STALE_METADATA_ERRORS,
+  TRANSACTION_COORDINATOR_BUSY_ERRORS,
   unionOf,
 } from '../../cluster/error-classifier';
 import { sendInitProducerId } from '../../cluster/init-producer-id';
@@ -16,7 +17,12 @@ import type { Retrier } from '../../retry/index';
 import { createIdempotenceLedger, type IdempotenceLedger } from '../idempotence-ledger';
 import type { OpenTransaction, TransactionTopicPartitions } from '../send-messages';
 import type { ProducerBatch, ProducerRecord, RecordMetadata, Transaction } from '../types';
-import { FENCED_PRODUCER_MESSAGE, TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
+import {
+  ABORT_BEFORE_BEGIN_MESSAGE,
+  FENCED_PRODUCER_MESSAGE,
+  TransactionStateMachine,
+  type TransitionEvent,
+} from './transaction-state-machine';
 import { TRANSACTION_STATES, type TransactionState } from './transaction-states';
 import { AddOffsetsToTxn } from '../../protocol/requests/add-offsets-to-txn/index';
 import { AddPartitionsToTxn } from '../../protocol/requests/add-partitions-to-txn/index';
@@ -30,6 +36,11 @@ import { TxnOffsetCommit } from '../../protocol/requests/txn-offset-commit/index
 const TXN_OFFSET_COMMIT_RETRY_ON = unionOf(COORDINATOR_LOADING_ERRORS, STALE_METADATA_ERRORS);
 
 type TransactionCall = 'send' | 'commit' | 'abort';
+
+interface SendOffsetsOptions {
+  consumerGroupId: string;
+  topics: readonly TopicOffsets[];
+}
 
 /** The states in which a {@link Transaction} call may run; `send` covers `sendBatch` and `sendOffsets` too. */
 const LEGAL_STATES: Record<TransactionCall, readonly TransactionState[]> = {
@@ -174,6 +185,7 @@ export function createTransactionSession({
   function assertCanBegin(): void {
     const state = stateMachine.state();
     if (state === TRANSACTION_STATES.FATAL_ERROR) throw new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE);
+    if (state === TRANSACTION_STATES.ABORTABLE) throw new KafkaNonRetriableError(ABORT_BEFORE_BEGIN_MESSAGE);
     if (state !== TRANSACTION_STATES.UNINITIALIZED && state !== TRANSACTION_STATES.READY) {
       throw new KafkaNonRetriableError(
         'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
@@ -200,7 +212,7 @@ export function createTransactionSession({
     return {
       send: guard(handle, 'send', handle.sender.send),
       sendBatch: guard(handle, 'send', handle.sender.sendBatch),
-      sendOffsets: guard(handle, 'send', sendOffsets),
+      sendOffsets: guard(handle, 'send', (offsets: SendOffsetsOptions) => sendOffsets(handle, offsets)),
       commit: guard(handle, 'commit', () => flushThenEnd(handle, 'commit')),
       abort: guard(handle, 'abort', () => flushThenEnd(handle, 'abort')),
       isActive: () => open === handle && stateMachine.state() === TRANSACTION_STATES.TRANSACTING,
@@ -358,24 +370,36 @@ export function createTransactionSession({
     }
   }
 
-  /** Adds consumer-group offsets to the transaction; they are marked committed locally once it commits. */
-  async function sendOffsets({
-    consumerGroupId,
-    topics,
-  }: {
-    consumerGroupId: string;
-    topics: readonly TopicOffsets[];
-  }): Promise<void> {
+  /**
+   * Adds consumer-group offsets to the transaction; they are marked committed locally once it
+   * commits. A failure leaves the transaction abort-only, as in the Java client: the group may
+   * already be part of it, with some of the offsets written.
+   */
+  async function sendOffsets(handle: TransactionHandle, options: SendOffsetsOptions): Promise<void> {
+    try {
+      await addOffsetsToTransaction(options);
+    } catch (error) {
+      // A call still running when its transaction ended must not affect the transaction begun after it.
+      if (open === handle) sendFailed();
+      throw error;
+    }
+  }
+
+  async function addOffsetsToTransaction({ consumerGroupId, topics }: SendOffsetsOptions): Promise<void> {
     // Kept from the start, so a call still running when its transaction ends cannot add to the next one.
     const transactionOffsets = offsetsToMarkCommitted;
-    const transactionCoordinator = await findTransactionCoordinator();
 
-    await transactionCoordinator.send(AddOffsetsToTxn, {
-      transactionalId,
-      producerId: ledger.getProducerId(),
-      producerEpoch: ledger.getProducerEpoch(),
-      groupId: consumerGroupId,
-    });
+    await cluster.run(
+      coordinatorTarget(transactionalId, COORDINATOR_TYPES.TRANSACTION),
+      (transactionCoordinator) =>
+        transactionCoordinator.send(AddOffsetsToTxn, {
+          transactionalId,
+          producerId: ledger.getProducerId(),
+          producerEpoch: ledger.getProducerEpoch(),
+          groupId: consumerGroupId,
+        }),
+      { retrier: retry, retryOn: TRANSACTION_COORDINATOR_BUSY_ERRORS },
+    );
 
     hasOffsetsAddedToTransaction = true;
 

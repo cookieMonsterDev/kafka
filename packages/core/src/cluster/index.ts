@@ -289,9 +289,8 @@ export class Cluster {
   }
 
   /**
-   * Resolves `target`, runs `work` on its broker and retries. Admin requests, InitProducerId and
-   * TxnOffsetCommit use it; it suits other low-rate coordinator or controller requests too. Each
-   * attempt resolves the target again.
+   * Resolves `target`, runs `work` on its broker and retries. Admin requests and the other low-rate
+   * coordinator or controller requests use it. Each attempt resolves the target again.
    * An error is retried when the target moved (`NOT_CONTROLLER` for the controller, a moved or
    * unreachable coordinator, a stale partition leader) or its type is in `options.retryOn`, after
    * {@link recover}; any other error rejects as is. With a function, `targets` is read on every
@@ -584,7 +583,13 @@ export class Cluster {
     return this.retrier(async (bail, retryCount, retryTime) => {
       try {
         const { coordinator } = await this.findGroupCoordinatorMetadata({ groupId, coordinatorType });
-        return await this.findBroker({ nodeId: String(coordinator.nodeId) });
+        const nodeId = String(coordinator.nodeId);
+        // A coordinator can move to a new address under the same node id before the cached
+        // metadata knows it; the cached broker would keep reaching the old address.
+        if (this.brokerPool.hasBrokerMoved({ nodeId, host: coordinator.host, port: coordinator.port })) {
+          await this.#refreshStaleMetadata();
+        }
+        return await this.findBroker({ nodeId });
       } catch (e) {
         const error = e as Error;
 

@@ -5,12 +5,9 @@ import {
   type InitProducerIdResponse,
 } from '../protocol/requests/init-producer-id/index';
 import type { Retrier } from '../retry/index';
-import { CONCURRENT_TRANSACTIONS_ERRORS, COORDINATOR_LOADING_ERRORS, unionOf } from './error-classifier';
+import { TRANSACTION_COORDINATOR_BUSY_ERRORS } from './error-classifier';
 import type { Cluster } from './index';
 import { CONTROLLER, coordinatorTarget } from './run';
-
-/** A coordinator still loading, or still ending the transactional id's previous transaction. */
-const INIT_PRODUCER_ID_RETRY_ON = unionOf(COORDINATOR_LOADING_ERRORS, CONCURRENT_TRANSACTIONS_ERRORS);
 
 export interface SendInitProducerIdContext {
   cluster: Cluster;
@@ -33,6 +30,6 @@ export function sendInitProducerId(
 
   return cluster.run(target, (broker) => broker.send(InitProducerId, request), {
     retrier: retry,
-    retryOn: INIT_PRODUCER_ID_RETRY_ON,
+    retryOn: TRANSACTION_COORDINATOR_BUSY_ERRORS,
   });
 }

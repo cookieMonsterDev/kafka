@@ -202,7 +202,7 @@ Do not hand-format. Prettier and ESLint run on commit and in CI.
 
 **Filenames and folders:** kebab-case only (`fetch-request`, not `fetchRequest`).
 
-**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`.
+**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`. Each package's `build:types` then runs `scripts/add-declaration-extensions.mjs`, which adds the `.js` extensions that `node16`/`nodenext` consumers need to the extensionless relative imports copied from `src`.
 
 ## Tests
 

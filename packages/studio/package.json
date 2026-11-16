@@ -57,7 +57,7 @@
   "scripts": {
     "build": "pnpm run build:js && pnpm run build:types && pnpm run build:web",
     "build:js": "vite build",
-    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
+    "build:types": "tsc -p tsconfig.json --emitDeclarationOnly && node ../../scripts/add-declaration-extensions.mjs dist",
     "build:web": "vite build --config vite.web.config.ts",
     "dev": "vite build --watch",
     "dev:server": "KAFKA_STUDIO_DEV=1 node dist/bin.js",

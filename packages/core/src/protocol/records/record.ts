@@ -2,7 +2,6 @@ import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import type { TimestampType } from '../enums/timestamp-types';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
-import type { RecordHeaderInput } from './header';
 
 /**
  * v2
@@ -32,35 +31,61 @@ export interface EncodeRecordOptions {
   headers?: RecordHeaders;
 }
 
-function flattenHeaders(headers: RecordHeaders): RecordHeaderInput[] {
-  return Object.entries(headers).flatMap(([key, value]) =>
-    Array.isArray(value) ? value.map((v) => ({ key, value: v })) : [{ key, value }],
-  );
+const NULL_HEADER_VALUE_SIZE = Encoder.sizeOfVarInt(-1);
+
+interface HeadersMeasurement {
+  /** Header entries on the wire; an array value contributes one entry per element. */
+  count: number;
+  /** Encoded size of the headers array, including the leading entry-count varint. */
+  size: number;
 }
 
-function sizeOfHeaders(headersArray: readonly RecordHeaderInput[]): number {
-  let size = Encoder.sizeOfVarInt(headersArray.length);
+function sizeOfHeaderValue(value: HeaderValue): number {
+  if (value === null) return NULL_HEADER_VALUE_SIZE;
+  const valueSize = Buffer.byteLength(value);
+  return Encoder.sizeOfVarInt(valueSize) + valueSize;
+}
 
-  for (const header of headersArray) {
-    const keySize = Buffer.byteLength(header.key);
-    size += Encoder.sizeOfVarInt(keySize) + keySize;
-
-    if (header.value === null) {
-      size += Encoder.sizeOfVarInt(-1);
+/**
+ * Walks the own enumerable keys in `Object.entries` order without building intermediate arrays.
+ * Values typed as headers but `undefined` at runtime throw from `Buffer.byteLength`.
+ */
+function measureHeaders(headers: RecordHeaders): HeadersMeasurement {
+  let count = 0;
+  let entriesSize = 0;
+  for (const key in headers) {
+    if (!Object.hasOwn(headers, key)) continue;
+    const value = headers[key] as HeaderValue | HeaderValue[];
+    const sizeOfKey = Encoder.sizeOfVarIntBytes(key);
+    if (Array.isArray(value)) {
+      // `forEach` skips the holes of a sparse array, so a hole is not an entry.
+      value.forEach((item) => {
+        count += 1;
+        entriesSize += sizeOfKey + sizeOfHeaderValue(item);
+      });
     } else {
-      const valueSize = Buffer.byteLength(header.value);
-      size += Encoder.sizeOfVarInt(valueSize) + valueSize;
+      count += 1;
+      entriesSize += sizeOfKey + sizeOfHeaderValue(value);
     }
   }
-
-  return size;
+  return { count, size: Encoder.sizeOfVarInt(count) + entriesSize };
 }
 
-function writeHeaders(encoder: Encoder, headersArray: readonly RecordHeaderInput[]): void {
-  encoder.writeVarInt(headersArray.length);
-  for (const header of headersArray) {
-    encoder.writeVarIntString(header.key);
-    encoder.writeVarIntBytes(header.value);
+/** Encoded size of a record's headers array: the entry count followed by every key and value. */
+export function sizeOfRecordHeaders(headers: RecordHeaders): number {
+  return measureHeaders(headers).size;
+}
+
+/** Must write the same entries, in the same order, as `measureHeaders` counted and sized. */
+function writeHeaderEntries(encoder: Encoder, headers: RecordHeaders): void {
+  for (const key in headers) {
+    if (!Object.hasOwn(headers, key)) continue;
+    const value = headers[key] as HeaderValue | HeaderValue[];
+    if (Array.isArray(value)) {
+      value.forEach((item) => encoder.writeVarIntString(key).writeVarIntBytes(item));
+    } else {
+      encoder.writeVarIntString(key).writeVarIntBytes(value);
+    }
   }
 }
 
@@ -72,7 +97,7 @@ export function encodeRecord(
   { offsetDelta = 0, timestampDelta = 0n, key = null, value = null, headers = {} }: EncodeRecordOptions = {},
   encoder?: Encoder,
 ): Encoder {
-  const headersArray = flattenHeaders(headers);
+  const { count: headerCount, size: sizeOfHeaders } = measureHeaders(headers);
 
   const sizeOfBody =
     1 + // always one byte for attributes
@@ -80,7 +105,7 @@ export function encodeRecord(
     Encoder.sizeOfVarInt(offsetDelta) +
     Encoder.sizeOfVarIntBytes(key) +
     Encoder.sizeOfVarIntBytes(value) +
-    sizeOfHeaders(headersArray);
+    sizeOfHeaders;
 
   const target = encoder ?? new Encoder(Encoder.sizeOfVarInt(sizeOfBody) + sizeOfBody);
   target
@@ -89,8 +114,9 @@ export function encodeRecord(
     .writeVarLong(timestampDelta)
     .writeVarInt(offsetDelta)
     .writeVarIntBytes(key)
-    .writeVarIntBytes(value);
-  writeHeaders(target, headersArray);
+    .writeVarIntBytes(value)
+    .writeVarInt(headerCount);
+  writeHeaderEntries(target, headers);
   return target;
 }
 

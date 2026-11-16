@@ -125,6 +125,11 @@ interface PreferredReadReplica {
   expireAt: number;
 }
 
+/** `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`: the coordinator fenced this member out of the group. */
+export function isFencedMemberError(error: { type?: string }): boolean {
+  return error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH';
+}
+
 function revokedPartitions(
   previousAssignment: readonly TopicPartitions[],
   nextAssignment: readonly TopicPartitions[],
@@ -223,8 +228,8 @@ export interface ConsumerGroupFetchOptions {
 
 /** Property-function shape so tests can fake/spy on these without unbound-method lint. */
 export interface ConsumerGroupHandle {
-  groupId: string | null;
-  memberId: string | null;
+  readonly groupId: string | null;
+  readonly memberId: string | null;
   shuttingDown?: boolean;
   connect: () => Promise<void>;
   joinAndSync: () => Promise<void>;
@@ -242,12 +247,10 @@ export interface ConsumerGroupHandle {
   isPaused: (topic: string, partition: number) => boolean;
   hasSeekOffset: (topicPartition: TopicPartition) => boolean;
   /**
-   * Declares the member's current assignment lost without a clean revoke (session expiry,
-   * fencing) and fires `onPartitionsLost` with it instead of `onPartitionsRevoked`. Callers
-   * invoke this as soon as they detect `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`, before
-   * rejoining, so a subsequent rebalance doesn't also report the same partitions as revoked.
+   * Reports the current assignment lost and resets the member after `UNKNOWN_MEMBER_ID` /
+   * `FENCED_MEMBER_EPOCH`. Callers invoke this as soon as they detect fencing, before rejoining.
    */
-  notifyPartitionsLost: () => Promise<void>;
+  recoverFencedMember: (error: { type?: string }) => Promise<void>;
   /** Next fetch offset for `topic`/`partition`, or `null` when it isn't currently assigned. */
   position: (topic: string, partition: number) => bigint | null;
   /** Latest high watermark seen on a Fetch response for `topic`/`partition`, or `null` if none yet. */
@@ -663,6 +666,21 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     await this.#notify(this.onPartitionsLost, lost, 'onPartitionsLost');
   }
 
+  /**
+   * Recovers from `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`: the coordinator no longer
+   * recognizes this member (session timeout, or another member took its generation), so it was
+   * fenced out before it could leave and revoke cleanly. Reports the current assignment lost and
+   * resets the membership so the next {@link joinAndSync} rejoins from scratch. Every path that
+   * detects fencing calls this before rejoining.
+   */
+  async recoverFencedMember(error: { type?: string }): Promise<void> {
+    await this.notifyPartitionsLost();
+    if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
+    this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
+    this.#includeJoinFields = true;
+    this.#consumerProtocolJoined = false;
+  }
+
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
     const { groupId, generationId, memberId, coordinator } = this;
     if (!this.#assignMode && (!coordinator || generationId == null || memberId == null)) {
@@ -785,7 +803,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     const cached = this.#topicNameById.get(key);
     if (cached) return cached;
 
-    if (this.topicsSubscribed.length === 1) {
+    // With a pattern, a topic id can also belong to a topic the pattern matched.
+    if (this.topicsSubscribed.length === 1 && this.subscribedTopicRegex == null) {
       const name = this.topicsSubscribed[0];
       if (name != null) {
         this.#topicNameById.set(key, name);
@@ -1019,16 +1038,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
           throw new KafkaError(error);
         }
 
-        if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
-          // The coordinator no longer recognizes this member: it was fenced out of the group
-          // (session timeout, or another member took its generation) before it ever got a chance
-          // to leave and revoke cleanly. Whatever it held may already be reassigned elsewhere, so
-          // report it lost - not revoked - before resetting and rejoining from scratch.
-          await this.notifyPartitionsLost();
-          if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
-          this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
-          this.#includeJoinFields = true;
-          this.#consumerProtocolJoined = false;
+        if (isFencedMemberError(error)) {
+          await this.recoverFencedMember(error);
           throw new KafkaError(error);
         }
 

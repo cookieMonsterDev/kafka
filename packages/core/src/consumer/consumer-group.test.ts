@@ -7,7 +7,7 @@ import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { MemberAssignment } from './assigner-protocol';
 import type { Batch } from './batch';
-import { ConsumerGroup, nextAdaptiveMaxBytes } from './consumer-group';
+import { ConsumerGroup, nextAdaptiveMaxBytes, type ConsumerGroupOptions } from './consumer-group';
 import { isFetchBatchCurrent, settleFetchBatch } from './fetcher';
 import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetManager } from './offset-manager/index';
@@ -16,7 +16,7 @@ import type { Assigner } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-function createGroup(): ConsumerGroup {
+function createGroup(overrides: Partial<ConsumerGroupOptions> = {}): ConsumerGroup {
   return new ConsumerGroup({
     logger: silentLogger,
     topics: ['topic1'],
@@ -37,6 +37,7 @@ function createGroup(): ConsumerGroup {
     autoCommit: true,
     autoCommitInterval: null,
     autoCommitThreshold: null,
+    ...overrides,
   });
 }
 
@@ -575,6 +576,104 @@ describe('consumer/consumer-group', () => {
     });
     expect(consumerGroup.assigned()).toEqual([{ topic: 'matched-topic', partitions: [0, 1] }]);
     expect(topicConfigurations['matched-topic']).toEqual({ autoOffsetReset: 'earliest' });
+  });
+
+  it('resolves a topic id assigned through the pattern when one topic name is subscribed beside it', async () => {
+    const namedTopicId = Buffer.alloc(16, 1);
+    const matchedTopicId = Buffer.alloc(16, 2);
+    const consumerGroupHeartbeat = vi
+      .fn()
+      .mockResolvedValueOnce({
+        memberId: 'member',
+        memberEpoch: 1,
+        heartbeatIntervalMs: 5_000,
+        assignment: {
+          topicPartitions: [
+            { topicId: matchedTopicId, partitions: [0] },
+            { topicId: namedTopicId, partitions: [0] },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({ memberId: 'member', memberEpoch: 1, heartbeatIntervalMs: 5_000, assignment: null });
+    const consumerGroupDescribe = vi.fn(async () => ({
+      groups: [
+        {
+          groupId: 'group',
+          members: [
+            {
+              memberId: 'member',
+              assignment: { topicPartitions: [] },
+              targetAssignment: {
+                topicPartitions: [
+                  { topicId: namedTopicId, topicName: 'a' },
+                  { topicId: matchedTopicId, topicName: 'b-1' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    }));
+    const consumerGroup = createGroup({
+      topics: ['a'],
+      groupProtocol: 'consumer',
+      subscribedTopicRegex: 'b-.*',
+      cluster: {
+        findGroupCoordinator: vi.fn(async () => ({ consumerGroupHeartbeat, consumerGroupDescribe })),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
+        committedOffsets: vi.fn(() => ({})),
+        refreshMetadata: vi.fn(async () => undefined),
+      } as unknown as Cluster,
+    });
+
+    await consumerGroup.joinAndSync();
+
+    expect(consumerGroup.assigned()).toEqual([
+      { topic: 'b-1', partitions: [0] },
+      { topic: 'a', partitions: [0] },
+    ]);
+  });
+
+  it('waits for the broker to accept the rejoin after a fence found outside the join (KIP-848)', async () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const heartbeatResponse = (memberEpoch: number, partitions?: number[]) => ({
+      memberId: 'member',
+      memberEpoch,
+      heartbeatIntervalMs: 5_000,
+      assignment: partitions ? { topicPartitions: [{ topicId, partitions }] } : null,
+    });
+    const consumerGroupHeartbeat = vi
+      .fn()
+      .mockResolvedValueOnce(heartbeatResponse(1, [0, 1]))
+      .mockResolvedValueOnce(heartbeatResponse(1))
+      // The rejoin is not accepted on the first heartbeat, so the join has to keep heartbeating.
+      .mockResolvedValueOnce(heartbeatResponse(0))
+      .mockResolvedValueOnce(heartbeatResponse(3, [1]))
+      .mockResolvedValueOnce(heartbeatResponse(3));
+    const consumerGroup = createGroup({
+      groupProtocol: 'consumer',
+      cluster: {
+        findGroupCoordinator: vi.fn(async () => ({ consumerGroupHeartbeat })),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+        committedOffsets: vi.fn(() => ({})),
+        refreshMetadata: vi.fn(async () => undefined),
+      } as unknown as Cluster,
+    });
+    const onPartitionsLost = vi.fn();
+    consumerGroup.onPartitionsLost = onPartitionsLost;
+    await consumerGroup.joinAndSync();
+
+    const fenced = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'FENCED_MEMBER_EPOCH')!.code);
+    await consumerGroup.recoverFencedMember(fenced);
+    await consumerGroup.joinAndSync();
+
+    expect(onPartitionsLost).toHaveBeenCalledWith([
+      { topic: 'topic1', partition: 0 },
+      { topic: 'topic1', partition: 1 },
+    ]);
+    expect(consumerGroupHeartbeat.mock.calls[2]?.[0]).toMatchObject({ memberId: 'member', memberEpoch: 0 });
+    expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [1] }]);
+    expect(consumerGroup.generationId).toBe(3);
   });
 
   it('emits GROUP_JOIN when a later heartbeat installs a new assignment', async () => {

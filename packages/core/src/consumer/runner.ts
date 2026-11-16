@@ -6,7 +6,7 @@ import { retrier, type RetryOptions } from '../retry/index';
 import { isPromiseLike } from '../utils/is-promise-like';
 import { runHooks } from '../utils/run-hooks';
 import { Batch } from './batch';
-import type { ConsumerGroupHandle } from './consumer-group';
+import { isFencedMemberError, type ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
 import type { ConsumerHooks, EachBatchHandler, EachMessageHandler, Offsets } from './types';
@@ -240,7 +240,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
+        if (isFencedMemberError(error)) {
           if (!this.running || this.shuttingDown) return;
 
           this.logger.error('The coordinator is not aware of this member, re-joining the group', {
@@ -249,11 +249,7 @@ export class Runner extends EventEmitter {
             error: error.message,
           });
 
-          // Discovered mid-fetch, not mid-join: the member was fenced out before it could leave
-          // and revoke cleanly, so its current assignment is lost, not revoked.
-          await this.consumerGroup.notifyPartitionsLost();
-
-          if (error.type === 'UNKNOWN_MEMBER_ID') this.consumerGroup.memberId = null;
+          await this.consumerGroup.recoverFencedMember(error);
           await this.consumerGroup.joinAndSync();
           return;
         }

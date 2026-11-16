@@ -59,9 +59,10 @@ export interface TransactionSession extends OpenTransaction {
   /** Producer id, epoch and sequence numbers for the transactional id; an epoch bump waits until the transaction ends. */
   readonly ledger: IdempotenceLedger;
   /**
-   * Begins a transaction, sending InitProducerId first on the first call and running any requested
-   * epoch bump. `createSender` builds the transaction's message producer. Rejects while another
-   * transaction is open or once the producer is fenced.
+   * Begins a transaction once the epoch bump after the previous transaction settles, sending
+   * InitProducerId first on the first call and running any requested epoch bump. `createSender`
+   * builds the transaction's message producer. Rejects while another transaction is open or once
+   * the producer is fenced.
    */
   begin: (createSender: () => TransactionSender) => Promise<Transaction>;
   /** Sends what the open transaction's message producer still buffers. */
@@ -92,6 +93,9 @@ export function createTransactionSession({
 
   /** The transaction from `begin` until it ends. */
   let open: TransactionHandle | undefined;
+
+  /** The epoch bump that runs once a transaction ended; the next transaction begins only after it. */
+  let postTransactionBump: Promise<void> | undefined;
 
   const stateMachine = new TransactionStateMachine({ logger });
   stateMachine.on('transition', ({ to }: TransitionEvent) => {
@@ -160,7 +164,7 @@ export function createTransactionSession({
     };
   }
 
-  async function begin(createSender: () => TransactionSender): Promise<Transaction> {
+  function assertCanBegin(): void {
     const state = stateMachine.state();
     if (state === TRANSACTION_STATES.FATAL_ERROR) throw new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE);
     if (state !== TRANSACTION_STATES.UNINITIALIZED && state !== TRANSACTION_STATES.READY) {
@@ -168,10 +172,19 @@ export function createTransactionSession({
         'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
       );
     }
+  }
+
+  async function begin(createSender: () => TransactionSender): Promise<Transaction> {
+    // The ended transaction is already READY while its bump runs; beginning under the old epoch
+    // would race the bump and lose it.
+    if (postTransactionBump) await postTransactionBump;
+    assertCanBegin();
 
     // The producer id is initialized once; later transactions only bump the epoch when requested.
     if (!ledger.isInitialized()) await ledger.initProducerId();
     await ledger.bumpEpochIfRequested();
+    // A concurrent `begin` may have opened its transaction while this one waited.
+    assertCanBegin();
 
     const handle: TransactionHandle = { sender: createSender() };
     stateMachine.transitionTo(TRANSACTION_STATES.TRANSACTING);
@@ -312,17 +325,26 @@ export function createTransactionSession({
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
     // fencing recovery), so the next transaction starts from a fresh epoch.
     if (isTransactionV2Enabled() || ledger.isEpochBumpRequested()) {
-      // The transaction has already ended, so a failed bump must not fail it; the next transaction
-      // retries the bump before it begins.
-      try {
-        await ledger.initProducerId();
-      } catch (error) {
-        logger.warn('Failed to bump the producer epoch after ending the transaction; retrying later', {
-          error: (error as Error).message,
-          transactionalId,
-        });
-        ledger.requestEpochBump();
-      }
+      postTransactionBump = bumpEpochAfterTransaction().finally(() => {
+        postTransactionBump = undefined;
+      });
+      await postTransactionBump;
+    }
+  }
+
+  /**
+   * Never rejects: the transaction has already ended, so a failed bump only requests one, which the
+   * next `begin` runs.
+   */
+  async function bumpEpochAfterTransaction(): Promise<void> {
+    try {
+      await ledger.initProducerId();
+    } catch (error) {
+      logger.warn('Failed to bump the producer epoch after ending the transaction; retrying later', {
+        error: (error as Error).message,
+        transactionalId,
+      });
+      ledger.requestEpochBump();
     }
   }
 

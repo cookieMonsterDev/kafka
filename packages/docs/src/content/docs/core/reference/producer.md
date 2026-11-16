@@ -72,7 +72,8 @@ with `linger.ms=0`.
 ### `RecordMetadata`
 
 `baseOffset`, `logAppendTime`, and `logStartOffset` are `bigint`. `errorCode` is
-the per-partition Produce error.
+the per-partition Produce error. `logStartOffset` is `-1n`, as in the Java client, when the
+negotiated Produce version does not carry it (before v5, Kafka 1.0).
 
 ## `transaction`
 

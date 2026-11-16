@@ -80,8 +80,7 @@ export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGro
         cluster.run(
           nodeTarget(String(coordinator.nodeId)),
           async (broker) => {
-            // DescribeShareGroupOffsets v0 partitions carry no `lag` (KIP-1226), which the result types as present.
-            const { groups: resultGroups } = (await broker.send(DescribeShareGroupOffsets, {
+            const { groups: resultGroups } = await broker.send(DescribeShareGroupOffsets, {
               groups: grouped.map(({ groupId, topics }) => ({
                 groupId,
                 topics:
@@ -92,7 +91,7 @@ export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGro
                         partitions: partitions ?? [],
                       })),
               })),
-            })) as DescribeShareGroupOffsetsResponseV1Body;
+            });
             return resultGroups;
           },
           { retrier, retryRetriable: true },

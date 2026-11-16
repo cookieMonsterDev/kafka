@@ -73,7 +73,7 @@ export function createRecordAccumulator({
   maxRequestSize,
 }: RecordAccumulatorOptions): RecordAccumulator {
   /** Every pending send's delivery deadline, on one timer. */
-  const deliveryDeadlines = new DeliveryDeadlines(() => new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
+  const deliveryDeadlines = new DeliveryDeadlines(deliveryTimeoutMs);
   const bufferLimit =
     lingerMs > 0 && bufferMemory != null && bufferMemory > 0 ? bufferMemory : Number.POSITIVE_INFINITY;
   /** Linger-buffered calls the next flush sends. */

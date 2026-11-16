@@ -12,35 +12,18 @@ import {
   uuid,
 } from '../../../schema';
 import type { ResponseDefinition } from '../../../schema';
-import type { DescribeShareGroupOffsetsResponseV0Body } from '../v0/response';
+import type {
+  DescribeShareGroupOffsetsGroupV0,
+  DescribeShareGroupOffsetsPartitionV0,
+  DescribeShareGroupOffsetsResponseV0Body,
+  DescribeShareGroupOffsetsTopicV0,
+} from '../v0/response';
 
-export interface DescribeShareGroupOffsetsPartitionV1 {
-  partitionIndex: number;
-  startOffset: bigint;
-  leaderEpoch: number;
-  lag: bigint;
-  errorCode: number;
-  errorMessage: string | null;
-}
-
-export interface DescribeShareGroupOffsetsTopicV1 {
-  topicName: string;
-  topicId: Buffer;
-  partitions: DescribeShareGroupOffsetsPartitionV1[];
-}
-
-export interface DescribeShareGroupOffsetsGroupV1 {
-  groupId: string;
-  topics: DescribeShareGroupOffsetsTopicV1[];
-  errorCode: number;
-  errorMessage: string | null;
-}
-
-export interface DescribeShareGroupOffsetsResponseV1Body {
-  throttleTime: number;
-  clientSideThrottleTime: number;
-  groups: DescribeShareGroupOffsetsGroupV1[];
-}
+/** The same decoded shape as v0, which fills `lag` with -1 (unknown). */
+export type DescribeShareGroupOffsetsPartitionV1 = DescribeShareGroupOffsetsPartitionV0;
+export type DescribeShareGroupOffsetsTopicV1 = DescribeShareGroupOffsetsTopicV0;
+export type DescribeShareGroupOffsetsGroupV1 = DescribeShareGroupOffsetsGroupV0;
+export type DescribeShareGroupOffsetsResponseV1Body = DescribeShareGroupOffsetsResponseV0Body;
 
 /**
  * DescribeShareGroupOffsets Response (Version: 1) adds `lag` after leader_epoch (KIP-1226).
@@ -87,5 +70,3 @@ export const describeShareGroupOffsetsResponseV1: ResponseDefinition<DescribeSha
     return data;
   },
 };
-
-export type { DescribeShareGroupOffsetsResponseV0Body };

@@ -113,6 +113,8 @@ describe('producer.send', () => {
           partition: expect.any(Number),
           errorCode: 0,
           baseOffset: expect.any(BigInt),
+          // -1n on Produce v0-v4 (Kafka before 1.0), which do not carry it.
+          logStartOffset: expect.any(BigInt),
         }),
       ]),
     );

@@ -20,7 +20,8 @@ export interface SendInitProducerIdContext {
 /**
  * Sends InitProducerId to the transaction coordinator of `transactionalId`, or to the controller
  * without one, since then any broker can allocate the producer id. Retries a moved controller or
- * coordinator, a loading coordinator and a transaction still ending; any other error rejects as is.
+ * coordinator (after a metadata refresh, so the next lookup reaches its new address), a loading
+ * coordinator and a transaction still ending; any other error rejects as is.
  */
 export function sendInitProducerId(
   { cluster, retry }: SendInitProducerIdContext,

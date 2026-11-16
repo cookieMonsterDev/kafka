@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createMetadataQuorumApi } from './metadata-quorum';
 import { withSend } from '../broker/test-send';
@@ -29,13 +31,9 @@ describe('admin/metadata-quorum', () => {
         ],
       }),
     });
-    const findControllerBroker = vi.fn().mockResolvedValue(broker);
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findControllerBroker,
-    } as unknown as Cluster;
+    const cluster = fakeRunCluster({ controller: broker });
     const api = createMetadataQuorumApi({
-      cluster,
+      cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
       rootLogger: silentLogger,
     });
@@ -59,7 +57,7 @@ describe('admin/metadata-quorum', () => {
       ],
     });
 
-    expect(findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(broker.describeQuorum).toHaveBeenCalledWith({
       topics: [{ topicName: '__cluster_metadata', partitions: [{ partitionIndex: 0 }] }],
     });

@@ -1,6 +1,8 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDelegationTokensApi } from './delegation-tokens';
@@ -39,11 +41,7 @@ function fakeCluster(
     expireDelegationToken: methods.expireDelegationToken ?? vi.fn().mockResolvedValue({ expiryTimestampMs: 2n }),
     describeDelegationToken: methods.describeDelegationToken ?? vi.fn().mockResolvedValue({ tokens: [] }),
   });
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 function apiFor(cluster: ReturnType<typeof fakeCluster>) {
@@ -77,7 +75,7 @@ describe('admin/delegation-tokens', () => {
     });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
-    expect(cluster.findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.broker.createDelegationToken).toHaveBeenCalledWith({
       renewers,
       maxLifetimeMs: 3_600_000n,
@@ -150,6 +148,6 @@ describe('admin/delegation-tokens', () => {
     await expect(api.expireDelegationToken({ hmac: 'not-a-buffer' as unknown as Buffer })).rejects.toThrow(
       KafkaNonRetriableError,
     );
-    expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 });

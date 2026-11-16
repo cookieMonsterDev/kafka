@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ACL_OPERATION_TYPES } from '../protocol/enums/acl-operation-types';
@@ -39,11 +41,7 @@ const validFilter: AclFilter = {
 };
 
 function fakeCluster(broker: Record<string, ReturnType<typeof vi.fn>> = {}) {
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 function makeApi(cluster: ReturnType<typeof fakeCluster>, retry?: { retries?: number }) {
@@ -61,7 +59,7 @@ describe('admin/acls', () => {
       const cluster = fakeCluster();
       const api = makeApi(cluster);
       await expect(api.createAcls({ acl: undefined as unknown as AclEntry[] })).rejects.toThrow(KafkaNonRetriableError);
-      expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+      expect(cluster.run).not.toHaveBeenCalled();
     });
 
     it('rejects an empty acl array', async () => {
@@ -125,7 +123,7 @@ describe('admin/acls', () => {
       await expect(api.createAcls({ acl: [validAcl] })).resolves.toBe(true);
 
       expect(cluster.refreshMetadata).toHaveBeenCalled();
-      expect(cluster.findControllerBroker).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(cluster.broker.createAcls).toHaveBeenCalledWith({ creations: [validAcl] });
     });
 
@@ -138,6 +136,7 @@ describe('admin/acls', () => {
       const api = makeApi(cluster);
 
       await expect(api.createAcls({ acl: [validAcl] })).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries and eventually fails when the controller keeps returning NOT_CONTROLLER', async () => {
@@ -151,6 +150,7 @@ describe('admin/acls', () => {
 
       await expect(api.createAcls({ acl: [validAcl] })).rejects.toThrow();
       expect(cluster.broker.createAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 
@@ -249,6 +249,7 @@ describe('admin/acls', () => {
       const api = makeApi(cluster);
 
       await expect(api.describeAcls(validFilter)).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries when the controller returns NOT_CONTROLLER', async () => {
@@ -262,6 +263,7 @@ describe('admin/acls', () => {
 
       await expect(api.describeAcls(validFilter)).rejects.toThrow();
       expect(cluster.broker.describeAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 
@@ -383,6 +385,7 @@ describe('admin/acls', () => {
       const api = makeApi(cluster);
 
       await expect(api.deleteAcls({ filters: [validFilter] })).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries when the controller returns NOT_CONTROLLER', async () => {
@@ -396,6 +399,7 @@ describe('admin/acls', () => {
 
       await expect(api.deleteAcls({ filters: [validFilter] })).rejects.toThrow();
       expect(cluster.broker.deleteAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 });

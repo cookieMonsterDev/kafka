@@ -1,7 +1,8 @@
 import { KafkaNonRetriableError } from '../errors';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import type { AddRaftVoterOptions, RaftVoterListener, RemoveRaftVoterOptions } from './types';
 import { AddRaftVoter, RemoveRaftVoter } from '../protocol/requests/lazy-families';
 
@@ -56,7 +57,9 @@ function validateListeners(listeners: unknown): RaftVoterListener[] {
   });
 }
 
-export function createRaftVotersApi({ cluster, logger, retry }: AdminContext): RaftVotersApi {
+export function createRaftVotersApi({ cluster, retry }: AdminContext): RaftVotersApi {
+  const retrier = createRetrier(retry);
+
   const addRaftVoter = async ({
     clusterId,
     timeoutMs,
@@ -70,10 +73,9 @@ export function createRaftVotersApi({ cluster, logger, retry }: AdminContext): R
     const normalizedDirectoryId = validateDirectoryId(voterDirectoryId);
     const normalizedListeners = validateListeners(listeners);
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
         await broker.send(AddRaftVoter, {
           clusterId,
           timeoutMs,
@@ -82,49 +84,26 @@ export function createRaftVotersApi({ cluster, logger, retry }: AdminContext): R
           listeners: normalizedListeners,
           ackWhenCommitted,
         });
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not add raft voter', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not add raft voter' },
+    );
   };
 
   const removeRaftVoter = async ({ clusterId, voterId, voterDirectoryId }: RemoveRaftVoterOptions): Promise<void> => {
     const normalizedVoterId = validateVoterId(voterId);
     const normalizedDirectoryId = validateDirectoryId(voterDirectoryId);
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
         await broker.send(RemoveRaftVoter, {
           clusterId,
           voterId: normalizedVoterId,
           voterDirectoryId: normalizedDirectoryId,
         });
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not remove raft voter', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not remove raft voter' },
+    );
   };
 
   return { addRaftVoter, removeRaftVoter };

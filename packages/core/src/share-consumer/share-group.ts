@@ -6,7 +6,8 @@ import { TopicIdNames, type DescribedTopic } from '../consumer/membership/topic-
 import { KafkaError, KafkaNonRetriableError, type KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
-import { createErrorFromCode, failure, staleMetadata } from '../protocol/error-codes';
+import { isStaleCoordinator, isStaleMetadata } from '../cluster/error-classifier';
+import { createErrorFromCode, failure } from '../protocol/error-codes';
 import type { ShareAcknowledgeTopicInput } from '../protocol/requests/share-acknowledge/index';
 import {
   SHARE_ACQUIRE_MODE,
@@ -294,8 +295,7 @@ export class ShareGroup {
   }
 
   async recoverFromFetch(error: unknown): Promise<void> {
-    const type = (error as { type?: string }).type;
-    if (type === 'NOT_COORDINATOR_FOR_GROUP' || type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
+    if (isStaleCoordinator(error)) {
       this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
     }
   }
@@ -312,7 +312,7 @@ export class ShareGroup {
    */
   async fetch(nodeId: string): Promise<ShareBatch[]> {
     if (this.#metadataRefreshNeeded) {
-      await this.cluster.refreshMetadata();
+      await this.cluster.refreshStaleMetadata();
       this.#metadataRefreshNeeded = false;
     } else {
       await this.cluster.refreshMetadataIfNecessary();
@@ -528,7 +528,7 @@ export class ShareGroup {
   #handlePartitionFetchError(topic: string, partition: number, errorCode: number): KafkaProtocolError | undefined {
     const error = createErrorFromCode(errorCode, { topic, partition });
     if (!error.retriable) return error;
-    if (staleMetadata(error)) this.#metadataRefreshNeeded = true;
+    if (isStaleMetadata(error)) this.#metadataRefreshNeeded = true;
     this.#logger.warn('Share fetch failed for partition, retrying', {
       groupId: this.groupId,
       topic,

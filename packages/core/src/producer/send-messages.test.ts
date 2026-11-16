@@ -10,6 +10,7 @@ import { createSendMessages, type OpenTransaction } from './send-messages';
 import { createTransactionSession } from './transaction-session/index';
 import type { PartitionerArgs } from './types';
 import { withSend } from '../broker/test-send';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -111,6 +112,7 @@ describe('producer/sendMessages', () => {
       needsMetadataRefresh: vi.fn().mockReturnValue(true),
       connectedBroker: vi.fn().mockReturnValue(undefined),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       applyLeaderUpdate: vi.fn().mockResolvedValue(true),
       findTopicPartitionMetadata: vi.fn().mockReturnValue(partitionMetadata),
@@ -127,7 +129,7 @@ describe('producer/sendMessages', () => {
       findBroker: vi
         .fn()
         .mockImplementation(({ nodeId }: { nodeId: string }) => Promise.resolve(brokers[Number(nodeId)])),
-      removeBroker: vi.fn(),
+      onConnectionClosed: vi.fn(() => false),
       connect: vi.fn().mockResolvedValue(undefined),
       targetTopics: new Set<string>(),
       isConnected: vi.fn().mockReturnValue(true),
@@ -200,7 +202,7 @@ describe('producer/sendMessages', () => {
       });
 
       expect(brokers[1].produce).toHaveBeenCalledTimes(2);
-      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.refreshStaleMetadata).toHaveBeenCalled();
     });
   }
 
@@ -239,7 +241,7 @@ describe('producer/sendMessages', () => {
       currentLeader: { leaderId: 2, leaderEpoch: 5 },
       nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
     });
-    expect(cluster.refreshMetadata).not.toHaveBeenCalled();
+    expect(cluster.refreshStaleMetadata).not.toHaveBeenCalled();
     expect(brokers[1].produce).toHaveBeenCalledTimes(2);
   });
 
@@ -263,7 +265,7 @@ describe('producer/sendMessages', () => {
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
-    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(cluster.refreshStaleMetadata).toHaveBeenCalled();
   });
 
   it("continues each partition's sequence on the next send", async () => {
@@ -479,7 +481,7 @@ describe('producer/sendMessages', () => {
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
-    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(cluster.refreshStaleMetadata).toHaveBeenCalled();
     expect(brokers[1].produce).toHaveBeenCalledTimes(1);
     expect(brokers[3].produce).toHaveBeenCalledTimes(1);
     expect(brokers[2].produce).toHaveBeenCalledTimes(2);
@@ -514,7 +516,7 @@ describe('producer/sendMessages', () => {
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
-    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(cluster.refreshStaleMetadata).toHaveBeenCalled();
   });
 
   it('marks the transaction abort-only on TRANSACTION_ABORTABLE (KIP-890)', async () => {
@@ -1075,10 +1077,13 @@ describe('producer/sendMessages', () => {
       });
       const session = createTransactionSession({
         logger: silentLogger,
-        cluster: withSend({
-          findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-          brokerPool: { versions: undefined },
-        }) as unknown as Cluster,
+        cluster: fakeRunCluster(
+          { coordinator },
+          withSend({
+            findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
+            brokerPool: { versions: undefined },
+          }),
+        ) as unknown as Cluster,
         transactionalId: 'transactional-id',
         transactionTimeout: 60_000,
         retry: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),

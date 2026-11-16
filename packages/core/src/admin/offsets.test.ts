@@ -4,10 +4,12 @@ import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createOffsetsApi } from './offsets';
 import { withSend } from '../broker/test-send';
+import { STALE_METADATA_ERRORS } from '../cluster/error-classifier';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-function makeApi(cluster: Record<string, unknown>, retry?: { retries?: number }) {
+function makeApi(cluster: object, retry?: { retries?: number }) {
   return createOffsetsApi({
     cluster: cluster as unknown as Cluster,
     logger: silentLogger.namespace('Admin'),
@@ -25,31 +27,34 @@ describe('admin/offsets', () => {
     });
 
     it('joins high and low watermarks per partition', async () => {
-      const cluster = {
-        addTargetTopic: vi.fn().mockResolvedValue(undefined),
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }, { partitionId: 1 }]),
-        fetchTopicsOffset: vi
-          .fn()
-          .mockResolvedValueOnce([
-            {
-              topic: 'orders',
-              partitions: [
-                { partition: 0, offset: 10n },
-                { partition: 1, offset: 20n },
-              ],
-            },
-          ])
-          .mockResolvedValueOnce([
-            {
-              topic: 'orders',
-              partitions: [
-                { partition: 0, offset: 0n },
-                { partition: 1, offset: 5n },
-              ],
-            },
-          ]),
-      };
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }, { partitionId: 1 }]),
+          fetchTopicsOffset: vi
+            .fn()
+            .mockResolvedValueOnce([
+              {
+                topic: 'orders',
+                partitions: [
+                  { partition: 0, offset: 10n },
+                  { partition: 1, offset: 20n },
+                ],
+              },
+            ])
+            .mockResolvedValueOnce([
+              {
+                topic: 'orders',
+                partitions: [
+                  { partition: 0, offset: 0n },
+                  { partition: 1, offset: 5n },
+                ],
+              },
+            ]),
+        },
+      );
 
       await expect(makeApi(cluster).fetchTopicOffsets('orders')).resolves.toEqual([
         { partition: 0, offset: 10n, high: 10n, low: 0n },
@@ -66,16 +71,23 @@ describe('admin/offsets', () => {
 
     it('refreshes metadata and retries on UNKNOWN_TOPIC_OR_PARTITION', async () => {
       const error = Object.assign(new Error('unknown'), { type: 'UNKNOWN_TOPIC_OR_PARTITION' });
-      const cluster = {
-        addTargetTopic: vi.fn().mockResolvedValue(undefined),
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findTopicPartitionMetadata: vi.fn().mockImplementation(() => {
-          throw error;
-        }),
-      };
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockImplementation(() => {
+            throw error;
+          }),
+        },
+      );
       await expect(makeApi(cluster, { retries: 0 }).fetchTopicOffsets('orders')).rejects.toThrow();
-      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.run).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.any(Function),
+        expect.objectContaining({ retryOn: STALE_METADATA_ERRORS }),
+      );
+      expect(cluster.recover).toHaveBeenCalledWith(error);
     });
   });
 
@@ -85,15 +97,18 @@ describe('admin/offsets', () => {
     });
 
     it('uses the high watermark when the timestamp lookup returns a negative offset', async () => {
-      const cluster = {
-        addTargetTopic: vi.fn().mockResolvedValue(undefined),
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
-        fetchTopicsOffset: vi
-          .fn()
-          .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 99n }] }])
-          .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: -1n }] }]),
-      };
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
+          fetchTopicsOffset: vi
+            .fn()
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 99n }] }])
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: -1n }] }]),
+        },
+      );
 
       await expect(makeApi(cluster).fetchTopicOffsetsByTimestamp('orders', 1_700_000_000_000n)).resolves.toEqual([
         { partition: 0, offset: 99n },
@@ -104,15 +119,18 @@ describe('admin/offsets', () => {
     });
 
     it('forwards a numeric timestamp through parseOffset', async () => {
-      const cluster = {
-        addTargetTopic: vi.fn().mockResolvedValue(undefined),
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
-        fetchTopicsOffset: vi
-          .fn()
-          .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] }])
-          .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 3n }] }]),
-      };
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
+          fetchTopicsOffset: vi
+            .fn()
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 5n }] }])
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 3n }] }]),
+        },
+      );
 
       await expect(makeApi(cluster).fetchTopicOffsetsByTimestamp('orders', '100')).resolves.toEqual([
         { partition: 0, offset: 3n },

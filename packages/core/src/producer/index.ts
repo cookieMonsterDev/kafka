@@ -131,7 +131,7 @@ export function createProducer({
     logger,
     initProducerId: (current) =>
       sendInitProducerId(
-        { cluster, retry: producerRetrier, logger },
+        { cluster, retry: producerRetrier },
         { transactionalId: null, transactionTimeout, ...current },
       ),
   });

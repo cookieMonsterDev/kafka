@@ -538,7 +538,4 @@ export class KafkaConfigRequiresAsyncError extends KafkaNonRetriableError {
   }
 }
 
-export const isRebalancing = (e: { type?: string }): boolean =>
-  e.type === 'REBALANCE_IN_PROGRESS' || e.type === 'NOT_COORDINATOR_FOR_GROUP' || e.type === 'ILLEGAL_GENERATION';
-
 export const isKafkaError = (e: unknown): e is KafkaError => e instanceof KafkaError;

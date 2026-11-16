@@ -6,15 +6,13 @@ import { createQuotasApi } from './quotas';
 import type { AlterClientQuotasEntry } from '../protocol/requests/alter-client-quotas/index';
 import type { DescribeClientQuotasComponent } from '../protocol/requests/describe-client-quotas/index';
 import { withSend } from '../broker/test-send';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeCluster(broker: Record<string, ReturnType<typeof vi.fn>> = {}) {
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 function makeApi(cluster: ReturnType<typeof fakeCluster>, retry?: { retries?: number }) {
@@ -53,7 +51,7 @@ describe('admin/quotas', () => {
       await expect(api.describeClientQuotas()).resolves.toEqual({ entries: [{ entity: [], values: [] }] });
 
       expect(cluster.refreshMetadata).toHaveBeenCalled();
-      expect(cluster.findControllerBroker).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(cluster.broker.describeClientQuotas).toHaveBeenCalledWith({ components: [], strict: false });
     });
 
@@ -82,7 +80,7 @@ describe('admin/quotas', () => {
       await expect(api.describeClientQuotas()).rejects.toThrow('boom');
     });
 
-    it('refreshes metadata and retries when the controller returns NOT_CONTROLLER', async () => {
+    it('recovers and retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const cluster = fakeCluster(
         withSend({
@@ -93,7 +91,7 @@ describe('admin/quotas', () => {
 
       await expect(api.describeClientQuotas()).rejects.toThrow();
       expect(cluster.broker.describeClientQuotas).toHaveBeenCalledTimes(1);
-      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 
@@ -109,7 +107,7 @@ describe('admin/quotas', () => {
       const cluster = fakeCluster();
       const api = makeApi(cluster);
       await expect(api.alterClientQuotas({ entries: [] })).rejects.toThrow(KafkaNonRetriableError);
-      expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+      expect(cluster.run).not.toHaveBeenCalled();
     });
 
     it('alters client quotas through the active controller with validateOnly defaulted to false', async () => {
@@ -157,7 +155,7 @@ describe('admin/quotas', () => {
       await expect(api.alterClientQuotas({ entries: [validEntry] })).rejects.toThrow('boom');
     });
 
-    it('refreshes metadata and retries when the controller returns NOT_CONTROLLER', async () => {
+    it('recovers and retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const cluster = fakeCluster(
         withSend({
@@ -168,7 +166,7 @@ describe('admin/quotas', () => {
 
       await expect(api.alterClientQuotas({ entries: [validEntry] })).rejects.toThrow();
       expect(cluster.broker.alterClientQuotas).toHaveBeenCalledTimes(1);
-      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 });

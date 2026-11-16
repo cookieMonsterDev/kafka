@@ -15,7 +15,7 @@ function fakeCluster(): Cluster {
     addMultipleTargetTopics: vi.fn(async () => undefined),
     metadata: vi.fn(async () => ({ topicMetadata: [] })),
     findGroupCoordinator: vi.fn(),
-    removeBroker: vi.fn(),
+    onConnectionClosed: vi.fn(() => false),
     clientInstanceId: vi.fn().mockReturnValue(null),
   }) as unknown as Cluster;
 }

@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createLogDirsApi } from './log-dirs';
 import { withSend } from '../broker/test-send';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -24,14 +25,13 @@ describe('admin/describeReplicaLogDirs', () => {
         ],
       })),
     });
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findBroker: vi.fn(async () => broker),
-    } as unknown as Cluster;
-    const api = createLogDirsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({}, { findBroker: vi.fn(async () => broker) });
+    const api = createLogDirsApi({ cluster: cluster as unknown as Cluster, logger, rootLogger: logger });
 
     const result = await api.describeReplicaLogDirs([{ topic: 'orders', partition: 0, brokerId: 1 }]);
 
+    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(cluster.findBroker).toHaveBeenCalledWith({ nodeId: '1' });
     expect(broker.describeLogDirs).toHaveBeenCalledWith({
       topics: [{ topic: 'orders', partitions: [0] }],
     });

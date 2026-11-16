@@ -455,6 +455,7 @@ describe('consumer/consumer-group', () => {
       findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
       ...committedOffsetCalls(),
       refreshMetadata: vi.fn(async () => undefined),
+      refreshStaleMetadata: vi.fn(async () => undefined),
     }) as unknown as Cluster;
     const consumerGroup = new ConsumerGroup({
       logger: silentLogger,
@@ -512,6 +513,7 @@ describe('consumer/consumer-group', () => {
       findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
       ...committedOffsetCalls(),
       refreshMetadata: vi.fn(async () => undefined),
+      refreshStaleMetadata: vi.fn(async () => undefined),
     }) as unknown as Cluster;
     const consumerGroup = new ConsumerGroup({
       logger: silentLogger,
@@ -617,6 +619,7 @@ describe('consumer/consumer-group', () => {
       findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
       ...committedOffsetCalls(),
       refreshMetadata: vi.fn(async () => undefined),
+      refreshStaleMetadata: vi.fn(async () => undefined),
     }) as unknown as Cluster;
     const topicConfigurations: Record<string, TopicOffsetConfiguration> = {};
     const consumerGroup = new ConsumerGroup({
@@ -700,6 +703,7 @@ describe('consumer/consumer-group', () => {
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
         ...committedOffsetCalls(),
         refreshMetadata: vi.fn(async () => undefined),
+        refreshStaleMetadata: vi.fn(async () => undefined),
       }) as unknown as Cluster,
     });
 
@@ -734,6 +738,7 @@ describe('consumer/consumer-group', () => {
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
         ...committedOffsetCalls(),
         refreshMetadata: vi.fn(async () => undefined),
+        refreshStaleMetadata: vi.fn(async () => undefined),
       }) as unknown as Cluster,
     });
     const onPartitionsLost = vi.fn();
@@ -786,6 +791,7 @@ describe('consumer/consumer-group', () => {
       findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
       ...committedOffsetCalls(),
       refreshMetadata: vi.fn(async () => undefined),
+      refreshStaleMetadata: vi.fn(async () => undefined),
     }) as unknown as Cluster;
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const groupJoins: { payload: { memberAssignment: Record<string, number[]> } }[] = [];
@@ -846,8 +852,8 @@ describe('consumer/consumer-group', () => {
   it('recovers the leader from a CurrentLeader hint instead of a metadata refresh and rejoin (KIP-951)', async () => {
     const consumerGroup = createGroup();
     const applyLeaderUpdate = vi.fn().mockResolvedValue(true);
-    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
-    consumerGroup.cluster = { applyLeaderUpdate, refreshMetadata } as unknown as Cluster;
+    const refreshStaleMetadata = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.cluster = { applyLeaderUpdate, refreshStaleMetadata } as unknown as Cluster;
     const joinAndSync = vi.fn().mockResolvedValue(undefined);
     consumerGroup.joinAndSync = joinAndSync;
 
@@ -867,15 +873,15 @@ describe('consumer/consumer-group', () => {
       currentLeader: { leaderId: 2, leaderEpoch: 5 },
       nodeEndpoints: [{ nodeId: 2, host: 'broker-2', port: 9093, rack: null }],
     });
-    expect(refreshMetadata).not.toHaveBeenCalled();
+    expect(refreshStaleMetadata).not.toHaveBeenCalled();
     expect(joinAndSync).not.toHaveBeenCalled();
   });
 
   it('falls back to a full metadata refresh and rejoin when the leader patch misses (KIP-951)', async () => {
     const consumerGroup = createGroup();
     const applyLeaderUpdate = vi.fn().mockResolvedValue(false);
-    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
-    consumerGroup.cluster = { applyLeaderUpdate, refreshMetadata } as unknown as Cluster;
+    const refreshStaleMetadata = vi.fn().mockResolvedValue(undefined);
+    consumerGroup.cluster = { applyLeaderUpdate, refreshStaleMetadata } as unknown as Cluster;
     const joinAndSync = vi.fn().mockResolvedValue(undefined);
     consumerGroup.joinAndSync = joinAndSync;
 
@@ -889,7 +895,7 @@ describe('consumer/consumer-group', () => {
     await consumerGroup.recoverFromFetch(error);
 
     expect(applyLeaderUpdate).toHaveBeenCalled();
-    expect(refreshMetadata).toHaveBeenCalled();
+    expect(refreshStaleMetadata).toHaveBeenCalled();
     expect(joinAndSync).toHaveBeenCalled();
   });
 
@@ -1892,6 +1898,7 @@ describe('consumer/consumer-group', () => {
       const cluster = withSend({
         connect: vi.fn(async () => undefined),
         refreshMetadata: vi.fn(async () => undefined),
+        refreshStaleMetadata: vi.fn(async () => undefined),
         refreshMetadataIfNecessary: vi.fn(async () => undefined),
         findGroupCoordinator,
         findTopicPartitionMetadata: vi.fn(() => [
@@ -2102,6 +2109,7 @@ describe('consumer/consumer-group', () => {
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
         ...committedOffsets,
         refreshMetadata: vi.fn(async () => undefined),
+        refreshStaleMetadata: vi.fn(async () => undefined),
       }) as unknown as Cluster;
       const consumerGroup = createGroup({ groupProtocol: 'consumer', cluster });
       await consumerGroup.joinAndSync();

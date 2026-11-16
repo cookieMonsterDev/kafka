@@ -104,6 +104,7 @@ function createFetchingGroup({
 } = {}) {
   const cluster = {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
+    refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
     findBroker: findBroker ?? vi.fn().mockResolvedValue(withSend({ shareFetch, shareAcknowledge })),
@@ -167,6 +168,7 @@ describe('share-consumer/share-group', () => {
       disconnect: vi.fn(),
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     }) as unknown as Cluster;
 
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
@@ -307,6 +309,7 @@ describe('share-consumer/share-group', () => {
       connect: vi.fn(),
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
@@ -348,6 +351,7 @@ describe('share-consumer/share-group', () => {
     const cluster = withSend({
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
@@ -371,6 +375,7 @@ describe('share-consumer/share-group', () => {
     const cluster = withSend({
       findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     }) as unknown as Cluster;
     const group = new ShareGroup({ cluster, groupId: 'share-1', logger: silentLogger, retry: { retries: 0 } });
     group.subscribe(['events', 'clicks']);
@@ -612,9 +617,9 @@ describe('share-consumer/share-group', () => {
         ]),
       );
 
-      expect(cluster.refreshMetadata).not.toHaveBeenCalled();
+      expect(cluster.refreshStaleMetadata).not.toHaveBeenCalled();
       await group.fetch('1');
-      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(1);
+      expect(cluster.refreshStaleMetadata).toHaveBeenCalledTimes(1);
     });
 
     it('rejects a response that names a topic id the request did not', async () => {

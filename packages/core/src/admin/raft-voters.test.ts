@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createRaftVotersApi } from './raft-voters';
@@ -8,18 +10,19 @@ import { withSend } from '../broker/test-send';
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const directoryId = Buffer.alloc(16, 4);
 
+function makeApi(cluster: ReturnType<typeof fakeRunCluster>) {
+  return createRaftVotersApi({
+    cluster: cluster as unknown as Cluster,
+    logger: silentLogger.namespace('Admin'),
+    rootLogger: silentLogger,
+  });
+}
+
 describe('admin/raft-voters', () => {
   it('targets the active controller for addRaftVoter', async () => {
     const broker = withSend({ addRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) });
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findControllerBroker: vi.fn().mockResolvedValue(broker),
-    } as unknown as Cluster;
-    const api = createRaftVotersApi({
-      cluster,
-      logger: silentLogger.namespace('Admin'),
-      rootLogger: silentLogger,
-    });
+    const cluster = fakeRunCluster({ controller: broker });
+    const api = makeApi(cluster);
 
     await expect(
       api.addRaftVoter({
@@ -30,6 +33,7 @@ describe('admin/raft-voters', () => {
       }),
     ).resolves.toBeUndefined();
 
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(broker.addRaftVoter).toHaveBeenCalledWith({
       clusterId: undefined,
       timeoutMs: undefined,
@@ -42,15 +46,8 @@ describe('admin/raft-voters', () => {
 
   it('targets the active controller for removeRaftVoter', async () => {
     const broker = withSend({ removeRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) });
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findControllerBroker: vi.fn().mockResolvedValue(broker),
-    } as unknown as Cluster;
-    const api = createRaftVotersApi({
-      cluster,
-      logger: silentLogger.namespace('Admin'),
-      rootLogger: silentLogger,
-    });
+    const cluster = fakeRunCluster({ controller: broker });
+    const api = makeApi(cluster);
 
     await expect(
       api.removeRaftVoter({
@@ -60,6 +57,7 @@ describe('admin/raft-voters', () => {
       }),
     ).resolves.toBeUndefined();
 
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(broker.removeRaftVoter).toHaveBeenCalledWith({
       clusterId: 'cluster-1',
       voterId: 4,
@@ -68,16 +66,8 @@ describe('admin/raft-voters', () => {
   });
 
   it('rejects invalid directory ids and listeners', async () => {
-    const findControllerBroker = vi.fn();
-    const cluster = {
-      refreshMetadata: vi.fn(),
-      findControllerBroker,
-    } as unknown as Cluster;
-    const api = createRaftVotersApi({
-      cluster,
-      logger: silentLogger.namespace('Admin'),
-      rootLogger: silentLogger,
-    });
+    const cluster = fakeRunCluster({ controller: withSend({}) });
+    const api = makeApi(cluster);
 
     await expect(
       api.addRaftVoter({
@@ -86,6 +76,6 @@ describe('admin/raft-voters', () => {
         listeners: [],
       }),
     ).rejects.toThrow(KafkaNonRetriableError);
-    expect(findControllerBroker).not.toHaveBeenCalled();
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 });

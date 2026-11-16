@@ -4,6 +4,7 @@ import {
   KafkaInvariantViolation,
   KafkaProtocolError,
 } from '../errors';
+import { isUnsupportedVersion } from '../cluster/error-classifier';
 import type { Logger } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { asTypedSend } from '../network/connection';
@@ -29,7 +30,7 @@ const notInitializedLookup: LookupRequest = () => {
 
 /** Pre-flexible brokers answer ApiVersions v3+ with a v0/v1 body instead of UNSUPPORTED_VERSION. */
 function isApiVersionsNegotiationFallback(error: unknown): boolean {
-  if (error instanceof KafkaProtocolError) return error.type === 'UNSUPPORTED_VERSION';
+  if (error instanceof KafkaProtocolError) return isUnsupportedVersion(error);
   return error instanceof RangeError || error instanceof KafkaInvalidVarIntError;
 }
 

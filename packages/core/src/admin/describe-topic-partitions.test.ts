@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ZERO_TOPIC_ID } from '../protocol/requests/metadata/shared';
@@ -39,11 +41,7 @@ function fakeCluster(
   }),
 ) {
   const broker = withSend({ describeTopicPartitions });
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 describe('admin/topics describeTopicPartitions', () => {
@@ -83,7 +81,7 @@ describe('admin/topics describeTopicPartitions', () => {
     });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
-    expect(cluster.findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.broker.describeTopicPartitions).toHaveBeenCalledWith({
       topics: [{ topic: 'orders' }],
       responsePartitionLimit: undefined,
@@ -177,6 +175,6 @@ describe('admin/topics describeTopicPartitions', () => {
     await expect(
       api.describeTopicPartitions({ topics: ['orders'], cursor: { topic: '', partitionIndex: 0 } }),
     ).rejects.toThrow('Invalid cursor topic');
-    expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 });

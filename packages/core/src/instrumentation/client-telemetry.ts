@@ -1,5 +1,6 @@
 import type { Broker } from '../broker/index';
 import { supportsClientTelemetry } from '../broker/capabilities';
+import { isTelemetryTooLarge, isUnknownTelemetrySubscription } from '../cluster/error-classifier';
 import { KafkaBrokerNotFound, KafkaProtocolError, KafkaServerDoesNotSupportApiKey } from '../errors';
 import type { Logger } from '../loggers/index';
 import { COMPRESSION_TYPES, lookupCodec } from '../protocol/compression/index';
@@ -90,7 +91,7 @@ export class ClientTelemetryReporter {
         this.#stopped = true;
         return;
       }
-      if (error instanceof KafkaProtocolError && error.type === 'UNKNOWN_SUBSCRIPTION_ID') {
+      if (error instanceof KafkaProtocolError && isUnknownTelemetrySubscription(error)) {
         this.#subscription = null;
         this.#schedule(DEFAULT_PUSH_INTERVAL_MS);
         return;
@@ -175,7 +176,7 @@ export class ClientTelemetryReporter {
         metrics,
       });
     } catch (error) {
-      if (error instanceof KafkaProtocolError && error.type === 'TELEMETRY_TOO_LARGE') {
+      if (error instanceof KafkaProtocolError && isTelemetryTooLarge(error)) {
         this.#logger.debug('Broker rejected PushTelemetry as TELEMETRY_TOO_LARGE');
         return;
       }

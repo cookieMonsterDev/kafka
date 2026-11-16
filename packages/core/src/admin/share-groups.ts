@@ -4,13 +4,13 @@ import type { AlterShareGroupOffsetsResponseV0Body } from '../protocol/requests/
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { DeleteShareGroupOffsetsResponseV0Body } from '../protocol/requests/delete-share-group-offsets/v0/response';
 import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/requests/describe-share-group-offsets/v1/response';
-import { retrier } from '../retry/index';
+import { coordinatorTarget, nodeTarget } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown, protocolType } from './helpers';
+import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown, groupByBroker } from './helpers';
 import type {
   AlterShareGroupOffsetsOptions,
   DeleteShareGroupOffsetsOptions,
-  DescribeShareGroupOffsetsOptions,
   ListShareGroupOffsetsOptions,
 } from './types';
 import {
@@ -43,7 +43,9 @@ function assertNonEmptyGroupIds(groupIds: unknown): asserts groupIds is string[]
   }
 }
 
-export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): ShareGroupsApi {
+export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGroupsApi {
+  const retrier = createRetrier(retry);
+
   const describeShareGroups = async (groupIds: string[]): Promise<{ groups: ShareGroupDescribeGroupV1[] }> => {
     assertNonEmptyGroupIds(groupIds);
     if (groupIds.length === 0) return { groups: [] };
@@ -71,48 +73,30 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
       }
     }
 
-    const coordinatorsForGroup = await Promise.all(
-      groups.map(async (entry) => {
-        const coordinator = await cluster.findGroupCoordinator({ groupId: entry.groupId });
-        return { coordinator, entry };
-      }),
-    );
-
-    const groupsByCoordinator = new Map<
-      string,
-      {
-        coordinator: (typeof coordinatorsForGroup)[number]['coordinator'];
-        groups: DescribeShareGroupOffsetsOptions['groups'];
-      }
-    >();
-    for (const { coordinator, entry } of coordinatorsForGroup) {
-      const key = String(coordinator.nodeId);
-      const existing = groupsByCoordinator.get(key);
-      if (existing) {
-        existing.groups.push(entry);
-      } else {
-        groupsByCoordinator.set(key, { coordinator, groups: [entry] });
-      }
-    }
-
+    // Coordinators are looked up once, then each coordinator's request is retried on its own.
+    const coordinators = await Promise.all(groups.map(({ groupId }) => cluster.findGroupCoordinator({ groupId })));
     const responses = await Promise.all(
-      [...groupsByCoordinator.values()].map(async ({ coordinator, groups: grouped }) => {
-        const { groups: resultGroups } = await retrier(retry)(() =>
-          coordinator.send(DescribeShareGroupOffsets, {
-            groups: grouped.map(({ groupId, topics }) => ({
-              groupId,
-              topics:
-                topics == null
-                  ? null
-                  : topics.map(({ topicName, partitions }) => ({
-                      topicName,
-                      partitions: partitions ?? [],
-                    })),
-            })),
-          }),
-        );
-        return resultGroups;
-      }),
+      [...groupByBroker(groups, coordinators)].map(([coordinator, grouped]) =>
+        cluster.run(
+          nodeTarget(String(coordinator.nodeId)),
+          async (broker) => {
+            const { groups: resultGroups } = await broker.send(DescribeShareGroupOffsets, {
+              groups: grouped.map(({ groupId, topics }) => ({
+                groupId,
+                topics:
+                  topics == null
+                    ? null
+                    : topics.map(({ topicName, partitions }) => ({
+                        topicName,
+                        partitions: partitions ?? [],
+                      })),
+              })),
+            });
+            return resultGroups;
+          },
+          { retrier, retryRetriable: true },
+        ),
+      ),
     );
 
     return { groups: responses.flat() };
@@ -129,27 +113,14 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
       throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
+    return cluster.run(
+      coordinatorTarget(groupId),
+      async (coordinator) => {
         const { responses } = await coordinator.send(AlterShareGroupOffsets, { groupId, topics });
         return { responses };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not alter share group offsets', {
-            error: error instanceof Error ? error.message : String(error),
-            groupId,
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-        bail(error as Error);
-        return { responses: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not alter share group offsets' },
+    );
   };
 
   const deleteShareGroupOffsets = async ({
@@ -163,30 +134,14 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
       throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const { responses } = await coordinator.send(DeleteShareGroupOffsets, {
-          groupId,
-          topics,
-        });
+    return cluster.run(
+      coordinatorTarget(groupId),
+      async (coordinator) => {
+        const { responses } = await coordinator.send(DeleteShareGroupOffsets, { groupId, topics });
         return { responses };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not delete share group offsets', {
-            error: error instanceof Error ? error.message : String(error),
-            groupId,
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-        bail(error as Error);
-        return { responses: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not delete share group offsets' },
+    );
   };
 
   const deleteShareGroups = async (groupIds: string[]): Promise<DeleteGroupsResult[]> => {
@@ -194,7 +149,6 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
 
     return deleteGroupsViaCoordinators({
       cluster,
-      logger,
       retry,
       groupIds,
       errorLabel: 'Error in DeleteShareGroups',

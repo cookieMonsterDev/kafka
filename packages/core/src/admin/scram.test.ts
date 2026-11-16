@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { SCRAM_MECHANISMS } from '../protocol/enums/scram-mechanisms';
@@ -14,11 +16,7 @@ function fakeCluster(
     alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [] }),
   }),
 ) {
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 describe('admin/scram', () => {
@@ -36,6 +34,7 @@ describe('admin/scram', () => {
 
       await expect(api.describeUserScramCredentials()).resolves.toEqual({ results: [{ user: 'alice' }] });
       expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(broker.describeUserScramCredentials).toHaveBeenCalledWith({ users: undefined });
     });
 
@@ -53,7 +52,7 @@ describe('admin/scram', () => {
       expect(broker.describeUserScramCredentials).toHaveBeenCalledWith({ users: ['alice', 'bob'] });
     });
 
-    it('retries and rethrows on NOT_CONTROLLER, refreshing metadata again', async () => {
+    it('retries and rethrows on NOT_CONTROLLER, recovering before the retry', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const broker = withSend({ describeUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
@@ -65,7 +64,8 @@ describe('admin/scram', () => {
       });
 
       await expect(api.describeUserScramCredentials()).rejects.toThrow();
-      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(error);
     });
 
     it('bails immediately on a non-retriable broker error', async () => {
@@ -94,7 +94,7 @@ describe('admin/scram', () => {
 
       // @ts-expect-error intentionally invalid input
       await expect(api.alterUserScramCredentials({ deletions: 'nope' })).rejects.toThrow(KafkaNonRetriableError);
-      expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+      expect(cluster.run).not.toHaveBeenCalled();
     });
 
     it('rejects when both deletions and upsertions are empty', async () => {
@@ -303,7 +303,7 @@ describe('admin/scram', () => {
       });
     });
 
-    it('retries and rethrows on NOT_CONTROLLER, refreshing metadata again', async () => {
+    it('retries and rethrows on NOT_CONTROLLER, recovering before the retry', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const broker = withSend({ alterUserScramCredentials: vi.fn().mockRejectedValue(error) });
       const cluster = fakeCluster(broker);
@@ -317,7 +317,8 @@ describe('admin/scram', () => {
       await expect(
         api.alterUserScramCredentials({ deletions: [{ name: 'alice', mechanism: SCRAM_MECHANISMS.SCRAM_SHA_256 }] }),
       ).rejects.toThrow();
-      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(error);
     });
 
     it('bails immediately on a non-retriable broker error', async () => {

@@ -1,6 +1,14 @@
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
-import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment, isRebalancing } from '../errors';
+import {
+  isFetchSessionInvalid,
+  isRebalancing,
+  isRejectedMember,
+  isStaleLeaderEpoch,
+  isStaleMetadata,
+  isUnknownMember,
+} from '../cluster/error-classifier';
+import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
@@ -14,7 +22,6 @@ import { AssignModeMembership } from './membership/assign-mode-membership';
 import { ClassicMembership } from './membership/classic-membership';
 import { ConsumerProtocolMembership } from './membership/consumer-protocol-membership';
 import {
-  isRejectedMemberError,
   toPartitionsByTopic,
   type AssignmentChange,
   type GroupMembership,
@@ -38,18 +45,6 @@ import type {
 import { estimatePrefetchBytes } from './worker-queue';
 import { Fetch } from '../protocol/requests/fetch/index';
 import { OffsetForLeaderEpoch } from '../protocol/requests/offset-for-leader-epoch/index';
-
-const STALE_METADATA_ERRORS = Object.freeze([
-  'LEADER_NOT_AVAILABLE',
-  'NOT_LEADER_FOR_PARTITION',
-  'NOT_LEADER_OR_FOLLOWER',
-  'FENCED_LEADER_EPOCH',
-  'UNKNOWN_LEADER_EPOCH',
-  'UNKNOWN_TOPIC_OR_PARTITION',
-  'UNKNOWN_TOPIC_ID',
-  'INCONSISTENT_TOPIC_ID',
-  'REBOOTSTRAP_REQUIRED',
-]);
 
 const CONSUMER_REPLICA_ID = -1;
 
@@ -476,7 +471,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
    */
   async recoverRejectedMember(error: { type?: string }): Promise<void> {
     await this.notifyPartitionsLost();
-    this.#membership.resetRejectedMember({ forgetMemberId: error.type === 'UNKNOWN_MEMBER_ID' });
+    this.#membership.resetRejectedMember({ forgetMemberId: isUnknownMember(error) });
   }
 
   async changeAssignment({ assignment, revoked, gained, onInstalled }: AssignmentChange): Promise<void> {
@@ -571,7 +566,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
           throw new KafkaError(error);
         }
 
-        if (isRejectedMemberError(error)) {
+        if (isRejectedMember(error)) {
           await this.recoverRejectedMember(error);
           throw new KafkaError(error);
         }
@@ -824,9 +819,6 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
 
   async recoverFromFetch(e: unknown): Promise<void> {
     const error = e as Error & {
-      type?: string;
-      host?: string;
-      port?: number;
       topic?: string;
       partition?: number;
       currentLeader?: { leaderId: number; leaderEpoch: number };
@@ -837,7 +829,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     // KIP-227: the broker no longer recognizes this fetch session (evicted, or our epoch fell out
     // of sync). `fetch()` already reset the session handler for this node, so the next fetch is a
     // full one that opens a fresh session - nothing else to do.
-    if (error.type === 'FETCH_SESSION_ID_NOT_FOUND' || error.type === 'INVALID_FETCH_SESSION_EPOCH') {
+    if (isFetchSessionInvalid(error)) {
       this.logger.debug('Fetch session invalidated by broker, retrying with a full fetch', {
         groupId: this.groupId,
         memberId: this.memberId,
@@ -850,7 +842,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     // didn't already have it cached). Patch the cache locally and retry - no Metadata RPC, no
     // group rejoin, since the assignment itself hasn't changed.
     if (
-      STALE_METADATA_ERRORS.includes(error.type ?? '') &&
+      isStaleMetadata(error) &&
       error.topic != null &&
       error.partition != null &&
       error.currentLeader != null &&
@@ -872,7 +864,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
           leaderId: error.currentLeader.leaderId,
         });
 
-        if (error.type === 'FENCED_LEADER_EPOCH' || error.type === 'UNKNOWN_LEADER_EPOCH') {
+        if (isStaleLeaderEpoch(error)) {
           await this.recoverFromTruncation({ topic: error.topic, partition: error.partition });
         }
 
@@ -880,14 +872,14 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       }
     }
 
-    if (STALE_METADATA_ERRORS.includes(error.type ?? '') || error.name === 'KafkaTopicMetadataNotLoaded') {
+    if (isStaleMetadata(error) || error.name === 'KafkaTopicMetadataNotLoaded') {
       this.logger.debug('Stale cluster metadata, refreshing...', {
         groupId: this.groupId,
         memberId: this.memberId,
         error: error.message,
       });
 
-      await this.cluster.refreshMetadata();
+      await this.cluster.refreshStaleMetadata();
       await this.joinAndSync();
       return;
     }
@@ -917,14 +909,13 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       return;
     }
 
-    if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
-      this.cluster.removeBroker({ host: error.host, port: error.port });
+    if (this.cluster.onConnectionClosed(error)) {
       return;
     }
 
     if (error.name === 'KafkaBrokerNotFound' || error.name === 'KafkaConnectionClosedError') {
       this.logger.debug(`${error.message}, refreshing metadata and retrying...`);
-      await this.cluster.refreshMetadata();
+      await this.cluster.refreshStaleMetadata();
       return;
     }
 

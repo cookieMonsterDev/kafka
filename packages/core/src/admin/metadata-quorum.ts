@@ -1,6 +1,6 @@
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { protocolType } from './helpers';
 import type { DescribeMetadataQuorumResult, MetadataQuorumReplica } from './types';
 import { DescribeQuorum } from '../protocol/requests/lazy-families';
 
@@ -28,12 +28,13 @@ export interface MetadataQuorumApi {
   describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
 }
 
-export function createMetadataQuorumApi({ cluster, logger, retry }: AdminContext): MetadataQuorumApi {
+export function createMetadataQuorumApi({ cluster, retry }: AdminContext): MetadataQuorumApi {
+  const retrier = createRetrier(retry);
+
   const describeMetadataQuorum = async (): Promise<DescribeMetadataQuorumResult> => {
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const response = await broker.send(DescribeQuorum, {
           topics: [{ topicName: '__cluster_metadata', partitions: [{ partitionIndex: 0 }] }],
         });
@@ -54,20 +55,9 @@ export function createMetadataQuorumApi({ cluster, logger, retry }: AdminContext
           })),
           ...('nodes' in response ? { nodes: response.nodes } : {}),
         };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe metadata quorum', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe metadata quorum' },
+    );
   };
 
   return { describeMetadataQuorum };

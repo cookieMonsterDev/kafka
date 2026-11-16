@@ -9,6 +9,7 @@ import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createProducer } from './index';
 import { withSend } from '../broker/test-send';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -27,7 +28,7 @@ function fakeBroker() {
 
 function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
   const broker = fakeBroker();
-  return withSend({
+  const cluster = withSend({
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -46,6 +47,17 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
     },
     ...overrides,
   });
+  // `Cluster.run` resolves the controller and coordinators through the stubs above, so a test can
+  // replace them through `overrides`.
+  const runCluster = fakeRunCluster({
+    controller: () => (cluster as { findControllerBroker: () => Promise<object> }).findControllerBroker(),
+    coordinator: (groupId, coordinatorType) =>
+      (cluster as { findGroupCoordinator: (options: object) => Promise<object> }).findGroupCoordinator({
+        groupId,
+        coordinatorType,
+      }),
+  });
+  return Object.assign(cluster, { run: runCluster.run, recover: runCluster.recover });
 }
 
 describe('producer', () => {
@@ -294,7 +306,7 @@ describe('producer', () => {
       findTopicId: vi.fn().mockReturnValue(undefined),
       findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
       findBroker: vi.fn().mockResolvedValue(broker),
-      removeBroker: vi.fn(),
+      onConnectionClosed: vi.fn(() => false),
       targetTopics: new Set<string>(),
       isConnected: vi.fn().mockReturnValue(true),
     });

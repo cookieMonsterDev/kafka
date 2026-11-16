@@ -1,13 +1,14 @@
 import { KafkaNonRetriableError } from '../errors';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../protocol/enums/incremental-alter-configs-operations';
-import { staleMetadata } from '../protocol/error-codes';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
-import { retrier } from '../retry/index';
+import { STALE_METADATA_ERRORS } from '../cluster/error-classifier';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { groupResourcesByBroker, protocolType, formatUnknown } from './helpers';
+import { groupResourcesByBroker, formatUnknown } from './helpers';
 import type { IncrementalResourceConfig, ResourceConfig, ResourceConfigQuery } from './types';
 import {
   AlterConfigs,
@@ -38,7 +39,9 @@ export interface ConfigsApi {
 const VALID_RESOURCE_TYPES: readonly number[] = Object.values(CONFIG_RESOURCE_TYPES);
 const VALID_CONFIG_OPERATIONS: readonly number[] = Object.values(INCREMENTAL_ALTER_CONFIGS_OPERATIONS);
 
-export function createConfigsApi({ cluster, logger, retry }: AdminContext): ConfigsApi {
+export function createConfigsApi({ cluster, retry }: AdminContext): ConfigsApi {
+  const retrier = createRetrier(retry);
+
   const describeConfigs = async ({
     resources,
     includeSynonyms,
@@ -76,10 +79,9 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       );
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const controller = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (controller) => {
         const resourcesByBroker = await groupResourcesByBroker({ resources, defaultBroker: controller, cluster });
 
         const brokers = [...resourcesByBroker.keys()];
@@ -95,20 +97,9 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         );
 
         return { resources: responses.flatMap((response) => response.resources) };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
-          logger.warn('Could not describe configs', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { resources: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_METADATA_ERRORS, description: 'Could not describe configs' },
+    );
   };
 
   const alterConfigs = async ({
@@ -151,10 +142,9 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       throw new KafkaNonRetriableError(`Invalid resource config value: ${JSON.stringify(invalidConfigValue)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const controller = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (controller) => {
         const resourcesByBroker = await groupResourcesByBroker({ resources, defaultBroker: controller, cluster });
 
         const brokers = [...resourcesByBroker.keys()];
@@ -169,20 +159,9 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         );
 
         return { resources: responses.flatMap((response) => response.resources) };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
-          logger.warn('Could not alter configs', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { resources: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_METADATA_ERRORS, description: 'Could not alter configs' },
+    );
   };
 
   const incrementalAlterConfigs = async ({
@@ -230,10 +209,9 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       throw new KafkaNonRetriableError(`Invalid resource config value: ${JSON.stringify(invalidConfigValue)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const controller = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (controller) => {
         const resourcesByBroker = await groupResourcesByBroker({ resources, defaultBroker: controller, cluster });
 
         const brokers = [...resourcesByBroker.keys()];
@@ -248,20 +226,14 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
         );
 
         return { resources: responses.flatMap((response) => response.resources) };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER' || staleMetadata({ type: protocolType(error) })) {
-          logger.warn('Could not incrementally alter configs', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { resources: [] };
-      }
-    });
+      },
+      {
+        retrier,
+        refreshMetadata: true,
+        retryOn: STALE_METADATA_ERRORS,
+        description: 'Could not incrementally alter configs',
+      },
+    );
   };
 
   const listConfigResources = async ({
@@ -279,26 +251,14 @@ export function createConfigsApi({ cluster, logger, retry }: AdminContext): Conf
       }
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const { configResources } = await broker.send(ListConfigResources, { resourceTypes });
         return { resources: configResources };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not list config resources', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not list config resources' },
+    );
   };
 
   return { describeConfigs, alterConfigs, incrementalAlterConfigs, listConfigResources };

@@ -153,16 +153,26 @@ percentiles from a preallocated sample buffer, process and cgroup CPU seconds, r
 memory, heap, GC count and time, and event-loop delay p99 (the last three are `null` where the runtime lacks the
 API).
 
-Statistics: repetitions run in fresh containers and are interleaved: each round runs every cell once, in an
-order shuffled with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a
-separate, fixed seed, so every session sends the same bytes. The report shows the median with min–max
-and the coefficient of variation. A cell above the noise threshold is marked noisy, and a comparison is called
-`inconclusive` when either cell is noisy, the min–max ranges overlap, or the difference is within the noise
-floor (the `--noise-floor` passed in, or the A/A floor measured in the same session, whichever is larger).
-Throughput scenarios compare records/s, L1 compares time to the first acknowledged produce, and E1 compares p99
-and p50 latency, each with its own coefficient of variation and A/A floor. Every chart on the docs page, peak
-memory included, names a highest or lowest client on a runtime only when this rule puts it ahead of every other
-client, and otherwise says there is no clear one.
+### Comparison rule
+
+Repetitions run in fresh containers and are interleaved: each round runs every cell once, in an order shuffled
+with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a separate, fixed
+seed, so every session sends the same bytes. The report shows the median with min–max and the coefficient of
+variation (CV). A cell whose CV is above the noise threshold (5%, or the `--noise-threshold` passed in) is marked
+noisy.
+
+A comparison of two cells is `inconclusive`, and names neither as better, when any of these holds:
+
+1. Either cell is noisy. This check comes first, so two noisy cells stay inconclusive even when their min–max
+   ranges do not overlap.
+2. Their min–max ranges overlap.
+3. Their medians differ by no more than the noise floor: the `--noise-floor` passed in, or the A/A floor measured
+   in the same session, whichever is larger.
+
+Otherwise the cell with the better median is better. Throughput scenarios compare records/s, L1 compares time to
+the first acknowledged produce, and E1 compares p99 and p50 latency, each with its own CV and A/A floor. Every
+chart on the docs page, peak memory included, names a highest or lowest client on a runtime only when this rule
+puts it ahead of every other client there, and otherwise says there is no clear one.
 
 ## Fairness rules
 

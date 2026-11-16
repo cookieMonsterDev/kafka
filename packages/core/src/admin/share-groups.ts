@@ -97,21 +97,19 @@ export function createShareGroupsApi({ cluster, logger, retry }: AdminContext): 
 
     const responses = await Promise.all(
       [...groupsByCoordinator.values()].map(async ({ coordinator, groups: grouped }) => {
-        // DescribeShareGroupOffsets v0 partitions carry no `lag` (KIP-1226), which the result types as present.
-        const { groups: resultGroups } = await retrier(retry)(
-          async () =>
-            (await coordinator.send(DescribeShareGroupOffsets, {
-              groups: grouped.map(({ groupId, topics }) => ({
-                groupId,
-                topics:
-                  topics == null
-                    ? null
-                    : topics.map(({ topicName, partitions }) => ({
-                        topicName,
-                        partitions: partitions ?? [],
-                      })),
-              })),
-            })) as DescribeShareGroupOffsetsResponseV1Body,
+        const { groups: resultGroups } = await retrier(retry)(() =>
+          coordinator.send(DescribeShareGroupOffsets, {
+            groups: grouped.map(({ groupId, topics }) => ({
+              groupId,
+              topics:
+                topics == null
+                  ? null
+                  : topics.map(({ topicName, partitions }) => ({
+                      topicName,
+                      partitions: partitions ?? [],
+                    })),
+            })),
+          }),
         );
         return resultGroups;
       }),

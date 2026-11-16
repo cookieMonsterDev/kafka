@@ -17,6 +17,11 @@ export interface DescribeShareGroupOffsetsPartitionV0 {
   partitionIndex: number;
   startOffset: bigint;
   leaderEpoch: number;
+  /**
+   * The share-partition lag (KIP-1226). Version 0 has no such field on the wire, so it decodes as
+   * -1 (unknown), the field's default in Kafka's `DescribeShareGroupOffsetsResponse.json`.
+   */
+  lag: bigint;
   errorCode: number;
   errorMessage: string | null;
 }
@@ -73,7 +78,17 @@ export const responseSchema = flexibleObject([
 export const describeShareGroupOffsetsResponseV0: ResponseDefinition<DescribeShareGroupOffsetsResponseV0Body> = {
   decode: async (rawData) => {
     const decoded = responseSchema.read(new Decoder(rawData));
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
+    return {
+      throttleTime: 0,
+      clientSideThrottleTime: decoded.throttleTime,
+      groups: decoded.groups.map((group) => ({
+        ...group,
+        topics: group.topics.map((topic) => ({
+          ...topic,
+          partitions: topic.partitions.map((partition) => ({ ...partition, lag: -1n })),
+        })),
+      })),
+    };
   },
   parse: async (data) => {
     const failedGroup = data.groups.find(({ errorCode }) => failure(errorCode));

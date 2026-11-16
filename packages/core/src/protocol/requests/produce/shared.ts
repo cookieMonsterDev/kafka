@@ -10,7 +10,6 @@ import {
   compactNullableString,
   compactOwnedEncoderBytes,
   compactString,
-  defineResponse,
   field,
   flexibleObject,
   int16,
@@ -22,6 +21,7 @@ import {
   string,
   uuid,
   type RequestDefinition,
+  type ResponseDefinition,
 } from '../../schema';
 import { API_KEYS } from '../api-keys';
 
@@ -276,6 +276,7 @@ export interface ProducePartitionResult {
   errorCode: number;
   baseOffset: bigint;
   logAppendTime: bigint;
+  logStartOffset: bigint;
 }
 
 export interface ProduceTopicResult {
@@ -409,8 +410,21 @@ export function parseProduceResponse<
   return data;
 }
 
-/** Response wire shape for v3-v4 - identical, so v4's response.ts re-exports this directly. */
-export const produceResponseV3 = defineResponse({
-  schema: responseBodySchema,
+/**
+ * Response for v3-v4 - identical, so v4's response.ts re-exports this directly. The wire has no
+ * `log_start_offset` before v5, so it decodes as -1, the field's default in Kafka's
+ * `ProduceResponse.json` and what the Java client reports for these versions.
+ */
+export const produceResponseV3: ResponseDefinition<ProduceResponseV3Body> = {
+  decode: async (rawData) => {
+    const decoded = responseBodySchema.read(new Decoder(rawData));
+    return {
+      topics: decoded.topics.map((topic) => ({
+        topicName: topic.topicName,
+        partitions: topic.partitions.map((partition) => ({ ...partition, logStartOffset: -1n })),
+      })),
+      throttleTime: decoded.throttleTime,
+    };
+  },
   parse: parseProduceResponse,
-});
+};

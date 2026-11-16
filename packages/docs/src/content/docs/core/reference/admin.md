@@ -66,8 +66,14 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 `describeConsumerGroups` discovers each group coordinator and sends
 ConsumerGroupDescribe (key 69). Use it for KIP-848 `groupProtocol: 'consumer'`
-groups on Kafka 4.0+. `describeClassicGroups` is an alias for `describeGroups`
+groups on Kafka 4.0+. Each member's `memberType` is `0` (classic) or `1` (consumer), or
+`-1` (unknown) when the coordinator answers with ConsumerGroupDescribe v0, which does not
+carry it (KIP-1099). `describeClassicGroups` is an alias for `describeGroups`
 (DescribeGroups, key 15) for classic JoinGroup/SyncGroup groups.
+
+`listShareGroupOffsets` returns each share partition's `startOffset` and `lag`. `lag` is
+`-1n` (unknown) when the coordinator answers with DescribeShareGroupOffsets v0, which does
+not carry it (KIP-1226).
 
 `describeProducers` queries each partition leader by default. Set `brokerId` to inspect a
 specific replica. It returns one entry per partition with `activeProducers`; producer IDs,

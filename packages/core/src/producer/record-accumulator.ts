@@ -53,6 +53,15 @@ interface BufferWaiter {
   reject: (error: Error) => void;
 }
 
+/**
+ * Built outside {@link createRecordAccumulator}: the deadline timer stays armed after the last send
+ * and holds this factory, and a closure made inside would keep the accumulator, its `dispatch` and
+ * so the producer reachable until the timer fires.
+ */
+function deliveryTimeoutErrorFactory(deliveryTimeoutMs: number): () => Error {
+  return () => new KafkaDeliveryTimeoutError(deliveryTimeoutMs);
+}
+
 function groupKey(entry: PendingSend): string {
   const compression = entry.compression ?? COMPRESSION_TYPES.None;
   const compressionLevel = entry.compressionLevel ?? '';
@@ -73,7 +82,7 @@ export function createRecordAccumulator({
   maxRequestSize,
 }: RecordAccumulatorOptions): RecordAccumulator {
   /** Every pending send's delivery deadline, on one timer. */
-  const deliveryDeadlines = new DeliveryDeadlines(() => new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
+  const deliveryDeadlines = new DeliveryDeadlines(deliveryTimeoutErrorFactory(deliveryTimeoutMs));
   const bufferLimit =
     lingerMs > 0 && bufferMemory != null && bufferMemory > 0 ? bufferMemory : Number.POSITIVE_INFINITY;
   /** Linger-buffered calls the next flush sends. */

@@ -27,7 +27,8 @@ export class DeliveryDeadline extends Deadline {
  * the timer is armed for the earliest deadline and re-armed only when it fires or a send starts
  * with an earlier deadline, not per send. A settled send leaves the timer armed, so it can fire
  * before any deadline is due. While nothing is tracked the timer is unref'd, so an idle producer
- * doesn't keep the process alive.
+ * doesn't keep the process alive, but it stays armed for up to the delivery timeout and holds
+ * `createError` until then: build that outside the owner's scope so the owner can be collected.
  *
  * Deadlines are `performance.now()` ms, so a wall-clock jump moves none of them.
  */

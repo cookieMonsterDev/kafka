@@ -289,9 +289,8 @@ export class Cluster {
   }
 
   /**
-   * Resolves `target`, runs `work` on its broker and retries. Admin requests, InitProducerId and
-   * TxnOffsetCommit use it; it suits other low-rate coordinator or controller requests too. Each
-   * attempt resolves the target again.
+   * Resolves `target`, runs `work` on its broker and retries. Admin requests and the other low-rate
+   * coordinator or controller requests use it. Each attempt resolves the target again.
    * An error is retried when the target moved (`NOT_CONTROLLER` for the controller, a moved or
    * unreachable coordinator, a stale partition leader) or its type is in `options.retryOn`, after
    * {@link recover}; any other error rejects as is. With a function, `targets` is read on every

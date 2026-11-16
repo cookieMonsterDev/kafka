@@ -128,6 +128,23 @@ describe('producer.transactions', () => {
     await first.disconnect();
   });
 
+  testIfKafkaAtLeast_0_11('adds offsets first in a transaction begun right after the previous one ended', async () => {
+    producer = createProducer({ cluster: createCluster(), logger: newLogger(), idempotent: true, transactionalId });
+    await producer.connect();
+    const consumerGroupId = `group-${secureRandom()}`;
+
+    // The coordinator answers CONCURRENT_TRANSACTIONS until it has finished ending the previous
+    // transaction; AddOffsetsToTxn has to wait that out.
+    for (let offset = 1n; offset <= 4n; offset++) {
+      const transaction = await producer.transaction();
+      await transaction.sendOffsets({
+        consumerGroupId,
+        topics: [{ topic: topicName, partitions: [{ partition: 0, offset }] }],
+      });
+      await (offset % 2n === 0n ? transaction.commit() : transaction.abort());
+    }
+  });
+
   /** KIP-890 part 2: transaction V2 (Produce v12+, Kafka 4.0+) lets Produce itself cover AddPartitionsToTxn. */
   function countAddPartitionsToTxnRequests() {
     const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();

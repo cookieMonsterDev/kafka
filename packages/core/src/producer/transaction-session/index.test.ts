@@ -584,6 +584,37 @@ describe('producer/transactionSession', () => {
       expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
     });
 
+    it.each(['CONCURRENT_TRANSACTIONS', 'GROUP_LOAD_IN_PROGRESS'])(
+      'retries AddOffsetsToTxn on %s, as right after the previous transaction ended',
+      async (type) => {
+        const broker = fakeBroker();
+        broker.addOffsetsToTxn.mockRejectedValueOnce(errorOfType(type)).mockResolvedValueOnce(undefined);
+        const txn = await createSession(fakeCluster(broker), { initialRetryTime: 1 }).begin(fakeSender);
+
+        await txn.sendOffsets({ consumerGroupId, topics });
+        expect(broker.addOffsetsToTxn).toHaveBeenCalledTimes(2);
+        expect(broker.txnOffsetCommit).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('sends AddOffsetsToTxn to a fresh transaction coordinator when the current one moved', async () => {
+      const staleBroker = fakeBroker();
+      staleBroker.addOffsetsToTxn.mockRejectedValue(errorOfType('NOT_COORDINATOR_FOR_GROUP'));
+      const freshBroker = fakeBroker();
+      const cluster = fakeCluster(staleBroker);
+      cluster.findGroupCoordinator = vi
+        .fn()
+        .mockResolvedValueOnce(staleBroker) // transaction coordinator lookup, during begin
+        .mockResolvedValueOnce(staleBroker) // transaction coordinator lookup, first AddOffsetsToTxn
+        .mockResolvedValue(freshBroker); // every lookup after the refresh
+      const txn = await createSession(cluster, { initialRetryTime: 1 }).begin(fakeSender);
+
+      await txn.sendOffsets({ consumerGroupId, topics });
+      expect(staleBroker.addOffsetsToTxn).toHaveBeenCalledOnce();
+      expect(freshBroker.addOffsetsToTxn).toHaveBeenCalledOnce();
+      expect(cluster.recover).toHaveBeenCalledOnce();
+    });
+
     it('retries while the group coordinator is still loading', async () => {
       const broker = fakeBroker();
       broker.txnOffsetCommit

@@ -5,6 +5,7 @@ import {
   COORDINATOR_LOADING_ERRORS,
   isProducerFenced,
   STALE_METADATA_ERRORS,
+  TRANSACTION_COORDINATOR_BUSY_ERRORS,
   unionOf,
 } from '../../cluster/error-classifier';
 import { sendInitProducerId } from '../../cluster/init-producer-id';
@@ -368,14 +369,18 @@ export function createTransactionSession({
   }): Promise<void> {
     // Kept from the start, so a call still running when its transaction ends cannot add to the next one.
     const transactionOffsets = offsetsToMarkCommitted;
-    const transactionCoordinator = await findTransactionCoordinator();
 
-    await transactionCoordinator.send(AddOffsetsToTxn, {
-      transactionalId,
-      producerId: ledger.getProducerId(),
-      producerEpoch: ledger.getProducerEpoch(),
-      groupId: consumerGroupId,
-    });
+    await cluster.run(
+      coordinatorTarget(transactionalId, COORDINATOR_TYPES.TRANSACTION),
+      (transactionCoordinator) =>
+        transactionCoordinator.send(AddOffsetsToTxn, {
+          transactionalId,
+          producerId: ledger.getProducerId(),
+          producerEpoch: ledger.getProducerEpoch(),
+          groupId: consumerGroupId,
+        }),
+      { retrier: retry, retryOn: TRANSACTION_COORDINATOR_BUSY_ERRORS },
+    );
 
     hasOffsetsAddedToTransaction = true;
 

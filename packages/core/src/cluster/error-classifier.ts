@@ -58,6 +58,15 @@ export const COORDINATOR_LOADING_ERRORS: ReadonlySet<string> = new Set(['GROUP_L
  */
 export const CONCURRENT_TRANSACTIONS_ERRORS: ReadonlySet<string> = new Set(['CONCURRENT_TRANSACTIONS']);
 
+/**
+ * The transaction coordinator is loading the transactional id's state, or is still ending its
+ * previous transaction, for example right after the producer ended it. Requests to it retry both.
+ */
+export const TRANSACTION_COORDINATOR_BUSY_ERRORS: ReadonlySet<string> = unionOf(
+  COORDINATOR_LOADING_ERRORS,
+  CONCURRENT_TRANSACTIONS_ERRORS,
+);
+
 /** A replica or broker the request needs is down; fresh metadata may route around it. */
 export const REPLICA_UNAVAILABLE_ERRORS: ReadonlySet<string> = new Set([
   'REPLICA_NOT_AVAILABLE',

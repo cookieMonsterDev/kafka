@@ -42,4 +42,24 @@ describe('network/createSocket', () => {
     fakeSocket.emit('timeout');
     expect(onTimeout).toHaveBeenCalledOnce();
   });
+
+  it('passes onread through to the socketFactory', () => {
+    const socketFactory = vi.fn().mockReturnValue(new EventEmitter());
+    const onread = { buffer: Buffer.alloc(1), callback: () => true };
+
+    createSocket({
+      socketFactory,
+      host: 'localhost',
+      port: 9092,
+      ssl: null,
+      onConnect: vi.fn(),
+      onData: vi.fn(),
+      onEnd: vi.fn(),
+      onError: vi.fn(),
+      onTimeout: vi.fn(),
+      onread,
+    });
+
+    expect(socketFactory).toHaveBeenCalledWith(expect.objectContaining({ onread }));
+  });
 });

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
+import type { OnReadOpts } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
@@ -111,6 +112,45 @@ function createFakeSocket(): { socket: net.Socket; destroy: Mock; end: Mock; rem
   socket.destroy = destroy;
   socket.removeAllListeners = removeAllListeners;
   return { socket, destroy, end, removeAllListeners };
+}
+
+/**
+ * Connects using a fake socket whose factory keeps `onread`, and returns `receive`, which feeds bytes
+ * through it the way Node does: it asks `buffer()` for the first target when the socket is created
+ * and again after each read, and each read fills at most its target.
+ */
+async function connectWithOnreadSocket(
+  createConnection: (port: number, overrides?: Partial<ConnectionOptions>) => Connection,
+  overrides: Partial<ConnectionOptions> = {},
+): Promise<{ connection: Connection; onread: OnReadOpts; receive: (bytes: Buffer) => Uint8Array[] }> {
+  const { socket } = createFakeSocket();
+  let onread: OnReadOpts | undefined;
+  const socketFactory: SocketFactory = (args) => {
+    onread = args.onread;
+    queueMicrotask(args.onConnect);
+    return socket;
+  };
+
+  const connection = createConnection(9999, { socketFactory, ...overrides });
+  await connection.connect();
+  if (onread === undefined) throw new Error('the connection passed no onread');
+  const hook: OnReadOpts = onread;
+  const nextTarget = (): Uint8Array => (typeof hook.buffer === 'function' ? hook.buffer() : hook.buffer);
+
+  let target = nextTarget();
+  const receive = (bytes: Buffer): Uint8Array[] => {
+    const targets: Uint8Array[] = [];
+    let offset = 0;
+    while (offset < bytes.length) {
+      const bytesRead = bytes.copy(target, 0, offset);
+      offset += bytesRead;
+      targets.push(target);
+      hook.callback(bytesRead, target);
+      target = nextTarget();
+    }
+    return targets;
+  };
+  return { connection, onread: hook, receive };
 }
 
 /** Connects using a fake socket that never emits data, so requests stay in flight indefinitely. */
@@ -559,6 +599,114 @@ describe('network/Connection', () => {
       expect(() => socket.emit('data', frame)).not.toThrow();
       await expect(request).rejects.toThrow('Invalid response size 2');
       await vi.waitFor(() => expect(connection.isConnected()).toBe(false));
+    });
+
+    describe('with onread', () => {
+      it('keeps receiving through data events when a custom factory ignores onread', async () => {
+        let receivedOnread = false;
+        const { socket } = createFakeSocket();
+        const socketFactory: SocketFactory = ({ onConnect, onread }) => {
+          receivedOnread = onread !== undefined;
+          queueMicrotask(onConnect);
+          return socket;
+        };
+        const connection = createConnection(9999, { socketFactory });
+        await connection.connect();
+        const [request] = await sendInFlight(connection, 1);
+
+        socket.emit('data', responseFrame(0, Buffer.from('via data')));
+
+        expect(receivedOnread).toBe(true);
+        await expect(request).resolves.toEqual(Buffer.from('via data'));
+      });
+
+      it('reads the rest of a split frame straight into its buffer, stopping at the frame end', async () => {
+        const { connection, receive } = await connectWithOnreadSocket(createConnection, { maxInFlightRequests: 5 });
+        const [first, second] = await sendInFlight(connection, 2);
+        const firstFrame = responseFrame(0, Buffer.alloc(10_000, 0xa1));
+        const secondFrame = responseFrame(1, Buffer.alloc(100, 0xb2));
+
+        const [scratch] = receive(firstFrame.subarray(0, 3_000));
+        const [frameRemainder, nextTarget] = receive(Buffer.concat([firstFrame.subarray(3_000), secondFrame]));
+
+        expect(frameRemainder?.length).toBe(firstFrame.length - 3_000);
+        expect(nextTarget).toBe(scratch);
+        const firstPayload = await first;
+        expect(firstPayload).toEqual(Buffer.alloc(10_000, 0xa1));
+        expect(firstPayload?.buffer).toBe(frameRemainder?.buffer);
+        await expect(second).resolves.toEqual(Buffer.alloc(100, 0xb2));
+      });
+
+      it('never writes a frame again once it has been handed on', async () => {
+        const { connection, receive } = await connectWithOnreadSocket(createConnection, { maxInFlightRequests: 5 });
+        const [first, second] = await sendInFlight(connection, 2);
+        const firstFrame = responseFrame(0, Buffer.alloc(5_000, 0xa1));
+        const secondFrame = responseFrame(1, Buffer.alloc(5_000, 0xb2));
+
+        receive(firstFrame.subarray(0, 100));
+        receive(Buffer.concat([firstFrame.subarray(100), secondFrame.subarray(0, 100)]));
+        const firstPayload = await first;
+        receive(secondFrame.subarray(100));
+
+        expect(firstPayload).toEqual(Buffer.alloc(5_000, 0xa1));
+        await expect(second).resolves.toEqual(Buffer.alloc(5_000, 0xb2));
+      });
+
+      it('copies complete frames out of the reused read buffer before the next read', async () => {
+        const { connection, receive } = await connectWithOnreadSocket(createConnection, { maxInFlightRequests: 5 });
+        const [first, second, third] = await sendInFlight(connection, 3);
+
+        const [scratch] = receive(
+          Buffer.concat([responseFrame(0, Buffer.alloc(40, 0xa1)), responseFrame(1, Buffer.alloc(30, 0xb2))]),
+        );
+        const [nextTarget] = receive(responseFrame(2, Buffer.alloc(50, 0xc3)));
+
+        expect(nextTarget).toBe(scratch);
+        const [firstPayload, secondPayload, thirdPayload] = await Promise.all([first, second, third]);
+        expect(firstPayload).toEqual(Buffer.alloc(40, 0xa1));
+        expect(secondPayload).toEqual(Buffer.alloc(30, 0xb2));
+        expect(thirdPayload).toEqual(Buffer.alloc(50, 0xc3));
+        expect(firstPayload?.buffer).not.toBe(scratch?.buffer);
+      });
+
+      it('ignores a read into anything but the pending frame remainder', async () => {
+        const { connection, onread, receive } = await connectWithOnreadSocket(createConnection);
+        const [request] = await sendInFlight(connection, 1);
+        const frame = responseFrame(0, Buffer.alloc(1_000, 0xe5));
+
+        receive(frame.subarray(0, 100));
+        onread.callback(500, Buffer.alloc(500, 0xff));
+        receive(frame.subarray(100));
+
+        await expect(request).resolves.toEqual(Buffer.alloc(1_000, 0xe5));
+      });
+
+      it('grows a frame larger than the up-front allocation while reading into it', async () => {
+        const { connection, receive } = await connectWithOnreadSocket(createConnection, { requestTimeout: 5_000 });
+        const [request] = await sendInFlight(connection, 1);
+        const body = Buffer.alloc(16 * 1024 * 1024 + 100_000);
+        for (let i = 0; i < body.length; i += 4096) body[i] = (i / 4096) % 256;
+
+        receive(responseFrame(0, body));
+
+        const payload = await request;
+        expect(payload?.equals(body)).toBe(true);
+      });
+
+      it('reads SASL responses through the reused read buffer', async () => {
+        const { connection, receive } = await connectWithOnreadSocket(createConnection);
+        const reply = connection.sendAuthRequest({
+          request: { encode: () => Buffer.alloc(0) },
+          response: { decode: async (rawData: Buffer) => Buffer.from(rawData), parse: async (data: Buffer) => data },
+        });
+        const frame = responseFrame(0, Buffer.alloc(100, 0xd4));
+
+        const [scratch] = receive(frame.subarray(0, 50));
+        const [nextTarget] = receive(frame.subarray(50));
+
+        expect(nextTarget).toBe(scratch);
+        await expect(reply).resolves.toEqual(frame);
+      });
     });
   });
 

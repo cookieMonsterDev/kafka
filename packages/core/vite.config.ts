@@ -4,9 +4,9 @@ import { defineConfig } from 'vitest/config';
 const NON_ASCII = /[\u0080-\uFFFF]/;
 
 /**
- * Fails the build when an emitted chunk contains a non-ASCII character. V8 keeps a module source
- * with any character above Latin-1 as a two-byte string, which doubled the bundle's retained heap.
- * Escape such characters in source strings (`\u2014`) or rewrite them.
+ * Fails the build when an emitted chunk still contains a non-ASCII character after `charset: 'ascii'`
+ * escaped what it could, such as one in a legal comment. V8 keeps a module source with any character
+ * above Latin-1 as a two-byte string, which takes twice the heap; ASCII is the simpler rule to check.
  */
 function asciiOnlyOutput(): Plugin {
   return {
@@ -50,9 +50,11 @@ export default defineConfig({
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
-        // JSDoc already ships in the `.d.ts` files, where editors read it; in the JavaScript it
-        // was about a quarter of the bytes. Legal and `@__PURE__` annotation comments stay.
+        // JSDoc ships in the `.d.ts` files, where editors read it, and is about a quarter of the
+        // unminified JavaScript. Legal and `@__PURE__` annotation comments stay.
         comments: { jsdoc: false, legal: true, annotation: true },
+        // Escapes non-ASCII characters in strings and regexes; `asciiOnlyOutput` checks the rest.
+        charset: 'ascii',
         codeSplitting: {
           groups: [
             // Code that both `index.js` and `lazy-requests.js` use (schema, encoder, errors). It

@@ -8,14 +8,10 @@
 // deletes nothing and exits with an error.
 //
 // Usage: node scripts/prune-unreachable-declarations.mjs <dist-dir>
-import { readFileSync, readdirSync, rmSync, rmdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, rmdirSync } from 'node:fs';
 import path from 'node:path';
 
-import { RELATIVE_SPECIFIER } from './declaration-specifiers.mjs';
-
-function isFile(filePath) {
-  return statSync(filePath, { throwIfNoEntry: false })?.isFile() ?? false;
-}
+import { isFile, RELATIVE_SPECIFIER } from './declaration-files.mjs';
 
 // Returns the reachable declaration files as absolute paths, and the specifiers it could not follow.
 function findReachableDeclarations(entryFile) {
@@ -25,7 +21,8 @@ function findReachableDeclarations(entryFile) {
 
   while (pending.length > 0) {
     const declarationFile = pending.pop();
-    for (const [, , , specifier] of readFileSync(declarationFile, 'utf8').matchAll(RELATIVE_SPECIFIER)) {
+    for (const match of readFileSync(declarationFile, 'utf8').matchAll(RELATIVE_SPECIFIER)) {
+      const { specifier } = match.groups;
       const target = path.resolve(path.dirname(declarationFile), specifier.replace(/\.js$/, '.d.ts'));
       if (!target.endsWith('.d.ts') || !isFile(target)) {
         problems.push(`${declarationFile}: "${specifier}" names no emitted declaration`);
@@ -39,18 +36,6 @@ function findReachableDeclarations(entryFile) {
   }
 
   return { reachable, problems };
-}
-
-// Removes directories left empty after pruning, deepest first so a parent sees its children gone.
-function removeEmptyDirectories(distDir) {
-  const directories = readdirSync(distDir, { recursive: true })
-    .map((entry) => path.join(distDir, entry))
-    .filter((entry) => statSync(entry).isDirectory())
-    .sort((left, right) => right.length - left.length);
-
-  for (const directory of directories) {
-    if (readdirSync(directory).length === 0) rmdirSync(directory);
-  }
 }
 
 const distDir = process.argv[2];
@@ -71,10 +56,15 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-for (const entry of readdirSync(distDir, { recursive: true })) {
-  if (!entry.endsWith('.d.ts')) continue;
-
-  const declarationFile = path.resolve(distDir, entry);
-  if (!reachable.has(declarationFile)) rmSync(declarationFile);
+const directories = [];
+for (const entry of readdirSync(distDir, { recursive: true, withFileTypes: true })) {
+  const entryPath = path.resolve(entry.parentPath, entry.name);
+  if (entry.isDirectory()) directories.push(entryPath);
+  else if (entry.name.endsWith('.d.ts') && !reachable.has(entryPath)) rmSync(entryPath);
 }
-removeEmptyDirectories(distDir);
+
+// Deepest first, so a directory whose subdirectories were all emptied is empty by its turn.
+directories.sort((left, right) => right.length - left.length);
+for (const directory of directories) {
+  if (readdirSync(directory).length === 0) rmdirSync(directory);
+}

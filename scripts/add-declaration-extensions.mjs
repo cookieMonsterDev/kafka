@@ -8,16 +8,12 @@
 // silently degrades to `any`.
 //
 // Usage: node scripts/add-declaration-extensions.mjs <dist-dir>
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { RELATIVE_SPECIFIER } from './declaration-specifiers.mjs';
+import { isFile, RELATIVE_SPECIFIER } from './declaration-files.mjs';
 
 const EXPLICIT_EXTENSION = /\.(?:js|mjs|cjs|json)$/;
-
-function isFile(filePath) {
-  return statSync(filePath, { throwIfNoEntry: false })?.isFile() ?? false;
-}
 
 // Mirrors `bundler` resolution, which tries `<specifier>.ts` before `<specifier>/index.ts`;
 // `.`, `..`, and a trailing `/` name a directory, so only its index can match.

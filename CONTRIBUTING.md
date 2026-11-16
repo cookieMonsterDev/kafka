@@ -206,7 +206,9 @@ Do not hand-format. Prettier and ESLint run on commit and in CI.
 
 **Domain terms:** name Kafka concepts in code, docs, and errors with the words in [GLOSSARY.md](GLOSSARY.md), and avoid the synonyms it lists under _Avoid_. Existing public names keep their current spelling until a breaking release. If your change adds, renames, or redefines a domain concept, update the glossary in the same PR.
 
-**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`. Each package's `build:types` then runs `scripts/add-declaration-extensions.mjs`, which adds the `.js` extensions that `node16`/`nodenext` consumers need to the extensionless relative imports copied from `src`. In `@cookiemonsterdev/kafka-core`, `scripts/prune-unreachable-declarations.mjs` then deletes the `.d.ts` files that `dist/index.d.ts` does not reach. Its Vite build also drops JSDoc from the JavaScript (the `.d.ts` files keep it) and fails when the output has a non-ASCII character; write one in a source string as an escape such as `\u2014`.
+**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`. Each package's `build:types` then runs `scripts/add-declaration-extensions.mjs`, which adds the `.js` extensions that `node16`/`nodenext` consumers need to the extensionless relative imports copied from `src`. In `@cookiemonsterdev/kafka-core`, `scripts/prune-unreachable-declarations.mjs` then deletes the `.d.ts` files that `dist/index.d.ts` does not reach.
+
+**Bundled JavaScript** (`@cookiemonsterdev/kafka-core`): the Vite build drops JSDoc from the JavaScript (the `.d.ts` files keep it), escapes non-ASCII characters in strings and regexes, and fails if any non-ASCII character is left, for example in a legal comment.
 
 ## Tests
 

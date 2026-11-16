@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
-const REPO_SCRIPTS = resolve(PACKAGE_ROOT, '../../scripts');
+const REPO_SCRIPTS_DIR = resolve(PACKAGE_ROOT, '../../scripts');
 
 /**
  * Headroom above the 290 files this suite packs (dist, README, package.json). It catches a
@@ -60,7 +60,7 @@ describe('published file count', () => {
     });
     // The rest of `build:types`, so the declarations packed here are the ones that get published.
     for (const script of ['add-declaration-extensions.mjs', 'prune-unreachable-declarations.mjs']) {
-      execFileSync(process.execPath, [join(REPO_SCRIPTS, script), distDir]);
+      execFileSync(process.execPath, [join(REPO_SCRIPTS_DIR, script), distDir]);
     }
     cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
     cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));

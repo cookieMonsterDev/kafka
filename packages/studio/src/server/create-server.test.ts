@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { findFreePort } from '../testing/free-port';
 import { createStudioServer, sendError, sendJson } from './create-server';
 import { Router } from './router';
 
@@ -145,9 +146,9 @@ describe('createStudioServer', () => {
 
   it('applies the auth policy to /api/* before the router even matches', async () => {
     router.get('/api/health', (_req, res) => sendJson(res, 200, { ok: true }));
-    // A fixed port, not `withServer`'s ephemeral 0 — the auth policy has to know the bound port
-    // before the request arrives, so it has to be chosen before `listen()` too.
-    const port = 58_201;
+    // Not `withServer`'s port 0: the auth policy has to know the bound port before the request
+    // arrives, so it has to be chosen before `listen()` too.
+    const port = await findFreePort();
     const server = createStudioServer({ router, auth: { host: '127.0.0.1', port, token: 'secret' } });
 
     await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));

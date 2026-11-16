@@ -1,5 +1,6 @@
 import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
+import { findFreePort } from '../testing/free-port';
 import { NoFreePortError, PortUnavailableError, resolvePort } from './port';
 
 const HOST = '127.0.0.1';
@@ -24,10 +25,7 @@ describe('resolvePort', () => {
   });
 
   it('returns the requested port when it is free', async () => {
-    // A genuinely free ephemeral port, found by asking the OS for one and releasing it.
-    const probe = await listenOn(0);
-    const { port } = probe.address() as net.AddressInfo;
-    await close(probe);
+    const port = await findFreePort(HOST);
 
     await expect(resolvePort({ host: HOST, requestedPort: port })).resolves.toBe(port);
   });
@@ -41,7 +39,9 @@ describe('resolvePort', () => {
   });
 
   it('scans the range and returns the first free port', async () => {
-    const range: [number, number] = [59_000, 59_010];
+    // Below every OS's ephemeral range (Linux starts at 32768), so no outgoing connection can
+    // hold these ports; only a listening service could.
+    const range: [number, number] = [24_000, 24_010];
     const busy = await listenOn(range[0]);
     busyServers.push(busy);
 
@@ -49,10 +49,10 @@ describe('resolvePort', () => {
   });
 
   it('throws NoFreePortError when every port in range is busy', async () => {
-    const range: [number, number] = [59_020, 59_021];
-    for (const port of [range[0], range[1]]) {
-      busyServers.push(await listenOn(port));
-    }
+    const server = await listenOn(0);
+    busyServers.push(server);
+    const { port } = server.address() as net.AddressInfo;
+    const range: [number, number] = [port, port];
 
     await expect(resolvePort({ host: HOST, range })).rejects.toBeInstanceOf(NoFreePortError);
   });

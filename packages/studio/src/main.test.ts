@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { main } from './main';
 import type { Runtime } from './runtime';
+import { findFreePort } from './testing/free-port';
 
 function fakeRuntime(overrides: Partial<Runtime> = {}): {
   runtime: Runtime;
@@ -58,9 +59,7 @@ describe('main', () => {
   it('starts the server, then shuts down cleanly on abort', async () => {
     const controller = new AbortController();
     const { runtime, stdout } = fakeRuntime({
-      // Must not reuse a port from src/index.test.ts: vitest runs test files in parallel
-      // processes, and an explicit --port is "this port or nothing" (see server/port.ts).
-      argv: ['--port', '59106', '--browser', 'none'],
+      argv: ['--port', String(await findFreePort()), '--browser', 'none'],
       signal: controller.signal,
     });
 

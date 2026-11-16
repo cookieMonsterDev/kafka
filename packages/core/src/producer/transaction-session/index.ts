@@ -91,7 +91,7 @@ export function createTransactionSession({
    * Offsets sent with the current transaction. They are marked committed in the cluster's record
    * only once the transaction commits, so an aborted one leaves no offset the group never stored.
    */
-  let pendingCommittedOffsets: { groupId: string; topic: string; partition: number; offset: bigint }[] = [];
+  let offsetsToMarkCommitted: Parameters<Cluster['markOffsetAsCommitted']>[0][] = [];
 
   /** The transaction from `begin` until it ends. */
   let open: TransactionHandle | undefined;
@@ -101,7 +101,7 @@ export function createTransactionSession({
     if (to === TRANSACTION_STATES.READY) {
       transactionTopicPartitions = new Map();
       hasOffsetsAddedToTransaction = false;
-      pendingCommittedOffsets = [];
+      offsetsToMarkCommitted = [];
       open = undefined;
     }
   });
@@ -311,7 +311,7 @@ export function createTransactionSession({
       throw error;
     });
     if (transactionResult) {
-      for (const committedOffset of pendingCommittedOffsets) cluster.markOffsetAsCommitted(committedOffset);
+      for (const committedOffset of offsetsToMarkCommitted) cluster.markOffsetAsCommitted(committedOffset);
     }
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
@@ -340,6 +340,8 @@ export function createTransactionSession({
     consumerGroupId: string;
     topics: readonly TopicOffsets[];
   }): Promise<void> {
+    // Kept from the start, so a call still running when its transaction ends cannot add to the next one.
+    const transactionOffsets = offsetsToMarkCommitted;
     const transactionCoordinator = await findTransactionCoordinator();
 
     await transactionCoordinator.send(AddOffsetsToTxn, {
@@ -405,7 +407,7 @@ export function createTransactionSession({
 
     for (const { topic, partitions } of topics) {
       for (const { partition, offset } of partitions) {
-        pendingCommittedOffsets.push({ groupId: consumerGroupId, topic, partition, offset });
+        transactionOffsets.push({ groupId: consumerGroupId, topic, partition, offset });
       }
     }
   }

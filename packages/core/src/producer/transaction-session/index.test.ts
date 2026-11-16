@@ -472,6 +472,31 @@ describe('producer/transactionSession', () => {
       expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
     });
 
+    it('does not mark offsets of a call that finishes after its transaction ended', async () => {
+      const broker = fakeBroker();
+      let finishTxnOffsetCommit: (() => void) | undefined;
+      broker.txnOffsetCommit.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishTxnOffsetCommit = resolve;
+          }),
+      );
+      const cluster = fakeCluster(broker);
+      const session = createSession(cluster);
+      const ended = await session.begin(fakeSender);
+      const sending = ended.sendOffsets({ consumerGroupId, topics });
+      await vi.waitFor(() => expect(finishTxnOffsetCommit).toBeDefined());
+
+      await ended.abort();
+      finishTxnOffsetCommit?.();
+      await sending;
+      const next = await session.begin(fakeSender);
+      await session.enrollPartitions([{ topic, partitions: [{ partition: 0 }] }]);
+      await next.commit();
+
+      expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
+    });
+
     it('marks offsets committed only once a failed commit is retried successfully', async () => {
       const broker = fakeBroker();
       broker.endTxn.mockRejectedValueOnce(new Error('connection lost'));

@@ -71,13 +71,15 @@ describe('consumer.transactions', () => {
   });
 
   testIfKafkaAtLeast_2_4(
-    'still commits offsets sent with an aborted transaction for a partition retained across a rebalance',
+    'auto-commits a processed offset whose transaction aborted, on a partition retained across a rebalance',
     async () => {
       // Shared like the record of one Kafka client, so the producer's offset marks reach the consumer.
       const offsets: CommittedOffsetsByGroup = new Map();
       const groupId = `group-${secureRandom()}`;
       const inputTopic = `test-topic-${secureRandom()}`;
+      const outputTopic = `test-topic-${secureRandom()}`;
       await createTopic({ topic: inputTopic, partitions: 2 });
+      await createTopic({ topic: outputTopic, partitions: 1 });
 
       const seed = createProducer({ cluster: createCluster(), logger: newLogger() });
       await seed.connect();
@@ -117,14 +119,18 @@ describe('consumer.transactions', () => {
       const join = waitForConsumerToJoinGroup(consumer, { label: 'first' });
       await consumer.run({
         eachMessage: async (event) => {
+          const { topic, partition, message } = event;
           const transaction = await producer!.transaction();
-          await transaction.sendOffsets({
-            consumerGroupId: groupId,
-            topics: [
-              { topic: event.topic, partitions: [{ partition: event.partition, offset: event.message.offset + 1n }] },
-            ],
-          });
-          await transaction.abort();
+          try {
+            await transaction.send({ topic: outputTopic, messages: [{ value: message.value }] });
+            await transaction.sendOffsets({
+              consumerGroupId: groupId,
+              topics: [{ topic, partitions: [{ partition, offset: message.offset + 1n }] }],
+            });
+          } finally {
+            // Also when a step fails, so the redelivered message can begin a new transaction.
+            await transaction.abort();
+          }
           consumed.push(event);
         },
       });
@@ -142,7 +148,8 @@ describe('consumer.transactions', () => {
       expect(retained).toHaveLength(1);
       const [partition] = retained as [number];
 
-      // The aborted offsets never reached the group, so auto-commit has to commit the processed one.
+      // The retained partition keeps its committed offset without an OffsetFetch. The aborted
+      // transaction must not have marked its offset committed there, or auto-commit skips it.
       await waitFor(
         async () => {
           const [committed] = await consumer!.committed([{ topic: inputTopic, partition }]);

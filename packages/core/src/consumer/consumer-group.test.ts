@@ -16,6 +16,16 @@ import type { Assigner } from './types';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
+/** Sends the group's next heartbeat as if its interval had elapsed. */
+async function heartbeatWhenDue(consumerGroup: ConsumerGroup): Promise<void> {
+  const now = vi.spyOn(Date, 'now').mockReturnValue(consumerGroup.nextHeartbeatAt);
+  try {
+    await consumerGroup.heartbeat();
+  } finally {
+    now.mockRestore();
+  }
+}
+
 function createGroup(overrides: Partial<ConsumerGroupOptions> = {}): ConsumerGroup {
   return new ConsumerGroup({
     logger: silentLogger,
@@ -26,6 +36,7 @@ function createGroup(overrides: Partial<ConsumerGroupOptions> = {}): ConsumerGro
     assigners: [],
     sessionTimeout: 30_000,
     rebalanceTimeout: 60_000,
+    heartbeatInterval: 3_000,
     maxBytesPerPartition: 1024,
     minBytes: 1,
     maxBytes: 1024,
@@ -281,6 +292,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -295,7 +307,6 @@ describe('consumer/consumer-group', () => {
       retry: { retries: 0 },
     });
     consumerGroup.cluster = cluster;
-    consumerGroup.memberId = 'stale-member';
     consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     const onPartitionsRevoked = vi.fn();
     const onPartitionsLost = vi.fn();
@@ -362,6 +373,55 @@ describe('consumer/consumer-group', () => {
     expect(consumerGroupHeartbeat).not.toHaveBeenCalled();
   });
 
+  it('has a classic heartbeat due only between joining and leaving the group', async () => {
+    const heartbeat = vi.fn(async () => undefined);
+    const leaveGroup = vi.fn(async () => undefined);
+    const coordinator = {
+      joinGroup: vi.fn(async () => ({
+        generationId: 1,
+        leaderId: 'other-member',
+        memberId: 'member-1',
+        members: [],
+        groupProtocol: 'eager',
+      })),
+      syncGroup: vi.fn(async () => ({
+        memberAssignment: MemberAssignment.encode({ version: 0, assignment: { topic1: [0] } }),
+      })),
+      heartbeat,
+      leaveGroup,
+    };
+    const consumerGroup = createGroup({
+      cluster: {
+        findGroupCoordinator: vi.fn(async () => coordinator),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }]),
+        committedOffsets: vi.fn(() => ({})),
+        findBroker: vi.fn(),
+      } as unknown as Cluster,
+      assigners: [
+        {
+          name: 'eager',
+          version: 0,
+          protocolType: 'eager',
+          assign: vi.fn(async () => []),
+          protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
+        },
+      ],
+    });
+    expect(consumerGroup.nextHeartbeatAt).toBe(Infinity);
+
+    await consumerGroup.joinAndSync();
+    expect(consumerGroup.nextHeartbeatAt).toBeLessThanOrEqual(Date.now() + 3_000);
+
+    await heartbeatWhenDue(consumerGroup);
+    expect(heartbeat).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ groupId: 'group', memberId: 'member-1', groupGenerationId: 1 }),
+    );
+
+    await consumerGroup.leave();
+    expect(leaveGroup).toHaveBeenCalled();
+    expect(consumerGroup.nextHeartbeatAt).toBe(Infinity);
+  });
+
   it('joins with ConsumerGroupHeartbeat when groupProtocol is consumer', async () => {
     const topicId = Buffer.from('0123456789abcdef');
     const consumerGroupHeartbeat = vi
@@ -394,6 +454,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -450,6 +511,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -484,6 +546,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -552,6 +615,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -724,6 +788,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -753,8 +818,7 @@ describe('consumer/consumer-group', () => {
     ]);
     onPartitionsAssigned.mockClear();
 
-    consumerGroup.lastRequest = 0;
-    await consumerGroup.heartbeat({ interval: 0 });
+    await heartbeatWhenDue(consumerGroup);
 
     expect(groupJoins).toHaveLength(2);
     expect(groupJoins[1]?.payload.memberAssignment).toEqual({ topic1: [0] });
@@ -840,6 +904,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -930,6 +995,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -978,6 +1044,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -1131,6 +1198,7 @@ describe('consumer/consumer-group', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 3_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -1225,6 +1293,7 @@ describe('consumer/consumer-group', () => {
         assigners: [],
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
+        heartbeatInterval: 3_000,
         maxBytesPerPartition: 1024,
         minBytes: 1,
         maxBytes: 8192,
@@ -1462,6 +1531,7 @@ describe('consumer/consumer-group', () => {
         assigners: [],
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
+        heartbeatInterval: 3_000,
         maxBytesPerPartition: 1024,
         minBytes: 1,
         maxBytes: 8192,
@@ -1683,6 +1753,7 @@ describe('consumer/consumer-group', () => {
         assigners: [],
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
+        heartbeatInterval: 3_000,
         maxBytesPerPartition: 1024,
         minBytes: 1,
         maxBytes: 1024,
@@ -1729,6 +1800,7 @@ describe('consumer/consumer-group', () => {
         assigners: [],
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
+        heartbeatInterval: 3_000,
         maxBytesPerPartition: 1024,
         minBytes: 1,
         maxBytes: 1024,
@@ -1801,8 +1873,6 @@ describe('consumer/consumer-group', () => {
         sessionId: 55,
       });
       const { consumerGroup } = createGroupWithBroker(brokerFetch);
-      consumerGroup.memberId = null;
-      consumerGroup.coordinator = null;
 
       await consumerGroup.fetch('1');
       await consumerGroup.leave();
@@ -1852,6 +1922,7 @@ describe('consumer/consumer-group', () => {
         assigners: [],
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
+        heartbeatInterval: 3_000,
         maxBytesPerPartition: 1024,
         minBytes: 1,
         maxBytes: 1024,
@@ -1889,12 +1960,12 @@ describe('consumer/consumer-group', () => {
       expect(groupJoins).toHaveLength(0);
     });
 
-    it('heartbeat() and heartbeatDue() are no-ops', async () => {
+    it('never has a heartbeat due, and heartbeat() is a no-op', async () => {
       const { consumerGroup } = createAssignGroup();
       await consumerGroup.joinAndSync();
 
-      expect(consumerGroup.heartbeatDue(0)).toBe(false);
-      await expect(consumerGroup.heartbeat({ interval: 0 })).resolves.toBeUndefined();
+      expect(consumerGroup.nextHeartbeatAt).toBe(Infinity);
+      await expect(consumerGroup.heartbeat()).resolves.toBeUndefined();
     });
 
     it('leave() does not perform a group leave RPC', async () => {
@@ -2022,8 +2093,7 @@ describe('consumer/consumer-group', () => {
       }
       const offsetCommit = vi.fn(async () => undefined);
       const coordinator = { consumerGroupHeartbeat, offsetCommit, isConnected: () => true };
-      const consumerGroup = createGroup();
-      consumerGroup.useConsumerProtocol = true;
+      const consumerGroup = createGroup({ groupProtocol: 'consumer' });
       consumerGroup.cluster = {
         findGroupCoordinator: vi.fn(async () => coordinator),
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
@@ -2036,8 +2106,7 @@ describe('consumer/consumer-group', () => {
 
     it('commits with the member epoch bumped by a heartbeat that carried no assignment', async () => {
       const { consumerGroup, offsetCommit } = await joinedGroup(heartbeatResponse(2));
-      consumerGroup.lastRequest = 0;
-      await consumerGroup.heartbeat({ interval: 0 });
+      await heartbeatWhenDue(consumerGroup);
 
       consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 5n });
       await consumerGroup.commitOffsets();
@@ -2050,8 +2119,7 @@ describe('consumer/consumer-group', () => {
       consumerGroup.resolveOffset({ topic: 'topic1', partition: 0, offset: 41n });
       consumerGroup.resolveOffset({ topic: 'topic1', partition: 1, offset: 9n });
 
-      consumerGroup.lastRequest = 0;
-      await consumerGroup.heartbeat({ interval: 0 });
+      await heartbeatWhenDue(consumerGroup);
       expect(consumerGroup.assigned()).toEqual([{ topic: 'topic1', partitions: [0] }]);
 
       expect(consumerGroup.position('topic1', 0)).toBe(42n);

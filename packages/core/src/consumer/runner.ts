@@ -6,9 +6,10 @@ import { retrier, type RetryOptions } from '../retry/index';
 import { isPromiseLike } from '../utils/is-promise-like';
 import { runHooks } from '../utils/run-hooks';
 import { Batch } from './batch';
-import { isFencedMemberError, type ConsumerGroupHandle } from './consumer-group';
+import type { ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
+import { isFencedMemberError } from './membership/group-membership';
 import type { ConsumerHooks, EachBatchHandler, EachMessageHandler, Offsets } from './types';
 import { DEFAULT_PREFETCH_MAX_BATCHES, DEFAULT_PREFETCH_MAX_BYTES, estimatePrefetchBytes } from './worker-queue';
 
@@ -31,7 +32,6 @@ export interface RunnerOptions {
   prefetchMaxBytes?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
-  heartbeatInterval: number;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
   autoCommit?: boolean;
@@ -81,7 +81,6 @@ export class Runner extends EventEmitter {
   eachBatchAutoResolve: boolean;
   eachBatch: EachBatchHandler | null | undefined;
   eachMessage: EachMessageHandler | null | undefined;
-  heartbeatInterval: number;
   retrier: ReturnType<typeof retrier>;
   onCrash: (reason: Error) => void | Promise<void>;
   autoCommit: boolean;
@@ -115,7 +114,6 @@ export class Runner extends EventEmitter {
     prefetchMaxBytes = DEFAULT_PREFETCH_MAX_BYTES,
     eachBatch,
     eachMessage,
-    heartbeatInterval,
     onCrash,
     retry,
     autoCommit = true,
@@ -130,7 +128,6 @@ export class Runner extends EventEmitter {
     this.eachBatchAutoResolve = eachBatchAutoResolve;
     this.eachBatch = eachBatch;
     this.eachMessage = eachMessage;
-    this.heartbeatInterval = heartbeatInterval;
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
@@ -336,7 +333,7 @@ export class Runner extends EventEmitter {
 
   async heartbeat(): Promise<void> {
     try {
-      await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval });
+      await this.consumerGroup.heartbeat();
     } catch (e) {
       if (isRebalancing(e as { type?: string })) {
         await this.autoCommitOffsets();
@@ -345,8 +342,11 @@ export class Runner extends EventEmitter {
     }
   }
 
+  /** Runs per record, so it stays synchronous until a heartbeat is actually due. */
   heartbeatIfDue(): Promise<void> | undefined {
-    if (!this.consumerGroup.heartbeatDue(this.heartbeatInterval)) return undefined;
+    const { nextHeartbeatAt } = this.consumerGroup;
+    // Assign mode never heartbeats; skip the clock read.
+    if (nextHeartbeatAt === Infinity || Date.now() < nextHeartbeatAt) return undefined;
     return this.heartbeat();
   }
 

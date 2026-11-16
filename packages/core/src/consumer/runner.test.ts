@@ -70,7 +70,7 @@ describe('consumer/runner', () => {
       commitOffsetsIfNecessary: vi.fn(async () => undefined),
       uncommittedOffsets: vi.fn(() => ({ topics: [] })),
       heartbeat: vi.fn(async () => undefined),
-      heartbeatDue: vi.fn(() => false),
+      nextHeartbeatAt: Infinity,
       assigned: vi.fn(() => []),
       isLeader: vi.fn(() => true),
       isPaused: vi.fn().mockReturnValue(false),
@@ -97,7 +97,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -120,7 +119,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
 
@@ -145,7 +143,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
 
@@ -191,6 +188,7 @@ describe('consumer/runner', () => {
       assigners: [],
       sessionTimeout: 30_000,
       rebalanceTimeout: 60_000,
+      heartbeatInterval: 60_000,
       maxBytesPerPartition: 1024,
       minBytes: 1,
       maxBytes: 1024,
@@ -219,7 +217,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 60_000,
       retry: { retries: 0 },
     });
 
@@ -245,7 +242,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -298,7 +294,6 @@ describe('consumer/runner', () => {
         seenOffsets.push(message.offset);
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
 
     await runner.start();
@@ -348,7 +343,6 @@ describe('consumer/runner', () => {
         }
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
 
     await runner.start();
@@ -368,7 +362,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -406,7 +399,6 @@ describe('consumer/runner', () => {
       eachBatch: vi.fn(async () => undefined),
       eachBatchAutoResolve: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -429,7 +421,6 @@ describe('consumer/runner', () => {
       eachBatch,
       autoCommit: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -457,7 +448,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -480,7 +470,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     await runner.start();
     await waitFor(() => onCrash.mock.calls.length > 0);
@@ -496,7 +485,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     await runner.start();
     const offsets = { topics: [{ topic: topicName, partitions: [{ offset: 1n, partition }] }] };
@@ -518,7 +506,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
     runner.scheduleFetchManager = vi.fn();
@@ -546,7 +533,6 @@ describe('consumer/runner', () => {
       },
       concurrency: 10,
       retry: { retries: 0 },
-      heartbeatInterval: 3000,
     });
     await runner.start();
     await waitFor(() => onCrash.mock.calls.length > 0);
@@ -569,7 +555,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
 
@@ -598,7 +583,6 @@ describe('consumer/runner', () => {
         void runner!.stop();
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -612,7 +596,6 @@ describe('consumer/runner', () => {
 
   it('does not heartbeat or OffsetCommit after every eachMessage record', async () => {
     const consumerGroup = fakeConsumerGroup();
-    vi.mocked(consumerGroup.heartbeatDue).mockReturnValue(false);
     const offsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -623,7 +606,6 @@ describe('consumer/runner', () => {
         offsets.push(message.offset);
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -643,7 +625,11 @@ describe('consumer/runner', () => {
 
   it('heartbeats from the runner only when the interval has elapsed', async () => {
     const consumerGroup = fakeConsumerGroup();
-    vi.mocked(consumerGroup.heartbeatDue).mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+    const nextHeartbeatAt = vi
+      .fn(() => 0)
+      .mockReturnValueOnce(Date.now() + 60_000)
+      .mockReturnValueOnce(Date.now() + 60_000);
+    Object.defineProperty(consumerGroup, 'nextHeartbeatAt', { get: nextHeartbeatAt });
     runner = new Runner({
       consumerGroup,
       onCrash: vi.fn(),
@@ -651,7 +637,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachMessage: async () => undefined,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -663,7 +648,7 @@ describe('consumer/runner', () => {
     });
     await runner.handleBatch(batch);
 
-    expect(consumerGroup.heartbeatDue).toHaveBeenCalled();
+    expect(nextHeartbeatAt).toHaveBeenCalledTimes(4);
     expect(consumerGroup.heartbeat).toHaveBeenCalledTimes(2);
     expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
     expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
@@ -678,7 +663,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -700,7 +684,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachMessage: async () => undefined,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -730,7 +713,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [first, second] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -767,7 +749,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachBatch,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [onConsume] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -800,7 +781,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [throwingHook] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -825,7 +805,6 @@ describe('consumer/runner', () => {
       eachMessage: async () => undefined,
       autoCommit: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -851,7 +830,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       started.scheduleFetchManager = vi.fn();
       await started.start();
@@ -911,7 +889,7 @@ describe('consumer/runner', () => {
       expect(consumerGroup.heartbeat).not.toHaveBeenCalled();
 
       await heartbeats[0]!();
-      expect(consumerGroup.heartbeat).toHaveBeenCalledWith({ interval: 3000 });
+      expect(consumerGroup.heartbeat).toHaveBeenCalledTimes(1);
     });
 
     it('resolves an async handler message only after its promise settles', async () => {
@@ -1029,7 +1007,6 @@ describe('consumer/runner', () => {
           seenOffsets.push(message.offset);
         },
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1058,7 +1035,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage: async () => undefined,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hasAutoCommitCadence: true,
       });
       runner.scheduleFetchManager = vi.fn();
@@ -1085,7 +1061,6 @@ describe('consumer/runner', () => {
         },
         maxRecords: 5,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1108,7 +1083,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachBatch,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1140,7 +1114,6 @@ describe('consumer/runner', () => {
         eachBatch,
         maxRecords: 5,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1166,7 +1139,6 @@ describe('consumer/runner', () => {
         maxRecords: 5,
         hasAutoCommitCadence: true,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1188,7 +1160,6 @@ describe('consumer/runner', () => {
         eachMessage: async () => undefined,
         maxRecords: 1,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();

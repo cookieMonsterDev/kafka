@@ -1,24 +1,25 @@
-import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import { KafkaError, KafkaNonRetriableError, KafkaStaleTopicMetadataAssignment, isRebalancing } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
-import {
-  CONSUMER_GROUP_JOIN_EPOCH,
-  CONSUMER_GROUP_LEAVE_EPOCH,
-} from '../protocol/requests/consumer-group-heartbeat/index';
-import type { ConsumerGroupHeartbeatTopicPartitions } from '../protocol/requests/consumer-group-heartbeat/index';
-import type { ConsumerGroupHeartbeatResponseV1Body } from '../protocol/requests/consumer-group-heartbeat/v1/response';
 import { retrier, type RetryOptions } from '../retry/index';
 import { arrayDiff } from '../utils/array-diff';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
-import { MemberAssignment } from './assigner-protocol';
 import { Batch } from './batch';
 import { FetchSessionHandler } from './fetch-session';
 import { topicPartitionKey, trackFetchBatch } from './fetcher';
-import { CONNECT, GROUP_JOIN, HEARTBEAT, RECEIVED_UNSUBSCRIBED_TOPICS } from './instrumentation-events';
+import { CONNECT, GROUP_JOIN } from './instrumentation-events';
+import { AssignModeMembership } from './membership/assign-mode-membership';
+import { ClassicMembership } from './membership/classic-membership';
+import { ConsumerProtocolMembership } from './membership/consumer-protocol-membership';
+import {
+  isFencedMemberError,
+  type AssignmentChange,
+  type GroupMembership,
+  type MembershipHost,
+} from './membership/group-membership';
 import { AssignedOffsetManager } from './offset-manager/assigned-offset-manager';
 import { OffsetManager, type OffsetManagerHandle } from './offset-manager/index';
 import type { TopicOffsetConfiguration } from './offset-reset';
@@ -125,25 +126,6 @@ interface PreferredReadReplica {
   expireAt: number;
 }
 
-/** `UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`: the coordinator fenced this member out of the group. */
-export function isFencedMemberError(error: { type?: string }): boolean {
-  return error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH';
-}
-
-function revokedPartitions(
-  previousAssignment: readonly TopicPartitions[],
-  nextAssignment: readonly TopicPartitions[],
-): TopicPartitions[] {
-  const nextPartitionsByTopic = new Map(nextAssignment.map(({ topic, partitions }) => [topic, new Set(partitions)]));
-
-  return previousAssignment
-    .map(({ topic, partitions }) => ({
-      topic,
-      partitions: partitions.filter((partition) => !nextPartitionsByTopic.get(topic)?.has(partition)),
-    }))
-    .filter(({ partitions }) => partitions.length > 0);
-}
-
 /** `{ topic, partitions: number[] }[]` -> `{ topic, partition }[]`, for the rebalance callbacks. */
 function flattenTopicPartitions(topicPartitions: readonly TopicPartitions[]): TopicPartition[] {
   return topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => ({ topic, partition })));
@@ -161,6 +143,8 @@ export interface ConsumerGroupOptions {
   assigners: readonly Assigner[];
   sessionTimeout: number;
   rebalanceTimeout: number;
+  /** Heartbeat interval in milliseconds; under the consumer protocol, only until the broker sends its own. */
+  heartbeatInterval: number;
   maxBytesPerPartition: number;
   minBytes: number;
   maxBytes: number;
@@ -230,6 +214,11 @@ export interface ConsumerGroupFetchOptions {
 export interface ConsumerGroupHandle {
   readonly groupId: string | null;
   readonly memberId: string | null;
+  /**
+   * When the next heartbeat is due, in epoch milliseconds, or `Infinity` when none is. Compared
+   * per record, so it is a number rather than a method.
+   */
+  readonly nextHeartbeatAt: number;
   shuttingDown?: boolean;
   connect: () => Promise<void>;
   joinAndSync: () => Promise<void>;
@@ -240,8 +229,8 @@ export interface ConsumerGroupHandle {
   commitOffsets: (offsets?: Offsets) => Promise<void>;
   commitOffsetsIfNecessary: () => Promise<void>;
   uncommittedOffsets: () => OffsetsByTopicPartition;
-  heartbeat: (options: { interval: number }) => Promise<void>;
-  heartbeatDue: (interval: number) => boolean;
+  /** Sends a heartbeat when one is due. */
+  heartbeat: () => Promise<void>;
   pause: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   resume: (topicPartitions: readonly { topic: string; partitions?: number[] }[]) => void;
   isPaused: (topic: string, partition: number) => boolean;
@@ -257,7 +246,7 @@ export interface ConsumerGroupHandle {
   highWatermark: (topic: string, partition: number) => bigint | null;
 }
 
-export class ConsumerGroup implements ConsumerGroupHandle {
+export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   cluster: Cluster;
   groupId: string | null;
   topics: string[];
@@ -267,8 +256,6 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   instrumentationEmitter: InstrumentationEventEmitter;
   retrier: ReturnType<typeof retrier>;
   assigners: readonly Assigner[];
-  sessionTimeout: number;
-  rebalanceTimeout: number;
   maxBytesPerPartition: number;
   minBytes: number;
   maxBytes: number;
@@ -280,15 +267,10 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   checkCrcs: boolean;
   rackId: string;
   metadataMaxAge: number;
-  groupInstanceId: string | null;
-  /** When true, membership uses ConsumerGroupHeartbeat (KIP-848) instead of JoinGroup/SyncGroup. */
-  useConsumerProtocol: boolean;
-  /** `serverAssignor` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
-  groupRemoteAssignor: 'uniform' | 'range' | null;
-  /** `subscribedTopicRegex` sent on ConsumerGroupHeartbeat; only set when `useConsumerProtocol` is true. */
-  subscribedTopicRegex: string | null;
-  /** Fallback offset-reset config for topics assigned only via `subscribedTopicRegex`. */
-  defaultTopicConfiguration: TopicOffsetConfiguration | null;
+  /** `serverAssignor` sent on ConsumerGroupHeartbeat; only set with the consumer group protocol. */
+  readonly groupRemoteAssignor: 'uniform' | 'range' | null;
+  /** `subscribedTopicRegex` sent on ConsumerGroupHeartbeat; only set with the consumer group protocol. */
+  readonly subscribedTopicRegex: string | null;
   hooks: ConsumerHooks | undefined;
   onPartitionsRevoked: RebalanceListener | undefined;
   onPartitionsAssigned: RebalanceListener | undefined;
@@ -296,25 +278,13 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   shuttingDown = false;
 
   seekOffset = new SeekOffsets();
-  coordinator: Broker | null = null;
-  generationId: number | null = null;
-  leaderId: string | null = null;
-  memberId: string | null = null;
-  members: { memberId: string; memberMetadata: Buffer; groupInstanceId?: string | null }[] | null = null;
-  groupProtocol: string | null = null;
   partitionsPerSubscribedTopic: Map<string, number[]> | null = null;
   preferredReadReplicasPerTopicPartition: Record<string, Record<number, PreferredReadReplica>> = {};
   offsetManager: OffsetManagerHandle | null = null;
   subscriptionState = new SubscriptionState();
-  lastRequest = Date.now();
-  heartbeatIntervalMs: number | null = null;
 
-  readonly #sharedHeartbeat: (options: { interval: number }) => Promise<void>;
-  #includeJoinFields = true;
-  #ownedTopicPartitions: ConsumerGroupHeartbeatTopicPartitions[] = [];
-  #ownedPartitionsDirty = false;
-  #consumerProtocolJoined = false;
-  readonly #topicNameById = new Map<string, string>();
+  readonly #membership: GroupMembership;
+  readonly #sharedHeartbeat: () => Promise<void>;
   #activeTopicPartitions: Record<string, Set<number>> | null = null;
   #adaptiveMaxBytes: number;
   /** KIP-320: the leader epoch each assigned partition was last fetched under, for truncation detection. */
@@ -325,9 +295,6 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   readonly #fetchableWaiters = new Set<() => void>();
   /** Bumped on every wake, so a fetch can tell that a partition became fetchable while it was in flight. */
   #fetchableGeneration = 0;
-  /** `assign()` mode: fetches these exact partitions and skips join/sync/heartbeat entirely. */
-  readonly #assignMode: boolean;
-  readonly #fixedAssignment: TopicPartitions[] | null;
   /** Latest `highWatermark` seen on a Fetch response, per topic/partition. Backs {@link currentLag}. */
   #highWatermarks: Record<string, Record<number, bigint>> = {};
 
@@ -342,6 +309,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     assigners,
     sessionTimeout,
     rebalanceTimeout,
+    heartbeatInterval,
     maxBytesPerPartition,
     minBytes,
     maxBytes,
@@ -366,10 +334,6 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   }: ConsumerGroupOptions) {
     this.cluster = cluster;
     this.groupId = groupId;
-    this.#assignMode = assignedPartitions != null;
-    this.#fixedAssignment = assignedPartitions
-      ? assignedPartitions.map(({ topic, partitions }) => ({ topic, partitions: [...partitions] }))
-      : null;
     this.topics = [...topics];
     this.topicsSubscribed = [...topics];
     this.topicConfigurations = topicConfigurations;
@@ -377,8 +341,6 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.instrumentationEmitter = instrumentationEmitter;
     this.retrier = retrier({ ...retry });
     this.assigners = assigners;
-    this.sessionTimeout = sessionTimeout;
-    this.rebalanceTimeout = rebalanceTimeout;
     this.maxBytesPerPartition = maxBytesPerPartition;
     this.minBytes = minBytes;
     this.maxBytes = maxBytes;
@@ -390,54 +352,75 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.checkCrcs = checkCrcs;
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
-    this.groupInstanceId = groupInstanceId ?? null;
-    this.useConsumerProtocol = groupProtocol === 'consumer';
     this.hooks = hooks;
     this.onPartitionsRevoked = onPartitionsRevoked;
     this.onPartitionsAssigned = onPartitionsAssigned;
     this.onPartitionsLost = onPartitionsLost;
     this.#adaptiveMaxBytes = maxBytes;
 
-    if (groupRemoteAssignor != null && !this.useConsumerProtocol) {
+    const useConsumerProtocol = groupProtocol === 'consumer';
+    if (groupRemoteAssignor != null && !useConsumerProtocol) {
       this.logger.debug('groupRemoteAssignor is only used with groupProtocol "consumer"; ignoring', {
         groupRemoteAssignor,
         groupProtocol,
       });
     }
-    this.groupRemoteAssignor = this.useConsumerProtocol ? (groupRemoteAssignor ?? null) : null;
+    this.groupRemoteAssignor = useConsumerProtocol ? (groupRemoteAssignor ?? null) : null;
 
-    if (subscribedTopicRegex != null && !this.useConsumerProtocol) {
+    if (subscribedTopicRegex != null && !useConsumerProtocol) {
       this.logger.debug('subscribedTopicRegex is only used with groupProtocol "consumer"; ignoring', {
         subscribedTopicRegex,
         groupProtocol,
       });
     }
-    this.subscribedTopicRegex = this.useConsumerProtocol ? (subscribedTopicRegex ?? null) : null;
-    this.defaultTopicConfiguration = this.useConsumerProtocol ? (defaultTopicConfiguration ?? null) : null;
+    this.subscribedTopicRegex = useConsumerProtocol ? (subscribedTopicRegex ?? null) : null;
 
-    this.#sharedHeartbeat = sharedPromiseTo(async ({ interval }: { interval: number }) => {
-      if (this.#assignMode) return;
+    if (assignedPartitions != null) {
+      this.#membership = new AssignModeMembership(this, assignedPartitions);
+    } else if (useConsumerProtocol) {
+      this.#membership = new ConsumerProtocolMembership(this, {
+        rebalanceTimeout,
+        groupInstanceId: groupInstanceId ?? null,
+        rackId,
+        serverAssignor: this.groupRemoteAssignor,
+        subscribedTopicRegex: this.subscribedTopicRegex,
+        defaultTopicConfiguration: defaultTopicConfiguration ?? null,
+        heartbeatInterval,
+      });
+    } else {
+      this.#membership = new ClassicMembership(this, {
+        sessionTimeout,
+        rebalanceTimeout,
+        groupInstanceId: groupInstanceId ?? null,
+        heartbeatInterval,
+      });
+    }
 
-      if (this.useConsumerProtocol) {
-        await this.#heartbeatConsumerProtocol({ interval });
-        return;
-      }
+    this.#sharedHeartbeat = sharedPromiseTo(() => this.#membership.heartbeat());
+  }
 
-      const { groupId: id, generationId, memberId } = this;
-      const now = Date.now();
+  get coordinator(): Broker | null {
+    return this.#membership.coordinator;
+  }
 
-      if (id && memberId && generationId != null && this.coordinator && now >= this.lastRequest + interval) {
-        const payload = {
-          groupId: id,
-          memberId,
-          groupGenerationId: generationId,
-          groupInstanceId: this.groupInstanceId,
-        };
-        await this.coordinator.heartbeat(payload);
-        this.instrumentationEmitter.emit(HEARTBEAT, payload);
-        this.lastRequest = Date.now();
-      }
-    });
+  get memberId(): string | null {
+    return this.#membership.memberId;
+  }
+
+  get generationId(): number | null {
+    return this.#membership.generationId;
+  }
+
+  get leaderId(): string | null {
+    return this.#membership.leaderId;
+  }
+
+  get groupProtocol(): string | null {
+    return this.#membership.groupProtocol;
+  }
+
+  get nextHeartbeatAt(): number {
+    return this.#membership.nextHeartbeatAt;
   }
 
   isLeader(): boolean {
@@ -454,172 +437,9 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     await this.cluster.refreshMetadataIfNecessary();
   }
 
-  async #join(): Promise<void> {
-    const { groupId, sessionTimeout, rebalanceTimeout } = this;
-    if (!groupId) {
-      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
-    }
-    this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
-
-    const groupData = await this.coordinator.joinGroup({
-      groupId,
-      sessionTimeout,
-      rebalanceTimeout,
-      memberId: this.memberId ?? '',
-      groupInstanceId: this.groupInstanceId,
-      protocolType: 'consumer',
-      groupProtocols: this.assigners.map((assigner) => assigner.protocol({ topics: this.topicsSubscribed })),
-    });
-
-    this.generationId = groupData.generationId;
-    this.leaderId = groupData.leaderId;
-    this.memberId = groupData.memberId;
-    this.members = groupData.members;
-    this.groupProtocol = groupData.groupProtocol;
-  }
-
   async leave(): Promise<void> {
     await this.#closeFetchSessions();
-
-    const { groupId, memberId, coordinator } = this;
-    if (!memberId || !coordinator || !groupId) return;
-
-    if (this.useConsumerProtocol) {
-      if (this.#consumerProtocolJoined) {
-        await coordinator.consumerGroupHeartbeat({
-          groupId,
-          memberId,
-          memberEpoch: CONSUMER_GROUP_LEAVE_EPOCH,
-          instanceId: this.groupInstanceId,
-        });
-      }
-      this.#consumerProtocolJoined = false;
-      this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
-      this.#includeJoinFields = true;
-      this.#ownedTopicPartitions = [];
-      this.#ownedPartitionsDirty = false;
-      return;
-    }
-
-    await coordinator.leaveGroup({ groupId, memberId, groupInstanceId: this.groupInstanceId });
-    this.memberId = null;
-  }
-
-  async #sync(): Promise<boolean> {
-    let assignment: { memberId: string; memberAssignment: Buffer }[] = [];
-    const { groupId, generationId, memberId, members, groupProtocol, topicsSubscribed, coordinator } = this;
-
-    if (!coordinator || !groupId || generationId == null || memberId == null) {
-      throw new KafkaNonRetriableError('Consumer group has not joined');
-    }
-
-    if (this.isLeader()) {
-      this.logger.debug('Chosen as group leader', { groupId, generationId, memberId, topics: this.topics });
-      const assigner = this.assigners.find(({ name }) => name === groupProtocol);
-
-      if (!assigner) {
-        throw new KafkaNonRetriableError(
-          `Unsupported partition assigner "${groupProtocol}", the assigner wasn't found in the assigners list`,
-        );
-      }
-
-      await this.cluster.refreshMetadata();
-      assignment = await assigner.assign({ members: members ?? [], topics: topicsSubscribed });
-
-      this.logger.debug('Group assignment', {
-        groupId,
-        generationId,
-        groupProtocol,
-        assignment,
-        topics: topicsSubscribed,
-      });
-    }
-
-    this.partitionsPerSubscribedTopic = this.generatePartitionsPerSubscribedTopic();
-    const { memberAssignment } = await coordinator.syncGroup({
-      groupId,
-      generationId,
-      memberId,
-      groupInstanceId: this.groupInstanceId,
-      protocolType: 'consumer',
-      protocolName: groupProtocol,
-      groupAssignment: assignment,
-    });
-
-    const decodedMemberAssignment = MemberAssignment.decode(memberAssignment);
-    const decodedAssignment = decodedMemberAssignment != null ? decodedMemberAssignment.assignment : {};
-
-    this.logger.debug('Received assignment', {
-      groupId,
-      generationId,
-      memberId,
-      memberAssignment: decodedAssignment,
-    });
-
-    const assignedTopics = Object.keys(decodedAssignment);
-    const topicsNotSubscribed = arrayDiff(assignedTopics, topicsSubscribed);
-
-    if (topicsNotSubscribed.length > 0) {
-      const payload = {
-        groupId,
-        generationId,
-        memberId,
-        assignedTopics,
-        topicsSubscribed,
-        topicsNotSubscribed,
-      };
-
-      this.instrumentationEmitter.emit(RECEIVED_UNSUBSCRIBED_TOPICS, payload);
-      this.logger.warn('Consumer group received unsubscribed topics', payload);
-    }
-
-    const safeAssignment = arrayDiff(assignedTopics, topicsNotSubscribed);
-    const currentMemberAssignment = safeAssignment.map((topic) => ({
-      topic,
-      partitions: decodedAssignment[topic] ?? [],
-    }));
-
-    const previousAssignment = this.assigned();
-    const selectedAssigner = this.assigners.find(({ name }) => name === groupProtocol);
-    const isCooperative = selectedAssigner?.protocolType === 'cooperative';
-    // Cooperative-sticky (KIP-429) settles over two JoinGroup/SyncGroup rounds: this round's
-    // `currentMemberAssignment` already leaves foreign-owned partitions unassigned (see
-    // `applyCooperativeConstraint` in sticky-assigner.ts), so `partitionsToRevoke` is only the
-    // subset this member is actually giving up - not its whole previous assignment. A classic
-    // (eager) rebalance has no such settling round: the member's entire prior assignment is
-    // revoked and its entire new assignment is granted in one round.
-    const partitionsToRevoke = isCooperative ? revokedPartitions(previousAssignment, currentMemberAssignment) : [];
-    const revoked = isCooperative ? partitionsToRevoke : previousAssignment;
-    const gained = isCooperative
-      ? revokedPartitions(currentMemberAssignment, previousAssignment)
-      : currentMemberAssignment;
-
-    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
-
-    await this.#installAssignment(currentMemberAssignment);
-
-    selectedAssigner?.onAssignment?.(
-      currentMemberAssignment.reduce<MemberAssignmentMap>(
-        (partitionsByTopic, { topic, partitions }) => {
-          partitionsByTopic[topic] = partitions;
-          return partitionsByTopic;
-        },
-        Object.create(null) as MemberAssignmentMap,
-      ),
-    );
-
-    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
-
-    if (partitionsToRevoke.length > 0) {
-      this.logger.debug('Cooperative assignment revoked partitions; rejoining to settle assignment', {
-        groupId,
-        generationId,
-        memberId,
-        partitionsToRevoke,
-      });
-    }
-
-    return partitionsToRevoke.length > 0;
+    await this.#membership.leave();
   }
 
   /**
@@ -648,12 +468,10 @@ export class ConsumerGroup implements ConsumerGroupHandle {
 
   /**
    * Declares the current assignment lost without a clean revoke and fires `onPartitionsLost`
-   * with it (instead of `onPartitionsRevoked`). Callers must invoke this as soon as they detect
-   * the member was fenced out of the group (`UNKNOWN_MEMBER_ID` / `FENCED_MEMBER_EPOCH`) -
-   * before rejoining - both so the callback reflects reality (a lost partition may already be
-   * owned by someone else; a pending offset commit for it should typically be abandoned) and so
-   * the next successful rebalance's revoke/assign diff doesn't also report these same partitions
-   * as revoked, since the local assignment is cleared here.
+   * with it (instead of `onPartitionsRevoked`): a lost partition may already be owned by someone
+   * else, so a pending offset commit for it should typically be abandoned. Clearing the local
+   * assignment here also keeps the next rebalance's revoke/assign diff from reporting these same
+   * partitions as revoked.
    */
   async notifyPartitionsLost(): Promise<void> {
     const lost = this.assigned();
@@ -675,15 +493,24 @@ export class ConsumerGroup implements ConsumerGroupHandle {
    */
   async recoverFencedMember(error: { type?: string }): Promise<void> {
     await this.notifyPartitionsLost();
-    if (error.type === 'UNKNOWN_MEMBER_ID') this.memberId = null;
-    this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
-    this.#includeJoinFields = true;
-    this.#consumerProtocolJoined = false;
+    this.#membership.resetFencedMember(error);
+  }
+
+  async changeAssignment({ assignment, revoked, gained, onInstalled }: AssignmentChange): Promise<void> {
+    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
+    await this.#installAssignment(assignment);
+    onInstalled?.();
+    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
+  }
+
+  updateCommitGeneration(generationId: number): void {
+    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = generationId;
   }
 
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<void> {
     const { groupId, generationId, memberId, coordinator } = this;
-    if (!this.#assignMode && (!coordinator || generationId == null || memberId == null)) {
+    const isGroupMember = this.#membership.isGroupMember;
+    if (isGroupMember && (!coordinator || generationId == null || memberId == null)) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -725,7 +552,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       {},
     );
 
-    if (this.#assignMode) {
+    if (!isGroupMember) {
       if (this.offsetManager instanceof AssignedOffsetManager) {
         this.offsetManager.updateAssignment(memberAssignment);
       } else {
@@ -776,184 +603,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     this.offsetManager = offsetManager;
   }
 
-  /**
-   * `assign()` mode: install the user-supplied partitions directly, skipping JoinGroup/SyncGroup
-   * entirely. Refreshes metadata first so `#installAssignment`'s partition-awareness check has
-   * current data.
-   */
-  async #installFixedAssignment(): Promise<void> {
-    await this.cluster.refreshMetadata();
-    await this.#installAssignment(this.#fixedAssignment ?? []);
-    this.logger.info('Assigned partitions, no group membership', { assignment: this.#fixedAssignment });
-  }
-
-  #ensureMemberId(): string {
-    if (!this.memberId) {
-      this.memberId = randomUUID();
-    }
-    return this.memberId;
-  }
-
-  #topicIdKey(topicId: Buffer): string {
-    return topicId.toString('hex');
-  }
-
-  async #resolveTopicName(topicId: Buffer): Promise<string> {
-    const key = this.#topicIdKey(topicId);
-    const cached = this.#topicNameById.get(key);
-    if (cached) return cached;
-
-    // With a pattern, a topic id can also belong to a topic the pattern matched.
-    if (this.topicsSubscribed.length === 1 && this.subscribedTopicRegex == null) {
-      const name = this.topicsSubscribed[0];
-      if (name != null) {
-        this.#topicNameById.set(key, name);
-        return name;
-      }
-    }
-
-    await this.#refreshTopicIdMapFromDescribe();
-    const resolved = this.#topicNameById.get(key);
-    if (resolved) return resolved;
-
-    throw new KafkaNonRetriableError(`Unable to resolve topic id ${key} to a subscribed topic name`);
-  }
-
-  async #refreshTopicIdMapFromDescribe(): Promise<void> {
-    const { coordinator, groupId, memberId } = this;
-    if (!coordinator || !groupId) return;
-
-    const { groups } = await coordinator.consumerGroupDescribe({
-      groupIds: [groupId],
-      includeAuthorizedOperations: false,
-    });
-    const group = groups.find((entry) => entry.groupId === groupId);
-    if (!group) return;
-
-    const members = memberId ? group.members.filter((member) => member.memberId === memberId) : group.members;
-    for (const member of members) {
-      for (const assignment of [member.assignment, member.targetAssignment]) {
-        for (const { topicId, topicName } of assignment.topicPartitions) {
-          if (topicName) this.#topicNameById.set(this.#topicIdKey(topicId), topicName);
-        }
-      }
-    }
-  }
-
-  async #heartbeatConsumerProtocol({
-    interval,
-    force = false,
-    ackDepth = 0,
-  }: {
-    interval: number;
-    force?: boolean;
-    ackDepth?: number;
-  }): Promise<void> {
-    const { groupId, coordinator } = this;
-    if (!coordinator || !groupId) {
-      throw new KafkaNonRetriableError('Consumer group has not joined');
-    }
-
-    const memberId = this.#ensureMemberId();
-    const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
-    const now = Date.now();
-    if (!force && now < this.lastRequest + heartbeatInterval) return;
-
-    const memberEpoch = this.generationId ?? CONSUMER_GROUP_JOIN_EPOCH;
-    // Epoch 0 is a (re)join. The broker returns INVALID_REQUEST unless rebalanceTimeoutMs is
-    // set, subscribedTopicNames (or regex) is non-null, and TopicPartitions is an empty list —
-    // null means "unchanged", which is illegal before the member exists.
-    const isJoining = memberEpoch === CONSUMER_GROUP_JOIN_EPOCH;
-    const includeJoinFields = this.#includeJoinFields || isJoining;
-    const includeOwnedPartitions = this.#ownedPartitionsDirty;
-    const response = await coordinator.consumerGroupHeartbeat({
-      groupId,
-      memberId,
-      memberEpoch,
-      instanceId: includeJoinFields ? this.groupInstanceId : null,
-      rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
-      rebalanceTimeoutMs: includeJoinFields ? this.rebalanceTimeout : -1,
-      subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
-      subscribedTopicRegex: includeJoinFields ? this.subscribedTopicRegex : null,
-      serverAssignor: includeJoinFields ? this.groupRemoteAssignor : null,
-      topicPartitions: isJoining ? [] : includeOwnedPartitions ? this.#ownedTopicPartitions : null,
-    });
-
-    this.#includeJoinFields = false;
-    this.#ownedPartitionsDirty = false;
-    this.lastRequest = Date.now();
-    this.instrumentationEmitter.emit(HEARTBEAT, {
-      groupId,
-      memberId,
-      groupGenerationId: response.memberEpoch,
-      groupInstanceId: this.groupInstanceId,
-    });
-
-    await this.#applyHeartbeatResponse(response);
-
-    // Ack the new assignment on the next heartbeat immediately. The broker will not give
-    // revoked partitions to other members until this member reports the updated owned set.
-    if (this.#ownedPartitionsDirty && ackDepth < 8) {
-      await this.#heartbeatConsumerProtocol({ interval: 0, force: true, ackDepth: ackDepth + 1 });
-    }
-  }
-
-  async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body): Promise<void> {
-    if (response.memberId) this.memberId = response.memberId;
-    this.generationId = response.memberEpoch;
-    // The epoch can advance without a new assignment (so no new OffsetManager); commits must carry
-    // the current epoch or the broker rejects them with STALE_MEMBER_EPOCH.
-    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = response.memberEpoch;
-    this.heartbeatIntervalMs = response.heartbeatIntervalMs;
-    this.leaderId = null;
-    this.groupProtocol = 'consumer';
-    const wasJoined = this.#consumerProtocolJoined;
-    if (response.memberEpoch > CONSUMER_GROUP_JOIN_EPOCH) {
-      this.#consumerProtocolJoined = true;
-    }
-
-    if (!response.assignment) return;
-
-    const currentMemberAssignment: TopicPartitions[] = [];
-    const owned: ConsumerGroupHeartbeatTopicPartitions[] = [];
-    for (const { topicId, partitions } of response.assignment.topicPartitions) {
-      const topic = await this.#resolveTopicName(topicId);
-      // Topics assigned only through `subscribedTopicRegex` were unknown at subscribe time, so
-      // they have no entry in `topicConfigurations` by name yet - apply the regex subscription's
-      // offset-reset config the first time each such topic is seen.
-      if (this.defaultTopicConfiguration && !(topic in this.topicConfigurations)) {
-        this.topicConfigurations[topic] = this.defaultTopicConfiguration;
-      }
-      currentMemberAssignment.push({ topic, partitions });
-      owned.push({ topicId, partitions });
-    }
-
-    this.logger.debug('Received consumer-protocol assignment', {
-      groupId: this.groupId,
-      memberId: this.memberId,
-      memberEpoch: this.generationId,
-      memberAssignment: currentMemberAssignment,
-    });
-
-    // KIP-848 reconciliation is inherently incremental at the wire level - the broker sends this
-    // member's full current target assignment on every change, and the client diffs it against
-    // what it already held, same as a cooperative-sticky settling round above.
-    const previousAssignment = this.assigned();
-    const revoked = revokedPartitions(previousAssignment, currentMemberAssignment);
-    const gained = revokedPartitions(currentMemberAssignment, previousAssignment);
-
-    await this.#notify(this.onPartitionsRevoked, revoked, 'onPartitionsRevoked');
-
-    await this.#installAssignment(currentMemberAssignment);
-    this.#ownedTopicPartitions = owned;
-    this.#ownedPartitionsDirty = true;
-
-    await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
-
-    if (wasJoined) this.#emitGroupJoin(0);
-  }
-
-  #emitGroupJoin(duration: number): void {
+  emitGroupJoin(durationMs: number): void {
     const memberAssignment = this.assigned().reduce<MemberAssignmentMap>((result, { topic, partitions }) => {
       result[topic] = partitions;
       return result;
@@ -965,36 +615,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       isLeader: this.isLeader(),
       memberAssignment,
       groupProtocol: this.groupProtocol,
-      duration,
+      duration: durationMs,
     });
-  }
-
-  async #joinConsumerProtocol(): Promise<void> {
-    const groupId = this.groupId;
-    if (!groupId) {
-      throw new KafkaNonRetriableError('Consumer groupId is required to join a consumer group');
-    }
-    this.coordinator = await this.cluster.findGroupCoordinator({ groupId });
-    this.#includeJoinFields = true;
-    this.#ownedPartitionsDirty = false;
-    this.#ownedTopicPartitions = [];
-    this.generationId = CONSUMER_GROUP_JOIN_EPOCH;
-    this.#ensureMemberId();
-    await this.cluster.refreshMetadata();
-
-    await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
-
-    let attempts = 0;
-    while (!this.#consumerProtocolJoined && !this.shuttingDown && attempts < 8) {
-      attempts += 1;
-      await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
-    }
-
-    attempts = 0;
-    while (this.#ownedPartitionsDirty && !this.shuttingDown && attempts < 8) {
-      attempts += 1;
-      await this.#heartbeatConsumerProtocol({ interval: 0, force: true });
-    }
   }
 
   joinAndSync(): Promise<void> {
@@ -1003,25 +625,10 @@ export class ConsumerGroup implements ConsumerGroupHandle {
       if (this.shuttingDown) return;
 
       try {
-        if (this.#assignMode) {
-          await this.#installFixedAssignment();
-          return;
-        }
+        await this.#membership.join();
+        if (this.shuttingDown || !this.#membership.isGroupMember) return;
 
-        if (this.useConsumerProtocol) {
-          await this.#joinConsumerProtocol();
-        } else {
-          let requiresFollowupRebalance: boolean;
-          do {
-            await this.#join();
-            if (this.shuttingDown) return;
-            requiresFollowupRebalance = await this.#sync();
-          } while (requiresFollowupRebalance && !this.shuttingDown);
-        }
-
-        if (this.shuttingDown) return;
-
-        this.#emitGroupJoin(Date.now() - startJoin);
+        this.emitGroupJoin(Date.now() - startJoin);
         this.logger.info('Consumer has joined the group', {
           groupId: this.groupId,
           memberId: this.memberId,
@@ -1114,25 +721,8 @@ export class ConsumerGroup implements ConsumerGroupHandle {
     return this.#requireOffsetManager().uncommittedOffsets();
   }
 
-  async heartbeat({ interval }: { interval: number }): Promise<void> {
-    await this.#sharedHeartbeat({ interval });
-  }
-
-  heartbeatDue(interval: number): boolean {
-    if (this.#assignMode) return false;
-
-    if (this.useConsumerProtocol) {
-      if (!this.coordinator) return false;
-      const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
-      return Date.now() >= this.lastRequest + heartbeatInterval;
-    }
-
-    return (
-      this.memberId != null &&
-      this.generationId != null &&
-      this.coordinator != null &&
-      Date.now() >= this.lastRequest + interval
-    );
+  async heartbeat(): Promise<void> {
+    await this.#sharedHeartbeat();
   }
 
   async fetch(nodeId: string, { isProcessing }: ConsumerGroupFetchOptions = {}): Promise<Batch[]> {
@@ -1633,7 +1223,7 @@ export class ConsumerGroup implements ConsumerGroupHandle {
   checkForStaleAssignment(): void {
     // assign() mode assignment is fixed by the caller; there is no rejoin to trigger, so a
     // partition-count change on the topic is not this consumer's concern to reconcile.
-    if (this.#assignMode || !this.partitionsPerSubscribedTopic) return;
+    if (!this.#membership.isGroupMember || !this.partitionsPerSubscribedTopic) return;
 
     const newPartitionsPerSubscribedTopic = this.generatePartitionsPerSubscribedTopic();
 

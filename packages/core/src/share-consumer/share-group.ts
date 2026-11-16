@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import type { TopicPartitions } from '../consumer/types';
+import { HeartbeatMember } from '../consumer/membership/heartbeat-member';
+import { TopicIdNames, type DescribedTopic } from '../consumer/membership/topic-id-names';
 import { KafkaError, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
-import { SHARE_GROUP_JOIN_EPOCH, SHARE_GROUP_LEAVE_EPOCH } from '../protocol/requests/share-group-heartbeat/index';
+import { SHARE_GROUP_LEAVE_EPOCH } from '../protocol/requests/share-group-heartbeat/index';
 import type { ShareGroupHeartbeatResponseV1Body } from '../protocol/requests/share-group-heartbeat/v1/response';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
@@ -26,17 +27,13 @@ export class ShareGroup {
   readonly #logger: Logger;
   readonly rackId: string;
 
-  memberId: string | null = null;
-  memberEpoch = SHARE_GROUP_JOIN_EPOCH;
-  heartbeatIntervalMs: number | null = null;
+  /** Member id, epoch and heartbeat state, shared with the consumer group protocol (KIP-848). */
+  readonly member = new HeartbeatMember();
   coordinator: Broker | null = null;
   topicsSubscribed: string[] = [];
   assignment: TopicPartitions[] = [];
-  joined = false;
   shuttingDown = false;
-  lastHeartbeatAt = 0;
-  #includeJoinFields = false;
-  #topicNameById = new Map<string, string>();
+  readonly #topicNames: TopicIdNames;
   readonly #retrier: ReturnType<typeof retrier>;
 
   constructor({ cluster, groupId, logger, retry, rackId = '' }: ShareGroupOptions) {
@@ -45,6 +42,27 @@ export class ShareGroup {
     this.#logger = logger.namespace('ShareGroup');
     this.#retrier = retrier(retry);
     this.rackId = rackId;
+    this.#topicNames = new TopicIdNames({
+      subscribedTopics: () => this.topicsSubscribed,
+      hasPattern: () => false,
+      describeAssignedTopics: () => this.#describeAssignedTopics(),
+    });
+  }
+
+  get memberId(): string | null {
+    return this.member.memberId;
+  }
+
+  get memberEpoch(): number {
+    return this.member.memberEpoch;
+  }
+
+  get heartbeatIntervalMs(): number | null {
+    return this.member.heartbeatIntervalMs;
+  }
+
+  get joined(): boolean {
+    return this.member.isJoined;
   }
 
   async connect(): Promise<void> {
@@ -63,10 +81,7 @@ export class ShareGroup {
   async joinAndSync(): Promise<void> {
     await this.#retrier(async () => {
       this.coordinator = await this.cluster.findGroupCoordinator({ groupId: this.groupId });
-      this.#includeJoinFields = true;
-      this.memberEpoch = SHARE_GROUP_JOIN_EPOCH;
-      this.joined = false;
-      this.#ensureMemberId();
+      this.member.startJoin();
       await this.cluster.refreshMetadata();
       await this.#heartbeat({ force: true });
 
@@ -84,12 +99,13 @@ export class ShareGroup {
   }
 
   async leave(): Promise<void> {
-    if (!this.coordinator || !this.memberId) return;
+    const { memberId } = this;
+    if (!this.coordinator || !memberId) return;
     this.shuttingDown = true;
     try {
       await this.coordinator.shareGroupHeartbeat({
         groupId: this.groupId,
-        memberId: this.memberId,
+        memberId,
         memberEpoch: SHARE_GROUP_LEAVE_EPOCH,
         rackId: null,
         subscribedTopicNames: null,
@@ -100,8 +116,7 @@ export class ShareGroup {
         error: error instanceof Error ? error.message : String(error),
       });
     } finally {
-      this.joined = false;
-      this.memberEpoch = SHARE_GROUP_JOIN_EPOCH;
+      this.member.reset();
     }
   }
 
@@ -111,20 +126,15 @@ export class ShareGroup {
 
   heartbeatDue(interval: number): boolean {
     if (!this.coordinator) return false;
-    const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
-    return Date.now() >= this.lastHeartbeatAt + heartbeatInterval;
+    return Date.now() >= this.member.nextHeartbeatAt(interval);
   }
 
   async #heartbeat({ interval = 0, force = false }: { interval?: number; force?: boolean }): Promise<void> {
     if (this.shuttingDown || !this.coordinator) return;
+    if (!force && Date.now() < this.member.nextHeartbeatAt(interval)) return;
 
-    const heartbeatInterval = this.heartbeatIntervalMs ?? interval;
-    const now = Date.now();
-    if (!force && heartbeatInterval > 0 && now < this.lastHeartbeatAt + heartbeatInterval) return;
-
-    const memberId = this.#ensureMemberId();
-    const isJoining = this.memberEpoch === SHARE_GROUP_JOIN_EPOCH;
-    const includeJoinFields = this.#includeJoinFields || isJoining;
+    const memberId = this.member.ensureMemberId();
+    const sendsJoinFields = this.member.sendsJoinFields;
 
     const response = await this.#retrier(() => {
       if (!this.coordinator) throw new KafkaNonRetriableError('Share group coordinator is not set');
@@ -132,27 +142,21 @@ export class ShareGroup {
         groupId: this.groupId,
         memberId,
         memberEpoch: this.memberEpoch,
-        rackId: includeJoinFields ? (this.rackId === '' ? null : this.rackId) : null,
-        subscribedTopicNames: includeJoinFields ? [...this.topicsSubscribed] : null,
+        rackId: sendsJoinFields && this.rackId !== '' ? this.rackId : null,
+        subscribedTopicNames: sendsJoinFields ? [...this.topicsSubscribed] : null,
       });
     });
 
-    this.#includeJoinFields = false;
-    this.lastHeartbeatAt = Date.now();
-    await this.#applyHeartbeatResponse(response);
+    this.member.applyResponse(response);
+    await this.#applyAssignment(response);
   }
 
-  async #applyHeartbeatResponse(response: ShareGroupHeartbeatResponseV1Body): Promise<void> {
-    if (response.memberId) this.memberId = response.memberId;
-    this.memberEpoch = response.memberEpoch;
-    this.heartbeatIntervalMs = response.heartbeatIntervalMs;
-    if (response.memberEpoch > SHARE_GROUP_JOIN_EPOCH) this.joined = true;
-
+  async #applyAssignment(response: ShareGroupHeartbeatResponseV1Body): Promise<void> {
     if (!response.assignment) return;
 
     const nextAssignment: TopicPartitions[] = [];
     for (const { topicId, partitions } of response.assignment.topicPartitions) {
-      const topic = await this.#resolveTopicName(topicId);
+      const topic = await this.#topicNames.resolve(topicId);
       nextAssignment.push({ topic, partitions });
     }
     this.assignment = nextAssignment;
@@ -164,51 +168,16 @@ export class ShareGroup {
     });
   }
 
-  #topicIdKey(topicId: Buffer): string {
-    return topicId.toString('hex');
-  }
-
-  async #resolveTopicName(topicId: Buffer): Promise<string> {
-    const key = this.#topicIdKey(topicId);
-    const cached = this.#topicNameById.get(key);
-    if (cached) return cached;
-
-    if (this.topicsSubscribed.length === 1) {
-      const name = this.topicsSubscribed[0];
-      if (name != null) {
-        this.#topicNameById.set(key, name);
-        return name;
-      }
-    }
-
-    await this.#refreshTopicIdMapFromDescribe();
-    const resolved = this.#topicNameById.get(key);
-    if (resolved) return resolved;
-
-    throw new KafkaNonRetriableError(`Unable to resolve topic id ${key} to a subscribed topic name`);
-  }
-
-  async #refreshTopicIdMapFromDescribe(): Promise<void> {
+  async #describeAssignedTopics(): Promise<DescribedTopic[]> {
     const { coordinator, groupId } = this;
-    if (!coordinator) return;
+    if (!coordinator) return [];
 
     const { groups } = await coordinator.shareGroupDescribe({
       groupIds: [groupId],
       includeAuthorizedOperations: false,
     });
     const group = groups.find((entry) => entry.groupId === groupId);
-    if (!group) return;
-
-    for (const member of group.members) {
-      for (const { topicId, topicName } of member.assignment.topicPartitions) {
-        if (topicName) this.#topicNameById.set(this.#topicIdKey(topicId), topicName);
-      }
-    }
-  }
-
-  #ensureMemberId(): string {
-    if (!this.memberId) this.memberId = randomUUID();
-    return this.memberId;
+    return group?.members.flatMap((entry) => entry.assignment.topicPartitions) ?? [];
   }
 
   assigned(): TopicPartitions[] {

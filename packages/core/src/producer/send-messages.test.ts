@@ -150,6 +150,7 @@ describe('producer/sendMessages', () => {
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -187,6 +188,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -220,6 +222,7 @@ describe('producer/sendMessages', () => {
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -246,7 +249,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
@@ -266,6 +274,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
     }
@@ -286,7 +295,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
     const send = () =>
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] });
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+      });
 
     await expect(send()).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
     await send();
@@ -306,7 +320,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
     const send = () =>
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] });
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+      });
 
     await send();
     brokers[1].produce.mockImplementationOnce(async () => {
@@ -336,7 +355,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(transaction.enrollPartitions).toHaveBeenCalledTimes(3);
     expect(transaction.enrollPartitions).toHaveBeenCalledWith([
@@ -363,7 +387,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     for (const nodeId of [1, 2, 3]) {
       expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
@@ -385,7 +414,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     for (const nodeId of [1, 2, 3]) {
       expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
@@ -409,6 +443,7 @@ describe('producer/sendMessages', () => {
     const response = await sendMessages({
       acks: 0,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
     expect(response).toEqual([]);
@@ -433,6 +468,7 @@ describe('producer/sendMessages', () => {
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -464,7 +500,12 @@ describe('producer/sendMessages', () => {
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
@@ -485,7 +526,12 @@ describe('producer/sendMessages', () => {
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
 
     expect(transaction.sendFailed).toHaveBeenCalled();
@@ -505,7 +551,12 @@ describe('producer/sendMessages', () => {
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
 
     // Partitions 1 and 2 were written inside the transaction; committing now would keep a partial send.
@@ -529,7 +580,12 @@ describe('producer/sendMessages', () => {
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
 
     expect(initProducerId).not.toHaveBeenCalled();
@@ -553,6 +609,7 @@ describe('producer/sendMessages', () => {
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -581,7 +638,12 @@ describe('producer/sendMessages', () => {
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
 
     expect(brokers[2].produce).toHaveBeenCalledTimes(1);
@@ -605,6 +667,7 @@ describe('producer/sendMessages', () => {
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -634,6 +697,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -658,6 +722,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: 0,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -683,6 +748,7 @@ describe('producer/sendMessages', () => {
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 4,
       topicMessages: [{ topic, messages: [{ key: 'ab', value: 'cd' }] }],
     });
 
@@ -714,10 +780,15 @@ describe('producer/sendMessages', () => {
 
     await Promise.all(
       ['first', 'second'].map((value) =>
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value }] }] }),
+        sendMessages({ acks: -1, timeout: 30_000, bytes: 0, topicMessages: [{ topic, messages: [{ value }] }] }),
       ),
     );
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'third' }] }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: [{ value: 'third' }] }],
+    });
 
     // The timed-out request may already be on the log, so its retry must reuse sequence 0 and the
     // queued send must never be handed that range (the broker would dedupe it away as a duplicate).
@@ -760,9 +831,19 @@ describe('producer/sendMessages', () => {
       });
 
       await expect(
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'first' }] }] }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ value: 'first' }] }],
+        }),
       ).rejects.toBeDefined();
-      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'second' }] }] });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'second' }] }],
+      });
 
       // Reusing sequence 0 under epoch 0 would let the broker drop 'second' as a duplicate of a
       // 'first' that may be on the log; a new epoch restarts sequences without that ambiguity.
@@ -801,7 +882,12 @@ describe('producer/sendMessages', () => {
         ...options,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
-      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'a' }] }],
+      });
 
       // The retry must reuse its sequence under the same epoch so the broker can dedupe it.
       expect(requests).toEqual([
@@ -832,6 +918,7 @@ describe('producer/sendMessages', () => {
         sendMessages({
           acks: -1,
           timeout: 30_000,
+          bytes: 0,
           topicMessages: [
             {
               topic,
@@ -910,8 +997,18 @@ describe('producer/sendMessages', () => {
       });
 
       const sends = Promise.all([
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '0', value: 'a' }] }] }),
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '1', value: 'b' }] }] }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ key: '0', value: 'a' }] }],
+        }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ key: '1', value: 'b' }] }],
+        }),
       ]);
       // Give the producer-id recovery time to run while partition 1's request is still in flight.
       await delay(20);
@@ -946,7 +1043,12 @@ describe('producer/sendMessages', () => {
 
       await Promise.all(
         ['0', '1', '2'].map((key) =>
-          sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key, value: key }] }] }),
+          sendMessages({
+            acks: -1,
+            timeout: 30_000,
+            bytes: 0,
+            topicMessages: [{ topic, messages: [{ key, value: key }] }],
+          }),
         ),
       );
 
@@ -990,7 +1092,7 @@ describe('producer/sendMessages', () => {
       });
 
       await expect(
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] }),
+        sendMessages({ acks: -1, timeout: 30_000, bytes: 0, topicMessages: [{ topic, messages: [{ value: 'a' }] }] }),
       ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
       expect(brokers[1].produce).toHaveBeenCalledTimes(1);
 
@@ -1031,6 +1133,7 @@ describe('producer/sendMessages', () => {
       const response = await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1049,6 +1152,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1064,6 +1168,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1078,6 +1183,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1091,6 +1197,7 @@ describe('producer/sendMessages', () => {
       const response = await createFastPathSend(fastPathCluster(brokers))({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
       });
 
@@ -1110,6 +1217,7 @@ describe('producer/sendMessages', () => {
         createFastPathSend(cluster)({
           acks: -1,
           timeout: 30_000,
+          bytes: 0,
           topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
         }),
       ).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
@@ -1125,6 +1233,7 @@ describe('producer/sendMessages', () => {
       )({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1137,6 +1246,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(fastPathCluster(brokers))({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 

@@ -97,7 +97,7 @@ Each call awaits `send()` of 100 records with acks 1. This is the fairest produc
 
 ```chart
 {
-  "description": "Bar chart of batched send (100 records) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (470.2k records/s), Node.js 26: kafka-core (440.4k records/s), Bun: kafka-core (544.3k records/s). The table below lists every value.",
+  "description": "Bar chart of batched send (100 records) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: kafka-core (440.4k records/s), Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -163,7 +163,7 @@ Each call awaits `send()` of one record with acks 1 and no linger, so every reco
 
 ```chart
 {
-  "description": "Bar chart of single-record send with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: Platformatic (12.7k records/s), Node.js 26: Platformatic (13.5k records/s), Bun: Platformatic (12.9k records/s). The table below lists every value.",
+  "description": "Bar chart of single-record send with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: Platformatic (13.5k records/s), Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -229,7 +229,7 @@ Up to 256 concurrent single-record `send()` calls with linger 5 ms. This favours
 
 ```chart
 {
-  "description": "Bar chart of concurrent sends with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (300.4k records/s), Node.js 26: kafka-core (300.6k records/s), Bun: kafka-core (359.3k records/s). The table below lists every value.",
+  "description": "Bar chart of concurrent sends with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -297,7 +297,7 @@ Reads 2,000,000 preloaded records with a per-record handler and the same fetch s
 
 ```chart
 {
-  "description": "Bar chart of consume (per message) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: Platformatic (1.30M records/s), Node.js 26: kafka-core (1.43M records/s), Bun: kafka-core (1.61M records/s). The table below lists every value.",
+  "description": "Bar chart of consume (per message) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -363,7 +363,7 @@ The same read with each library's default settings, including its own auto-commi
 
 ```chart
 {
-  "description": "Bar chart of consume (per message, library defaults) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (1.10M records/s), Node.js 26: kafka-core (1.32M records/s), Bun: kafka-core (1.56M records/s). The table below lists every value.",
+  "description": "Bar chart of consume (per message, library defaults) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -429,7 +429,7 @@ The same read through each client's batch API. Platformatic has none, so its ada
 
 ```chart
 {
-  "description": "Bar chart of consume (batch) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (1.46M records/s), Node.js 26: kafka-core (1.50M records/s), Bun: kafka-core (1.75M records/s). The table below lists every value.",
+  "description": "Bar chart of consume (batch) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -497,7 +497,7 @@ A producer sends 5,000 records per second for 15 seconds while a consumer reads 
 
 ```chart
 {
-  "description": "Bar chart of end-to-end latency, median with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: Platformatic (1.38 ms), Node.js 26: Platformatic (1.45 ms), Bun: kafka-core (1.03 ms). The table below lists every value.",
+  "description": "Bar chart of end-to-end latency, median with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -563,7 +563,7 @@ The same runs, 99th percentile.
 
 ```chart
 {
-  "description": "Bar chart of end-to-end latency, p99 with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: kafka-core (3.14 ms), Node.js 26: kafka-core (4.06 ms), Bun: kafka-core (2.62 ms). The table below lists every value.",
+  "description": "Bar chart of end-to-end latency, p99 with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -629,7 +629,7 @@ Time from process start to the first acknowledged produce.
 
 ```chart
 {
-  "description": "Bar chart of startup, first acknowledged produce with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: kafka-core (103 ms), Node.js 26: kafka-core (93 ms), Bun: KafkaJS (42 ms). The table below lists every value.",
+  "description": "Bar chart of startup, first acknowledged produce with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -763,7 +763,7 @@ Peak container memory while consuming per message, under a 2 GiB limit.
 
 ```chart
 {
-  "description": "Bar chart of peak memory, consume (per message) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: KafkaJS (159 MiB), Node.js 26: KafkaJS (123 MiB), Bun: KafkaJS (111 MiB). The table below lists every value.",
+  "description": "Bar chart of peak memory, consume (per message) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: KafkaJS (123 MiB), Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -829,7 +829,7 @@ Peak container memory while consuming in batches, under a 2 GiB limit.
 
 ```chart
 {
-  "description": "Bar chart of peak memory, consume (batch) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: KafkaJS (140 MiB), Node.js 26: KafkaJS (119 MiB), Bun: kafka-core (120 MiB). The table below lists every value.",
+  "description": "Bar chart of peak memory, consume (batch) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420

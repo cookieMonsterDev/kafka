@@ -78,6 +78,32 @@ describe('cluster/runOnTargets', () => {
     expect(work).toHaveBeenCalledTimes(3);
   });
 
+  it('retries the original error when the recovery fails, logging the recovery failure', async () => {
+    const { context, warn } = fakeContext();
+    context.recover.mockRejectedValueOnce(new KafkaNonRetriableError('metadata refresh failed'));
+    const work = vi.fn().mockRejectedValueOnce(errorOfType('NOT_CONTROLLER')).mockResolvedValue('done');
+
+    await expect(runOnTargets(context, CONTROLLER, work)).resolves.toBe('done');
+    expect(work).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      'Recovery before the retry failed',
+      expect.objectContaining({ recoveryError: 'metadata refresh failed', retryCount: 0 }),
+    );
+  });
+
+  it('rejects with the original error, not the failed recovery, once the retries run out', async () => {
+    const { context } = fakeContext();
+    context.recover.mockRejectedValue(new Error('metadata refresh failed'));
+    const notController = errorOfType('NOT_CONTROLLER');
+    const work = vi.fn().mockRejectedValue(notController);
+
+    await expect(runOnTargets(context, CONTROLLER, work)).rejects.toMatchObject({
+      name: 'KafkaNumberOfRetriesExceeded',
+      message: notController.message,
+    });
+    expect(work).toHaveBeenCalledTimes(3);
+  });
+
   it('refreshes metadata before every attempt when asked to', async () => {
     const { context } = fakeContext();
     const work = vi.fn().mockRejectedValueOnce(errorOfType('NOT_CONTROLLER')).mockResolvedValue('done');

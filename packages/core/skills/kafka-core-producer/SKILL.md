@@ -72,8 +72,9 @@ await producer.sendBatch({
 
 Defaults: `acks: -1` (all in-sync replicas), `lingerMs: 5`, `batchSize: 16384`,
 `maxInFlightRequests: 5`, `idempotent: false`. Consecutive `send()` calls within `lingerMs` share
-one Produce request. Use `lingerMs: 0` for one request per `send()`. For high volume, spread the
-preset:
+one Produce request. `lingerMs: 0` adds no delay, but `send()` calls made in the same event-loop
+turn (before the first `await`) still share one request and its outcome; an awaited `send()` goes
+alone. For high volume, spread the preset:
 
 ```ts
 import { throughputPreset } from '@cookiemonsterdev/kafka-core';

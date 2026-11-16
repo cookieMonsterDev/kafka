@@ -59,7 +59,9 @@ client config. See [Testing](../../guides/testing/).
 ## Linger, batch size, and in-flight defaults
 
 Constructor defaults are throughput-oriented: `lingerMs: 5`, `batchSize: 16384`,
-and `maxInFlightRequests: 5`. Pass `lingerMs: 0` for one Produce per `send()`.
+and `maxInFlightRequests: 5`. Pass `lingerMs: 0` to send without added delay;
+calls made in the same event-loop turn still share a request (see
+[Producer API](../../reference/producer/#linger-0-and-same-turn-sends)).
 Pass `maxInFlightRequests: null` to uncap in-flight requests.
 
 `throughputPreset()` still adds the sticky partitioner, a 32 MiB `bufferMemory`,

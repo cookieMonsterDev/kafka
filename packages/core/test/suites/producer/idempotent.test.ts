@@ -54,4 +54,27 @@ describe('producer.idempotent', () => {
     await waitForMessages(consumed, { number: messages.length });
     expect(consumed.map((c) => c.message.value?.toString())).toEqual(['0', '1', '2', '3']);
   });
+
+  testIfKafkaAtLeast_0_11('writes same-turn sends at lingerMs 0 once and in order', async () => {
+    await producer!.disconnect();
+    producer = createProducer({ cluster: createCluster(), logger: newLogger(), idempotent: true, lingerMs: 0 });
+    await producer.connect();
+
+    const values = ['0', '1', '2', '3'];
+    const results = await Promise.all(
+      values.map((value) => producer!.send({ acks: -1, topic: topicName, messages: [{ key: `k-${value}`, value }] })),
+    );
+    expect(results.map(([metadata]) => metadata?.baseOffset)).toEqual([0n, 0n, 0n, 0n]);
+
+    const consumed: { message: { value: Buffer | null } }[] = [];
+    const join = waitForConsumerToJoinGroup(consumer!);
+    await consumer!.run({
+      eachMessage: async (event) => {
+        consumed.push(event);
+      },
+    });
+    await join;
+    await waitForMessages(consumed, { number: values.length });
+    expect(consumed.map((c) => c.message.value?.toString())).toEqual(values);
+  });
 });

@@ -41,7 +41,9 @@ Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 
 Producer-level `acks` (default `-1`, all ISR) and `compression` apply when a
 call omits them. `lingerMs` defaults to `5`, so consecutive `send()` calls can
-share a Produce request. Pass `lingerMs: 0` for one Produce per `send()`, or
+share a Produce request. Pass `lingerMs: 0` to send without added delay
+(calls made in the same event-loop turn still share a request; see
+[Producer API](../../reference/producer/#linger-0-and-same-turn-sends)), or
 spread [`throughputPreset()`](../throughput/) for sticky partitioning and a
 32 MiB send buffer. See
 [Breaking changes](../../migration/breaking-changes/). See
@@ -104,7 +106,8 @@ Two checks apply:
   `KafkaMessageTooLargeError`. So does a call whose records, combined, exceed
   the cap even though none alone does — this client doesn't split one call's
   records across multiple requests.
-- With `lingerMs` and `batchSize` batching multiple calls together, a
+- With `lingerMs` and `batchSize` batching multiple calls together (or calls
+  made in the same event-loop turn with `lingerMs: 0`), a
   combined batch that would otherwise exceed `maxRequestSize` is sent as
   multiple Produce requests instead of one oversized one — each call's own
   records land in one request, in order, none over the cap.

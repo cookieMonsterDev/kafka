@@ -118,6 +118,28 @@ describe('producer.send', () => {
     );
   });
 
+  it('sends same-turn calls with lingerMs 0 as one Produce request', async () => {
+    await createTopic({ topic: topicName });
+    producer = createProducer({
+      cluster: createCluster(),
+      createPartitioner: createModPartitioner,
+      logger: newLogger(),
+      lingerMs: 0,
+    });
+    await producer.connect();
+
+    const results = await Promise.all(
+      ['a', 'b', 'c'].map((value) => producer!.send({ acks: 1, topic: topicName, messages: [{ key: 'k', value }] })),
+    );
+
+    // One shared request appends one batch, so every caller sees its base offset.
+    for (const metadata of results) {
+      expect(metadata).toEqual([expect.objectContaining({ topicName, errorCode: 0, baseOffset: 0n })]);
+    }
+    const [next] = await producer.send({ acks: 1, topic: topicName, messages: [{ key: 'k', value: 'd' }] });
+    expect(next).toEqual(expect.objectContaining({ baseOffset: 3n }));
+  });
+
   testIfKafkaAtLeast_0_11('sends messages without a key', async () => {
     await createTopic({ topic: topicName });
     producer = createProducer({

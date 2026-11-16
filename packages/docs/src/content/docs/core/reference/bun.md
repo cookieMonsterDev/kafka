@@ -100,7 +100,7 @@ client compares with other Kafka clients on Bun, see [Benchmarks](../benchmarks/
 | ZSTD compression   | `Bun.zstdCompress`     | Faster than `node:zlib` on Bun for 16 KiB to 1 MiB batches, and also asynchronous. Used when `compressionLevel` is unset or an integer from 1 to 22. Other levels, which it rejects, use `node:zlib`.                                               |
 | ZSTD decompression | `node:zlib`            | Bun's decompression APIs take no output size limit, so the client couldn't cap how large a fetched batch may grow when decompressed.                                                                                                                |
 | GZIP               | `node:zlib`            | Bun's GZIP APIs are synchronous. They block the event loop, and they're slower than `node:zlib` from 64 KiB or with several batches in flight.                                                                                                      |
-| CRC32C             | JavaScript             | Bun has no CRC32C API (`Bun.hash.crc32` computes the IEEE CRC-32). See [CRC32C](#crc32c).                                                                                                                                                           |
+| CRC32C             | `@node-rs/crc32`       | Bun has no CRC32C API (`Bun.hash.crc32` computes the IEEE CRC-32). Both runtimes use the same optional N-API package. See [Native CRC32C](../../start/installation/#native-crc32c).                                                                 |
 | Sockets and TLS    | `node:net`, `node:tls` | `Bun.connect` stayed within 10% of Bun's `node:net`: faster for small requests, slower for 1 MiB produce requests. Its TLS options also can't express every [`ssl` option](../../guides/security/), such as `checkServerIdentity` and `minVersion`. |
 | SCRAM              | `node:crypto`          | `pbkdf2` from `node:crypto` is already fast on Bun. An implementation on `Bun.CryptoHasher` was slower.                                                                                                                                             |
 | Studio HTTP server | `node:http`            | The studio's development mode mounts Vite's middleware, which needs `node:http`. `Bun.serve` also closes connections idle for 10 seconds by default, so each of the studio's event streams would need its own override.                             |
@@ -111,13 +111,6 @@ decodes, but its bytes can differ from what `node:zlib` produces for the same in
 To rule out a Bun-native path while debugging, set `KAFKA_BUN_NATIVE=0` in the environment. It
 turns off every Bun-native path, which today means ZSTD compression uses `node:zlib` as on Node.js.
 The variable is read on each use and has no effect on Node.js.
-
-### CRC32C
-
-Record batch checksums use `crypto.hash('crc32c')` when the platform's crypto library provides it.
-Stock Node.js 24 and 26 builds don't, and neither does Bun, so both runtimes normally use the
-built-in JavaScript implementation. It processes about 2.8 GB/s on an Apple silicon Mac on either
-runtime.
 
 ### Compression workers
 
@@ -148,7 +141,9 @@ binaries differ from the npm packages in these ways:
   browser and refuses to open it until you remove the attribute:
   `xattr -d com.apple.quarantine kafka`.
 - The [optional native packages](#native-optional-packages) aren't included, so SASL/GSSAPI is
-  unavailable, and Snappy and LZ4 use the built-in pure-JS codecs.
+  unavailable, and Snappy and LZ4 use the built-in pure-JS codecs. `@node-rs/crc32` isn't
+  included either, so [CRC32C](../../start/installation/#native-crc32c) uses the JavaScript
+  implementation.
 - `kafka studio` in the `kafka` binary can't load the studio and prints the npm install hint. Run
   the `kafka-studio` binary instead.
 - Bun's own `.env` and `bunfig.toml` autoloading is turned off, so a `.env.local` or `bunfig.toml`

@@ -2,7 +2,13 @@ import { EventEmitter } from 'node:events';
 import net from 'node:net';
 import tls from 'node:tls';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isBun } from '../runtime/runtime';
 import { createDefaultSocketFactory } from './socket-factory';
+import type { SocketFactoryArgs } from './socket-factory';
+
+/** TLS without certificates: both sides share a pre-shared key. */
+const PSK_TLS_OPTIONS = { ciphers: 'PSK-AES128-GCM-SHA256', maxVersion: 'TLSv1.2' } as const;
+const PSK = Buffer.from('0123456789abcdef');
 
 describe('network/createDefaultSocketFactory', () => {
   let server: net.Server | undefined;
@@ -95,5 +101,72 @@ describe('network/createDefaultSocketFactory', () => {
       servername: 'broker.example.com',
     });
     connectSpy.mockRestore();
+  });
+
+  // Bun ignores `onread` and emits 'data'; its TLS also lacks the PSK cipher used here.
+  describe.skipIf(isBun())('onread', () => {
+    const payload = Buffer.from(Array.from({ length: 3_000 }, (_, i) => i % 251));
+
+    /** Connects with `onread` reading into a 1000-byte buffer, and collects everything it receives. */
+    const receiveAll = (args: Omit<SocketFactoryArgs, 'onConnect' | 'onread'>) =>
+      new Promise<{ received: Buffer; maxRead: number; dataEvents: number }>((resolve, reject) => {
+        const readBuffer = Buffer.alloc(1_000);
+        const reads: Buffer[] = [];
+        let dataEvents = 0;
+        const socket = createDefaultSocketFactory()({
+          ...args,
+          onConnect: () => {},
+          onread: {
+            buffer: () => readBuffer,
+            callback: (bytesRead, target) => {
+              reads.push(Buffer.from(target.subarray(0, bytesRead)));
+              return true;
+            },
+          },
+        });
+        socket.on('data', () => (dataEvents += 1));
+        socket.on('error', reject);
+        socket.on('end', () => {
+          socket.destroy();
+          resolve({
+            received: Buffer.concat(reads),
+            maxRead: Math.max(...reads.map((read) => read.length)),
+            dataEvents,
+          });
+        });
+      });
+
+    it('passes onread to a plain TCP socket', async () => {
+      server = net.createServer((socket) => socket.end(payload));
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address() as net.AddressInfo;
+
+      const { received, maxRead, dataEvents } = await receiveAll({ host: '127.0.0.1', port });
+
+      expect(received.equals(payload)).toBe(true);
+      expect(maxRead).toBeLessThanOrEqual(1_000);
+      expect(dataEvents).toBe(0);
+    });
+
+    it('passes onread to a TLS socket, which reads decrypted bytes into it', async () => {
+      server = tls.createServer({ ...PSK_TLS_OPTIONS, pskCallback: () => PSK }, (socket) => socket.end(payload));
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address() as net.AddressInfo;
+
+      const { received, maxRead, dataEvents } = await receiveAll({
+        host: '127.0.0.1',
+        port,
+        // A PSK handshake has no certificate to check the host against.
+        ssl: {
+          ...PSK_TLS_OPTIONS,
+          pskCallback: () => ({ psk: PSK, identity: 'client' }),
+          checkServerIdentity: () => undefined,
+        },
+      });
+
+      expect(received.equals(payload)).toBe(true);
+      expect(maxRead).toBeLessThanOrEqual(1_000);
+      expect(dataEvents).toBe(0);
+    });
   });
 });

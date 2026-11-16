@@ -7,8 +7,9 @@ import type { Logger } from '../loggers/index';
 import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
 import { createTopicData } from './create-topic-data';
-import type { EosManager, EosManagerPartition } from './eos-manager/index';
+import type { EosManager } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
+import { partitionKey } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
@@ -33,10 +34,6 @@ export interface SendMessagesRequest {
   topicMessages: readonly TopicMessages[];
   /** Ends the retry cycle (the delivery deadline): no new attempt starts and queued gate waits give up. */
   signal?: AbortSignal;
-}
-
-function partitionKey(topic: string, partition: number): string {
-  return `${topic}\0${partition}`;
 }
 
 function payloadBytes(value: Message['key'] | Message['value']): number {
@@ -87,6 +84,8 @@ export function createSendMessages({
   nodeLatencyTracker = createNodeLatencyTracker(),
   metrics,
 }: SendMessagesOptions) {
+  const { ledger } = eosManager;
+
   return ({
     acks,
     timeout,
@@ -101,84 +100,10 @@ export function createSendMessages({
     const produceSize = topicMessagesSize(topicMessages);
     const topicNames = topicMessages.map(({ topic }) => topic);
     /**
-     * Sequences handed to this send, kept across retries like the Java client's in-flight batches:
-     * a failed attempt may still have been written, so its retry must reuse the same range and no
-     * other send may be handed it. Only valid for the producer id/epoch they were assigned under.
+     * Holds this send's partition gates and sequences from its first attempt until it settles, so a
+     * queued send cannot take sequences ahead of this one's retries. Reads `assignment` once filled.
      */
-    const firstSequences = new Map<string, number>();
-    /** Partitions whose failed request may still have been written, so their sequences are spent. */
-    const writeUnknownPartitions = new Set<string>();
-    let sequenceGeneration: string | undefined;
-    let gatedPartitions: EosManagerPartition[] | undefined;
-
-    function producerGeneration(): string {
-      return `${eosManager.getProducerId()}:${eosManager.getProducerEpoch()}`;
-    }
-
-    function firstSequenceFor(topic: string, partition: number, recordCount: number): number {
-      const generation = producerGeneration();
-      if (generation !== sequenceGeneration) {
-        firstSequences.clear();
-        writeUnknownPartitions.clear();
-        sequenceGeneration = generation;
-      }
-
-      const key = partitionKey(topic, partition);
-      let firstSequence = firstSequences.get(key);
-      if (firstSequence === undefined) {
-        firstSequence = eosManager.getSequence(topic, partition);
-        eosManager.updateSequence(topic, partition, recordCount);
-        firstSequences.set(key, firstSequence);
-      }
-      return firstSequence;
-    }
-
-    /**
-     * Hand back the ranges of partitions that never got acked; safe because their gates are still
-     * held. A range that may be on the log can't be handed back (the next send's records would be
-     * deduplicated away) nor skipped (OUT_OF_ORDER_SEQUENCE), so that needs a new epoch instead.
-     */
-    function releaseUnackedSequences(): void {
-      if (producerGeneration() !== sequenceGeneration) return;
-      if ([...writeUnknownPartitions].some((key) => !ackedPartitions.has(key))) {
-        eosManager.requestEpochBump();
-        return;
-      }
-      for (const [topic, messagesPerPartition] of assignment) {
-        for (const [partition, messages] of messagesPerPartition) {
-          const key = partitionKey(topic, partition);
-          if (!ackedPartitions.has(key) && firstSequences.has(key)) {
-            eosManager.updateSequence(topic, partition, -messages.length);
-          }
-        }
-      }
-    }
-
-    /**
-     * Hold every partition's gate from the first attempt until the send settles, so a queued send
-     * cannot take sequences ahead of this one's retries. Acquired all at once (sorted inside the
-     * EOS manager) so two sends sharing partitions cannot deadlock.
-     */
-    async function acquireGates(partitions: EosManagerPartition[]): Promise<void> {
-      await eosManager.acquirePartitionGates(partitions, { signal });
-      gatedPartitions = partitions;
-    }
-
-    /** Partitions still to gate, or `undefined` when already gated or when there are no gates to take. */
-    function partitionsToGate(): EosManagerPartition[] | undefined {
-      if (gatedPartitions) return undefined;
-      const partitions: EosManagerPartition[] = [];
-      for (const [topic, messagesPerPartition] of assignment) {
-        for (const partition of messagesPerPartition.keys()) partitions.push({ topic, partition });
-      }
-      // Gates exist only once a producer id is initialised; recording the partitions without the
-      // EOS manager call spares a non-idempotent send an `await`, with the same outcome.
-      if (!eosManager.isInitialized()) {
-        gatedPartitions = partitions;
-        return undefined;
-      }
-      return partitions;
-    }
+    const lease = ledger.lease(assignment);
 
     function collectResponse(): RecordMetadata[] {
       if (acks === 0) return [];
@@ -231,8 +156,8 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       if (cluster.needsMetadataRefresh()) await cluster.refreshMetadataIfNecessary();
       assignMessages();
-      const ungatedPartitions = partitionsToGate();
-      if (ungatedPartitions) await acquireGates(ungatedPartitions);
+      const gateWait = lease.acquire(signal);
+      if (gateWait) await gateWait;
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
 
@@ -283,11 +208,9 @@ export function createSendMessages({
         }
 
         // Without a producer id, sequences are not tracked and the encoder writes the default.
-        if (eosManager.isInitialized()) {
+        if (ledger.isInitialized()) {
           for (const { topic, partitions } of topicData) {
-            for (const entry of partitions) {
-              entry.firstSequence = firstSequenceFor(topic, entry.partition, entry.messages.length);
-            }
+            for (const entry of partitions) entry.firstSequence = lease.firstSequence(topic, entry.partition);
           }
         }
 
@@ -295,8 +218,8 @@ export function createSendMessages({
         const response = await broker
           .produce({
             transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
-            producerId: eosManager.getProducerId(),
-            producerEpoch: eosManager.getProducerEpoch(),
+            producerId: ledger.getProducerId(),
+            producerEpoch: ledger.getProducerEpoch(),
             acks,
             timeout,
             compression,
@@ -304,11 +227,13 @@ export function createSendMessages({
             topicData,
           })
           .catch((error: unknown) => {
+            const maybeWritten: string[] = [];
             for (const { topic, partitions } of topicData) {
               for (const { partition } of partitions) {
-                if (!wasRejected(error, topic, partition)) writeUnknownPartitions.add(partitionKey(topic, partition));
+                if (!wasRejected(error, topic, partition)) maybeWritten.push(partitionKey(topic, partition));
               }
             }
+            lease.markMaybeWritten(maybeWritten);
             throw error;
           });
 
@@ -421,15 +346,18 @@ export function createSendMessages({
           throw error;
         }
 
-        // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this PID after
-        // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue.
-        if (error.type === 'UNKNOWN_PRODUCER_ID' && eosManager.isInitialized()) {
-          logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
-            retryCount,
-            retryTime,
-          });
-          await eosManager.initProducerId();
-          throw new KafkaProtocolError(error, { retriable: true });
+        // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this producer id after
+        // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue, once
+        // every other send has drained. A transaction can only abort, which bumps it then.
+        if (error.type === 'UNKNOWN_PRODUCER_ID') {
+          const canRetry = lease.retryUnderNewEpoch();
+          if (canRetry) {
+            logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
+              retryCount,
+              retryTime,
+            });
+            throw new KafkaProtocolError(error, { retriable: true });
+          }
         }
 
         logger.error(`${error.message}`, { retryCount, retryTime });
@@ -439,19 +367,19 @@ export function createSendMessages({
       }
     };
 
-    return retrier(attempt, { signal })
-      .catch((error: unknown) => {
-        releaseUnackedSequences();
+    return retrier(attempt, { signal }).then(
+      (metadata) => {
+        lease.release();
+        return metadata;
+      },
+      (error: unknown) => {
+        lease.release(ackedPartitions);
         // Some partitions may already be written inside the transaction (and KIP-890's
         // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
         // client's abortable error state; a later `commit()` must not keep a partial send.
         if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
         throw error;
-      })
-      .finally(() => {
-        // Releasing is a no-op until a producer id is initialised, so skip the call and its promise.
-        if (gatedPartitions && eosManager.isInitialized()) return eosManager.releasePartitionGates(gatedPartitions);
-        return undefined;
-      });
+      },
+    );
   };
 }

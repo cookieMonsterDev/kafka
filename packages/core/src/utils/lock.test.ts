@@ -36,6 +36,20 @@ describe('utils/Lock', () => {
     );
   });
 
+  it('takes a free lock without waiting, and leaves a held one to its holder', async () => {
+    const lock = new Lock({ timeout: 1000 });
+
+    expect(lock.tryAcquire()).toBe(true);
+    expect(lock.tryAcquire()).toBe(false);
+
+    let acquired = false;
+    const waiting = lock.acquire().then(() => (acquired = true));
+    await lock.release();
+    await waiting;
+    expect(acquired).toBe(true);
+    expect(lock.tryAcquire()).toBe(false);
+  });
+
   it('throws if constructed without a numeric timeout', () => {
     expect(() => new Lock()).toThrow(`'timeout' is not a number, received 'undefined'`);
   });

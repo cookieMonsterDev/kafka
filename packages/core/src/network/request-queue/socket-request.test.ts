@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { KafkaNonRetriableError, KafkaRequestTimeoutError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
@@ -27,7 +27,6 @@ describe('network/request-queue/SocketRequest', () => {
   const createSocketRequest = (overrides: Partial<SocketRequestOptions> = {}) =>
     new SocketRequest({
       requestTimeout,
-      enforceRequestTimeout: true,
       broker: 'localhost:9092',
       clientId: 'kafka',
       expectResponse: true,
@@ -37,10 +36,6 @@ describe('network/request-queue/SocketRequest', () => {
       logger: silentLogger,
       ...overrides,
     });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   describe('send', () => {
     it('sends the request using the provided function', () => {
@@ -79,100 +74,27 @@ describe('network/request-queue/SocketRequest', () => {
       expect(timeoutHandler).toHaveBeenCalledOnce();
     });
 
-    it('times out on its own after requestTimeout elapses once sent', async () => {
-      const timeoutHandler = vi.fn();
-      const request = createSocketRequest({ requestTimeout: 20, timeout: timeoutHandler });
-
-      request.send();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-
-      expect(timeoutHandler).toHaveBeenCalledOnce();
-      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
-    });
-
-    it('never times out when enforceRequestTimeout is false', async () => {
-      const timeoutHandler = vi.fn();
-      const request = createSocketRequest({
-        requestTimeout: 10,
-        enforceRequestTimeout: false,
-        timeout: timeoutHandler,
-      });
-
-      request.send();
-      await new Promise((resolve) => setTimeout(resolve, 60));
-
-      expect(timeoutHandler).not.toHaveBeenCalled();
-      expect(request.entry.reject).not.toHaveBeenCalled();
-    });
-
-    it('does not fire the timeout after the request already completed', async () => {
-      const timeoutHandler = vi.fn();
-      const request = createSocketRequest({ requestTimeout: 20, timeout: timeoutHandler });
-
-      request.send();
-      request.completed({ size, payload });
-      await new Promise((resolve) => setTimeout(resolve, 60));
-
-      expect(timeoutHandler).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('request timeout', () => {
-    it('rejects with the request timing fields once requestTimeout elapses', async () => {
+    it('times out at requestTimeout after it is sent, and never before it is sent', () => {
       vi.useFakeTimers();
-      const timeoutHandler = vi.fn();
-      const request = createSocketRequest({ requestTimeout: 200, timeout: timeoutHandler });
+      try {
+        const request = createSocketRequest({ requestTimeout: 200 });
+        expect(request.timeoutAt).toBe(Number.POSITIVE_INFINITY);
 
-      request.send();
-      await vi.advanceTimersByTimeAsync(199);
-      expect(timeoutHandler).not.toHaveBeenCalled();
-
-      await vi.advanceTimersByTimeAsync(1);
-      expect(timeoutHandler).toHaveBeenCalledOnce();
-      const error = vi.mocked(request.entry.reject).mock.calls[0]?.[0] as KafkaRequestTimeoutError;
-      expect(error).toBeInstanceOf(KafkaRequestTimeoutError);
-      expect(error.message).toBe('Request Produce(key: 0, version: 4) timed out');
-      expect(error).toMatchObject({
-        broker: 'localhost:9092',
-        correlationId: request.correlationId,
-        createdAt: request.createdAt,
-        sentAt: request.sentAt,
-        pendingDuration: request.pendingDuration,
-      });
-      expect(vi.getTimerCount()).toBe(0);
+        request.send();
+        expect(request.timeoutAt).toBe(performance.now() + 200);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
-    it('arms no timer until the request is sent', () => {
+    it('arms no timer of its own', () => {
       vi.useFakeTimers();
-      createSocketRequest();
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('clears its timer when the request completes', () => {
-      vi.useFakeTimers();
-      const request = createSocketRequest();
-
-      request.send();
-      expect(vi.getTimerCount()).toBe(1);
-      request.completed({ size, payload });
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('clears its timer when the request is rejected', () => {
-      vi.useFakeTimers();
-      const request = createSocketRequest();
-
-      request.send();
-      request.rejected(new Error('closed'));
-      expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it('arms no timer when enforceRequestTimeout is false', () => {
-      vi.useFakeTimers();
-      const request = createSocketRequest({ enforceRequestTimeout: false });
-
-      request.send();
-      expect(vi.getTimerCount()).toBe(0);
+      try {
+        createSocketRequest().send();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

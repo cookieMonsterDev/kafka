@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KafkaConnectionError } from '../errors';
+import { Deadline } from '../utils/deadline';
 import { retrier } from './index';
 import { FAST_RETRY_DEFAULTS } from './test-defaults';
 
@@ -129,20 +130,20 @@ describe('retry/retrier', () => {
     },
   );
 
-  it('stops retrying once the signal aborts, rejecting with its reason without waiting out the backoff', async () => {
+  it('stops retrying once the deadline expires, rejecting with its reason without waiting out the backoff', async () => {
     vi.useFakeTimers();
     try {
       const retry = retrier({ retries: 10, initialRetryTime: 30_000, maxRetryTime: 30_000, factor: 0, multiplier: 1 });
-      const controller = new AbortController();
+      const deadline = new Deadline();
       const fn = vi.fn(async () => {
         throw new KafkaConnectionError('down');
       });
 
-      const result = retry(fn, { signal: controller.signal });
-      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the abort fires
+      const result = retry(fn, { deadline });
+      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the deadline expires
       const assertion = expect(result).rejects.toThrow('deadline');
       await vi.advanceTimersByTimeAsync(100);
-      controller.abort(new Error('deadline'));
+      deadline.expire(new Error('deadline'));
       await assertion;
 
       await vi.advanceTimersByTimeAsync(120_000);
@@ -152,16 +153,48 @@ describe('retry/retrier', () => {
     }
   });
 
-  it('lets an in-flight attempt finish after the signal aborts, then rejects instead of retrying', async () => {
+  it('lets an in-flight attempt finish after the deadline expires, then rejects instead of retrying', async () => {
     const retry = retrier(FAST_RETRY_DEFAULTS);
-    const controller = new AbortController();
+    const deadline = new Deadline();
     const fn = vi.fn(async () => {
-      controller.abort(new Error('deadline'));
+      deadline.expire(new Error('deadline'));
       await Promise.resolve();
       throw new KafkaConnectionError('down');
     });
 
-    await expect(retry(fn, { signal: controller.signal })).rejects.toThrow('deadline');
+    await expect(retry(fn, { deadline })).rejects.toThrow('deadline');
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start an attempt once the deadline has expired', async () => {
+    const retry = retrier(FAST_RETRY_DEFAULTS);
+    const deadline = new Deadline();
+    deadline.expire(new Error('deadline'));
+    const fn = vi.fn(async () => 'success');
+
+    await expect(retry(fn, { deadline })).rejects.toThrow('deadline');
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("reads the deadline's signal only to wait out a backoff", async () => {
+    const retry = retrier(FAST_RETRY_DEFAULTS);
+    const deadline = new Deadline();
+    const signal = vi.spyOn(deadline, 'signal', 'get');
+    let attempts = 0;
+
+    await expect(retry(async () => 'success', { deadline })).resolves.toBe('success');
+    expect(signal).not.toHaveBeenCalled();
+
+    await expect(
+      retry(
+        async () => {
+          attempts += 1;
+          if (attempts === 1) throw new KafkaConnectionError('down');
+          return 'success';
+        },
+        { deadline },
+      ),
+    ).resolves.toBe('success');
+    expect(signal).toHaveBeenCalledOnce();
   });
 });

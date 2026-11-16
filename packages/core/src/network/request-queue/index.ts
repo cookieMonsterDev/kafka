@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { INT_32_MAX_VALUE } from '../../constants';
 import { KafkaInvariantViolation } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import type { Logger } from '../../loggers/index';
@@ -29,8 +30,8 @@ export interface RequestQueueOptions {
 
 /**
  * Owns every in-flight and queued request for one `Connection`: enforces `maxInFlightRequests`,
- * matches correlation ids, and applies client-side throttling from KIP-219. Per-request timeouts
- * are `SocketRequest`'s own timer, not tracked here.
+ * matches correlation ids, applies client-side throttling from KIP-219, and times out in-flight
+ * requests with one timer for the connection.
  */
 export class RequestQueue extends EventEmitter {
   readonly instrumentationEmitter: InstrumentationEventEmitter<NetworkEventMap> | null;
@@ -52,6 +53,17 @@ export class RequestQueue extends EventEmitter {
   throttledUntil = -1;
 
   throttleCheckTimeoutId: NodeJS.Timeout | null = null;
+
+  /**
+   * The connection's one request-timeout timer, armed for the earliest in-flight deadline. A
+   * connection receives responses in request order, so the next request's deadline is rarely
+   * earlier than the one the timer waits for: a completed request leaves the timer armed, and it is
+   * re-armed only when it fires or a request is sent with an earlier deadline, not per request.
+   * Unref'd, so in-flight requests alone don't keep the process alive.
+   */
+  #requestTimeoutTimer: NodeJS.Timeout | undefined;
+  /** When `#requestTimeoutTimer` fires; `Infinity` while it is not armed. */
+  #requestTimeoutTimerAt = Number.POSITIVE_INFINITY;
 
   constructor(options: RequestQueueOptions) {
     super();
@@ -110,7 +122,6 @@ export class RequestQueue extends EventEmitter {
       instrumentationEmitter: this.instrumentationEmitter,
       logger: this.logger,
       requestTimeout,
-      enforceRequestTimeout: this.enforceRequestTimeout,
       send: () => {
         if (this.inflight.has(correlationId)) {
           throw new KafkaInvariantViolation('Correlation id already exists');
@@ -153,7 +164,9 @@ export class RequestQueue extends EventEmitter {
   sendSocketRequest(socketRequest: SocketRequest): void {
     socketRequest.send();
 
-    if (!socketRequest.expectResponse) {
+    if (socketRequest.expectResponse) {
+      if (this.enforceRequestTimeout) this.#armRequestTimeoutTimer(socketRequest.timeoutAt);
+    } else {
       this.logger.debug(`Request does not expect a response, resolving immediately`, {
         clientId: this.clientId,
         broker: this.broker,
@@ -229,7 +242,47 @@ export class RequestQueue extends EventEmitter {
   destroy(): void {
     clearTimeout(this.throttleCheckTimeoutId ?? undefined);
     this.throttleCheckTimeoutId = null;
+    clearTimeout(this.#requestTimeoutTimer);
+    this.#requestTimeoutTimer = undefined;
+    this.#requestTimeoutTimerAt = Number.POSITIVE_INFINITY;
   }
+
+  /** Arms the request-timeout timer for `performance.now()` ms `at`, unless it already fires by then. */
+  #armRequestTimeoutTimer(at: number): void {
+    if (at >= this.#requestTimeoutTimerAt) return;
+
+    clearTimeout(this.#requestTimeoutTimer);
+    this.#requestTimeoutTimerAt = at;
+    // Node fires a longer delay after 1 ms, so a far deadline is re-armed until it is due.
+    const delay = Math.min(Math.max(0, at - performance.now()), INT_32_MAX_VALUE);
+    this.#requestTimeoutTimer = setTimeout(this.#timeOutExpiredRequests, delay);
+    this.#requestTimeoutTimer.unref();
+  }
+
+  /**
+   * Times out every in-flight request past its deadline, including one with a longer custom
+   * `requestTimeout`, then re-arms the timer for the earliest deadline left.
+   */
+  #timeOutExpiredRequests = (): void => {
+    this.#requestTimeoutTimer = undefined;
+    this.#requestTimeoutTimerAt = Number.POSITIVE_INFINITY;
+
+    const now = performance.now();
+    const expired: SocketRequest[] = [];
+    let nextAt = Number.POSITIVE_INFINITY;
+    for (const socketRequest of this.inflight.values()) {
+      const { timeoutAt } = socketRequest;
+      if (timeoutAt <= now) {
+        expired.push(socketRequest);
+      } else {
+        nextAt = Math.min(nextAt, timeoutAt);
+      }
+    }
+
+    // Timing one out sends pending requests, which arm the timer for their own deadlines.
+    for (const socketRequest of expired) socketRequest.timeoutRequest();
+    if (nextAt !== Number.POSITIVE_INFINITY) this.#armRequestTimeoutTimer(nextAt);
+  };
 
   canSendSocketRequestImmediately(): boolean {
     const shouldEnqueue =

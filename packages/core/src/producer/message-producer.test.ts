@@ -121,6 +121,8 @@ function createTestProducer(broker: ReturnType<typeof fakeBroker>, overrides: Pa
 
 describe('producer/messageProducer', () => {
   afterEach(() => {
+    // Restore spies before the fake timers, or restoring a spy would reinstall a fake setTimeout.
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -377,8 +379,9 @@ describe('producer/messageProducer', () => {
       expect(producedMessages(broker, 0)).toEqual(['a', 'b']);
     });
 
-    it('sends awaited calls separately, each with a single deadline timer', async () => {
+    it('sends awaited calls separately, sharing one deadline timer', async () => {
       vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
       const broker = fakeBroker(1);
       const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
 
@@ -387,9 +390,9 @@ describe('producer/messageProducer', () => {
         await Promise.resolve();
         expect(vi.getTimerCount()).toBe(1);
         await sendPromise;
-        expect(vi.getTimerCount()).toBe(0);
       }
 
+      expect(setTimeoutSpy).toHaveBeenCalledOnce();
       expect(broker.produce).toHaveBeenCalledTimes(2);
       expect(producedMessages(broker, 0)).toEqual(['a']);
       expect(producedMessages(broker, 1)).toEqual(['b']);
@@ -463,7 +466,7 @@ describe('producer/messageProducer', () => {
       ]);
     });
 
-    it('arms one deadline timer per shared request and rejects every caller in it at the deadline', async () => {
+    it('shares one deadline timer for a shared request and rejects every caller in it at the deadline', async () => {
       vi.useFakeTimers();
       const broker = fakeBroker(1);
       broker.produce.mockImplementation(() => new Promise(() => {}));
@@ -631,21 +634,36 @@ describe('producer/messageProducer', () => {
         await expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
       });
 
-      it('arms a single deadline timer per send and clears it when the send settles', async () => {
+      it("keeps one deadline timer across sends, unref'd while no send is pending", async () => {
         vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
         const broker = fakeBroker(1);
         let respond: (value: unknown) => void = () => {};
         broker.produce.mockImplementation(() => new Promise((resolve) => (respond = resolve)));
         const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
 
-        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
-        await vi.advanceTimersByTimeAsync(0);
-        expect(broker.produce).toHaveBeenCalledTimes(1);
-        expect(vi.getTimerCount()).toBe(1);
+        for (const value of ['a', 'b']) {
+          const sendPromise = producer.send({ topic, messages: [{ value }] });
+          await vi.advanceTimersByTimeAsync(0);
+          const deadlineTimer = setTimeoutSpy.mock.results[0]?.value as NodeJS.Timeout;
+          expect(deadlineTimer.hasRef()).toBe(true);
 
-        respond(fakeProduceResponse(topic, 0));
-        await expect(sendPromise).resolves.toHaveLength(1);
-        expect(vi.getTimerCount()).toBe(0);
+          respond(fakeProduceResponse(topic, 0));
+          await expect(sendPromise).resolves.toHaveLength(1);
+          expect(deadlineTimer.hasRef()).toBe(false);
+        }
+
+        expect(broker.produce).toHaveBeenCalledTimes(2);
+        expect(setTimeoutSpy).toHaveBeenCalledOnce();
+      });
+
+      it('creates no AbortController for a send that never waits', async () => {
+        const abortController = vi.spyOn(globalThis, 'AbortController');
+        const broker = fakeBroker(1);
+        const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+        await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toHaveLength(1);
+        expect(abortController).not.toHaveBeenCalled();
       });
 
       it('stops retrying and releases the partition gates once the deadline elapses', async () => {

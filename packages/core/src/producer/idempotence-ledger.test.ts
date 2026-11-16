@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { Deadline } from '../utils/deadline';
 import { createIdempotenceLedger, partitionKey, type ProducerIdentity } from './idempotence-ledger';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -200,6 +201,18 @@ describe('producer/idempotenceLedger', () => {
       expect(ledger.lease(records({ 1: 1 })).acquire()).toBeUndefined();
     });
 
+    it("reads the deadline's signal only when a send has to wait for its gate", async () => {
+      const { ledger } = await initializedLedger();
+      const deadline = new Deadline();
+      const signal = vi.spyOn(deadline, 'signal', 'get');
+
+      expect(ledger.lease(records({ 0: 1 })).acquire(deadline)).toBeUndefined();
+      expect(signal).not.toHaveBeenCalled();
+
+      void ledger.lease(records({ 0: 1 })).acquire(deadline);
+      expect(signal).toHaveBeenCalledOnce();
+    });
+
     it('makes a send wait for its partition until the holder settles, then continues its sequence', async () => {
       const { ledger } = await initializedLedger();
       const first = ledger.lease(records({ 0: 4 }));
@@ -259,21 +272,21 @@ describe('producer/idempotenceLedger', () => {
       await expect(Promise.all(crossing)).resolves.toEqual([undefined, undefined]);
     });
 
-    it('keeps a queued send waiting past the lock timeout, until its signal aborts', async () => {
+    it('keeps a queued send waiting past the lock timeout, until its deadline expires', async () => {
       vi.useFakeTimers();
       try {
         const { ledger } = await initializedLedger();
         await ledger.lease(records({ 0: 1 })).acquire();
 
-        const controller = new AbortController();
-        const waiting = ledger.lease(records({ 0: 1 })).acquire(controller.signal);
+        const deadline = new Deadline();
+        const waiting = ledger.lease(records({ 0: 1 })).acquire(deadline);
         const waitingState = track(waiting);
 
         // A leader outage longer than the 0xffff ms InitProducerId lock timeout must not fail queued sends.
         await vi.advanceTimersByTimeAsync(5 * 60_000);
         expect(waitingState.settled()).toBe(false);
 
-        controller.abort(new Error('delivery deadline'));
+        deadline.expire(new Error('delivery deadline'));
         await expect(waiting).rejects.toThrow('delivery deadline');
       } finally {
         vi.useRealTimers();
@@ -346,9 +359,9 @@ describe('producer/idempotenceLedger', () => {
       await ledger.lease(records({ 0: 1 })).acquire();
       ledger.requestEpochBump();
 
-      const controller = new AbortController();
-      const waiting = ledger.lease(records({ 1: 1 })).acquire(controller.signal);
-      controller.abort(new Error('delivery deadline'));
+      const deadline = new Deadline();
+      const waiting = ledger.lease(records({ 1: 1 })).acquire(deadline);
+      deadline.expire(new Error('delivery deadline'));
 
       await expect(waiting).rejects.toThrow('delivery deadline');
       expect(initProducerId).toHaveBeenCalledTimes(1);

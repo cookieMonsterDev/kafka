@@ -134,7 +134,7 @@ client overhead, where differences between clients come mostly from the work eac
 | C4  | `consume-commit`       | C1 with an awaited offset commit every 1000 records                               |
 | E1  | `e2e-latency`          | Open-loop fixed-rate producer and a consumer; latency from the intended send time |
 | L1  | `startup`              | Process start to the first acknowledged produce and to the first consumed record  |
-| F1  | `footprint`            | Install size, dependency count, native addon (static, read from the image)        |
+| F1  | `footprint`            | Install size, dependencies and files, required and optional; information only²    |
 
 ¹ P3, and P4 and P5 built on it, are structurally biased. Each of the 256 workers awaits its own single-record
 `send()`, so the result shows whether and when a client merges records from separate calls, not protocol speed.
@@ -142,6 +142,11 @@ kafkajs and Platformatic send one request per call, librdkafka waits out `linger
 kafka-core flushes once its buffered bytes across all partitions reach `batchSize`
 ([option mapping](client/adapters/option-mapping.md#kafka-core)). Use P2 as the headline produce comparison; the
 report repeats this note under each of these scenarios.
+
+² F1 is read from the image, not run. For each client it reports bytes, files and dependencies twice: the required
+part is the package and everything it reaches through `dependencies`; the optional part is what installed
+`optionalDependencies` add on top. It names no smaller or larger client, because a client's size follows what it
+implements and bundles. A session recorded before this split has no F1 data once it is re-aggregated.
 
 Each run warms up in-process, then measures. Per run: records/s and MB/s (10^6 bytes, values only), latency
 percentiles from a preallocated sample buffer, process and cgroup CPU seconds, records per CPU second, cgroup peak
@@ -156,8 +161,8 @@ and the coefficient of variation. A cell above the noise threshold is marked noi
 floor (the `--noise-floor` passed in, or the A/A floor measured in the same session, whichever is larger).
 Throughput scenarios compare records/s, L1 compares time to the first acknowledged produce, and E1 compares p99
 and p50 latency, each with its own coefficient of variation and A/A floor. Every chart on the docs page, peak
-memory and install size included, names a highest or lowest client on a runtime only when this rule puts it
-ahead of every other client, and otherwise says there is no clear one.
+memory included, names a highest or lowest client on a runtime only when this rule puts it ahead of every other
+client, and otherwise says there is no clear one.
 
 ## Fairness rules
 
@@ -260,11 +265,13 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
 - `node runner/cli.ts typecheck` type-checks `client/` and `runner/` inside the image against the installed
   clients. For editor support and a quick host check, run `pnpm install --ignore-scripts` in this directory and
   `pnpm typecheck` (the Confluent addon is not built on the host).
-- `pnpm test` (in this directory) runs results-pipeline and attempt-lifecycle tests with `node:test`; they need
-  no Docker and no installed dependencies. Shutdown waits for in-flight topic setup and client-container
+- `pnpm test` (in this directory) runs results-pipeline, attempt-lifecycle and F1 footprint tests with `node:test`;
+  they need no Docker and no installed dependencies (the footprint test runs the in-image script on a temporary
+  directory). Shutdown waits for in-flight topic setup and client-container
   cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
 - ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
-- Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one.
+- Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one, and re-check what the
+  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`).
 - The security workflow scans only the repository's root lockfile. This lockfile is not scanned: these packages
   are never shipped, and at run time they execute only in containers without internet access. They are installed
   with network access during `docker build`, from the frozen lockfile with integrity hashes and pnpm's one-day

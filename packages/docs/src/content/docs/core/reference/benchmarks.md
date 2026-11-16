@@ -891,61 +891,18 @@ Peak container memory while consuming in batches, under a 2 GiB limit.
 
 ## Install size
 
-Size of the package and its production dependencies as installed.
+What installing each client adds, measured in the benchmark image. Required is the package and everything it reaches through `dependencies`; optional is what its `optionalDependencies` add, which npm and pnpm skip when they cannot be installed.
 
-```chart
-{
-  "description": "Bar chart of install size by client, lower is better. Lowest: KafkaJS (0.7 MB). The table below lists every value.",
-  "chart": {
-    "type": "bar",
-    "height": 240
-  },
-  "plotOptions": {
-    "bar": {
-      "horizontal": true,
-      "barHeight": "85%"
-    }
-  },
-  "title": {
-    "text": "Lower is better (MB)"
-  },
-  "subtitle": {
-    "text": "Draft. One measurement per client."
-  },
-  "series": [
-    {
-      "name": "kafka-core",
-      "data": [2.69]
-    },
-    {
-      "name": "Platformatic",
-      "data": [9.08]
-    },
-    {
-      "name": "KafkaJS",
-      "data": [0.73]
-    },
-    {
-      "name": "Confluent",
-      "data": [47.23]
-    }
-  ],
-  "xaxis": {
-    "categories": ["Install size"],
-    "title": {
-      "text": "megabytes (1 MB = 1,000,000 bytes)"
-    },
-    "max": 65
-  }
-}
-```
+This is information, not a ranking, because size follows what each client implements and bundles: kafka-core implements KIP-848 consumer groups, KIP-932 share groups and transactions (see [Compatibility](../compatibility/)), Platformatic and Confluent's client implement KIP-848 and transactions but not share groups, KafkaJS implements transactions but neither KIP-848 nor share groups, and Confluent's client bundles librdkafka as a native addon.
 
-| Client       | Install size (MB) |
-| ------------ | ----------------- |
-| kafka-core   | 2.69              |
-| Platformatic | 9.08              |
-| KafkaJS      | 0.73              |
-| Confluent    | 47.23             |
+| Client       | Version | Required (MB) | Required dependencies | Required files | Optional (MB) | Optional dependencies | Optional files | Native addon  |
+| ------------ | ------- | ------------- | --------------------- | -------------- | ------------- | --------------------- | -------------- | ------------- |
+| kafka-core   | 2.8.1   | 2.16          | 3                     | 891            | 0.54          | 2                     | 9              | optional only |
+| Platformatic | 2.15.0  | 4.62          | 16                    | 1,797          | 4.46          | 4                     | 129            | optional only |
+| KafkaJS      | 2.2.4   | 0.73          | 0                     | 391            | 0.00          | 0                     | 0              | no            |
+| Confluent    | 1.11.0  | 47.23         | 25                    | 1,316          | 0.00          | 0                     | 0              | yes           |
+
+MB is 1,000,000 bytes.
 
 ## How to reproduce
 

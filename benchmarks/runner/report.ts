@@ -5,6 +5,7 @@ import type { ScenarioId } from '../client/spec.ts';
 import { aggregateSession, baselineSeries } from './aggregate.ts';
 import type { CellSummary, ComparedMetric, Comparison, SessionSummary, StatSummary } from './aggregate.ts';
 import { sessionPaths } from './session.ts';
+import type { Footprint, FootprintPart } from './types.ts';
 
 function formatNumber(value: number, fractionDigits = 0): string {
   return value.toLocaleString('en-US', {
@@ -31,11 +32,22 @@ function formatMebibytes(stat: StatSummary | null): string {
   return formatNumber(stat.median / 1_048_576, 0);
 }
 
-function formatOptionalFlag(flag: boolean | null): string {
-  if (flag === null) {
+/** Where a client's closure holds a native addon: `yes` when it is required, `optional only`, or `no`. */
+export function formatNativeAddon(footprint: Footprint): string {
+  if (footprint.required === null || footprint.optional === null) {
     return 'n/a';
   }
-  return flag ? 'yes' : 'no';
+  if (footprint.required.hasNativeAddon) {
+    return 'yes';
+  }
+  return footprint.optional.hasNativeAddon ? 'optional only' : 'no';
+}
+
+function footprintPartCells(part: FootprintPart | null): string[] {
+  if (part === null) {
+    return ['n/a', 'n/a', 'n/a'];
+  }
+  return [formatNumber(part.bytes / 1_048_576, 1), String(part.dependencyCount), formatNumber(part.fileCount)];
 }
 
 function formatPercent(fraction: number): string {
@@ -248,14 +260,28 @@ function renderFootprints(summary: SessionSummary): string {
   const rows = summary.footprints.map((footprint) => [
     footprint.packageName,
     footprint.version ?? 'n/a',
-    footprint.installBytes === null ? 'n/a' : formatNumber(footprint.installBytes / 1_048_576, 1),
-    footprint.dependencyCount === null ? 'n/a' : String(footprint.dependencyCount),
-    formatOptionalFlag(footprint.hasNativeAddon),
+    ...footprintPartCells(footprint.required),
+    ...footprintPartCells(footprint.optional),
+    formatNativeAddon(footprint),
   ]);
+  const header = [
+    'Package',
+    'Version',
+    'Required MiB',
+    'Required dependencies',
+    'Required files',
+    'Optional MiB',
+    'Optional dependencies',
+    'Optional files',
+    'Native addon',
+  ];
   return [
     '## F1 `footprint`',
     '',
-    table(['Package', 'Version', 'Install MiB', 'Dependencies', 'Native addon'], rows),
+    'Information, not a comparison: what installing each client adds. Required is the package and what it reaches',
+    'through `dependencies`; optional is what installed `optionalDependencies` add on top.',
+    '',
+    table(header, rows),
   ].join('\n');
 }
 

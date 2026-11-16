@@ -5,8 +5,8 @@ import type { TopicPartitionOffset, TopicPartitions } from './types';
 /** One batch queued or being handled, plus one held by the fetcher until that one settles. */
 const MAX_UNSETTLED_BATCHES_PER_PARTITION = 2;
 
-/** Reads a partition's position from the offset manager; `null` while there is none. */
-type ReadPosition = (topic: string, partition: number) => bigint | null;
+/** Reads a partition's position from the offset tracker. */
+type ReadPosition = (topic: string, partition: number) => bigint;
 
 type TopicPartitionsInput = readonly { topic: string; partitions?: number[] }[];
 
@@ -85,7 +85,9 @@ export class PartitionPipeline {
    * Replaces the assignment. A retained partition keeps its fetch state, like its offsets in the
    * offset tracker: its unsettled batches still settle, so its next fetch can continue after them.
    * Every other partition's next fetch starts from its position, and its unsettled batches stop
-   * counting, so a batch counted under an earlier assignment cannot hold it back.
+   * counting, so a batch counted under an earlier assignment cannot hold it back. The state of a
+   * partition outside the new assignment is dropped, unless it holds a seek to apply once the
+   * partition is assigned again.
    */
   assign(topicPartitions: readonly TopicPartitions[]): void {
     this.#subscriptionState.assign(topicPartitions);
@@ -98,10 +100,13 @@ export class PartitionPipeline {
         state.isPaused = this.#subscriptionState.isPaused(topic, state.partition);
         if (state.isAssigned && assignedPartitions?.has(state.partition) === true) continue;
 
+        // A batch still holding the state sees it unassigned, even once the state is dropped.
         state.isAssigned = false;
         state.unsettledBatches = 0;
         this.#resetPrefetch(state);
+        if (state.pendingSeek === null) states.delete(state.partition);
       }
+      if (states.size === 0) this.#states.delete(topic);
     }
     for (const { topic, partitions } of topicPartitions) {
       for (const partition of partitions) this.#stateFor(topic, partition).isAssigned = true;
@@ -120,7 +125,7 @@ export class PartitionPipeline {
     return this.#states.get(topic)?.get(partition)?.isAssigned === true;
   }
 
-  /** The partition's state, or `undefined` when it was never assigned or sought. */
+  /** The partition's state, or `undefined` when it is neither assigned nor holding a pending seek. */
   state(topic: string, partition: number): PartitionState | undefined {
     return this.#states.get(topic)?.get(partition);
   }
@@ -204,8 +209,7 @@ export class PartitionPipeline {
           continue;
         }
 
-        const fetchOffset = state.prefetchOffset ?? this.#refreshPosition(state);
-        if (fetchOffset !== null) planned.push({ partition, fetchOffset });
+        planned.push({ partition, fetchOffset: state.prefetchOffset ?? this.#refreshPosition(state) });
       }
       if (planned.length > 0) topics.push({ topic, partitions: planned });
     }
@@ -329,13 +333,14 @@ export class PartitionPipeline {
     return state.isAssigned && !state.isPaused && state.pendingSeek === null;
   }
 
-  #position(state: PartitionState): bigint | null {
+  #position(state: PartitionState): bigint {
     return state.position ?? this.#refreshPosition(state);
   }
 
-  #refreshPosition(state: PartitionState): bigint | null {
-    state.position = this.#readPosition(state.topic, state.partition);
-    return state.position;
+  #refreshPosition(state: PartitionState): bigint {
+    const position = this.#readPosition(state.topic, state.partition);
+    state.position = position;
+    return position;
   }
 
   #resetPrefetch(state: PartitionState): void {

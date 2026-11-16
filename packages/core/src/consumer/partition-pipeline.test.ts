@@ -91,6 +91,18 @@ describe('consumer/partition-pipeline', () => {
       expect(fetchOffsets(pipeline, [0, 1])).toEqual([2n, 0n]);
     });
 
+    it('drops the state of a partition outside the assignment unless it holds a pending seek', () => {
+      const { pipeline, stateOf } = createPipeline([0, 1]);
+      const revoked = stateOf(0);
+      pipeline.seek({ topic, partition: 1, offset: 5n });
+
+      pipeline.assign([]);
+
+      expect(pipeline.state(topic, 0)).toBeUndefined();
+      expect(revoked.isAssigned).toBe(false);
+      expect(pipeline.state(topic, 1)).toMatchObject({ isAssigned: false, pendingSeek: 5n });
+    });
+
     it('keeps a pause of a retained partition', () => {
       const { pipeline, stateOf } = createPipeline([0, 1]);
       pipeline.pause([{ topic, partitions: [0] }]);

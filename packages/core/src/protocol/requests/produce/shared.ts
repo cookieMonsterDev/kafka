@@ -1,4 +1,4 @@
-import { encodeRecord, type RecordHeaders } from '../../records/record';
+import { encodeRecord, sizeOfRecordHeaders, type RecordHeaders } from '../../records/record';
 import { encodeRecordBatch } from '../../records/batch';
 import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index';
 import { Decoder } from '../../decoder';
@@ -121,6 +121,7 @@ async function encodePartition(
     estimatedBytes += 32;
     if (message.key != null) estimatedBytes += Buffer.byteLength(message.key);
     if (message.value != null) estimatedBytes += Buffer.byteLength(message.value);
+    if (message.headers != null) estimatedBytes += sizeOfRecordHeaders(message.headers);
   }
 
   const recordBatch = await encodeRecordBatch({

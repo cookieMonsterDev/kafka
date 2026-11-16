@@ -354,7 +354,7 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `studio` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
 3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then studio, then docs, so a package that comes later always builds against the freshly-released version of the ones before it. A package registered here before it has its own `release.config.js` (e.g. `studio`, mid-development) is skipped with a warning rather than crashing the chain.
 4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
-5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
+5. **Fixing a bad release:** release a new version with the fix instead of deleting or unpublishing the old one. Release tags are protected from deletion.
 6. **Recovering a half-failed release:** if one package fails mid-chain (say cli), `release-chain.mjs` stops there without running the packages after it — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.
 
 ## Adding a package

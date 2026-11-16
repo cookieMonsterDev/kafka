@@ -341,8 +341,7 @@ Dry-run prints the next version and release notes without creating a tag, releas
 2. A bot opens **`master` → `develop`** to sync versions — merge it with a merge commit.
 3. [GitHub Pages](../../.github/workflows/pages.yml) deploys the site (same push or the
    next one that touches `packages/docs/**`).
-4. To remove a mistaken release: **Actions → Unrelease**, package `docs`, version `X.Y.Z`,
-   confirm `DELETE` (drops tag + GitHub release; does not roll back Pages).
+4. To fix a mistaken release, land the correction and release a new version.
 
 </details>
 

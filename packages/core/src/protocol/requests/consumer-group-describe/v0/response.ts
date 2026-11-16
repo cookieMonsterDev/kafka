@@ -33,6 +33,11 @@ export interface ConsumerGroupDescribeMemberV0 {
   subscribedTopicRegex: string | null;
   assignment: ConsumerGroupDescribeAssignment;
   targetAssignment: ConsumerGroupDescribeAssignment;
+  /**
+   * -1 unknown, 0 classic, 1 consumer (KIP-1099). Version 0 has no such field on the wire, so it
+   * decodes as -1, the field's default in Kafka's `ConsumerGroupDescribeResponse.json`.
+   */
+  memberType: number;
 }
 
 export interface ConsumerGroupDescribeGroupV0 {
@@ -97,7 +102,14 @@ export const responseSchema = flexibleObject([
 export const consumerGroupDescribeResponseV0: ResponseDefinition<ConsumerGroupDescribeResponseV0Body> = {
   decode: async (rawData) => {
     const decoded = responseSchema.read(new Decoder(rawData));
-    return { ...decoded, throttleTime: 0, clientSideThrottleTime: decoded.throttleTime };
+    return {
+      throttleTime: 0,
+      clientSideThrottleTime: decoded.throttleTime,
+      groups: decoded.groups.map((group) => ({
+        ...group,
+        members: group.members.map((member) => ({ ...member, memberType: -1 })),
+      })),
+    };
   },
   parse: async (data) => {
     const failed = data.groups.find(({ errorCode }) => failure(errorCode));

@@ -79,22 +79,10 @@ describe('consumer/subscription-state assignments', () => {
   it('can track assigned partitions per topic', () => {
     const subscriptionState = new SubscriptionState();
     subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
-    expect(subscriptionState.active()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
+    expect(subscriptionState.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
 
     subscriptionState.assign([{ topic: 'topic2', partitions: [3, 4] }]);
-    expect(subscriptionState.active()).toEqual([{ topic: 'topic2', partitions: [3, 4] }]);
-  });
-
-  it('can return which topic partitions are assigned and not paused', () => {
-    const subscriptionState = new SubscriptionState();
-    subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
-    subscriptionState.pause([{ topic: 'topic1', partitions: [0] }]);
-
-    expect(subscriptionState.active()).toEqual([{ topic: 'topic1', partitions: [1] }]);
-
-    subscriptionState.pause([{ topic: 'topic2' }]);
-    subscriptionState.assign([{ topic: 'topic2', partitions: [0, 1, 2, 6, 7] }]);
-    expect(subscriptionState.active()).toEqual([{ topic: 'topic2', partitions: [] }]);
+    expect(subscriptionState.assigned()).toEqual([{ topic: 'topic2', partitions: [3, 4] }]);
   });
 
   it('returns assigned partitions independently of pause state', () => {
@@ -103,7 +91,7 @@ describe('consumer/subscription-state assignments', () => {
     subscriptionState.pause([{ topic: 'topic1' }]);
 
     expect(subscriptionState.assigned()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
-    expect(subscriptionState.active()).toEqual([{ topic: 'topic1', partitions: [] }]);
+    expect(subscriptionState.paused()).toEqual([{ topic: 'topic1', partitions: [0, 1] }]);
   });
 
   it('treats empty pause, resume, and assign as no-ops', () => {
@@ -114,6 +102,5 @@ describe('consumer/subscription-state assignments', () => {
 
     expect(subscriptionState.assigned()).toEqual([]);
     expect(subscriptionState.paused()).toEqual([]);
-    expect(subscriptionState.active()).toEqual([]);
   });
 });

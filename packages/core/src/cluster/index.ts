@@ -54,7 +54,8 @@ export interface TopicOffsets {
   partitions: TopicOffsetPartition[];
 }
 
-export type CommittedOffsetsByGroup = Map<string, Record<string, Record<string, bigint>>>;
+/** Committed offsets by group id, then topic, then partition. */
+export type CommittedOffsetsByGroup = Map<string, Map<string, Map<number, bigint>>>;
 
 export interface ClusterOptions {
   logger: Logger;
@@ -105,12 +106,12 @@ export class Cluster {
   readonly retrier: ReturnType<typeof retrier>;
   readonly brokerPool: BrokerPool;
   readonly isolationLevel: IsolationLevel | undefined;
-  readonly committedOffsetsByGroup: CommittedOffsetsByGroup;
   readonly allowAutoTopicCreation: boolean;
 
   targetTopics = new Set<string>();
   readonly mutatingTargetTopics: Lock;
 
+  readonly #committedOffsetsByGroup: CommittedOffsetsByGroup;
   readonly #connect: () => Promise<void>;
   readonly #refreshMetadata: () => Promise<void>;
   readonly #refreshMetadataIfNecessary: () => Promise<void>;
@@ -183,7 +184,7 @@ export class Cluster {
       metadataRecovery,
       usingBootstrapControllers,
     });
-    this.committedOffsetsByGroup = offsets;
+    this.#committedOffsetsByGroup = offsets;
 
     const snapshot = new TelemetrySnapshot();
     if (instrumentationEmitter) snapshot.bind(instrumentationEmitter);
@@ -574,12 +575,20 @@ export class Cluster {
     return [...partitionsPerTopic.entries()].map(([topic, partitions]) => ({ topic, partitions }));
   }
 
-  committedOffsets({ groupId }: { groupId: string }): Record<string, Record<string, bigint>> {
-    if (!this.committedOffsetsByGroup.has(groupId)) {
-      this.committedOffsetsByGroup.set(groupId, {});
-    }
-
-    return this.committedOffsetsByGroup.get(groupId)!;
+  /**
+   * The offset last committed for a partition through this client: by a consumer of `groupId`, or
+   * by a transactional producer sending offsets for it. `undefined` when none is known.
+   */
+  committedOffset({
+    groupId,
+    topic,
+    partition,
+  }: {
+    groupId: string;
+    topic: string;
+    partition: number;
+  }): bigint | undefined {
+    return this.#committedOffsetsByGroup.get(groupId)?.get(topic)?.get(partition);
   }
 
   markOffsetAsCommitted({
@@ -593,9 +602,22 @@ export class Cluster {
     partition: number;
     offset: bigint;
   }): void {
-    const committedOffsets = this.committedOffsets({ groupId });
-    committedOffsets[topic] = committedOffsets[topic] ?? {};
-    committedOffsets[topic][partition] = offset;
+    let committedTopics = this.#committedOffsetsByGroup.get(groupId);
+    if (!committedTopics) {
+      committedTopics = new Map();
+      this.#committedOffsetsByGroup.set(groupId, committedTopics);
+    }
+    let committedPartitions = committedTopics.get(topic);
+    if (!committedPartitions) {
+      committedPartitions = new Map();
+      committedTopics.set(topic, committedPartitions);
+    }
+    committedPartitions.set(partition, offset);
+  }
+
+  /** Drops the committed offset known for a partition, so the next lookup asks the coordinator again. */
+  forgetCommittedOffset({ groupId, topic, partition }: { groupId: string; topic: string; partition: number }): void {
+    this.#committedOffsetsByGroup.get(groupId)?.get(topic)?.delete(partition);
   }
 
   /**

@@ -462,8 +462,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     const lost = this.assigned();
     if (lost.length === 0) return;
 
-    this.partitionPipeline.assign([]);
-    this.offsetTracker.updateAssignment(toPartitionsByTopic([]));
+    this.#updateAssignment([]);
 
     await this.#notify(this.onPartitionsLost, lost, 'onPartitionsLost');
   }
@@ -519,9 +518,16 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     }
 
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
-    this.partitionPipeline.assign(currentMemberAssignment);
+    return this.#updateAssignment(currentMemberAssignment);
+  }
 
-    const memberAssignment = toPartitionsByTopic(currentMemberAssignment);
+  /**
+   * Tells the partition pipeline and the offset tracker about an assignment change. Every change
+   * goes through here so the two keep the same assignment, and so the same retained partitions.
+   */
+  #updateAssignment(assignment: readonly TopicPartitions[]): MemberAssignmentMap {
+    this.partitionPipeline.assign(assignment);
+    const memberAssignment = toPartitionsByTopic(assignment);
     this.offsetTracker.updateAssignment(memberAssignment);
     return memberAssignment;
   }

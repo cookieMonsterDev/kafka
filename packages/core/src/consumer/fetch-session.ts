@@ -5,7 +5,16 @@ export const FETCH_SESSION_INITIAL_EPOCH = 0;
 /** KIP-227: epoch -1 asks the broker to close an open session. */
 export const FETCH_SESSION_FINAL_EPOCH = -1;
 
-const MAX_EPOCH = 0x7fffffff;
+/** The highest epoch a session reaches before it wraps around. */
+const MAX_SESSION_EPOCH = 0x7fffffff;
+
+/**
+ * The epoch after `epoch` in a KIP-227 fetch session or a KIP-932 share session. It wraps to 1,
+ * not 0, because epoch 0 opens a new session.
+ */
+export function nextSessionEpoch(epoch: number): number {
+  return epoch === MAX_SESSION_EPOCH ? 1 : epoch + 1;
+}
 
 interface SessionPartitionState {
   currentLeaderEpoch: number;
@@ -104,7 +113,7 @@ export class FetchSessionHandler {
     }
 
     this.#topics = desiredTopics;
-    this.#epoch = this.#epoch === MAX_EPOCH ? 1 : this.#epoch + 1;
+    this.#epoch = nextSessionEpoch(this.#epoch);
     return { sessionId: this.#sessionId, sessionEpoch: this.#epoch, topics, forgottenTopics };
   }
 

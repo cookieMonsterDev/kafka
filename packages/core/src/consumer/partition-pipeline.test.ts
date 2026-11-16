@@ -79,6 +79,56 @@ describe('consumer/partition-pipeline', () => {
     });
   });
 
+  describe('assign', () => {
+    it("keeps a retained partition's fetch state and fetches a gained one from its position", () => {
+      const { pipeline, stateOf } = createPipeline([0]);
+      const first = fetchBatch(pipeline, stateOf(0), 0n);
+
+      pipeline.assign([{ topic, partitions: [0, 1] }]);
+
+      expect(stateOf(0).unsettledBatches).toBe(1);
+      expect(pipeline.isBatchCurrent(first)).toBe(true);
+      expect(fetchOffsets(pipeline, [0, 1])).toEqual([2n, 0n]);
+    });
+
+    it('drops the state of a partition outside the assignment unless it holds a pending seek', () => {
+      const { pipeline, stateOf } = createPipeline([0, 1]);
+      const dropped = stateOf(0);
+      pipeline.seek({ topic, partition: 1, offset: 5n });
+
+      pipeline.assign([]);
+
+      expect(pipeline.state(topic, 0)).toBeUndefined();
+      expect(dropped.isAssigned).toBe(false);
+      expect(pipeline.state(topic, 1)).toMatchObject({ isAssigned: false, pendingSeek: 5n });
+    });
+
+    it('keeps the state of a partition a worker is handling, so a seek after it is assigned again waits', async () => {
+      const { pipeline, stateOf } = createPipeline([0]);
+      const batch = fetchBatch(pipeline, stateOf(), 0n);
+      pipeline.beginProcessing(batch);
+
+      pipeline.assign([]);
+      pipeline.assign([{ topic, partitions: [0] }]);
+      pipeline.seek({ topic, partition: 0, offset: 50n });
+      const applySeek = vi.fn(async () => undefined);
+      await pipeline.applyPendingSeeks([{ topic, partitions: [0] }], applySeek);
+
+      expect(stateOf()).toBe(batch.partitionState);
+      expect(applySeek).not.toHaveBeenCalled();
+    });
+
+    it('keeps a pause of a retained partition', () => {
+      const { pipeline, stateOf } = createPipeline([0, 1]);
+      pipeline.pause([{ topic, partitions: [0] }]);
+
+      pipeline.assign([{ topic, partitions: [0] }]);
+
+      expect(stateOf(0).isPaused).toBe(true);
+      expect(pipeline.paused()).toEqual([{ topic, partitions: [0] }]);
+    });
+  });
+
   describe('planFetch', () => {
     it('leaves out paused partitions and those without a committed offset', () => {
       const { pipeline } = createPipeline([0, 1, 2]);
@@ -186,11 +236,12 @@ describe('consumer/partition-pipeline', () => {
       expect(fetchOffsets(pipeline)).toEqual([5n]);
     });
 
-    it('stops counting unsettled batches on reassignment without going negative when they settle', () => {
+    it('stops counting unsettled batches of a regained partition without going negative when they settle', () => {
       const { pipeline, stateOf } = createPipeline();
       const first = fetchBatch(pipeline, stateOf(), 0n);
       fetchBatch(pipeline, stateOf(), 2n);
 
+      pipeline.assign([]);
       pipeline.assign([{ topic, partitions: [0] }]);
       expect(fetchOffsets(pipeline)).toEqual([0n]);
       pipeline.settle(first);

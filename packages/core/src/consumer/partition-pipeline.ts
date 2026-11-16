@@ -5,8 +5,8 @@ import type { TopicPartitionOffset, TopicPartitions } from './types';
 /** One batch queued or being handled, plus one held by the fetcher until that one settles. */
 const MAX_UNSETTLED_BATCHES_PER_PARTITION = 2;
 
-/** Reads a partition's position from the offset manager; `null` while there is none. */
-type ReadPosition = (topic: string, partition: number) => bigint | null;
+/** Reads a partition's position from the offset tracker. */
+type ReadPosition = (topic: string, partition: number) => bigint;
 
 type TopicPartitionsInput = readonly { topic: string; partitions?: number[] }[];
 
@@ -24,7 +24,7 @@ export class PartitionState {
   pendingSeek: bigint | null = null;
   /** Whether a worker is handling one of the partition's batches. */
   isProcessing = false;
-  /** The position as last read from the offset manager; `null` once something may have moved it. */
+  /** The position as last read from the offset tracker; `null` once something may have moved it. */
   position: bigint | null = null;
   /** Batches returned by a fetch that have not left the fetch pipeline yet. */
   unsettledBatches = 0;
@@ -82,18 +82,31 @@ export class PartitionPipeline {
   }
 
   /**
-   * Replaces the assignment. Every partition's next fetch starts from its position, and unsettled
-   * batches stop counting, so a batch that was never settled cannot hold a partition back for good.
+   * Replaces the assignment. A retained partition keeps its fetch state, like its offsets in the
+   * offset tracker: its unsettled batches still settle, so its next fetch can continue after them.
+   * Every other partition's next fetch starts from its position, and its unsettled batches stop
+   * counting, so a batch counted under an earlier assignment cannot hold it back. The state of a
+   * partition outside the new assignment is dropped, unless it holds a seek to apply once the
+   * partition is assigned again or a worker is still handling one of its batches: that worker
+   * stops for a seek made after the partition is assigned again only if it sees the same state.
    */
   assign(topicPartitions: readonly TopicPartitions[]): void {
     this.#subscriptionState.assign(topicPartitions);
-    for (const states of this.#states.values()) {
+    const assignedPartitionsByTopic = new Map(
+      topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)] as const),
+    );
+    for (const [topic, states] of this.#states) {
+      const assignedPartitions = assignedPartitionsByTopic.get(topic);
       for (const state of states.values()) {
+        if (state.isAssigned && assignedPartitions?.has(state.partition) === true) continue;
+
+        // A batch still holding the state sees it unassigned, even once the state is dropped.
         state.isAssigned = false;
         state.unsettledBatches = 0;
-        state.isPaused = this.#subscriptionState.isPaused(state.topic, state.partition);
         this.#resetPrefetch(state);
+        if (state.pendingSeek === null && !state.isProcessing) states.delete(state.partition);
       }
+      if (states.size === 0) this.#states.delete(topic);
     }
     for (const { topic, partitions } of topicPartitions) {
       for (const partition of partitions) this.#stateFor(topic, partition).isAssigned = true;
@@ -112,7 +125,7 @@ export class PartitionPipeline {
     return this.#states.get(topic)?.get(partition)?.isAssigned === true;
   }
 
-  /** The partition's state, or `undefined` when it was never assigned or sought. */
+  /** The partition's state, or `undefined` when it has none; {@link assign} says when one is dropped. */
   state(topic: string, partition: number): PartitionState | undefined {
     return this.#states.get(topic)?.get(partition);
   }
@@ -196,8 +209,7 @@ export class PartitionPipeline {
           continue;
         }
 
-        const fetchOffset = state.prefetchOffset ?? this.#refreshPosition(state);
-        if (fetchOffset !== null) planned.push({ partition, fetchOffset });
+        planned.push({ partition, fetchOffset: state.prefetchOffset ?? this.#refreshPosition(state) });
       }
       if (planned.length > 0) topics.push({ topic, partitions: planned });
     }
@@ -321,11 +333,11 @@ export class PartitionPipeline {
     return state.isAssigned && !state.isPaused && state.pendingSeek === null;
   }
 
-  #position(state: PartitionState): bigint | null {
+  #position(state: PartitionState): bigint {
     return state.position ?? this.#refreshPosition(state);
   }
 
-  #refreshPosition(state: PartitionState): bigint | null {
+  #refreshPosition(state: PartitionState): bigint {
     state.position = this.#readPosition(state.topic, state.partition);
     return state.position;
   }

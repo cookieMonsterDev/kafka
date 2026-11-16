@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { listGroupsRequestV0 } from './v0/request';
 import { listGroupsResponseV0 } from './v0/response';
 import { listGroupsRequestV1 } from './v1/request';
@@ -14,7 +15,7 @@ export interface ListGroupsOptions {
   states?: string[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ListGroupsOptions>>> = {
+const VERSIONS = {
   0: () => ({ request: listGroupsRequestV0({}), response: listGroupsResponseV0 }),
   1: () => ({ request: listGroupsRequestV1({}), response: listGroupsResponseV1 }),
   2: () => ({ request: listGroupsRequestV2({}), response: listGroupsResponseV2 }),
@@ -23,13 +24,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ListGroupsOptions>>> = {
     request: listGroupsRequestV4({ states: options.states ?? [] }),
     response: listGroupsResponseV4,
   }),
-};
+} satisfies VersionFactories<ListGroupsOptions>;
 
-export const ListGroups: RequestFamily<ListGroupsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ListGroups protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ListGroups = defineRequestFamily(KAFKA_APIS.ListGroups, VERSIONS);

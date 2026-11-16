@@ -2,6 +2,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { protocolType } from './helpers';
 import type { DescribeMetadataQuorumResult, MetadataQuorumReplica } from './types';
+import { DescribeQuorum } from '../protocol/requests/lazy-families';
 
 export interface MetadataQuorumApi {
   describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
@@ -33,7 +34,7 @@ export function createMetadataQuorumApi({ cluster, logger, retry }: AdminContext
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const response = await broker.describeQuorum({
+        const response = await broker.send(DescribeQuorum, {
           topics: [{ topicName: '__cluster_metadata', partitions: [{ partitionIndex: 0 }] }],
         });
         return {

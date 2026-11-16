@@ -1,5 +1,6 @@
 import { assertNoPrefixedAclOnV0 } from '../acl-v0';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { createAclsRequestV0 } from './v0/request';
 import { createAclsResponseV0 } from './v0/response';
 import { createAclsRequestV1 } from './v1/request';
@@ -21,7 +22,7 @@ export interface CreateAclsOptions {
   }[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateAclsOptions>>> = {
+const VERSIONS = {
   0: (values) => {
     for (const creation of values.creations) {
       assertNoPrefixedAclOnV0(creation.resourcePatternType);
@@ -45,13 +46,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateAclsOptions>>> = {
   1: (values) => ({ request: createAclsRequestV1(values), response: createAclsResponseV1 }),
   2: (values) => ({ request: createAclsRequestV2(values), response: createAclsResponseV2 }),
   3: (values) => ({ request: createAclsRequestV3(values), response: createAclsResponseV3 }),
-};
+} satisfies VersionFactories<CreateAclsOptions>;
 
-export const CreateAcls: RequestFamily<CreateAclsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no CreateAcls protocol for version ${version}`);
-    return factory;
-  },
-});
+export const CreateAcls = defineRequestFamily(KAFKA_APIS.CreateAcls, VERSIONS);

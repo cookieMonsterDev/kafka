@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { describeShareGroupOffsetsRequestV0 } from './v0/request';
 import { describeShareGroupOffsetsResponseV0 } from './v0/response';
 import { describeShareGroupOffsetsRequestV1 } from './v1/request';
@@ -34,7 +35,7 @@ function toRequestGroups(groups: DescribeShareGroupOffsetsGroupInput[]) {
   }));
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeShareGroupOffsetsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeShareGroupOffsetsRequestV0({ groups: toRequestGroups(options.groups) }),
     response: describeShareGroupOffsetsResponseV0,
@@ -43,15 +44,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeShareGroupOffset
     request: describeShareGroupOffsetsRequestV1({ groups: toRequestGroups(options.groups) }),
     response: describeShareGroupOffsetsResponseV1,
   }),
-};
+} satisfies VersionFactories<DescribeShareGroupOffsetsOptions>;
 
-export const DescribeShareGroupOffsets: RequestFamily<DescribeShareGroupOffsetsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) {
-      throw new Error(`Invariant violated: no DescribeShareGroupOffsets protocol for version ${version}`);
-    }
-    return factory;
-  },
-});
+export const DescribeShareGroupOffsets = defineRequestFamily(KAFKA_APIS.DescribeShareGroupOffsets, VERSIONS);

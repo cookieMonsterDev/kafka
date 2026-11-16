@@ -1,8 +1,11 @@
 import type { Broker } from '../broker/index';
 import type { Logger } from '../loggers/index';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
-import type { InitProducerIdOptions } from '../protocol/requests/init-producer-id/index';
-import type { InitProducerIdResponseV1Body } from '../protocol/requests/init-producer-id/v1/response';
+import {
+  InitProducerId,
+  type InitProducerIdOptions,
+  type InitProducerIdResponse,
+} from '../protocol/requests/init-producer-id/index';
 import type { Retrier } from '../retry/index';
 import type { Cluster } from './index';
 
@@ -42,13 +45,13 @@ export interface SendInitProducerIdContext {
 export function sendInitProducerId(
   { cluster, retry, logger }: SendInitProducerIdContext,
   request: InitProducerIdOptions,
-): Promise<InitProducerIdResponseV1Body> {
+): Promise<InitProducerIdResponse> {
   const { transactionalId } = request;
 
   return retry(async (bail, retryCount, retryTime) => {
     try {
       const broker = await findBroker(cluster, transactionalId);
-      return await broker.initProducerId(request);
+      return await broker.send(InitProducerId, request);
     } catch (e) {
       const error = e as Error & { type?: string };
       if (error.type && RETRIABLE_COORDINATOR_ERRORS.has(error.type)) {

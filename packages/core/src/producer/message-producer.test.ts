@@ -13,6 +13,7 @@ import { retrier } from '../retry/index';
 import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
 import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -33,7 +34,10 @@ function fakeProduceResponse(topicName: string, partition: number) {
 }
 
 function fakeBroker(nodeId: number) {
-  return { nodeId, produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))) };
+  return withSend({
+    nodeId,
+    produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))),
+  });
 }
 
 function fakePartitionMetadata(): PartitionMetadata {
@@ -49,11 +53,13 @@ function fakePartitionMetadata(): PartitionMetadata {
 
 /** Sequences and gates run on a real ledger with an in-memory InitProducerId. */
 function inMemoryLedger(): IdempotenceLedger {
-  return createIdempotenceLedger({
-    logger: silentLogger,
-    initProducerId: (current: ProducerIdentity) =>
-      Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
-  });
+  return createIdempotenceLedger(
+    withSend({
+      logger: silentLogger,
+      initProducerId: (current: ProducerIdentity) =>
+        Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
+    }),
+  );
 }
 
 /** An idempotent producer's ledger, its producer id already initialized. */

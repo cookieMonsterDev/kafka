@@ -8,7 +8,7 @@ import { isLogLevelEnabled, LOG_LEVELS, type Logger } from '../loggers/index';
 import { createRequest } from '../protocol/request';
 import { Decoder } from '../protocol/decoder';
 import type { Encoder } from '../protocol/encoder';
-import { usesFlexibleResponseHeader } from '../protocol/flexible';
+import { usesFlexibleResponseHeader } from '../protocol/requests/kafka-apis';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../protocol/requests/index';
 import { sharedPromiseTo } from '../utils/shared-promise-to';

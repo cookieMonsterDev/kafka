@@ -4,11 +4,12 @@ import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createFeaturesApi } from './features';
 import { FEATURE_UPDATE_UPGRADE_TYPES } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeCluster(updateFeatures = vi.fn().mockResolvedValue({ results: [] })) {
-  const broker = { updateFeatures };
+  const broker = withSend({ updateFeatures });
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { renewDelegationTokenRequestV0 } from './v0/request';
 import { renewDelegationTokenResponseV0 } from './v0/response';
 import { renewDelegationTokenRequestV1 } from './v1/request';
@@ -17,7 +18,7 @@ function fields(options: RenewDelegationTokenOptions) {
   return { hmac: options.hmac, renewPeriodMs: options.renewPeriodMs ?? DEFAULT_RENEW_PERIOD_MS };
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<RenewDelegationTokenOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: renewDelegationTokenRequestV0(fields(options)),
     response: renewDelegationTokenResponseV0,
@@ -30,13 +31,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<RenewDelegationTokenOpti
     request: renewDelegationTokenRequestV2(fields(options)),
     response: renewDelegationTokenResponseV2,
   }),
-};
+} satisfies VersionFactories<RenewDelegationTokenOptions>;
 
-export const RenewDelegationToken: RequestFamily<RenewDelegationTokenOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no RenewDelegationToken protocol for version ${version}`);
-    return factory;
-  },
-});
+export const RenewDelegationToken = defineRequestFamily(KAFKA_APIS.RenewDelegationToken, VERSIONS);

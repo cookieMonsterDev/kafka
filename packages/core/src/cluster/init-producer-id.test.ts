@@ -6,6 +6,7 @@ import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import { retrier } from '../retry/index';
 import type { Cluster } from './index';
 import { sendInitProducerId } from './init-producer-id';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const response = { producerId: 1000n, producerEpoch: 1, errorCode: 0, throttleTime: 0, clientSideThrottleTime: 0 };
@@ -15,12 +16,12 @@ function errorOfType(type: string): KafkaProtocolError {
 }
 
 function fakeCluster() {
-  const broker = { initProducerId: vi.fn().mockResolvedValue(response) };
-  const cluster = {
+  const broker = withSend({ initProducerId: vi.fn().mockResolvedValue(response) });
+  const cluster = withSend({
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
-  };
+  });
   return { broker, cluster };
 }
 

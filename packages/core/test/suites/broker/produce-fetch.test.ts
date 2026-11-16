@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import { COMPRESSION_TYPES } from '../../../src/protocol/compression/index';
-import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { lookup } from '../../../src/protocol/requests/index';
 import { Fetch } from '../../../src/protocol/requests/fetch/index';
 import { Produce } from '../../../src/protocol/requests/produce/index';
@@ -20,6 +19,7 @@ import {
   testIfKafkaAtLeast_4_3,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
+import { Metadata } from '../../../src/protocol/requests/metadata/index';
 
 const timestamp = 1_509_928_155_660;
 
@@ -41,7 +41,9 @@ describe('broker.produceFetch', () => {
   });
 
   async function connectToLeader(): Promise<Broker> {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      broker!.send(Metadata, { topics: [topicName] }),
+    );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
     leader = new Broker({
@@ -54,12 +56,12 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtMost_0_10('on Kafka 0.10 produce/fetch uses MessageSet (Produce v2, Fetch v3)', async () => {
     const target = await connectToLeader();
-    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+    const produceVersion = lookup(target.versions!)(Produce)({
       acks: 1,
       timeout: 30_000,
       topicData: [],
     }).request.apiVersion;
-    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+    const fetchVersion = lookup(target.versions!)(Fetch)({
       replicaId: -1,
       maxWaitTime: 100,
       minBytes: 1,
@@ -71,7 +73,7 @@ describe('broker.produceFetch', () => {
     expect(fetchVersion).toBe(3);
 
     const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [
@@ -85,7 +87,7 @@ describe('broker.produceFetch', () => {
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
     expect(produced?.topics[0]?.partitions[0]?.baseOffset).toBe(0n);
 
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -101,12 +103,12 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtLeast_0_11('on Kafka 0.11+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 4)', async () => {
     const target = await connectToLeader();
-    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+    const produceVersion = lookup(target.versions!)(Produce)({
       acks: 1,
       timeout: 30_000,
       topicData: [],
     }).request.apiVersion;
-    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+    const fetchVersion = lookup(target.versions!)(Fetch)({
       replicaId: -1,
       maxWaitTime: 100,
       minBytes: 1,
@@ -118,7 +120,7 @@ describe('broker.produceFetch', () => {
     expect(fetchVersion).toBeGreaterThanOrEqual(4);
 
     const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [
@@ -136,7 +138,7 @@ describe('broker.produceFetch', () => {
     );
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
 
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -152,7 +154,7 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtLeast_1_1('on Kafka 1.1+ Fetch incremental sessions (v7+) accept a session id', async () => {
     const target = await connectToLeader();
-    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+    const fetchVersion = lookup(target.versions!)(Fetch)({
       replicaId: -1,
       maxWaitTime: 100,
       minBytes: 1,
@@ -162,7 +164,7 @@ describe('broker.produceFetch', () => {
     expect(fetchVersion).toBeGreaterThanOrEqual(7);
 
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [
@@ -170,7 +172,7 @@ describe('broker.produceFetch', () => {
         ],
       }),
     );
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -179,18 +181,18 @@ describe('broker.produceFetch', () => {
       sessionEpoch: -1,
       topics: [{ topic: topicName, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
     });
-    expect(fetched.sessionId).toEqual(expect.any(Number));
+    expect(fetched).toHaveProperty('sessionId', expect.any(Number));
     expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('session');
   });
 
   testIfKafkaAtLeast_2_4('on Kafka 2.4+ produce/fetch uses RecordBatch (Produce >= 3, Fetch >= 8)', async () => {
     const target = await connectToLeader();
-    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+    const produceVersion = lookup(target.versions!)(Produce)({
       acks: 1,
       timeout: 30_000,
       topicData: [],
     }).request.apiVersion;
-    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+    const fetchVersion = lookup(target.versions!)(Fetch)({
       replicaId: -1,
       maxWaitTime: 100,
       minBytes: 1,
@@ -201,7 +203,7 @@ describe('broker.produceFetch', () => {
     expect(produceVersion).toBeGreaterThanOrEqual(3);
     expect(fetchVersion).toBeGreaterThanOrEqual(8);
 
-    const produced = await target.produce({
+    const produced = await target.send(Produce, {
       acks: 1,
       timeout: 30_000,
       topicData: [
@@ -210,7 +212,7 @@ describe('broker.produceFetch', () => {
     });
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
 
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -228,7 +230,7 @@ describe('broker.produceFetch', () => {
     ];
 
     const produced = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [{ topic: topicName, partitions: [{ partition: 0, messages }] }],
@@ -237,7 +239,7 @@ describe('broker.produceFetch', () => {
     expect(produced?.topics[0]?.partitions[0]?.errorCode).toBe(0);
     expect(produced?.topics[0]?.partitions[0]?.baseOffset).toBe(0n);
 
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -254,7 +256,7 @@ describe('broker.produceFetch', () => {
   it('produces gzip-compressed records', async () => {
     const target = await connectToLeader();
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         compression: COMPRESSION_TYPES.GZIP,
@@ -266,7 +268,7 @@ describe('broker.produceFetch', () => {
         ],
       }),
     );
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -278,7 +280,7 @@ describe('broker.produceFetch', () => {
 
   testIfKafkaAtLeast_4_0('Kafka 4.0+ negotiates Produce v11+', async () => {
     const target = await connectToLeader();
-    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+    const produceVersion = lookup(target.versions!)(Produce)({
       acks: 1,
       timeout: 30_000,
       topicData: [],
@@ -287,13 +289,15 @@ describe('broker.produceFetch', () => {
   });
 
   testIfKafkaAtLeast_4_0('Kafka 4.0+ Fetch v13 uses topic IDs from metadata', async () => {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      broker!.send(Metadata, { topics: [topicName] }),
+    );
     const topicId = metadata.topicMetadata[0]?.topicId;
     expect(topicId).toBeInstanceOf(Buffer);
     expect(topicId?.length).toBe(16);
 
     const target = await connectToLeader();
-    const fetchVersion = lookup(target.versions!)(API_KEYS.Fetch, Fetch)({
+    const fetchVersion = lookup(target.versions!)(Fetch)({
       replicaId: -1,
       maxWaitTime: 100,
       minBytes: 1,
@@ -303,7 +307,7 @@ describe('broker.produceFetch', () => {
     expect(fetchVersion).toBeGreaterThanOrEqual(13);
 
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      target.produce({
+      target.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [
@@ -315,7 +319,7 @@ describe('broker.produceFetch', () => {
       }),
     );
 
-    const fetched = await target.fetch({
+    const fetched = await target.send(Fetch, {
       replicaId: -1,
       maxWaitTime: 1000,
       minBytes: 1,
@@ -323,25 +327,27 @@ describe('broker.produceFetch', () => {
       topics: [{ topic: topicName, topicId, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1_048_576 }] }],
     });
     expect(fetched.responses[0]?.topicName).toBe(topicName);
-    expect(fetched.responses[0]?.topicId).toEqual(topicId);
+    expect(fetched.responses[0]).toHaveProperty('topicId', topicId);
     expect(fetched.responses[0]?.partitions[0]?.messages[0]?.value?.toString()).toBe('v13');
   });
 
   testIfKafkaAtLeast_4_3('Kafka 4.3+ Produce v13 uses topic IDs from metadata', async () => {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      broker!.send(Metadata, { topics: [topicName] }),
+    );
     const topicId = metadata.topicMetadata[0]?.topicId;
     expect(topicId).toBeInstanceOf(Buffer);
     expect(topicId?.length).toBe(16);
 
     const target = await connectToLeader();
-    const produceVersion = lookup(target.versions!)(API_KEYS.Produce, Produce)({
+    const produceVersion = lookup(target.versions!)(Produce)({
       acks: 1,
       timeout: 30_000,
       topicData: [{ topic: topicName, topicId, partitions: [] }],
     }).request.apiVersion;
     expect(produceVersion).toBeGreaterThanOrEqual(13);
 
-    const produced = await target.produce({
+    const produced = await target.send(Produce, {
       acks: 1,
       timeout: 30_000,
       topicData: [

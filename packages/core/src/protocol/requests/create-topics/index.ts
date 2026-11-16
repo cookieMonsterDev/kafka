@@ -1,5 +1,6 @@
 import { KafkaNonRetriableError } from '../../../errors';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import type { CreateTopicInput } from './v2/request';
 import { createTopicsRequestV0 } from './v0/request';
 import { createTopicsResponseV0 } from './v0/response';
@@ -24,7 +25,7 @@ export interface CreateTopicsOptions {
   timeout?: number;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateTopicsOptions>>> = {
+const VERSIONS = {
   0: (options) => {
     if (options.validateOnly === true) {
       throw new KafkaNonRetriableError(
@@ -95,13 +96,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateTopicsOptions>>> =
     }),
     response: createTopicsResponseV7,
   }),
-};
+} satisfies VersionFactories<CreateTopicsOptions>;
 
-export const CreateTopics: RequestFamily<CreateTopicsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no CreateTopics protocol for version ${version}`);
-    return factory;
-  },
-});
+export const CreateTopics = defineRequestFamily(KAFKA_APIS.CreateTopics, VERSIONS);

@@ -1,5 +1,6 @@
 import { ISOLATION_LEVEL, type IsolationLevel } from '../../enums/isolation-level';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories, type VersionResponse } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import {
   REPLICA_ID,
   type ListOffsetsTopicOptions,
@@ -31,7 +32,7 @@ export interface ListOffsetsOptions {
   topics: ListOffsetsTopicOptions[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ListOffsetsOptions>>> = {
+const VERSIONS = {
   0: ({ replicaId = REPLICA_ID, topics }) => ({
     request: listOffsetsRequestV0({ replicaId, topics: withDefaultTimestampsAndMaxOffsets(topics) }),
     response: listOffsetsResponseV0,
@@ -68,13 +69,40 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ListOffsetsOptions>>> = 
     request: listOffsetsRequestV8({ replicaId, isolationLevel, topics: withDefaultTimestamps(topics) }),
     response: listOffsetsResponseV8,
   }),
-};
+} satisfies VersionFactories<ListOffsetsOptions>;
 
-export const ListOffsets: RequestFamily<ListOffsetsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ListOffsets protocol for version ${version}`);
-    return factory;
-  },
+/** A ListOffsets response in one shape for every version. */
+export interface ListOffsetsResponse {
+  throttleTime: number;
+  clientSideThrottleTime: number;
+  responses: {
+    topic: string;
+    partitions: { partition: number; errorCode: number; timestamp: bigint; offset: bigint; leaderEpoch: number }[];
+  }[];
+}
+
+/**
+ * ListOffsets v0 returns `offsets[]`; v1+ returns a single `offset`. Normalizes to `offset`, and
+ * fields an older version lacks take their "unknown" value.
+ */
+function normalizeListOffsets(body: VersionResponse<typeof VERSIONS>): ListOffsetsResponse {
+  return {
+    throttleTime: 'throttleTime' in body ? body.throttleTime : 0,
+    clientSideThrottleTime: 'clientSideThrottleTime' in body ? body.clientSideThrottleTime : 0,
+    responses: body.responses.map((response) => ({
+      topic: response.topic,
+      partitions: response.partitions.map((partition) => ({
+        partition: partition.partition,
+        errorCode: partition.errorCode,
+        timestamp: 'timestamp' in partition ? partition.timestamp : -1n,
+        offset: 'offsets' in partition ? (partition.offsets.at(-1) ?? -1n) : partition.offset,
+        leaderEpoch: 'leaderEpoch' in partition ? (partition.leaderEpoch ?? -1) : -1,
+      })),
+    })),
+  };
+}
+
+export const ListOffsets = defineRequestFamily(KAFKA_APIS.ListOffsets, VERSIONS, {
+  parseResponse: async (body, _options, parse) =>
+    normalizeListOffsets((await parse(body)) as VersionResponse<typeof VERSIONS>),
 });

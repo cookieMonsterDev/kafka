@@ -3,6 +3,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
 import type { UnregisterBrokerOptions } from './types';
+import { UnregisterBroker } from '../protocol/requests/lazy-families';
 
 export interface UnregisterBrokerApi {
   unregisterBroker: (options: UnregisterBrokerOptions) => Promise<void>;
@@ -23,7 +24,7 @@ export function createUnregisterBrokerApi({ cluster, logger, retry }: AdminConte
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.unregisterBroker({ brokerId: normalizedBrokerId });
+        await broker.send(UnregisterBroker, { brokerId: normalizedBrokerId });
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
           logger.warn('Could not unregister broker', {

@@ -3,6 +3,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, requireMetadata } from './helpers';
 import type { DescribeProducersOptions, PartitionProducerState, TopicPartitions } from './types';
+import { DescribeProducers } from '../protocol/requests/lazy-families';
 
 export interface ProducersApi {
   describeProducers: (options: DescribeProducersOptions) => Promise<PartitionProducerState[]>;
@@ -79,7 +80,7 @@ export function createProducersApi({ cluster, retry }: AdminContext): ProducersA
       const responses = await Promise.all(
         [...requestsByBroker].map(async ([nodeId, topics]) => {
           const broker = await cluster.findBroker({ nodeId });
-          return broker.describeProducers({
+          return broker.send(DescribeProducers, {
             topics: [...topics].map(([topic, partitions]) => ({ topic, partitions })),
           });
         }),

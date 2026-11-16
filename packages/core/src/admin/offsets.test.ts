@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createOffsetsApi } from './offsets';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -130,17 +131,17 @@ describe('admin/offsets', () => {
     });
 
     it('fetches committed offsets from the group coordinator', async () => {
-      const coordinator = {
+      const coordinator = withSend({
         offsetFetch: vi.fn().mockResolvedValue({
           responses: [{ topic: 'orders', partitions: [{ partition: 0, offset: 7n, metadata: '' }] }],
         }),
-      };
-      const cluster = {
+      });
+      const cluster = withSend({
         findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
         addTargetTopic: vi.fn().mockResolvedValue(undefined),
         refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
         findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
-      };
+      });
 
       await expect(makeApi(cluster).fetchOffsets({ groupId: 'g1', topics: ['orders'] })).resolves.toEqual([
         { topic: 'orders', partitions: [{ partition: 0, offset: 7n, metadata: null }] },

@@ -20,6 +20,15 @@ import type {
   TopicOffset,
   TopicPartitionConfig,
 } from './types';
+import {
+  CreatePartitions,
+  CreateTopics,
+  DeleteRecords,
+  DeleteTopics,
+  DescribeCluster,
+  DescribeTopicPartitions,
+} from '../protocol/requests/lazy-families';
+import { Metadata } from '../protocol/requests/metadata/index';
 
 const NO_CONTROLLER_ID = -1;
 const LEADER_NOT_AVAILABLE_CODE = 5;
@@ -112,17 +121,21 @@ export function createTopicsApi(
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.createTopics({ topics, validateOnly, timeout });
+        await broker.send(CreateTopics, { topics, validateOnly, timeout });
 
         // `validateOnly` never actually creates the topic, so its partitions never get a leader —
         // waiting for one here would just run out the clock on every dry-run call.
         if (waitForLeaders && !validateOnly) {
           const topicNamesArray = [...topicNames];
-          await retryOnLeaderNotAvailable(async () => broker.metadata(topicNamesArray), {
-            delay: 100,
-            maxWait: timeout,
-            timeoutMessage: 'Timed out while waiting for topic leaders',
-          });
+          await retryOnLeaderNotAvailable(
+            async () =>
+              broker.send(Metadata, { topics: topicNamesArray, allowAutoTopicCreation: broker.allowAutoTopicCreation }),
+            {
+              delay: 100,
+              maxWait: timeout,
+              timeoutMessage: 'Timed out while waiting for topic leaders',
+            },
+          );
         }
 
         return true;
@@ -179,7 +192,7 @@ export function createTopicsApi(
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.createPartitions({ topicPartitions, validateOnly, timeout });
+        await broker.send(CreatePartitions, { topicPartitions, validateOnly, timeout });
       } catch (error) {
         const type = protocolType(error);
         // A topic created moments earlier may not have reached this broker's metadata yet —
@@ -212,7 +225,7 @@ export function createTopicsApi(
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.deleteTopics({ topics, timeout });
+        await broker.send(DeleteTopics, { topics, timeout });
 
         for (const topic of topics) {
           cluster.targetTopics.delete(topic);
@@ -278,7 +291,7 @@ export function createTopicsApi(
     const versions = cluster.brokerPool.versions;
     if (versions?.[API_KEYS.DescribeCluster]) {
       const broker = await cluster.findControllerBroker();
-      const body = await broker.describeCluster({});
+      const body = await broker.send(DescribeCluster, {});
       const controller = body.controllerId == null || body.controllerId === NO_CONTROLLER_ID ? null : body.controllerId;
       return {
         brokers: body.brokers.map(({ nodeId, host, port }) => ({ nodeId, host, port })),
@@ -336,7 +349,7 @@ export function createTopicsApi(
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const body = await broker.describeTopicPartitions({
+        const body = await broker.send(DescribeTopicPartitions, {
           topics: names.map((topic) => ({ topic })),
           responsePartitionLimit,
           cursor: cursor ?? null,
@@ -463,7 +476,7 @@ export function createTopicsApi(
         const requests = Object.entries(leadersByBroker).map(([nodeId, nodePartitionIds]) =>
           (async () => {
             const broker = await cluster.findBroker({ nodeId });
-            await broker.deleteRecords({
+            await broker.send(DeleteRecords, {
               topics: [
                 {
                   topic,

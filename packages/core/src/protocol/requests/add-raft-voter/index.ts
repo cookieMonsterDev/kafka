@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { addRaftVoterRequestV0, type AddRaftVoterListener } from './v0/request';
 import { addRaftVoterResponseV0 } from './v0/response';
 import { addRaftVoterRequestV1 } from './v1/request';
@@ -26,7 +27,7 @@ const sharedFields = (options: AddRaftVoterOptions) => ({
   listeners: options.listeners,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AddRaftVoterOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: addRaftVoterRequestV0(sharedFields(options)),
     response: addRaftVoterResponseV0,
@@ -38,13 +39,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AddRaftVoterOptions>>> =
     }),
     response: addRaftVoterResponseV0,
   }),
-};
+} satisfies VersionFactories<AddRaftVoterOptions>;
 
-export const AddRaftVoter: RequestFamily<AddRaftVoterOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AddRaftVoter protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AddRaftVoter = defineRequestFamily(KAFKA_APIS.AddRaftVoter, VERSIONS);

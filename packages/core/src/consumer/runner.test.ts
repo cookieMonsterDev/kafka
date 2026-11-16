@@ -13,6 +13,7 @@ import { REBALANCING } from './instrumentation-events';
 import { PartitionPipeline, type PartitionState } from './partition-pipeline';
 import { Runner } from './runner';
 import type { EachBatchHandler, EachMessageHandler, EachMessagePayload, KafkaMessage, OnConsumeEvent } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -71,7 +72,7 @@ describe('consumer/runner', () => {
   }
 
   function fakeConsumerGroup(overrides: Partial<Record<string, unknown>> = {}): ConsumerGroupHandle {
-    return {
+    return withSend({
       groupId: 'group',
       memberId: 'member',
       getNodeIds: vi.fn(() => ['1', '2', '3']),
@@ -93,7 +94,7 @@ describe('consumer/runner', () => {
       recoverRejectedMember: vi.fn(async () => undefined),
       position: vi.fn(() => null),
       ...overrides,
-    } as unknown as ConsumerGroupHandle;
+    }) as unknown as ConsumerGroupHandle;
   }
 
   afterEach(async () => {
@@ -119,9 +120,11 @@ describe('consumer/runner', () => {
 
   it('still emits REBALANCING and rejoins (not lost) when a fetch reports the group is rebalancing', async () => {
     const error = rebalancingError();
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
-    });
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+      }),
+    );
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const rebalancingEvents: unknown[] = [];
     instrumentationEmitter.addListener(REBALANCING, (event) => rebalancingEvents.push(event));
@@ -146,9 +149,11 @@ describe('consumer/runner', () => {
 
   it('asks the group to recover the rejected member before rejoining after UNKNOWN_MEMBER_ID', async () => {
     const error = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
-    });
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+      }),
+    );
     runner = new Runner({
       consumerGroup,
       onCrash: vi.fn(),
@@ -188,17 +193,17 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       topics: [topicName],
       topicConfigurations: {},
-      cluster: {
+      cluster: withSend({
         connect: vi.fn(async () => undefined),
         refreshMetadataIfNecessary: vi.fn(async () => undefined),
         refreshMetadata: vi.fn(async () => undefined),
         getNodeIds: vi.fn(() => ['1']),
-        findGroupCoordinator: vi.fn(async () => ({ consumerGroupHeartbeat })),
+        findGroupCoordinator: vi.fn(async () => withSend({ consumerGroupHeartbeat })),
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
         committedOffset: vi.fn(() => undefined),
         markOffsetAsCommitted: vi.fn(),
         forgetCommittedOffset: vi.fn(),
-      } as unknown as Cluster,
+      }) as unknown as Cluster,
       groupId: 'group',
       assigners: [],
       sessionTimeout: 30_000,
@@ -290,24 +295,26 @@ describe('consumer/runner', () => {
       pipeline.track(batch);
       return batch;
     };
-    const consumerGroup = fakeConsumerGroup({
-      partitionPipeline: pipeline,
-      getNodeIds: vi.fn(() => ['1']),
-      // The second fetch is issued while the first batch is in flight, so it still reads from 0
-      // and only returns once that batch has been processed.
-      fetch: vi
-        .fn()
-        .mockResolvedValueOnce([batchFromZero()])
-        .mockImplementationOnce(async () => {
-          await prefetched;
-          return [batchFromZero()];
-        })
-        .mockResolvedValue([]),
-      resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
-        position = offset + 1n;
-        if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        partitionPipeline: pipeline,
+        getNodeIds: vi.fn(() => ['1']),
+        // The second fetch is issued while the first batch is in flight, so it still reads from 0
+        // and only returns once that batch has been processed.
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce([batchFromZero()])
+          .mockImplementationOnce(async () => {
+            await prefetched;
+            return [batchFromZero()];
+          })
+          .mockResolvedValue([]),
+        resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
+          position = offset + 1n;
+          if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+        }),
       }),
-    });
+    );
     const seenOffsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -328,26 +335,28 @@ describe('consumer/runner', () => {
 
   it('keeps a seek pending for a partition still being processed so the worker stops at it', async () => {
     const pipeline = assignedPipeline();
-    const consumerGroup = fakeConsumerGroup({
-      partitionPipeline: pipeline,
-      getNodeIds: vi.fn(() => ['1']),
-      // Mirrors ConsumerGroup.fetch: applying every pending seek it is allowed to.
-      fetch: vi
-        .fn()
-        .mockResolvedValueOnce([
-          new Batch(
-            topicName,
-            0n,
-            { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)] },
-            partitionState(pipeline),
-          ),
-        ])
-        .mockImplementation(async (): Promise<Batch[]> => {
-          await pipeline.applyPendingSeeks([{ topic: topicName, partitions: [partition] }], async () => undefined);
-          await new Promise((resolve) => setTimeout(resolve, 1));
-          return [];
-        }),
-    });
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        partitionPipeline: pipeline,
+        getNodeIds: vi.fn(() => ['1']),
+        // Mirrors ConsumerGroup.fetch: applying every pending seek it is allowed to.
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce([
+            new Batch(
+              topicName,
+              0n,
+              { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)] },
+              partitionState(pipeline),
+            ),
+          ])
+          .mockImplementation(async (): Promise<Batch[]> => {
+            await pipeline.applyPendingSeeks([{ topic: topicName, partitions: [partition] }], async () => undefined);
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return [];
+          }),
+      }),
+    );
     const seenOffsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -478,11 +487,13 @@ describe('consumer/runner', () => {
   it('crashes on KafkaNotImplemented errors from fetch', async () => {
     const notImplementedError = new KafkaNotImplemented('not implemented');
     const onCrash = vi.fn();
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn(async () => {
-        throw notImplementedError;
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn(async () => {
+          throw notImplementedError;
+        }),
       }),
-    });
+    );
     runner = new Runner({
       consumerGroup,
       onCrash,

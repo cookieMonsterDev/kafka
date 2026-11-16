@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { REPLICA_ID, withCurrentLeaderEpochs, withoutCurrentLeaderEpoch } from './shared';
 import { offsetForLeaderEpochRequestV0 } from './v0/request';
 import { offsetForLeaderEpochResponseV0 } from './v0/response';
@@ -19,7 +20,7 @@ export interface OffsetForLeaderEpochOptions {
   }[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetForLeaderEpochOptions>>> = {
+const VERSIONS = {
   0: ({ topics }) => ({
     request: offsetForLeaderEpochRequestV0({ topics: withoutCurrentLeaderEpoch(topics) }),
     response: offsetForLeaderEpochResponseV0,
@@ -43,13 +44,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetForLeaderEpochOpti
     request: offsetForLeaderEpochRequestV4({ replicaId, topics: withCurrentLeaderEpochs(topics) }),
     response: offsetForLeaderEpochResponseV4,
   }),
-};
+} satisfies VersionFactories<OffsetForLeaderEpochOptions>;
 
-export const OffsetForLeaderEpoch: RequestFamily<OffsetForLeaderEpochOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no OffsetForLeaderEpoch protocol for version ${version}`);
-    return factory;
-  },
-});
+export const OffsetForLeaderEpoch = defineRequestFamily(KAFKA_APIS.OffsetForLeaderEpoch, VERSIONS);

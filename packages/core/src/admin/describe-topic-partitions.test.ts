@@ -4,6 +4,7 @@ import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ZERO_TOPIC_ID } from '../protocol/requests/metadata/shared';
 import { createTopicsApi } from './topics';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topicId = Buffer.from('0123456789abcdef');
@@ -37,7 +38,7 @@ function fakeCluster(
     nextCursor: null,
   }),
 ) {
-  const broker = { describeTopicPartitions };
+  const broker = withSend({ describeTopicPartitions });
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),

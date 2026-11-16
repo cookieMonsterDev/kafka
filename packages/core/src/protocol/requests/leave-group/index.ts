@@ -1,4 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { createErrorFromCode, failIfVersionNotSupported, failure } from '../../error-codes';
+import { defineRequestFamily, type VersionFactories, type VersionResponse } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { leaveGroupRequestV0 } from './v0/request';
 import { leaveGroupResponseV0 } from './v0/response';
 import { leaveGroupRequestV1 } from './v1/request';
@@ -41,7 +43,7 @@ function toMembers(
   return [{ memberId: options.memberId, groupInstanceId: options.groupInstanceId ?? null, reason: null }];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<LeaveGroupOptions>>> = {
+const VERSIONS = {
   0: (options) => {
     if (options.memberId == null) throw new Error('Invariant violated: LeaveGroup v0 requires memberId');
     return {
@@ -75,13 +77,20 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<LeaveGroupOptions>>> = {
     request: leaveGroupRequestV5({ groupId: options.groupId, members: toMembers(options) }),
     response: leaveGroupResponseV5,
   }),
-};
+} satisfies VersionFactories<LeaveGroupOptions>;
 
-export const LeaveGroup: RequestFamily<LeaveGroupOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no LeaveGroup protocol for version ${version}`);
-    return factory;
+export const LeaveGroup = defineRequestFamily(KAFKA_APIS.LeaveGroup, VERSIONS);
+
+/**
+ * LeaveGroup that returns each member's error code instead of throwing on the first failed member;
+ * only a group-level error throws.
+ */
+export const LeaveGroupMembers = defineRequestFamily(KAFKA_APIS.LeaveGroup, VERSIONS, {
+  parseResponse: (body) => {
+    const response = body as VersionResponse<typeof VERSIONS>;
+    failIfVersionNotSupported(response.errorCode);
+    if (failure(response.errorCode)) throw createErrorFromCode(response.errorCode);
+    // Only v3+ (KIP-345) removes several members at once and reports each one.
+    return { ...response, members: 'members' in response ? response.members : [] };
   },
 });

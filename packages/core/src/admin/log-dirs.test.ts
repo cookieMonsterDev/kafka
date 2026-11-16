@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createLogDirsApi } from './log-dirs';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -26,7 +27,7 @@ describe('admin/log-dirs', () => {
     });
 
     it('queries every broker in the pool when brokerIds are omitted', async () => {
-      const broker = { describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ logDir: '/data' }] }) };
+      const broker = withSend({ describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ logDir: '/data' }] }) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         brokerPool: { brokers: { '1': {}, '2': {} } },
@@ -43,7 +44,7 @@ describe('admin/log-dirs', () => {
     });
 
     it('queries only the requested broker ids', async () => {
-      const broker = { describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [] }) };
+      const broker = withSend({ describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [] }) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findBroker: vi.fn().mockResolvedValue(broker),
@@ -65,7 +66,7 @@ describe('admin/log-dirs', () => {
 
     it('alters replica log dirs on the requested broker', async () => {
       const dirs = [{ path: '/data', topics: [{ topic: 'orders', partitions: [0] }] }];
-      const broker = { alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) };
+      const broker = withSend({ alterReplicaLogDirs: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findBroker: vi.fn().mockResolvedValue(broker),
@@ -81,7 +82,7 @@ describe('admin/log-dirs', () => {
       const error = Object.assign(new Error('not leader'), { type: 'NOT_LEADER_OR_FOLLOWER' });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findBroker: vi.fn().mockResolvedValue({ alterReplicaLogDirs: vi.fn().mockRejectedValue(error) }),
+        findBroker: vi.fn().mockResolvedValue(withSend({ alterReplicaLogDirs: vi.fn().mockRejectedValue(error) })),
       };
       await expect(
         makeApi(cluster, { retries: 0 }).alterReplicaLogDirs({

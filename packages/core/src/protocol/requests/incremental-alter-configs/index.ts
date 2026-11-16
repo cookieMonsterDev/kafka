@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { type IncrementalAlterConfigsResource, incrementalAlterConfigsRequestV0 } from './v0/request';
 import { incrementalAlterConfigsResponseV0 } from './v0/response';
 import { incrementalAlterConfigsRequestV1 } from './v1/request';
@@ -9,7 +10,7 @@ export interface IncrementalAlterConfigsOptions {
   validateOnly?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<IncrementalAlterConfigsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: incrementalAlterConfigsRequestV0({
       resources: options.resources,
@@ -24,13 +25,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<IncrementalAlterConfigsO
     }),
     response: incrementalAlterConfigsResponseV1,
   }),
-};
+} satisfies VersionFactories<IncrementalAlterConfigsOptions>;
 
-export const IncrementalAlterConfigs: RequestFamily<IncrementalAlterConfigsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no IncrementalAlterConfigs protocol for version ${version}`);
-    return factory;
-  },
-});
+export const IncrementalAlterConfigs = defineRequestFamily(KAFKA_APIS.IncrementalAlterConfigs, VERSIONS);

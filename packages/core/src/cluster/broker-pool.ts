@@ -11,6 +11,8 @@ import { shuffle } from '../utils/shuffle';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import type { ConnectionPoolBuilder } from './connection-pool-builder';
+import { DescribeCluster } from '../protocol/requests/lazy-families';
+import { Metadata } from '../protocol/requests/metadata/index';
 
 function hasBrokerBeenReplaced(
   broker: Broker,
@@ -430,7 +432,7 @@ export class BrokerPool {
    */
   private async fetchClusterMetadata(broker: Broker, topics: readonly string[]): Promise<ClusterMetadata> {
     if (!this.usingBootstrapControllers) {
-      return broker.metadata([...topics]);
+      return broker.send(Metadata, { topics: [...topics], allowAutoTopicCreation: broker.allowAutoTopicCreation });
     }
 
     const versions = broker.versions ?? this.versions ?? {};
@@ -438,7 +440,7 @@ export class BrokerPool {
       throw new KafkaNonRetriableError('bootstrapControllers requires DescribeCluster v1 (KIP-919, Kafka 3.7+)');
     }
 
-    const body = await broker.describeCluster({
+    const body = await broker.send(DescribeCluster, {
       includeClusterAuthorizedOperations: false,
       endpointType: ENDPOINT_TYPES.CONTROLLER,
     });

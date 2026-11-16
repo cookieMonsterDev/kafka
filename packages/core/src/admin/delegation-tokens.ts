@@ -11,6 +11,12 @@ import type {
   KafkaPrincipal,
   RenewDelegationTokenOptions,
 } from './types';
+import {
+  CreateDelegationToken,
+  DescribeDelegationToken,
+  ExpireDelegationToken,
+  RenewDelegationToken,
+} from '../protocol/requests/lazy-families';
 
 export interface DelegationTokensApi {
   createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
@@ -77,14 +83,17 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const response = await broker.createDelegationToken({
+        const response = await broker.send(CreateDelegationToken, {
           renewers,
           maxLifetimeMs: maxLifeTimeMs,
           owner,
         });
         return {
           owner: toOwner(response.principalType, response.principalName),
-          tokenRequester: toRequester(response.tokenRequesterPrincipalType, response.tokenRequesterPrincipalName),
+          tokenRequester:
+            'tokenRequesterPrincipalType' in response
+              ? toRequester(response.tokenRequesterPrincipalType, response.tokenRequesterPrincipalName)
+              : undefined,
           issueTimestamp: response.issueTimestampMs,
           expiryTimestamp: response.expiryTimestampMs,
           maxTimestamp: response.maxTimestampMs,
@@ -118,7 +127,7 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { expiryTimestampMs } = await broker.renewDelegationToken({
+        const { expiryTimestampMs } = await broker.send(RenewDelegationToken, {
           hmac,
           renewPeriodMs: renewTimePeriodMs,
         });
@@ -150,7 +159,7 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { expiryTimestampMs } = await broker.expireDelegationToken({ hmac, expiryTimePeriodMs });
+        const { expiryTimestampMs } = await broker.send(ExpireDelegationToken, { hmac, expiryTimePeriodMs });
         return { expiryTimestamp: expiryTimestampMs };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {
@@ -177,11 +186,14 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { tokens } = await broker.describeDelegationToken({ owners: options.owners });
+        const { tokens } = await broker.send(DescribeDelegationToken, { owners: options.owners });
         return {
           tokens: tokens.map((token) => ({
             owner: toOwner(token.principalType, token.principalName),
-            tokenRequester: toRequester(token.tokenRequesterPrincipalType, token.tokenRequesterPrincipalName),
+            tokenRequester:
+              'tokenRequesterPrincipalType' in token
+                ? toRequester(token.tokenRequesterPrincipalType, token.tokenRequesterPrincipalName)
+                : undefined,
             issueTimestamp: token.issueTimestamp,
             expiryTimestamp: token.expiryTimestamp,
             maxTimestamp: token.maxTimestamp,

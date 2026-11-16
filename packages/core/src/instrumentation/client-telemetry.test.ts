@@ -5,6 +5,7 @@ import { createErrorFromCode } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ClientTelemetryReporter } from './client-telemetry';
 import { TelemetrySnapshot } from './telemetry-snapshot';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -34,11 +35,11 @@ describe('instrumentation/client-telemetry', () => {
     const assigned = Buffer.alloc(16, 9);
     const getTelemetrySubscriptions = vi.fn().mockResolvedValue(subscription());
     const pushTelemetry = vi.fn().mockResolvedValue({ throttleTime: 0, clientSideThrottleTime: 0, errorCode: 0 });
-    const broker = {
+    const broker = withSend({
       versions: { [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } },
       getTelemetrySubscriptions,
       pushTelemetry,
-    };
+    });
     const snapshot = new TelemetrySnapshot();
     snapshot.recordProduce({ records: 2, bytes: 8, retries: 1 });
     const reporter = new ClientTelemetryReporter({
@@ -70,11 +71,11 @@ describe('instrumentation/client-telemetry', () => {
 
   it('does not push when the broker requested no metrics', async () => {
     const pushTelemetry = vi.fn();
-    const broker = {
+    const broker = withSend({
       versions: { [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } },
       getTelemetrySubscriptions: vi.fn().mockResolvedValue(subscription({ requestedMetrics: [] })),
       pushTelemetry,
-    };
+    });
     const reporter = new ClientTelemetryReporter({
       getBroker: async () => broker as never,
       logger: silentLogger,
@@ -92,7 +93,7 @@ describe('instrumentation/client-telemetry', () => {
 
   it('disables itself when the broker does not advertise telemetry APIs', async () => {
     const getTelemetrySubscriptions = vi.fn();
-    const broker = { versions: {}, getTelemetrySubscriptions };
+    const broker = withSend({ versions: {}, getTelemetrySubscriptions });
     const reporter = new ClientTelemetryReporter({
       getBroker: async () => broker as never,
       logger: silentLogger,
@@ -110,7 +111,7 @@ describe('instrumentation/client-telemetry', () => {
 
   it('gzip-compresses PushTelemetry when the broker accepts gzip and the payload is large', async () => {
     const pushTelemetry = vi.fn().mockResolvedValue({ throttleTime: 0, clientSideThrottleTime: 0, errorCode: 0 });
-    const broker = {
+    const broker = withSend({
       versions: { [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } },
       getTelemetrySubscriptions: vi.fn().mockResolvedValue(
         subscription({
@@ -120,7 +121,7 @@ describe('instrumentation/client-telemetry', () => {
         }),
       ),
       pushTelemetry,
-    };
+    });
     const snapshot = new TelemetrySnapshot();
     vi.spyOn(snapshot, 'encode').mockReturnValue(Buffer.alloc(600, 1));
     const reporter = new ClientTelemetryReporter({
@@ -141,7 +142,7 @@ describe('instrumentation/client-telemetry', () => {
 
   it('skips PushTelemetry when the payload exceeds telemetryMaxBytes', async () => {
     const pushTelemetry = vi.fn();
-    const broker = {
+    const broker = withSend({
       versions: { [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } },
       getTelemetrySubscriptions: vi.fn().mockResolvedValue(
         subscription({
@@ -151,7 +152,7 @@ describe('instrumentation/client-telemetry', () => {
         }),
       ),
       pushTelemetry,
-    };
+    });
     const snapshot = new TelemetrySnapshot();
     vi.spyOn(snapshot, 'encode').mockReturnValue(Buffer.alloc(200));
     const reporter = new ClientTelemetryReporter({
@@ -171,11 +172,11 @@ describe('instrumentation/client-telemetry', () => {
 
   it('swallows TELEMETRY_TOO_LARGE from the broker', async () => {
     const pushTelemetry = vi.fn().mockRejectedValue(createErrorFromCode(118));
-    const broker = {
+    const broker = withSend({
       versions: { [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } },
       getTelemetrySubscriptions: vi.fn().mockResolvedValue(subscription()),
       pushTelemetry,
-    };
+    });
     const reporter = new ClientTelemetryReporter({
       getBroker: async () => broker as never,
       logger: silentLogger,

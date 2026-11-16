@@ -2,20 +2,21 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createGroupsApi } from './groups';
+import { withSend } from '../broker/test-send';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/removeMembersFromConsumerGroup', () => {
   it('sends LeaveGroup with member identities to the group coordinator', async () => {
-    const coordinator = {
+    const coordinator = withSend({
       leaveGroupMembers: vi.fn(async () => ({
         members: [{ memberId: 'm-1', groupInstanceId: null, errorCode: 0 }],
       })),
-    };
-    const cluster = {
+    });
+    const cluster = withSend({
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       findGroupCoordinator: vi.fn(async () => coordinator),
-    } as unknown as Cluster;
+    }) as unknown as Cluster;
     const api = createGroupsApi({ cluster, logger, rootLogger: logger });
 
     const result = await api.removeMembersFromConsumerGroup({

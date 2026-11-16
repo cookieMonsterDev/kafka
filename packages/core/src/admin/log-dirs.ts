@@ -7,6 +7,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
 import type { DescribeReplicaLogDirsReplica, DescribeReplicaLogDirsResult } from './types';
+import { AlterReplicaLogDirs, DescribeLogDirs } from '../protocol/requests/lazy-families';
 
 export interface LogDirsApi {
   describeLogDirs: (options?: {
@@ -37,7 +38,7 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
         const brokers = await Promise.all(
           nodeIds.map(async (nodeId) => {
             const broker = await cluster.findBroker({ nodeId });
-            const { logDirs } = await broker.describeLogDirs({ topics: options.topics });
+            const { logDirs } = await broker.send(DescribeLogDirs, { topics: options.topics });
             return { brokerId: Number(nodeId), logDirs };
           }),
         );
@@ -68,7 +69,7 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findBroker({ nodeId: String(brokerId) });
-        const { results } = await broker.alterReplicaLogDirs({ dirs });
+        const { results } = await broker.send(AlterReplicaLogDirs, { dirs });
         return { results };
       } catch (error) {
         logger.warn('Could not alter replica log dirs', {
@@ -135,7 +136,7 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
 
             try {
               const broker = await cluster.findBroker({ nodeId });
-              const { logDirs } = await broker.describeLogDirs({ topics });
+              const { logDirs } = await broker.send(DescribeLogDirs, { topics });
               return { nodeId, brokerReplicas, logDirs, errorCode: 0 };
             } catch (error) {
               if (error instanceof KafkaNonRetriableError) throw error;

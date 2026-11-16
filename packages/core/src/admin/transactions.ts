@@ -14,6 +14,12 @@ import type {
   ForceTerminateTransactionOptions,
   ForceTerminateTransactionResult,
 } from './types';
+import {
+  DescribeProducers,
+  DescribeTransactions,
+  ListTransactions,
+  WriteTxnMarkers,
+} from '../protocol/requests/lazy-families';
 
 export interface TransactionsApi {
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: DescribeTransactionsState[] }>;
@@ -85,7 +91,7 @@ async function resolveCoordinatorEpoch(
 
   const [nodeId] = leaderEntry;
   const broker = await cluster.findBroker({ nodeId });
-  const { topics } = await broker.describeProducers({ topics: [{ topic, partitions: [partition] }] });
+  const { topics } = await broker.send(DescribeProducers, { topics: [{ topic, partitions: [partition] }] });
   const partitionState = topics.find(({ topic: topicName }) => topicName === topic)?.partitions[0];
   const producerState = partitionState?.activeProducers.find((producer) => producer.producerId === producerId);
   if (!producerState) {
@@ -141,7 +147,7 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
 
         const responses = await Promise.all(
           [...transactionsByCoordinator.values()].map(({ coordinator, transactionalIds: ids }) =>
-            coordinator.describeTransactions({ transactionalIds: ids }),
+            coordinator.send(DescribeTransactions, { transactionalIds: ids }),
           ),
         );
         return { transactionStates: responses.flatMap(({ transactionStates }) => transactionStates) };
@@ -173,7 +179,7 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
         const listings = await Promise.all(
           cluster.getNodeIds().map(async (nodeId) => {
             const broker = await cluster.findBroker({ nodeId });
-            const { transactionStates } = await broker.listTransactions(options);
+            const { transactionStates } = await broker.send(ListTransactions, options);
             return transactionStates;
           }),
         );
@@ -288,7 +294,7 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
 
         const [nodeId] = leaderEntry;
         const broker = await cluster.findBroker({ nodeId });
-        await broker.writeTxnMarkers({
+        await broker.send(WriteTxnMarkers, {
           markers: [
             {
               producerId,

@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createMetadataQuorumApi } from './metadata-quorum';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/metadata-quorum', () => {
   it('targets the active controller for the metadata partition', async () => {
-    const broker = {
+    const broker = withSend({
       describeQuorum: vi.fn().mockResolvedValue({
         errorCode: 0,
         topics: [
@@ -27,7 +28,7 @@ describe('admin/metadata-quorum', () => {
           },
         ],
       }),
-    };
+    });
     const findControllerBroker = vi.fn().mockResolvedValue(broker);
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),

@@ -6,6 +6,7 @@ import { createErrorFromCode } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { RetryOptions } from '../retry/index';
 import { createTopicsApi } from './topics';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -24,11 +25,11 @@ function makeApi(cluster: Record<string, unknown>, retry?: RetryOptions) {
 describe('admin/topics', () => {
   describe('listTopics', () => {
     it('returns topic names and skips unnamed metadata entries', async () => {
-      const cluster = {
+      const cluster = withSend({
         metadata: vi.fn().mockResolvedValue({
           topicMetadata: [{ topic: 'orders' }, { topic: null }, { topic: 'payments' }],
         }),
-      };
+      });
       await expect(makeApi(cluster).listTopics()).resolves.toEqual(['orders', 'payments']);
     });
   });
@@ -65,7 +66,7 @@ describe('admin/topics', () => {
     });
 
     it('creates topics through the controller without waiting for leaders', async () => {
-      const broker = { createTopics: vi.fn().mockResolvedValue(undefined), metadata: vi.fn() };
+      const broker = withSend({ createTopics: vi.fn().mockResolvedValue(undefined), metadata: vi.fn() });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -82,7 +83,7 @@ describe('admin/topics', () => {
     });
 
     it('does not wait for leaders on a validateOnly call, even with waitForLeaders left at its default', async () => {
-      const broker = { createTopics: vi.fn().mockResolvedValue(undefined), metadata: vi.fn() };
+      const broker = withSend({ createTopics: vi.fn().mockResolvedValue(undefined), metadata: vi.fn() });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -99,7 +100,7 @@ describe('admin/topics', () => {
       ]);
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({ createTopics: vi.fn().mockRejectedValue(error) }),
+        findControllerBroker: vi.fn().mockResolvedValue(withSend({ createTopics: vi.fn().mockRejectedValue(error) })),
       };
       await expect(
         makeApi(cluster).createTopics({ topics: [{ topic: 'orders' }], waitForLeaders: false }),
@@ -110,7 +111,7 @@ describe('admin/topics', () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({ createTopics: vi.fn().mockRejectedValue(error) }),
+        findControllerBroker: vi.fn().mockResolvedValue(withSend({ createTopics: vi.fn().mockRejectedValue(error) })),
       };
       await expect(
         makeApi(cluster, { retries: 0 }).createTopics({ topics: [{ topic: 'orders' }], waitForLeaders: false }),
@@ -139,7 +140,7 @@ describe('admin/topics', () => {
     });
 
     it('forwards topicPartitions to the controller', async () => {
-      const broker = { createPartitions: vi.fn().mockResolvedValue(undefined) };
+      const broker = withSend({ createPartitions: vi.fn().mockResolvedValue(undefined) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -154,7 +155,7 @@ describe('admin/topics', () => {
       const createPartitions = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({ createPartitions }),
+        findControllerBroker: vi.fn().mockResolvedValue(withSend({ createPartitions })),
       };
       await makeApi(cluster, { retries: 1, initialRetryTime: 1 }).createPartitions({
         topicPartitions: [{ topic: 'orders', count: 2 }],
@@ -167,7 +168,7 @@ describe('admin/topics', () => {
       const createPartitions = vi.fn().mockRejectedValue(error);
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({ createPartitions }),
+        findControllerBroker: vi.fn().mockResolvedValue(withSend({ createPartitions })),
       };
       await expect(
         makeApi(cluster, { retries: 5, initialRetryTime: 1 }).createPartitions({
@@ -187,7 +188,7 @@ describe('admin/topics', () => {
 
     it('deletes topics, drops them from the target set, and refreshes metadata', async () => {
       const targetTopics = new Set(['orders', 'keep']);
-      const broker = { deleteTopics: vi.fn().mockResolvedValue(undefined) };
+      const broker = withSend({ deleteTopics: vi.fn().mockResolvedValue(undefined) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -208,7 +209,7 @@ describe('admin/topics', () => {
 
     it('maps metadata, omitting unnamed topics and optional topicId', async () => {
       const topicId = Buffer.alloc(16, 7);
-      const cluster = {
+      const cluster = withSend({
         metadata: vi.fn().mockResolvedValue({
           topicMetadata: [
             { topic: null, partitionMetadata: [] },
@@ -216,7 +217,7 @@ describe('admin/topics', () => {
             { topic: 'legacy', partitionMetadata: [] },
           ],
         }),
-      };
+      });
       await expect(makeApi(cluster).fetchTopicMetadata({ topics: ['orders'] })).resolves.toEqual({
         topics: [
           { name: 'orders', topicId, partitions: [{ partitionId: 0 }] },
@@ -228,13 +229,13 @@ describe('admin/topics', () => {
 
   describe('describeCluster', () => {
     it('uses DescribeCluster when the broker advertises the API', async () => {
-      const broker = {
+      const broker = withSend({
         describeCluster: vi.fn().mockResolvedValue({
           brokers: [{ nodeId: 1, host: 'localhost', port: 9092 }],
           controllerId: 1,
           clusterId: 'cid',
         }),
-      };
+      });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -248,7 +249,7 @@ describe('admin/topics', () => {
     });
 
     it('falls back to metadata and maps a missing controller id to null', async () => {
-      const cluster = {
+      const cluster = withSend({
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         brokerPool: { versions: {} },
         metadata: vi.fn().mockResolvedValue({
@@ -256,7 +257,7 @@ describe('admin/topics', () => {
           clusterId: 'cid',
           controllerId: -1,
         }),
-      };
+      });
       await expect(makeApi(cluster).describeCluster()).resolves.toEqual({
         brokers: [{ nodeId: 2, host: 'b', port: 9093 }],
         controller: null,
@@ -284,7 +285,7 @@ describe('admin/topics', () => {
     });
 
     it('deletes records on the partition leader', async () => {
-      const broker = { deleteRecords: vi.fn().mockResolvedValue(undefined) };
+      const broker = withSend({ deleteRecords: vi.fn().mockResolvedValue(undefined) });
       const cluster = {
         findLeaderForPartitions: vi.fn().mockReturnValue({ '1': [0] }),
         findBroker: vi.fn().mockResolvedValue(broker),
@@ -296,14 +297,14 @@ describe('admin/topics', () => {
     });
 
     it('re-resolves the partition leader when retrying NOT_LEADER_OR_FOLLOWER', async () => {
-      const oldLeader = {
+      const oldLeader = withSend({
         deleteRecords: vi.fn().mockRejectedValue(
           new KafkaDeleteTopicRecordsError({
             partitions: [{ partition: 0, offset: 5n, error: createErrorFromCode(6) }],
           }),
         ),
-      };
-      const newLeader = { deleteRecords: vi.fn().mockResolvedValue(undefined) };
+      });
+      const newLeader = withSend({ deleteRecords: vi.fn().mockResolvedValue(undefined) });
       const cluster = {
         findLeaderForPartitions: vi
           .fn()

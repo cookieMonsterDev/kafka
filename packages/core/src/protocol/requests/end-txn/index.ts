@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { endTxnRequestV0 } from './v0/request';
 import { endTxnResponseV0 } from './v0/response';
 import { endTxnRequestV1 } from './v1/request';
@@ -15,18 +16,11 @@ export interface EndTxnOptions {
   transactionResult: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<EndTxnOptions>>> = {
+const VERSIONS = {
   0: (values) => ({ request: endTxnRequestV0(values), response: endTxnResponseV0 }),
   1: (values) => ({ request: endTxnRequestV1(values), response: endTxnResponseV1 }),
   2: (values) => ({ request: endTxnRequestV2(values), response: endTxnResponseV2 }),
   3: (values) => ({ request: endTxnRequestV3(values), response: endTxnResponseV3 }),
-};
+} satisfies VersionFactories<EndTxnOptions>;
 
-export const EndTxn: RequestFamily<EndTxnOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no EndTxn protocol for version ${version}`);
-    return factory;
-  },
-});
+export const EndTxn = defineRequestFamily(KAFKA_APIS.EndTxn, VERSIONS);

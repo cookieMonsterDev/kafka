@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { type DescribeClientQuotasComponent, describeClientQuotasRequestV0 } from './v0/request';
 import { describeClientQuotasResponseV0 } from './v0/response';
 import { describeClientQuotasRequestV1 } from './v1/request';
@@ -11,7 +12,7 @@ export interface DescribeClientQuotasOptions {
   strict?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeClientQuotasOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeClientQuotasRequestV0({
       components: options.components,
@@ -26,13 +27,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeClientQuotasOpti
     }),
     response: describeClientQuotasResponseV1,
   }),
-};
+} satisfies VersionFactories<DescribeClientQuotasOptions>;
 
-export const DescribeClientQuotas: RequestFamily<DescribeClientQuotasOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeClientQuotas protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeClientQuotas = defineRequestFamily(KAFKA_APIS.DescribeClientQuotas, VERSIONS);

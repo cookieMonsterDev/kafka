@@ -9,6 +9,7 @@ import { createNodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages, type OpenTransaction } from './send-messages';
 import { createTransactionSession } from './transaction-session/index';
 import type { PartitionerArgs } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -29,7 +30,10 @@ function fakeProduceResponse(topicName: string, partition: number) {
 }
 
 function fakeBroker(nodeId: number) {
-  return { nodeId, produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, nodeId - 1))) };
+  return withSend({
+    nodeId,
+    produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, nodeId - 1))),
+  });
 }
 
 function fakePartitionMetadata(partitionId: number): PartitionMetadata {
@@ -48,7 +52,10 @@ function inMemoryLedger() {
   const initProducerId = vi.fn((current: ProducerIdentity) =>
     Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
   );
-  return { ledger: createIdempotenceLedger({ logger: silentLogger, initProducerId }), initProducerId };
+  return withSend({
+    ledger: createIdempotenceLedger(withSend({ logger: silentLogger, initProducerId })),
+    initProducerId,
+  });
 }
 
 /** A transaction whose calls are mocked; it enrolls partitions without a coordinator round trip. */
@@ -69,7 +76,7 @@ function sendOptions(overrides: { ledger?: IdempotenceLedger; transaction?: Open
 async function idempotentSendOptions(overrides: { transaction?: OpenTransaction } = {}) {
   const { ledger, initProducerId } = inMemoryLedger();
   await ledger.initProducerId();
-  return { options: sendOptions({ ledger, ...overrides }), ledger, initProducerId };
+  return withSend({ options: sendOptions({ ledger, ...overrides }), ledger, initProducerId });
 }
 
 interface SequencedProduceRequest {
@@ -1061,17 +1068,17 @@ describe('producer/sendMessages', () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
       brokers[1].produce.mockRejectedValue(createErrorFromCode(unknownProducerIdCode));
       let epoch = -1;
-      const coordinator = {
+      const coordinator = withSend({
         initProducerId: vi.fn(() => Promise.resolve({ producerId: 1000n, producerEpoch: (epoch += 1) })),
         addPartitionsToTxn: vi.fn().mockResolvedValue(undefined),
         endTxn: vi.fn().mockResolvedValue(undefined),
-      };
+      });
       const session = createTransactionSession({
         logger: silentLogger,
-        cluster: {
+        cluster: withSend({
           findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
           brokerPool: { versions: undefined },
-        } as unknown as Cluster,
+        }) as unknown as Cluster,
         transactionalId: 'transactional-id',
         transactionTimeout: 60_000,
         retry: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),

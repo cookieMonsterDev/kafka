@@ -5,6 +5,7 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createQuotasApi } from './quotas';
 import type { AlterClientQuotasEntry } from '../protocol/requests/alter-client-quotas/index';
 import type { DescribeClientQuotasComponent } from '../protocol/requests/describe-client-quotas/index';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -42,9 +43,11 @@ describe('admin/quotas', () => {
     });
 
     it('describes quotas through the active controller with defaults', async () => {
-      const cluster = fakeCluster({
-        describeClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], values: [] }] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], values: [] }] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.describeClientQuotas()).resolves.toEqual({ entries: [{ entity: [], values: [] }] });
@@ -55,9 +58,11 @@ describe('admin/quotas', () => {
     });
 
     it('forwards components and strict to the controller broker', async () => {
-      const cluster = fakeCluster({
-        describeClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
+        }),
+      );
       const api = makeApi(cluster);
       const components: DescribeClientQuotasComponent[] = [{ entityType: 'client-id', matchType: 0, match: 'app-1' }];
 
@@ -67,9 +72,11 @@ describe('admin/quotas', () => {
     });
 
     it('propagates a non-retriable broker error', async () => {
-      const cluster = fakeCluster({
-        describeClientQuotas: vi.fn().mockRejectedValue(new Error('boom')),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeClientQuotas: vi.fn().mockRejectedValue(new Error('boom')),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.describeClientQuotas()).rejects.toThrow('boom');
@@ -77,9 +84,11 @@ describe('admin/quotas', () => {
 
     it('refreshes metadata and retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = fakeCluster({
-        describeClientQuotas: vi.fn().mockRejectedValue(notController),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeClientQuotas: vi.fn().mockRejectedValue(notController),
+        }),
+      );
       const api = makeApi(cluster, { retries: 0 });
 
       await expect(api.describeClientQuotas()).rejects.toThrow();
@@ -104,9 +113,11 @@ describe('admin/quotas', () => {
     });
 
     it('alters client quotas through the active controller with validateOnly defaulted to false', async () => {
-      const cluster = fakeCluster({
-        alterClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], errorCode: 0 }] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          alterClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], errorCode: 0 }] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.alterClientQuotas({ entries: [validEntry] })).resolves.toEqual({
@@ -120,9 +131,11 @@ describe('admin/quotas', () => {
     });
 
     it('forwards an explicit validateOnly flag', async () => {
-      const cluster = fakeCluster({
-        alterClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          alterClientQuotas: vi.fn().mockResolvedValue({ entries: [] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await api.alterClientQuotas({ entries: [validEntry], validateOnly: true });
@@ -134,9 +147,11 @@ describe('admin/quotas', () => {
     });
 
     it('propagates a non-retriable broker error', async () => {
-      const cluster = fakeCluster({
-        alterClientQuotas: vi.fn().mockRejectedValue(new Error('boom')),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          alterClientQuotas: vi.fn().mockRejectedValue(new Error('boom')),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.alterClientQuotas({ entries: [validEntry] })).rejects.toThrow('boom');
@@ -144,9 +159,11 @@ describe('admin/quotas', () => {
 
     it('refreshes metadata and retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = fakeCluster({
-        alterClientQuotas: vi.fn().mockRejectedValue(notController),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          alterClientQuotas: vi.fn().mockRejectedValue(notController),
+        }),
+      );
       const api = makeApi(cluster, { retries: 0 });
 
       await expect(api.alterClientQuotas({ entries: [validEntry] })).rejects.toThrow();

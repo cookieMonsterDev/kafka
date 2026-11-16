@@ -66,6 +66,8 @@ export type {
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
 } from './types';
+import { DescribeGroups } from '../protocol/requests/describe-groups/index';
+import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
 
 export { events };
 export { MemberAssignment, MemberMetadata } from './assigner-protocol';
@@ -932,7 +934,7 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const describeRetrier = retrier(retry);
     return describeRetrier(async () => {
-      const { groups } = await coordinator.describeGroups({ groupIds: [groupId] });
+      const { groups } = await coordinator.send(DescribeGroups, { groupIds: [groupId] });
       const group = groups.find((entry) => entry.groupId === groupId);
       if (!group) {
         throw new KafkaNonRetriableError(`Consumer group ${groupId} not found`);
@@ -983,7 +985,7 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const committedRetrier = retrier(retry);
     return committedRetrier(async () => {
-      const { responses } = await coordinator.offsetFetch({
+      const { responses } = await coordinator.send(OffsetFetch, {
         groupId,
         topics: [...partitionsByTopic.entries()].map(([topic, partitions]) => ({
           topic,

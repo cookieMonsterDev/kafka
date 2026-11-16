@@ -6,6 +6,7 @@ import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/de
 import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
+import { AlterClientQuotas, DescribeClientQuotas } from '../protocol/requests/lazy-families';
 
 export interface QuotasApi {
   describeClientQuotas: (options?: {
@@ -31,7 +32,7 @@ export function createQuotasApi({ cluster, logger, retry }: AdminContext): Quota
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const { entries } = await broker.describeClientQuotas({
+        const { entries } = await broker.send(DescribeClientQuotas, {
           components,
           strict: options.strict ?? false,
         });
@@ -67,7 +68,7 @@ export function createQuotasApi({ cluster, logger, retry }: AdminContext): Quota
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        const response = await broker.alterClientQuotas({ entries, validateOnly: validateOnly ?? false });
+        const response = await broker.send(AlterClientQuotas, { entries, validateOnly: validateOnly ?? false });
         return { entries: response.entries };
       } catch (error) {
         if (protocolType(error) === 'NOT_CONTROLLER') {

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { shareGroupDescribeRequestV1 } from './v1/request';
 import { shareGroupDescribeResponseV1 } from './v1/response';
 
@@ -14,18 +15,11 @@ const fields = (options: ShareGroupDescribeOptions) => ({
   includeAuthorizedOperations: options.includeAuthorizedOperations ?? false,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareGroupDescribeOptions>>> = {
+const VERSIONS = {
   1: (options) => ({
     request: shareGroupDescribeRequestV1(fields(options)),
     response: shareGroupDescribeResponseV1,
   }),
-};
+} satisfies VersionFactories<ShareGroupDescribeOptions>;
 
-export const ShareGroupDescribe: RequestFamily<ShareGroupDescribeOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ShareGroupDescribe protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ShareGroupDescribe = defineRequestFamily(KAFKA_APIS.ShareGroupDescribe, VERSIONS);

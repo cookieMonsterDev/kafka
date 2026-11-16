@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { shareFetchRequestV1 } from './v1/request';
 import { shareFetchResponseV1 } from './v1/response';
 import { shareFetchRequestV2 } from './v2/request';
@@ -91,7 +92,7 @@ const v2Fields = (options: ShareFetchOptions) => ({
   isRenewAck: options.isRenewAck ?? false,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareFetchOptions>>> = {
+const VERSIONS = {
   1: (options) => ({
     request: shareFetchRequestV1(fields(options)),
     response: shareFetchResponseV1,
@@ -100,13 +101,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ShareFetchOptions>>> = {
     request: shareFetchRequestV2(v2Fields(options)),
     response: shareFetchResponseV1,
   }),
-};
+} satisfies VersionFactories<ShareFetchOptions>;
 
-export const ShareFetch: RequestFamily<ShareFetchOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ShareFetch protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ShareFetch = defineRequestFamily(KAFKA_APIS.ShareFetch, VERSIONS);

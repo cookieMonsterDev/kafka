@@ -11,6 +11,9 @@ import {
   testIfKafkaAtLeast_2_1,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
+import { Metadata } from '../../../src/protocol/requests/metadata/index';
+import { OffsetForLeaderEpoch } from '../../../src/protocol/requests/offset-for-leader-epoch/index';
+import { Produce } from '../../../src/protocol/requests/produce/index';
 
 /**
  * Exercises the real OffsetForLeaderEpoch RPC end-to-end (the primitive `recoverFromTruncation`
@@ -37,7 +40,9 @@ describe('broker.offsetForLeaderEpoch (KIP-320 primitive)', () => {
   });
 
   testIfKafkaAtLeast_2_1('resolves the end offset for the partition’s current leader epoch', async () => {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => seedBroker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      seedBroker!.send(Metadata, { topics: [topicName] }),
+    );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
     leader = new Broker({
@@ -48,7 +53,7 @@ describe('broker.offsetForLeaderEpoch (KIP-320 primitive)', () => {
 
     const messages = generateMessages({ number: 5 });
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      leader!.produce({
+      leader!.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [{ topic: topicName, partitions: [{ partition: 0, messages }] }],
@@ -56,7 +61,7 @@ describe('broker.offsetForLeaderEpoch (KIP-320 primitive)', () => {
     );
 
     const leaderEpoch = partition.leaderEpoch ?? 0;
-    const { topics } = await leader.offsetForLeaderEpoch({
+    const { topics } = await leader.send(OffsetForLeaderEpoch, {
       topics: [{ topic: topicName, partitions: [{ partition: 0, currentLeaderEpoch: leaderEpoch, leaderEpoch }] }],
     });
 

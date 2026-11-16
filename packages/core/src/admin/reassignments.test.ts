@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createReassignmentsApi } from './reassignments';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -59,7 +60,7 @@ describe('admin/reassignments', () => {
     });
 
     it('sends the assignment to the controller', async () => {
-      const broker = { alterPartitionReassignments: vi.fn().mockResolvedValue(undefined) };
+      const broker = withSend({ alterPartitionReassignments: vi.fn().mockResolvedValue(undefined) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -72,9 +73,11 @@ describe('admin/reassignments', () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({
-          alterPartitionReassignments: vi.fn().mockRejectedValue(error),
-        }),
+        findControllerBroker: vi.fn().mockResolvedValue(
+          withSend({
+            alterPartitionReassignments: vi.fn().mockRejectedValue(error),
+          }),
+        ),
       };
       await expect(
         makeApi(cluster, { retries: 0 }).alterPartitionReassignments({ topics: [validAssignment] }),
@@ -108,7 +111,7 @@ describe('admin/reassignments', () => {
     });
 
     it('lists reassignments for all topics when the filter is omitted', async () => {
-      const broker = { listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }) };
+      const broker = withSend({ listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -141,7 +144,7 @@ describe('admin/reassignments', () => {
     });
 
     it('elects leaders through the controller', async () => {
-      const broker = { electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) };
+      const broker = withSend({ electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) });
       const cluster = {
         refreshMetadata: vi.fn().mockResolvedValue(undefined),
         findControllerBroker: vi.fn().mockResolvedValue(broker),

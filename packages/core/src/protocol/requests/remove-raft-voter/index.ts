@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { removeRaftVoterRequestV0 } from './v0/request';
 import { removeRaftVoterResponseV0 } from './v0/response';
 
@@ -11,7 +12,7 @@ export interface RemoveRaftVoterOptions {
   voterDirectoryId: Buffer;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<RemoveRaftVoterOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: removeRaftVoterRequestV0({
       clusterId: options.clusterId ?? null,
@@ -20,13 +21,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<RemoveRaftVoterOptions>>
     }),
     response: removeRaftVoterResponseV0,
   }),
-};
+} satisfies VersionFactories<RemoveRaftVoterOptions>;
 
-export const RemoveRaftVoter: RequestFamily<RemoveRaftVoterOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no RemoveRaftVoter protocol for version ${version}`);
-    return factory;
-  },
-});
+export const RemoveRaftVoter = defineRequestFamily(KAFKA_APIS.RemoveRaftVoter, VERSIONS);

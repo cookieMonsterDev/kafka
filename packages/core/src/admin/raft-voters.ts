@@ -3,6 +3,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
 import type { AddRaftVoterOptions, RaftVoterListener, RemoveRaftVoterOptions } from './types';
+import { AddRaftVoter, RemoveRaftVoter } from '../protocol/requests/lazy-families';
 
 export interface RaftVotersApi {
   addRaftVoter: (options: AddRaftVoterOptions) => Promise<void>;
@@ -73,7 +74,7 @@ export function createRaftVotersApi({ cluster, logger, retry }: AdminContext): R
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.addRaftVoter({
+        await broker.send(AddRaftVoter, {
           clusterId,
           timeoutMs,
           voterId: normalizedVoterId,
@@ -105,7 +106,7 @@ export function createRaftVotersApi({ cluster, logger, retry }: AdminContext): R
       try {
         await cluster.refreshMetadata();
         const broker = await cluster.findControllerBroker();
-        await broker.removeRaftVoter({
+        await broker.send(RemoveRaftVoter, {
           clusterId,
           voterId: normalizedVoterId,
           voterDirectoryId: normalizedDirectoryId,

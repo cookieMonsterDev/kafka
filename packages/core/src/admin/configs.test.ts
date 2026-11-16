@@ -5,6 +5,7 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../protocol/enums/incremental-alter-configs-operations';
 import { createConfigsApi } from './configs';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -13,7 +14,7 @@ function fakeCluster(
     configResources: [{ resourceName: 'orders', resourceType: CONFIG_RESOURCE_TYPES.TOPIC }],
   }),
 ) {
-  const broker = { listConfigResources };
+  const broker = withSend({ listConfigResources });
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -87,15 +88,15 @@ function fakeAdminCluster(
     brokerNode?: Record<string, ReturnType<typeof vi.fn>>;
   } = {},
 ) {
-  const controller = {
+  const controller = withSend({
     describeConfigs: overrides.describeConfigs ?? vi.fn().mockResolvedValue({ resources: [] }),
     alterConfigs: overrides.alterConfigs ?? vi.fn().mockResolvedValue({ resources: [] }),
     incrementalAlterConfigs: overrides.incrementalAlterConfigs ?? vi.fn().mockResolvedValue({ resources: [] }),
-  };
+  });
   return {
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(controller),
-    findBroker: vi.fn().mockResolvedValue(overrides.brokerNode ?? controller),
+    findBroker: vi.fn().mockResolvedValue(overrides.brokerNode ? withSend(overrides.brokerNode) : controller),
     controller,
   };
 }
@@ -167,9 +168,9 @@ describe('admin/configs describeConfigs', () => {
   });
 
   it('routes BROKER resources to the matching broker node and flattens the responses', async () => {
-    const brokerNode = { describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: '1' }] }) };
+    const brokerNode = withSend({ describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: '1' }] }) });
     const controllerDescribe = vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] });
-    const cluster = fakeAdminCluster({ describeConfigs: controllerDescribe, brokerNode });
+    const cluster = fakeAdminCluster(withSend({ describeConfigs: controllerDescribe, brokerNode }));
 
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
@@ -202,7 +203,7 @@ describe('admin/configs describeConfigs', () => {
 
   it('retries and rethrows on stale metadata errors', async () => {
     const error = Object.assign(new Error('stale'), { type: 'NOT_LEADER_OR_FOLLOWER' });
-    const cluster = fakeAdminCluster({ describeConfigs: vi.fn().mockRejectedValue(error) });
+    const cluster = fakeAdminCluster(withSend({ describeConfigs: vi.fn().mockRejectedValue(error) }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -218,7 +219,7 @@ describe('admin/configs describeConfigs', () => {
   it('bails immediately on a non-retriable broker error', async () => {
     const error = new Error('boom');
     const describeConfigs = vi.fn().mockRejectedValue(error);
-    const cluster = fakeAdminCluster({ describeConfigs });
+    const cluster = fakeAdminCluster(withSend({ describeConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -324,7 +325,7 @@ describe('admin/configs alterConfigs', () => {
 
   it('forwards validateOnly and flattens responses across brokers', async () => {
     const alterConfigs = vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders', errorCode: 0 }] });
-    const cluster = fakeAdminCluster({ alterConfigs });
+    const cluster = fakeAdminCluster(withSend({ alterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -345,7 +346,7 @@ describe('admin/configs alterConfigs', () => {
 
   it('retries and rethrows on NOT_CONTROLLER', async () => {
     const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-    const cluster = fakeAdminCluster({ alterConfigs: vi.fn().mockRejectedValue(error) });
+    const cluster = fakeAdminCluster(withSend({ alterConfigs: vi.fn().mockRejectedValue(error) }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -362,7 +363,7 @@ describe('admin/configs alterConfigs', () => {
 
   it('bails immediately on a non-retriable broker error', async () => {
     const alterConfigs = vi.fn().mockRejectedValue(new Error('boom'));
-    const cluster = fakeAdminCluster({ alterConfigs });
+    const cluster = fakeAdminCluster(withSend({ alterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -469,7 +470,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
 
   it('allows a null config value (delete operation)', async () => {
     const incrementalAlterConfigs = vi.fn().mockResolvedValue({ resources: [] });
-    const cluster = fakeAdminCluster({ incrementalAlterConfigs });
+    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -500,7 +501,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
 
   it('forwards validateOnly and returns broker results', async () => {
     const incrementalAlterConfigs = vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] });
-    const cluster = fakeAdminCluster({ incrementalAlterConfigs });
+    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -521,7 +522,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
 
   it('retries and rethrows on NOT_CONTROLLER', async () => {
     const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-    const cluster = fakeAdminCluster({ incrementalAlterConfigs: vi.fn().mockRejectedValue(error) });
+    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs: vi.fn().mockRejectedValue(error) }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -538,7 +539,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
 
   it('bails immediately on a non-retriable broker error', async () => {
     const incrementalAlterConfigs = vi.fn().mockRejectedValue(new Error('boom'));
-    const cluster = fakeAdminCluster({ incrementalAlterConfigs });
+    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),

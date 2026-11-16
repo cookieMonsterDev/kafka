@@ -3,6 +3,7 @@ import { retrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown, protocolType } from './helpers';
 import type { AssignReplicasToDirsOptions, AssignReplicasToDirsReplica } from './types';
+import { AssignReplicasToDirs } from '../protocol/requests/lazy-families';
 
 export interface AssignReplicasToDirsApi {
   assignReplicasToDirs: (options: AssignReplicasToDirsOptions) => Promise<void>;
@@ -116,7 +117,7 @@ export function createAssignReplicasToDirsApi({ cluster, logger, retry }: AdminC
           }),
         );
         const broker = await cluster.findControllerBroker();
-        await broker.assignReplicasToDirs({
+        await broker.send(AssignReplicasToDirs, {
           brokerId: normalizedBrokerId,
           brokerEpoch: normalizedBrokerEpoch,
           directories,

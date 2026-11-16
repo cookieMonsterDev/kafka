@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { txnOffsetCommitRequestV0 } from './v0/request';
 import { txnOffsetCommitResponseV0 } from './v0/response';
 import { txnOffsetCommitRequestV1 } from './v1/request';
@@ -38,7 +39,7 @@ function withLeaderEpoch(topics: TxnOffsetCommitOptions['topics']) {
   }));
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<TxnOffsetCommitOptions>>> = {
+const VERSIONS = {
   0: (values) => ({ request: txnOffsetCommitRequestV0(values), response: txnOffsetCommitResponseV0 }),
   1: (values) => ({ request: txnOffsetCommitRequestV1(values), response: txnOffsetCommitResponseV1 }),
   2: (values) => ({
@@ -64,13 +65,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<TxnOffsetCommitOptions>>
     }),
     response: txnOffsetCommitResponseV3,
   }),
-};
+} satisfies VersionFactories<TxnOffsetCommitOptions>;
 
-export const TxnOffsetCommit: RequestFamily<TxnOffsetCommitOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no TxnOffsetCommit protocol for version ${version}`);
-    return factory;
-  },
-});
+export const TxnOffsetCommit = defineRequestFamily(KAFKA_APIS.TxnOffsetCommit, VERSIONS);

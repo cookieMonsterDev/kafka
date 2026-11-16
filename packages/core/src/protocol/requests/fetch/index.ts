@@ -1,4 +1,6 @@
-import type { ProtocolFactory, ProtocolResult, RequestFamily } from '../index';
+import { shuffle } from '../../../utils/shuffle';
+import { defineRequestFamily, highestVersionBelow, type ProtocolResult, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { fetchRequestV0 } from './v0/request';
 import { fetchResponseV0 } from './v0/response';
 import { fetchRequestV1 } from './v1/request';
@@ -37,7 +39,7 @@ import { fetchRequestV17 } from './v17/request';
 import { fetchResponseV17 } from './v17/response';
 import { fetchRequestV18 } from './v18/request';
 import { fetchResponseV18 } from './v18/response';
-import type { FetchRequestOptions } from './shared';
+import { FETCH_TOPIC_ID_MIN_VERSION, fetchRequestHasUsableTopicIds, type FetchRequestOptions } from './shared';
 
 /**
  * Fetch can block up to `maxWaitTime`, which may exceed the connection `requestTimeout`.
@@ -49,11 +51,11 @@ function fetchRequestTimeout(maxWaitTime: number): number {
   return Number.isSafeInteger(maxWaitTime + NETWORK_DELAY) ? maxWaitTime + NETWORK_DELAY : maxWaitTime;
 }
 
-function fetchProtocol(
+function fetchProtocol<Response extends ProtocolResult['response']>(
   request: ProtocolResult['request'],
-  response: ProtocolResult['response'],
+  response: Response,
   maxWaitTime: number,
-): ProtocolResult {
+): ProtocolResult & { response: Response } {
   return {
     request,
     response,
@@ -61,7 +63,7 @@ function fetchProtocol(
   };
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> = {
+const VERSIONS = {
   0: (options) => fetchProtocol(fetchRequestV0(options), fetchResponseV0(options), options.maxWaitTime),
   1: (options) => fetchProtocol(fetchRequestV1(options), fetchResponseV1(options), options.maxWaitTime),
   2: (options) => fetchProtocol(fetchRequestV2(options), fetchResponseV2(options), options.maxWaitTime),
@@ -81,23 +83,49 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FetchRequestOptions>>> =
   16: (options) => fetchProtocol(fetchRequestV16(options), fetchResponseV16(options), options.maxWaitTime),
   17: (options) => fetchProtocol(fetchRequestV17(options), fetchResponseV17(options), options.maxWaitTime),
   18: (options) => fetchProtocol(fetchRequestV18(options), fetchResponseV18(options), options.maxWaitTime),
-};
+} satisfies VersionFactories<FetchRequestOptions>;
+
+const FETCH_VERSIONS: readonly number[] = Object.keys(VERSIONS).map(Number);
+
+/**
+ * Shuffles the requested partitions so that, across fetches, each gets a fair share of the
+ * response's byte limit (KIP-74), then merges consecutive partitions of one topic into one entry.
+ */
+function shuffleTopicPartitions(options: FetchRequestOptions): FetchRequestOptions {
+  const shuffledTopicPartitions = shuffle(
+    options.topics.flatMap(({ topic, topicId, partitions }) =>
+      partitions.map((partition) => ({ topic, topicId, partition })),
+    ),
+  );
+
+  const topics: FetchRequestOptions['topics'] = [];
+  for (const { topic, topicId, partition } of shuffledTopicPartitions) {
+    const last = topics.at(-1);
+    if (last && last.topic === topic) {
+      last.partitions.push(partition);
+    } else {
+      topics.push({ topic, topicId, partitions: [partition] });
+    }
+  }
+  return { ...options, topics };
+}
 
 /**
  * v0–v3 decode MessageSet only. v4+ probes the magic byte and dispatches to MessageSet
  * (magic 0/1) or RecordBatch (magic 2), including mixed-format responses during a cluster
  * upgrade from 0.10 to 0.11. v13+ addresses topics by UUID (KIP-516); lookup still picks
- * the highest overlapping version, and Broker.fetch falls back to ≤12 when metadata has
+ * the highest overlapping version, and `preferVersion` falls back to ≤12 when metadata has
  * no topic IDs.
  *
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/
  */
-export const Fetch: RequestFamily<FetchRequestOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no Fetch protocol for version ${version}`);
-    return factory;
-  },
+export const Fetch = defineRequestFamily(KAFKA_APIS.Fetch, VERSIONS, {
+  prepareOptions: shuffleTopicPartitions,
+  // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on the
+  // highest mutually supported name-based version (v12 on Kafka 4.0).
+  preferVersion: (options, version, advertised) =>
+    version < FETCH_TOPIC_ID_MIN_VERSION || fetchRequestHasUsableTopicIds(options)
+      ? version
+      : highestVersionBelow(KAFKA_APIS.Fetch, FETCH_VERSIONS, FETCH_TOPIC_ID_MIN_VERSION, advertised),
 });

@@ -11,6 +11,10 @@ import type { OpenTransaction, TransactionTopicPartitions } from '../send-messag
 import type { ProducerBatch, ProducerRecord, RecordMetadata, Transaction } from '../types';
 import { FENCED_PRODUCER_MESSAGE, TransactionStateMachine, type TransitionEvent } from './transaction-state-machine';
 import { TRANSACTION_STATES, type TransactionState } from './transaction-states';
+import { AddOffsetsToTxn } from '../../protocol/requests/add-offsets-to-txn/index';
+import { AddPartitionsToTxn } from '../../protocol/requests/add-partitions-to-txn/index';
+import { EndTxn } from '../../protocol/requests/end-txn/index';
+import { TxnOffsetCommit } from '../../protocol/requests/txn-offset-commit/index';
 
 /** Retry while the coordinator is still loading; refresh the coordinator once it moves. */
 const COMMIT_RETRIABLE_PROTOCOL_ERRORS = new Set(['UNKNOWN_TOPIC_OR_PARTITION', 'GROUP_LOAD_IN_PROGRESS']);
@@ -214,7 +218,7 @@ export function createTransactionSession({
 
   async function addPartitionsToTxn(topics: { topic: string; partitions: number[] }[]): Promise<void> {
     const broker = await findTransactionCoordinator();
-    await broker.addPartitionsToTxn({
+    await broker.send(AddPartitionsToTxn, {
       transactionalId,
       producerId: ledger.getProducerId(),
       producerEpoch: ledger.getProducerEpoch(),
@@ -271,7 +275,7 @@ export function createTransactionSession({
       try {
         // Looked up on every attempt so a moved coordinator (NOT_COORDINATOR, disconnect) is re-discovered.
         const broker = await findTransactionCoordinator();
-        await broker.endTxn({
+        await broker.send(EndTxn, {
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),
           transactionalId,
@@ -328,7 +332,7 @@ export function createTransactionSession({
   }): Promise<void> {
     const transactionCoordinator = await findTransactionCoordinator();
 
-    await transactionCoordinator.addOffsetsToTxn({
+    await transactionCoordinator.send(AddOffsetsToTxn, {
       transactionalId,
       producerId: ledger.getProducerId(),
       producerEpoch: ledger.getProducerEpoch(),
@@ -349,7 +353,7 @@ export function createTransactionSession({
 
     await retry(async (bail, retryCount, retryTime) => {
       try {
-        await groupCoordinator.txnOffsetCommit({
+        await groupCoordinator.send(TxnOffsetCommit, {
           transactionalId,
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),

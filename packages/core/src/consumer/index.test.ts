@@ -3,11 +3,12 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createConsumer, events } from './index';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeCluster(): Cluster {
-  return {
+  return withSend({
     connect: vi.fn(async () => undefined),
     disconnect: vi.fn(async () => undefined),
     isConnected: vi.fn().mockReturnValue(false),
@@ -16,7 +17,7 @@ function fakeCluster(): Cluster {
     findGroupCoordinator: vi.fn(),
     removeBroker: vi.fn(),
     clientInstanceId: vi.fn().mockReturnValue(null),
-  } as unknown as Cluster;
+  }) as unknown as Cluster;
 }
 
 describe('consumer', () => {
@@ -307,7 +308,7 @@ describe('consumer', () => {
         getNodeIds: vi.fn(() => ['1']),
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0, leader: 1 }]),
         findTopicId: vi.fn(() => undefined),
-        findBroker: vi.fn(async () => ({ fetch: vi.fn(async () => ({ responses: [], sessionId: 0 })) })),
+        findBroker: vi.fn(async () => withSend({ fetch: vi.fn(async () => ({ responses: [], sessionId: 0 })) })),
         fetchTopicsOffset: vi.fn(async () => [{ topic: 't', partitions: [{ partition: 0, offset: 0n }] }]),
         defaultOffset: vi.fn(() => 0n),
         ...overrides,
@@ -374,7 +375,7 @@ describe('consumer', () => {
 
     it('fetches without any JoinGroup/group-membership RPC and never requires a groupId', async () => {
       const findGroupCoordinator = vi.fn();
-      const cluster = fakeAssignCluster({ findGroupCoordinator });
+      const cluster = fakeAssignCluster(withSend({ findGroupCoordinator }));
       const consumer = createConsumer({ cluster, logger: silentLogger });
 
       await consumer.assign([{ topic: 't', partition: 0 }]);
@@ -420,7 +421,7 @@ describe('consumer', () => {
 
     it('commitOffsets() works in assign mode when a groupId is configured', async () => {
       const offsetCommit = vi.fn(async () => undefined);
-      const findGroupCoordinator = vi.fn(async () => ({ offsetCommit, isConnected: () => true }));
+      const findGroupCoordinator = vi.fn(async () => withSend({ offsetCommit, isConnected: () => true }));
       const cluster = fakeAssignCluster({ findGroupCoordinator: findGroupCoordinator as never });
       const consumer = createConsumer({ cluster, groupId: 'my-group', logger: silentLogger });
       await consumer.assign([{ topic: 't', partition: 0 }]);
@@ -440,7 +441,7 @@ describe('consumer', () => {
   describe('committed', () => {
     it('returns [] without an RPC when no partitions are requested', async () => {
       const findGroupCoordinator = vi.fn();
-      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
       const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
 
       await expect(consumer.committed([])).resolves.toEqual([]);
@@ -459,8 +460,8 @@ describe('consumer', () => {
           },
         ],
       }));
-      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
-      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const findGroupCoordinator = vi.fn(async () => withSend({ offsetFetch }));
+      const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
       const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
 
       const result = await consumer.committed([
@@ -483,8 +484,8 @@ describe('consumer', () => {
       const offsetFetch = vi.fn(async () => ({
         responses: [{ topic: 't', partitions: [{ partition: 0, offset: 7n, metadata: '', errorCode: 0 }] }],
       }));
-      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
-      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const findGroupCoordinator = vi.fn(async () => withSend({ offsetFetch }));
+      const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
       const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
 
       await expect(consumer.committed([{ topic: 't', partition: 0 }])).resolves.toEqual([
@@ -494,8 +495,8 @@ describe('consumer', () => {
 
     it('defaults a partition missing from the response to offset -1n and metadata null', async () => {
       const offsetFetch = vi.fn(async () => ({ responses: [] }));
-      const findGroupCoordinator = vi.fn(async () => ({ offsetFetch }));
-      const cluster = { ...fakeCluster(), findGroupCoordinator } as unknown as Cluster;
+      const findGroupCoordinator = vi.fn(async () => withSend({ offsetFetch }));
+      const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
       const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });
 
       const result = await consumer.committed([{ topic: 't', partition: 0 }]);

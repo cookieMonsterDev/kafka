@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import type { CreatePartitionsTopicInput } from './v0/request';
 import { createPartitionsRequestV0, withAssignmentDefaults } from './v0/request';
 import { createPartitionsResponseV0 } from './v0/response';
@@ -15,7 +16,7 @@ export interface CreatePartitionsOptions {
   timeout?: number;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<CreatePartitionsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: createPartitionsRequestV0({
       topicPartitions: withAssignmentDefaults(options.topicPartitions),
@@ -48,13 +49,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreatePartitionsOptions>
     }),
     response: createPartitionsResponseV3,
   }),
-};
+} satisfies VersionFactories<CreatePartitionsOptions>;
 
-export const CreatePartitions: RequestFamily<CreatePartitionsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no CreatePartitions protocol for version ${version}`);
-    return factory;
-  },
-});
+export const CreatePartitions = defineRequestFamily(KAFKA_APIS.CreatePartitions, VERSIONS);

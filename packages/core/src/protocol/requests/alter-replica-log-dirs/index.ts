@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { type AlterReplicaLogDir, alterReplicaLogDirsRequestV0 } from './v0/request';
 import { alterReplicaLogDirsResponseV0 } from './v0/response';
 import { alterReplicaLogDirsRequestV1 } from './v1/request';
@@ -10,7 +11,7 @@ export interface AlterReplicaLogDirsOptions {
   dirs: AlterReplicaLogDir[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterReplicaLogDirsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: alterReplicaLogDirsRequestV0({ dirs: options.dirs }),
     response: alterReplicaLogDirsResponseV0,
@@ -23,13 +24,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterReplicaLogDirsOptio
     request: alterReplicaLogDirsRequestV2({ dirs: options.dirs }),
     response: alterReplicaLogDirsResponseV2,
   }),
-};
+} satisfies VersionFactories<AlterReplicaLogDirsOptions>;
 
-export const AlterReplicaLogDirs: RequestFamily<AlterReplicaLogDirsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AlterReplicaLogDirs protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AlterReplicaLogDirs = defineRequestFamily(KAFKA_APIS.AlterReplicaLogDirs, VERSIONS);

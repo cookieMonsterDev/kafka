@@ -3,13 +3,14 @@ import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createRaftVotersApi } from './raft-voters';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const directoryId = Buffer.alloc(16, 4);
 
 describe('admin/raft-voters', () => {
   it('targets the active controller for addRaftVoter', async () => {
-    const broker = { addRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) };
+    const broker = withSend({ addRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) });
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       findControllerBroker: vi.fn().mockResolvedValue(broker),
@@ -40,7 +41,7 @@ describe('admin/raft-voters', () => {
   });
 
   it('targets the active controller for removeRaftVoter', async () => {
-    const broker = { removeRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) };
+    const broker = withSend({ removeRaftVoter: vi.fn().mockResolvedValue({ errorCode: 0, errorMessage: null }) });
     const cluster = {
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       findControllerBroker: vi.fn().mockResolvedValue(broker),

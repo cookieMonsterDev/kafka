@@ -20,7 +20,6 @@ import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
 import { staleMetadata } from '../protocol/error-codes';
-import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
 import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
@@ -28,6 +27,9 @@ import { Lock } from '../utils/lock';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { BrokerPool, type ApplyLeaderUpdateOptions, type MetadataRecovery } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
+import { FindCoordinator, type FindCoordinatorResponse } from '../protocol/requests/find-coordinator/index';
+import { ListOffsets } from '../protocol/requests/list-offsets/index';
+import { Metadata } from '../protocol/requests/metadata/index';
 
 type MetadataBroker = ClusterMetadata['brokers'][number];
 type MetadataTopic = ClusterMetadata['topicMetadata'][number];
@@ -301,7 +303,9 @@ export class Cluster {
         } else {
           await this.brokerPool.refreshMetadataIfNecessary([...topics]);
         }
-        return await this.brokerPool.withBroker(async ({ broker }) => broker.metadata([...topics]));
+        return await this.brokerPool.withBroker(async ({ broker }) =>
+          broker.send(Metadata, { topics: [...topics], allowAutoTopicCreation: broker.allowAutoTopicCreation }),
+        );
       } catch (e) {
         const error = e as Error & { type?: string };
         if (staleMetadata(error)) {
@@ -494,11 +498,11 @@ export class Cluster {
   }: {
     groupId: string;
     coordinatorType?: CoordinatorType;
-  }): Promise<FindCoordinatorResponseV2Body> {
+  }): Promise<FindCoordinatorResponse> {
     const brokerMetadata = await this.brokerPool.withBroker(async ({ nodeId, broker }) => {
       return this.retrier(async (bail, retryCount, retryTime) => {
         try {
-          const brokerMetadata = await broker.findGroupCoordinator({ groupId, coordinatorType });
+          const brokerMetadata = await broker.send(FindCoordinator, { groupId, coordinatorType });
           this.logger.debug('Found group coordinator', {
             broker: brokerMetadata.coordinator.host,
             nodeId: brokerMetadata.coordinator.nodeId,
@@ -552,7 +556,7 @@ export class Cluster {
     const requests = [...partitionsPerBroker.entries()].map(async ([nodeId, perTopic]) => {
       const broker = await this.findBroker({ nodeId });
 
-      const { responses: topicOffsets } = await broker.listOffsets({
+      const { responses: topicOffsets } = await broker.send(ListOffsets, {
         isolationLevel: this.isolationLevel,
         topics: Object.entries(perTopic).map(([topic, partitions]) => ({
           topic,

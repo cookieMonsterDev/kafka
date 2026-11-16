@@ -36,6 +36,8 @@ import type {
   TopicPartitions,
 } from './types';
 import { estimatePrefetchBytes } from './worker-queue';
+import { Fetch } from '../protocol/requests/fetch/index';
+import { OffsetForLeaderEpoch } from '../protocol/requests/offset-for-leader-epoch/index';
 
 const STALE_METADATA_ERRORS = Object.freeze([
   'LEADER_NOT_AVAILABLE',
@@ -672,7 +674,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       const broker = await this.cluster.findBroker({ nodeId });
       const fetchSession = this.#fetchSessionHandlerFor(nodeId);
       const sessionRequest = fetchSession.buildRequest(requests);
-      const { responses, sessionId } = await broker.fetch({
+      const response = await broker.send(Fetch, {
         replicaId: CONSUMER_REPLICA_ID,
         maxWaitTime: hasHeldBackPartition ? 0 : this.maxWaitTime,
         minBytes: this.minBytes,
@@ -686,9 +688,10 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
         topicsForResponse: requests,
         rackId: this.rackId,
       });
-      fetchSession.handleResponse(sessionId ?? 0);
+      // Fetch sessions (KIP-227) start at v7; an older response has no session id.
+      fetchSession.handleResponse('sessionId' in response ? response.sessionId : 0);
 
-      const batches = responses.flatMap(({ topicName, partitions }) => {
+      const batches = response.responses.flatMap(({ topicName, partitions }) => {
         const topicRequestData = requests.find(({ topic }) => topic === topicName);
 
         let preferredReadReplicas = this.preferredReadReplicasPerTopicPartition[topicName];
@@ -698,7 +701,10 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
         }
 
         return partitions.flatMap((partitionData) => {
-          const { partition, preferredReadReplica } = partitionData;
+          const { partition } = partitionData;
+          // Fetching from a follower (KIP-392) starts at v11.
+          const preferredReadReplica =
+            'preferredReadReplica' in partitionData ? partitionData.preferredReadReplica : undefined;
           const partitionState = this.partitionPipeline.stateForFetchedPartition(topicName, partition);
           if (partitionState === null) return [];
 
@@ -786,7 +792,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
 
         try {
           const broker = await this.cluster.findBroker({ nodeId });
-          await broker.fetch({
+          await broker.send(Fetch, {
             replicaId: CONSUMER_REPLICA_ID,
             maxWaitTime: 0,
             minBytes: 0,
@@ -962,7 +968,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
 
     try {
       const broker = await this.cluster.findBroker({ nodeId: String(partitionMetadata.leader) });
-      const { topics } = await broker.offsetForLeaderEpoch({
+      const { topics } = await broker.send(OffsetForLeaderEpoch, {
         topics: [
           {
             topic,

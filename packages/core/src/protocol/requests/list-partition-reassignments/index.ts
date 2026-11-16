@@ -1,19 +1,13 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { listPartitionReassignmentsRequestV0, type ListPartitionReassignmentsRequestV0Options } from './v0/request';
 import { listPartitionReassignmentsResponseV0 } from './v0/response';
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ListPartitionReassignmentsRequestV0Options>>> = {
+const VERSIONS = {
   0: (values) => ({
     request: listPartitionReassignmentsRequestV0(values),
     response: listPartitionReassignmentsResponseV0,
   }),
-};
+} satisfies VersionFactories<ListPartitionReassignmentsRequestV0Options>;
 
-export const ListPartitionReassignments: RequestFamily<ListPartitionReassignmentsRequestV0Options> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ListPartitionReassignments protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ListPartitionReassignments = defineRequestFamily(KAFKA_APIS.ListPartitionReassignments, VERSIONS);

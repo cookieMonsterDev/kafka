@@ -13,6 +13,10 @@ const POOL_SIZE = 2;
 /** `Fetch` gets its own dedicated connection so a long poll never head-of-line blocks metadata/heartbeats/produce. */
 const FETCH_CONNECTION_INDEX = 1;
 
+function connectionIndex(apiKey: number): number {
+  return apiKey === API_KEYS.Fetch ? FETCH_CONNECTION_INDEX : 0;
+}
+
 /**
  * A small fixed-size pool of `Connection`s to one broker. Every non-`Fetch` request shares
  * connection 0; `Fetch` always uses connection 1, so a long-poll fetch never blocks other
@@ -72,14 +76,14 @@ export class ConnectionPool {
     return this.pool.map((c) => callback(c));
   }
 
-  async send<T>(protocolRequest: SendOptions<T>): Promise<T | undefined> {
-    const connection = await this.getConnectionByRequest(protocolRequest);
-    return connection.send(protocolRequest);
-  }
-
-  getConnectionByRequest({ request: { apiKey } }: Pick<SendOptions<unknown>, 'request'>): Promise<Connection> {
-    const index = apiKey === API_KEYS.Fetch ? FETCH_CONNECTION_INDEX : 0;
-    return this.getConnection(index);
+  send<T>(protocolRequest: SendOptions<T>): Promise<T | undefined> {
+    const index = connectionIndex(protocolRequest.request.apiKey);
+    const connection = this.pool[index]!;
+    // A live connection takes the request without the promise hop of `getConnection`.
+    if (connection.isConnected()) {
+      return connection.send(protocolRequest);
+    }
+    return this.getConnection(index).then((ready) => ready.send(protocolRequest));
   }
 
   async getConnection(index = 0): Promise<Connection> {

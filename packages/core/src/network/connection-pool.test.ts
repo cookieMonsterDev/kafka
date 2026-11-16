@@ -30,7 +30,9 @@ describe('network/ConnectionPool', () => {
 
   const startServer = (): Promise<number> =>
     new Promise((resolve) => {
-      const server = net.createServer();
+      // Drain what the pool writes: a socket with unread data never sees the client's FIN, which
+      // would keep `server.close()` waiting.
+      const server = net.createServer((socket) => socket.resume());
       servers.push(server);
       server.listen(0, '127.0.0.1', () => resolve((server.address() as net.AddressInfo).port));
     });
@@ -83,11 +85,39 @@ describe('network/ConnectionPool', () => {
     const port = await startServer();
     const pool = createPool(port);
 
-    const fetchConnection = await pool.getConnectionByRequest({ request: requestWithApiKey(API_KEYS.Fetch) });
-    expect(fetchConnection).toBe(pool.pool[1]);
+    const response = { decode: (rawData: Buffer) => rawData, parse: (data: Buffer) => data };
+    const send = (apiKey: number) =>
+      pool.send({ request: { ...requestWithApiKey(apiKey), expectResponse: () => false }, response });
 
-    const metadataConnection = await pool.getConnectionByRequest({ request: requestWithApiKey(API_KEYS.Metadata) });
-    expect(metadataConnection).toBe(pool.pool[0]);
+    await send(API_KEYS.Fetch);
+    expect(pool.pool.map((connection) => connection.isConnected())).toEqual([false, true]);
+
+    await send(API_KEYS.Metadata);
+    expect(pool.pool.map((connection) => connection.isConnected())).toEqual([true, true]);
+  });
+
+  it('sends on a connected connection without going through getConnection', async () => {
+    const port = await startServer();
+    const pool = createPool(port);
+    await pool.getConnection(0);
+    const getConnection = vi.spyOn(pool, 'getConnection');
+
+    const request = { ...requestWithApiKey(API_KEYS.Produce), expectResponse: () => false };
+    const response = { decode: (rawData: Buffer) => rawData, parse: (data: Buffer) => data };
+
+    await expect(pool.send({ request, response })).resolves.toBeUndefined();
+    expect(getConnection).not.toHaveBeenCalled();
+  });
+
+  it('connects a disconnected connection before sending', async () => {
+    const port = await startServer();
+    const pool = createPool(port);
+
+    const request = { ...requestWithApiKey(API_KEYS.Produce), expectResponse: () => false };
+    const response = { decode: (rawData: Buffer) => rawData, parse: (data: Buffer) => data };
+
+    await expect(pool.send({ request, response })).resolves.toBeUndefined();
+    expect(pool.pool[0]!.isConnected()).toBe(true);
   });
 
   it('isConnected reports true if any pooled connection is connected', async () => {

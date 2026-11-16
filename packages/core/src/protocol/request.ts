@@ -7,7 +7,7 @@ export interface CreateRequestOptions {
   request: {
     apiKey: number;
     apiVersion: number;
-    encode(): Promise<Encoder>;
+    encode(): Encoder | Promise<Encoder>;
   };
 }
 
@@ -19,10 +19,25 @@ export interface CreateRequestOptions {
  * Header v2 (flexible versions, including ApiVersions v3+): the same fields plus an empty
  * TAG_BUFFER after client id (KIP-482). ApiVersions *responses* still use header v0.
  *
+ * Returns a promise only when `encode` does, so a synchronous body (such as an uncompressed
+ * Produce) is framed without a promise hop. A synchronous `encode` failure is thrown.
+ *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-export async function createRequest({ correlationId, clientId, request }: CreateRequestOptions): Promise<Encoder> {
-  const payload = await request.encode();
+export function createRequest({ correlationId, clientId, request }: CreateRequestOptions): Encoder | Promise<Encoder> {
+  const payload = request.encode();
+  if (payload instanceof Promise) {
+    return payload.then((body) => frameRequest(correlationId, clientId, request, body));
+  }
+  return frameRequest(correlationId, clientId, request, payload);
+}
+
+function frameRequest(
+  correlationId: number,
+  clientId: string,
+  request: CreateRequestOptions['request'],
+  payload: Encoder,
+): Encoder {
   const estimatedSize = 4 + 2 + 2 + 4 + 2 + Buffer.byteLength(clientId) + 1 + payload.size();
   const encoder = new Encoder(estimatedSize);
 

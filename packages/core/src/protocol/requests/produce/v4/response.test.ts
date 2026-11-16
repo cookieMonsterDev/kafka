@@ -15,6 +15,6 @@ describe('protocol/requests/produce/v4/response', () => {
       ],
       throttleTime: 0,
     });
-    await expect(produceResponseV4.parse(data)).resolves.toBeTruthy();
+    expect(produceResponseV4.parse(data)).toBeTruthy();
   });
 });

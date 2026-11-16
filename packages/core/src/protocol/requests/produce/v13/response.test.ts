@@ -62,10 +62,12 @@ describe('protocol/requests/produce/v13/response', () => {
       topicData: [{ topic: 'test-topic', topicId, partitions: [] }],
     });
     const data = await response.decode(encodeV13Response(3, 'unknown topic'));
-    await expect(response.parse(data)).rejects.toMatchObject({
-      type: 'UNKNOWN_TOPIC_OR_PARTITION',
-      topic: 'test-topic',
-      partition: 1,
-    });
+    expect(() => response.parse(data)).toThrow(
+      expect.objectContaining({
+        type: 'UNKNOWN_TOPIC_OR_PARTITION',
+        topic: 'test-topic',
+        partition: 1,
+      }),
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { KafkaServerDoesNotSupportApiKey } from '../../errors';
 import { API_KEYS } from './api-keys';
 import { ApiVersions } from './api-versions/index';
@@ -67,6 +67,18 @@ describe('protocol/requests', () => {
   it('picks min(highest version we implement, highest the broker advertised)', () => {
     const factory = lookup({ [API_KEYS.ApiVersions]: { maxVersion: 1 } })(API_KEYS.ApiVersions, ApiVersions);
     expect(factory({}).request.apiVersion).toBe(1);
+  });
+
+  it('negotiates each family once per lookup and reuses its factory', () => {
+    const family = fakeFamily([3, 4, 5]);
+    const protocol = vi.spyOn(family, 'protocol');
+    const lookupRequest = lookup({ [API_KEYS.Produce]: { minVersion: 0, maxVersion: 4 } });
+
+    const first = lookupRequest(API_KEYS.Produce, family);
+    const second = lookupRequest(API_KEYS.Produce, family);
+
+    expect(second).toBe(first);
+    expect(protocol).toHaveBeenCalledExactlyOnceWith({ version: 4 });
   });
 
   it('caps at the highest version we implement even if the broker supports more', () => {

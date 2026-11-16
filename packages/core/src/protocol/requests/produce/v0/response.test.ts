@@ -31,7 +31,7 @@ describe('protocol/requests/produce/v0/response', () => {
       ],
       throttleTime: 0,
     });
-    await expect(produceResponseV0.parse(data)).resolves.toBeTruthy();
+    expect(produceResponseV0.parse(data)).toBeTruthy();
   });
 
   it('includes topic and partition on produce partition errors', async () => {
@@ -39,11 +39,13 @@ describe('protocol/requests/produce/v0/response', () => {
       new Encoder().writeString('test-topic-1').writeArray([new Encoder().writeInt32(7).writeInt16(3).writeInt64(0)]),
     ]);
     const data = await produceResponseV0.decode(encoded.buffer);
-    await expect(produceResponseV0.parse(data)).rejects.toMatchObject({
-      type: 'UNKNOWN_TOPIC_OR_PARTITION',
-      topic: 'test-topic-1',
-      partition: 7,
-      message: expect.stringContaining('topic: test-topic-1, partition: 7'),
-    });
+    expect(() => produceResponseV0.parse(data)).toThrow(
+      expect.objectContaining({
+        type: 'UNKNOWN_TOPIC_OR_PARTITION',
+        topic: 'test-topic-1',
+        partition: 7,
+        message: expect.stringContaining('topic: test-topic-1, partition: 7'),
+      }),
+    );
   });
 });

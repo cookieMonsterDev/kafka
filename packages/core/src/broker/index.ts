@@ -433,7 +433,17 @@ export class Broker {
   }
 
   /** Resolves `undefined` only for `acks: 0`, where the broker never writes a response to the wire. */
-  async produce(options: ProduceRequestOptions): Promise<ProduceResponseV6Body | undefined> {
+  produce(options: ProduceRequestOptions): Promise<ProduceResponseV6Body | undefined> {
+    // Not `async`, which would add a promise hop to every send; a synchronous throw still rejects.
+    try {
+      return this.#sendRequest<ProduceResponseV6Body>(this.#produceProtocol(options));
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the failure as-is
+      return Promise.reject(e);
+    }
+  }
+
+  #produceProtocol(options: ProduceRequestOptions): ProtocolResult {
     const opts = { ...options, compression: options.compression ?? COMPRESSION_TYPES.None };
     const produce = this.lookupRequest<ProduceRequestOptions>(API_KEYS.Produce, Produce);
     let protocol = produce(opts);
@@ -456,7 +466,7 @@ export class Broker {
       protocol = Produce.protocol({ version: Math.max(...nameBased) })(opts);
     }
 
-    return this.#sendRequest<ProduceResponseV6Body>(protocol);
+    return protocol;
   }
 
   async fetch(options: FetchRequestOptions): Promise<FetchResponseV11Body> {
@@ -1010,15 +1020,13 @@ export class Broker {
     return result;
   }
 
-  async #sendRequest<T>(protocolResult: ProtocolResult): Promise<T | undefined> {
-    try {
-      return await this.connectionPool.send<T>(asTypedSend<T>(protocolResult));
-    } catch (e) {
+  #sendRequest<T>(protocolResult: ProtocolResult): Promise<T | undefined> {
+    return this.connectionPool.send<T>(asTypedSend<T>(protocolResult)).catch(async (e: unknown) => {
       if (e instanceof KafkaConnectionClosedError) {
         await this.disconnect();
       }
       throw e;
-    }
+    });
   }
 }
 

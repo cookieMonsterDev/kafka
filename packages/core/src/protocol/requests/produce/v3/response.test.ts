@@ -15,6 +15,6 @@ describe('protocol/requests/produce/v3/response', () => {
       ],
       throttleTime: 0,
     });
-    await expect(produceResponseV3.parse(data)).resolves.toBeTruthy();
+    expect(produceResponseV3.parse(data)).toBeTruthy();
   });
 });

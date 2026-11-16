@@ -60,6 +60,18 @@ function createLevel(
   };
 }
 
+/** Each logger's current level, kept outside the public `Logger` shape. */
+const currentLogLevels = new WeakMap<Logger, () => LogLevel>();
+
+/**
+ * Whether `logger` emits entries at `level`, so a hot path can skip building log arguments that
+ * would be dropped. True for a logger not made by `createLogger`, which may log at any level.
+ */
+export function isLogLevelEnabled(logger: Logger, level: LogLevel): boolean {
+  const currentLogLevel = currentLogLevels.get(logger);
+  return currentLogLevel === undefined || level <= currentLogLevel();
+}
+
 function evaluateLogLevel(level: LogLevel): LogLevel;
 function evaluateLogLevel(level: LogLevel | null): LogLevel | null;
 function evaluateLogLevel(level: LogLevel | null): LogLevel | null {
@@ -78,7 +90,7 @@ export function createLogger({ level = LOG_LEVELS.INFO, logCreator }: LoggerConf
   const createLogFunctions = (namespace?: string, namespaceLogLevel: LogLevel | null = null): Logger => {
     const currentLogLevel = (): LogLevel => (namespaceLogLevel == null ? logLevel : namespaceLogLevel);
 
-    return {
+    const logger: Logger = {
       info: createLevel('INFO', LOG_LEVELS.INFO, currentLogLevel, namespace, logFunction),
       error: createLevel('ERROR', LOG_LEVELS.ERROR, currentLogLevel, namespace, logFunction),
       warn: createLevel('WARN', LOG_LEVELS.WARN, currentLogLevel, namespace, logFunction),
@@ -88,6 +100,8 @@ export function createLogger({ level = LOG_LEVELS.INFO, logCreator }: LoggerConf
         logLevel = newLevel;
       },
     };
+    currentLogLevels.set(logger, currentLogLevel);
+    return logger;
   };
 
   return createLogFunctions();

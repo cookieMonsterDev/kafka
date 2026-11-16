@@ -83,7 +83,13 @@ const requestBodySchema = object([
   ),
 ]);
 
-async function encodePartition(
+interface EncodedPartition {
+  partition: number;
+  recordSet: Encoder;
+}
+
+/** Synchronous for an uncompressed batch; a promise only when a codec has to compress the records. */
+function encodePartition(
   { partition, firstSequence = 0, messages }: ProducePartitionData,
   {
     compression,
@@ -98,7 +104,7 @@ async function encodePartition(
     producerId?: bigint;
     producerEpoch?: number;
   },
-): Promise<{ partition: number; recordSet: Encoder }> {
+): EncodedPartition | Promise<EncodedPartition> {
   const dateNow = Date.now();
   let firstTimestamp = dateNow;
   let maxTimestamp = dateNow;
@@ -124,7 +130,7 @@ async function encodePartition(
     if (message.headers != null) estimatedBytes += sizeOfRecordHeaders(message.headers);
   }
 
-  const recordBatch = await encodeRecordBatch({
+  const recordBatch = encodeRecordBatch({
     compression,
     compressionLevel,
     firstTimestamp,
@@ -154,7 +160,16 @@ async function encodePartition(
     },
   });
 
+  if (recordBatch instanceof Promise) {
+    return recordBatch.then((recordSet) => ({ partition, recordSet }));
+  }
   return { partition, recordSet: recordBatch };
+}
+
+function isEncoded(
+  topicPartitions: readonly (EncodedPartition | Promise<EncodedPartition>)[][],
+): topicPartitions is EncodedPartition[][] {
+  return topicPartitions.every((partitions) => partitions.every((partition) => !(partition instanceof Promise)));
 }
 
 const flexibleRequestBodySchema = flexibleObject([
@@ -193,19 +208,6 @@ const flexibleRequestBodySchemaV13 = flexibleObject([
   ),
 ]);
 
-async function encodeTopicPartitions(
-  partitions: ProducePartitionData[],
-  options: {
-    compression: CompressionType;
-    compressionLevel?: number;
-    transactionalId?: string | null;
-    producerId?: bigint;
-    producerEpoch?: number;
-  },
-): Promise<{ partition: number; recordSet: Encoder }[]> {
-  return Promise.all(partitions.map((partition) => encodePartition(partition, options)));
-}
-
 /**
  * Every version from 3 through 8 shares this exact request wire shape (KIP-98's RecordBatch v2
  * became mandatory at v3; each later version bump only signals a client capability — quota
@@ -226,32 +228,47 @@ export function createProduceRequest(apiVersion: number, options: ProduceRequest
     // A request sent with acks=0 gets no response at all - the broker never writes one to the
     // wire, so the network layer must know not to wait for one.
     expectResponse: () => acks !== 0,
-    encode: async () => {
-      const encoder = new Encoder();
-
-      if (apiVersion >= PRODUCE_TOPIC_ID_MIN_VERSION) {
-        const encodedTopicData = await Promise.all(
-          topicData.map(async ({ topic, topicId, partitions }) => {
-            if (!isUsableTopicId(topicId)) {
-              throw new RangeError(`Produce v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
-            }
-            return { topicId, partitions: await encodeTopicPartitions(partitions, partitionOptions) };
-          }),
-        );
-        flexibleRequestBodySchemaV13.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
-        return encoder;
+    encode: () => {
+      // When compressing, `async` turns a partition's encode throw into a rejection that
+      // `Promise.all` observes, so batches already compressing never reject unhandled.
+      const encodeTopicPartition =
+        compression === COMPRESSION_TYPES.None
+          ? (partition: ProducePartitionData) => encodePartition(partition, partitionOptions)
+          : async (partition: ProducePartitionData) => encodePartition(partition, partitionOptions);
+      const topicPartitions = topicData.map(({ partitions }) => partitions.map(encodeTopicPartition));
+      // Uncompressed batches are already encoded, so the body is written without a promise hop.
+      if (isEncoded(topicPartitions)) {
+        return writeBody(topicPartitions);
       }
-
-      const encodedTopicData = await Promise.all(
-        topicData.map(async ({ topic, partitions }) => ({
-          topic,
-          partitions: await encodeTopicPartitions(partitions, partitionOptions),
-        })),
-      );
-      schema.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
-      return encoder;
+      return Promise.all(
+        // eslint-disable-next-line @typescript-eslint/await-thenable -- only the compressed partitions are promises
+        topicPartitions.map((partitions) => Promise.all(partitions)),
+      ).then(writeBody);
     },
   };
+
+  /** `encodedPartitions[i]` holds the encoded partitions of `topicData[i]`. */
+  function writeBody(encodedPartitions: readonly EncodedPartition[][]): Encoder {
+    const encoder = new Encoder();
+
+    if (apiVersion >= PRODUCE_TOPIC_ID_MIN_VERSION) {
+      const encodedTopicData = topicData.map(({ topic, topicId }, index) => {
+        if (!isUsableTopicId(topicId)) {
+          throw new RangeError(`Produce v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
+        }
+        return { topicId, partitions: encodedPartitions[index] ?? [] };
+      });
+      flexibleRequestBodySchemaV13.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
+      return encoder;
+    }
+
+    const encodedTopicData = topicData.map(({ topic }, index) => ({
+      topic,
+      partitions: encodedPartitions[index] ?? [],
+    }));
+    schema.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
+    return encoder;
+  }
 }
 
 export interface ProducePartitionResult {
@@ -369,7 +386,7 @@ export function readProduceResponseNodeEndpoints(decoder: Decoder): ProduceNodeE
  * Shared by every Produce response version: throw the first partition-level failure found,
  * scanning topics in wire order.
  */
-export async function parseProduceResponse<
+export function parseProduceResponse<
   T extends {
     topics: readonly {
       topicName?: string;
@@ -377,7 +394,7 @@ export async function parseProduceResponse<
     }[];
     nodeEndpoints?: readonly ProduceNodeEndpoint[];
   },
->(data: T): Promise<T> {
+>(data: T): T {
   for (const topic of data.topics) {
     const firstError = topic.partitions.find((p) => failure(p.errorCode));
     if (firstError) {

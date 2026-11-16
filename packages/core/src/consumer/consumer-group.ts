@@ -21,8 +21,8 @@ import {
   type GroupMembership,
   type MembershipHost,
 } from './membership/group-membership';
-import { AssignedOffsetManager } from './offset-manager/assigned-offset-manager';
-import { OffsetManager, type OffsetManagerHandle } from './offset-manager/index';
+import { AssignModeCommitTarget, GroupMemberCommitTarget } from './offset-manager/commit-target';
+import { OffsetTracker } from './offset-manager/offset-tracker';
 import type { TopicOffsetConfiguration } from './offset-reset';
 import { SeekOffsets } from './seek-offsets';
 import { SubscriptionState } from './subscription-state';
@@ -185,7 +185,7 @@ export interface ConsumerGroupOptions {
    * looked up in `topicConfigurations` by name ahead of time).
    */
   defaultTopicConfiguration?: TopicOffsetConfiguration;
-  /** Ordered async `onCommit` hook, forwarded to this group's `OffsetManager`. */
+  /** Ordered async `onCommit` hook, forwarded to this group's `OffsetTracker`. */
   hooks?: ConsumerHooks;
   /**
    * Verify each fetched record batch's CRC on decode; `false` skips the check for throughput.
@@ -261,9 +261,6 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   minBytes: number;
   maxBytes: number;
   maxWaitTime: number;
-  autoCommit: boolean;
-  autoCommitInterval: number | null;
-  autoCommitThreshold: number | null;
   isolationLevel: IsolationLevel;
   checkCrcs: boolean;
   rackId: string;
@@ -272,7 +269,6 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   readonly groupRemoteAssignor: 'uniform' | 'range' | null;
   /** `subscribedTopicRegex` sent on ConsumerGroupHeartbeat; only set with the consumer group protocol. */
   readonly subscribedTopicRegex: string | null;
-  hooks: ConsumerHooks | undefined;
   onPartitionsRevoked: RebalanceListener | undefined;
   onPartitionsAssigned: RebalanceListener | undefined;
   onPartitionsLost: RebalanceListener | undefined;
@@ -281,7 +277,8 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   seekOffset = new SeekOffsets();
   partitionsPerSubscribedTopic: Map<string, number[]> | null = null;
   preferredReadReplicasPerTopicPartition: Record<string, Record<number, PreferredReadReplica>> = {};
-  offsetManager: OffsetManagerHandle | null = null;
+  /** The consumer's offsets for this run, told about each assignment change. */
+  offsetTracker: OffsetTracker;
   subscriptionState = new SubscriptionState();
 
   readonly #membership: GroupMembership;
@@ -346,14 +343,10 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     this.minBytes = minBytes;
     this.maxBytes = maxBytes;
     this.maxWaitTime = maxWaitTimeInMs;
-    this.autoCommit = autoCommit;
-    this.autoCommitInterval = autoCommitInterval;
-    this.autoCommitThreshold = autoCommitThreshold;
     this.isolationLevel = isolationLevel;
     this.checkCrcs = checkCrcs;
     this.rackId = rackId;
     this.metadataMaxAge = metadataMaxAge;
-    this.hooks = hooks;
     this.onPartitionsRevoked = onPartitionsRevoked;
     this.onPartitionsAssigned = onPartitionsAssigned;
     this.onPartitionsLost = onPartitionsLost;
@@ -398,6 +391,24 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     }
 
     this.#sharedHeartbeat = sharedPromiseTo(() => this.#membership.heartbeat());
+
+    // A group member without a group id never joins, so it has nowhere to commit either.
+    const target =
+      this.#membership.isGroupMember && groupId !== null
+        ? new GroupMemberCommitTarget(cluster, groupId, this.#membership)
+        : new AssignModeCommitTarget(cluster, groupId);
+    this.offsetTracker = new OffsetTracker({
+      cluster,
+      target,
+      topicConfigurations: this.topicConfigurations,
+      instrumentationEmitter,
+      autoCommit,
+      // Assign mode commits only when asked to, so it has no auto-commit cadence.
+      autoCommitInterval: target.isGroupMember ? autoCommitInterval : null,
+      autoCommitThreshold: target.isGroupMember ? autoCommitThreshold : null,
+      logger: this.logger,
+      hooks,
+    });
   }
 
   get coordinator(): Broker | null {
@@ -479,6 +490,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     if (lost.length === 0) return;
 
     this.subscriptionState.assign([]);
+    this.offsetTracker.updateAssignment(toPartitionsByTopic([]));
     this.#invalidateActiveTopicPartitions();
     this.#prefetches.clear();
 
@@ -504,15 +516,10 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     await this.#notify(this.onPartitionsAssigned, gained, 'onPartitionsAssigned');
   }
 
-  updateMemberEpoch(memberEpoch: number): void {
-    if (this.offsetManager instanceof OffsetManager) this.offsetManager.generationId = memberEpoch;
-  }
-
   /** Installs the member's new assignment and returns it keyed by topic. */
   async #installAssignment(currentMemberAssignment: TopicPartitions[]): Promise<MemberAssignmentMap> {
     const { groupId, generationId, memberId, coordinator } = this;
-    const isGroupMember = this.#membership.isGroupMember;
-    if (isGroupMember && (!coordinator || generationId == null || memberId == null)) {
+    if (this.#membership.isGroupMember && (!coordinator || generationId == null || memberId == null)) {
       throw new KafkaNonRetriableError('Consumer group has not joined');
     }
 
@@ -540,63 +547,13 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       }
     }
 
-    const previousAssignment = this.assigned();
     this.topics = currentMemberAssignment.map(({ topic }) => topic);
     this.subscriptionState.assign(currentMemberAssignment);
     this.#invalidateActiveTopicPartitions();
     this.#prefetches.clear();
 
     const memberAssignment = toPartitionsByTopic(currentMemberAssignment);
-
-    if (!isGroupMember) {
-      if (this.offsetManager instanceof AssignedOffsetManager) {
-        this.offsetManager.updateAssignment(memberAssignment);
-      } else {
-        this.offsetManager = new AssignedOffsetManager({
-          cluster: this.cluster,
-          groupId,
-          topicConfigurations: this.topicConfigurations,
-          assignment: memberAssignment,
-          instrumentationEmitter: this.instrumentationEmitter,
-        });
-      }
-      return memberAssignment;
-    }
-
-    const previousOffsetManager = this.offsetManager;
-    const offsetManager = new OffsetManager({
-      cluster: this.cluster,
-      topicConfigurations: this.topicConfigurations,
-      instrumentationEmitter: this.instrumentationEmitter,
-      memberAssignment,
-      autoCommit: this.autoCommit,
-      autoCommitInterval: this.autoCommitInterval,
-      autoCommitThreshold: this.autoCommitThreshold,
-      coordinator: coordinator!,
-      groupId: groupId!,
-      generationId: generationId!,
-      memberId: memberId!,
-      logger: this.logger,
-      hooks: this.hooks,
-    });
-
-    // A partition the same member held before and after this change (cooperative-sticky, KIP-848)
-    // was owned throughout, so its processed-but-uncommitted position is still valid. Lost
-    // partitions were already cleared from `assigned()` by `notifyPartitionsLost`, so they never
-    // carry over.
-    if (previousOffsetManager instanceof OffsetManager && previousOffsetManager.memberId === memberId) {
-      for (const { topic, partitions } of previousAssignment) {
-        const retained = memberAssignment[topic];
-        for (const partition of partitions) {
-          const resolved = previousOffsetManager.resolvedOffsets[topic]?.[partition];
-          if (resolved !== undefined && retained?.includes(partition)) {
-            (offsetManager.resolvedOffsets[topic] ??= {})[partition] = resolved;
-          }
-        }
-      }
-    }
-
-    this.offsetManager = offsetManager;
+    this.offsetTracker.updateAssignment(memberAssignment);
     return memberAssignment;
   }
 
@@ -658,20 +615,13 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     });
   }
 
-  #requireOffsetManager(): OffsetManagerHandle {
-    if (!this.offsetManager) {
-      throw new KafkaNonRetriableError('Offset manager is not initialized');
-    }
-    return this.offsetManager;
-  }
-
   resetOffset({ topic, partition }: TopicPartition): void {
-    this.#requireOffsetManager().resetOffset({ topic, partition });
+    this.offsetTracker.resetOffset({ topic, partition });
     this.#clearPrefetchPosition(topic, partition);
   }
 
   resolveOffset({ topic, partition, offset }: TopicPartitionOffset): void {
-    this.#requireOffsetManager().resolveOffset({ topic, partition, offset });
+    this.offsetTracker.resolveOffset({ topic, partition, offset });
   }
 
   seek({ topic, partition, offset }: TopicPartitionOffset): void {
@@ -704,15 +654,15 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   }
 
   async commitOffsetsIfNecessary(): Promise<void> {
-    await this.#requireOffsetManager().commitOffsetsIfNecessary();
+    await this.offsetTracker.commitOffsetsIfNecessary();
   }
 
   async commitOffsets(offsets?: Offsets): Promise<void> {
-    await this.#requireOffsetManager().commitOffsets(offsets);
+    await this.offsetTracker.commitOffsets(offsets);
   }
 
   uncommittedOffsets(): OffsetsByTopicPartition {
-    return this.#requireOffsetManager().uncommittedOffsets();
+    return this.offsetTracker.uncommittedOffsets();
   }
 
   async heartbeat(): Promise<void> {
@@ -729,8 +679,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
 
       await this.seekOffsets(topicPartitions, isProcessing);
 
-      const offsetManager = this.#requireOffsetManager();
-      const committedOffsets = offsetManager.committedOffsets();
+      const offsetTracker = this.offsetTracker;
       const activeTopicPartitions = this.getActiveTopicPartitions();
 
       let hasHeldBackPartition = false;
@@ -744,7 +693,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
             partitions: partitions
               .filter((partition) => {
                 if (
-                  committedOffsets[topic]?.[partition] == null ||
+                  !offsetTracker.hasCommittedOffset(topic, partition) ||
                   activeTopicPartitions[topic]?.has(partition) !== true
                 ) {
                   return false;
@@ -764,7 +713,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
                   currentLeaderEpoch: leaderEpoch,
                   fetchOffset:
                     this.#prefetches.get(topicPartitionKey(topic, partition))?.position?.offset ??
-                    offsetManager.nextOffset(topic, partition),
+                    offsetTracker.nextOffset(topic, partition),
                   maxBytes: this.maxBytesPerPartition,
                 };
               }),
@@ -844,7 +793,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       });
 
       for (const batch of batches) {
-        this.#trackFetchedBatch(batch, offsetManager);
+        this.#trackFetchedBatch(batch, offsetTracker);
       }
 
       // Floored at one partition's limit: below it the broker returns little more than the first
@@ -913,7 +862,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
    * Counts `batch` as unsettled until the fetch pipeline settles it; a partition with
    * `MAX_UNSETTLED_BATCHES_PER_PARTITION` unsettled batches is left out of fetch requests.
    */
-  #trackFetchedBatch(batch: Batch, offsetManager: OffsetManagerHandle): void {
+  #trackFetchedBatch(batch: Batch, offsetTracker: OffsetTracker): void {
     const { topic, partition } = batch;
     const key = topicPartitionKey(topic, partition);
     let prefetch = this.#prefetches.get(key);
@@ -923,7 +872,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     }
     const tracked = prefetch;
     tracked.unsettledBatches += 1;
-    const extended = this.#extendPrefetchPosition(tracked, batch, offsetManager);
+    const extended = this.#extendPrefetchPosition(tracked, batch, offsetTracker);
 
     trackFetchBatch(batch, {
       // A held batch waits behind the partition's earlier one; a pause or seek meanwhile drops it.
@@ -950,11 +899,11 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
   #extendPrefetchPosition(
     prefetch: PartitionPrefetch,
     batch: Batch,
-    offsetManager: OffsetManagerHandle,
+    offsetTracker: OffsetTracker,
   ): { position: PrefetchPosition; endOffset: bigint } | null {
     if (batch.isEmptyIncludingFiltered()) return null;
 
-    const expectedOffset = prefetch.position?.offset ?? offsetManager.nextOffset(batch.topic, batch.partition);
+    const expectedOffset = prefetch.position?.offset ?? offsetTracker.nextOffset(batch.topic, batch.partition);
     // Fetched from a position that is already outdated: the runner drops it as stale.
     if (batch.fetchedOffset !== expectedOffset) return null;
 
@@ -1140,7 +1089,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
         memberId: this.memberId,
       });
 
-      await this.#requireOffsetManager().setDefaultOffset({
+      await this.offsetTracker.setDefaultOffset({
         topic: e.topic,
         partition: e.partition,
       });
@@ -1177,8 +1126,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
       });
 
       const endOffset = topics[0]?.partitions[0]?.endOffset;
-      const offsetManager = this.#requireOffsetManager();
-      if (endOffset == null || endOffset < 0n || offsetManager.nextOffset(topic, partition) <= endOffset) {
+      if (endOffset == null || endOffset < 0n || this.offsetTracker.nextOffset(topic, partition) <= endOffset) {
         return false;
       }
 
@@ -1191,7 +1139,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
         endOffset,
       });
 
-      await offsetManager.seek({ topic, partition, offset: endOffset });
+      await this.offsetTracker.seek({ topic, partition, offset: endOffset });
       delete this.#lastFetchedLeaderEpoch[topic]?.[partition];
       return true;
     } catch {
@@ -1237,8 +1185,6 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     topicPartitions: readonly TopicPartitions[],
     isProcessing?: ConsumerGroupFetchOptions['isProcessing'],
   ): Promise<void> {
-    const offsetManager = this.#requireOffsetManager();
-
     for (const { topic, partitions } of topicPartitions) {
       for (const partition of partitions) {
         if (isProcessing?.(topic, partition)) continue;
@@ -1250,12 +1196,12 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
           memberId: this.memberId,
           seek: seekEntry,
         });
-        await offsetManager.seek(seekEntry);
+        await this.offsetTracker.seek(seekEntry);
         this.#clearPrefetchPosition(topic, partition);
       }
     }
 
-    await offsetManager.resolveOffsets();
+    await this.offsetTracker.resolveOffsets();
   }
 
   hasSeekOffset({ topic, partition }: TopicPartition): boolean {
@@ -1271,7 +1217,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     const isAssigned = this.assigned().some((tp) => tp.topic === topic && tp.partitions.includes(partition));
     if (!isAssigned) return null;
 
-    return this.#requireOffsetManager().nextOffset(topic, partition);
+    return this.offsetTracker.nextOffset(topic, partition);
   }
 
   /**

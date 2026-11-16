@@ -171,10 +171,6 @@ export class ConsumerProtocolMembership implements GroupMembership {
 
   async #applyHeartbeatResponse(response: ConsumerGroupHeartbeatResponseV1Body, wasJoined: boolean): Promise<void> {
     const host = this.#host;
-    // The epoch can advance without a new assignment (so no new OffsetManager); commits must carry
-    // the current epoch or the broker rejects them with STALE_MEMBER_EPOCH.
-    host.updateMemberEpoch(response.memberEpoch);
-
     if (!response.assignment) return;
 
     const assignment: TopicPartitions[] = [];

@@ -77,13 +77,6 @@ export class SubscriptionState {
     }));
   }
 
-  active(): TopicPartitions[] {
-    return Object.values(this.assignedPartitionsByTopic).map(({ topic, partitions }) => ({
-      topic,
-      partitions: partitions.filter((partition) => !this.isPaused(topic, partition)).sort((a, b) => a - b),
-    }));
-  }
-
   paused(): TopicPartitions[] {
     return Object.values(this.assignedPartitionsByTopic)
       .map(({ topic, partitions }) => ({

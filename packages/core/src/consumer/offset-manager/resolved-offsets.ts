@@ -11,7 +11,7 @@ function createRecord<Value>(): Record<string, Value> {
  * per-record path then allocates nothing once a partition has been seen.
  */
 export class ResolvedOffsets {
-  #resolved: OffsetsByTopic = createRecord();
+  readonly #resolved: OffsetsByTopic = createRecord();
   readonly #pending = new Map<string, Map<number, bigint>>();
   #hasPending = false;
 
@@ -40,14 +40,5 @@ export class ResolvedOffsets {
     }
     this.#hasPending = false;
     return this.#resolved;
-  }
-
-  /** Drops pending offsets and replaces the map with a prototype-free copy of `resolved`. */
-  replace(resolved: OffsetsByTopic): void {
-    for (const pendingTopic of this.#pending.values()) {
-      pendingTopic.clear();
-    }
-    this.#hasPending = false;
-    this.#resolved = Object.assign(createRecord<Record<string, bigint>>(), resolved);
   }
 }

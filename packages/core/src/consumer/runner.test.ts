@@ -59,7 +59,7 @@ describe('consumer/runner', () => {
   const partition = 0;
 
   /** A pipeline with the test partition assigned, reading its position from `readPosition`. */
-  function assignedPipeline(readPosition: () => bigint | null = () => 0n): PartitionPipeline {
+  function assignedPipeline(readPosition: () => bigint = () => 0n): PartitionPipeline {
     const pipeline = new PartitionPipeline({ readPosition });
     pipeline.assign([{ topic: topicName, partitions: [partition] }]);
     return pipeline;
@@ -88,7 +88,7 @@ describe('consumer/runner', () => {
       nextHeartbeatAt: Infinity,
       assigned: vi.fn(() => []),
       isLeader: vi.fn(() => true),
-      partitionPipeline: new PartitionPipeline({ readPosition: () => null }),
+      partitionPipeline: new PartitionPipeline({ readPosition: () => 0n }),
       pause: vi.fn(),
       resume: vi.fn(),
       recoverRejectedMember: vi.fn(async () => undefined),

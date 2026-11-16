@@ -91,6 +91,12 @@ export function createTransactionSession({
   /** Whether consumer-group offsets have been added to the current transaction. */
   let hasOffsetsAddedToTransaction = false;
 
+  /**
+   * Offsets sent with the current transaction. They are marked committed in the cluster's record
+   * only once the transaction commits, so an aborted one leaves no offset the group never stored.
+   */
+  let offsetsToMarkCommitted: Parameters<Cluster['markOffsetAsCommitted']>[0][] = [];
+
   /** The transaction from `begin` until it ends. */
   let open: TransactionHandle | undefined;
 
@@ -102,6 +108,7 @@ export function createTransactionSession({
     if (to === TRANSACTION_STATES.READY) {
       transactionTopicPartitions = new Map();
       hasOffsetsAddedToTransaction = false;
+      offsetsToMarkCommitted = [];
       open = undefined;
     }
   });
@@ -320,6 +327,9 @@ export function createTransactionSession({
       }
       throw error;
     });
+    if (transactionResult) {
+      for (const committedOffset of offsetsToMarkCommitted) cluster.markOffsetAsCommitted(committedOffset);
+    }
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
     // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
@@ -348,7 +358,7 @@ export function createTransactionSession({
     }
   }
 
-  /** Adds consumer-group offsets to the transaction, then marks them committed locally. */
+  /** Adds consumer-group offsets to the transaction; they are marked committed locally once it commits. */
   async function sendOffsets({
     consumerGroupId,
     topics,
@@ -356,6 +366,8 @@ export function createTransactionSession({
     consumerGroupId: string;
     topics: readonly TopicOffsets[];
   }): Promise<void> {
+    // Kept from the start, so a call still running when its transaction ends cannot add to the next one.
+    const transactionOffsets = offsetsToMarkCommitted;
     const transactionCoordinator = await findTransactionCoordinator();
 
     await transactionCoordinator.send(AddOffsetsToTxn, {
@@ -387,7 +399,7 @@ export function createTransactionSession({
 
     for (const { topic, partitions } of topics) {
       for (const { partition, offset } of partitions) {
-        cluster.markOffsetAsCommitted({ groupId: consumerGroupId, topic, partition, offset });
+        transactionOffsets.push({ groupId: consumerGroupId, topic, partition, offset });
       }
     }
   }

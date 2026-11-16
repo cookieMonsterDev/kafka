@@ -21,14 +21,6 @@ describe('consumer/offset-manager/resolved-offsets', () => {
     expect(offsets.snapshot()['events']![0]).toBe(8n);
   });
 
-  it('drops pending offsets on replace', () => {
-    const offsets = new ResolvedOffsets();
-    offsets.resolve('events', 0, 4n);
-    offsets.replace({ events: {} });
-
-    expect(offsets.snapshot()).toEqual({ events: {} });
-  });
-
   it('keeps a topic named __proto__ as an ordinary key', () => {
     const offsets = new ResolvedOffsets();
     offsets.resolve('__proto__', 0, 1n);

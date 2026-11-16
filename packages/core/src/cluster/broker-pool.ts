@@ -14,13 +14,15 @@ import type { ConnectionPoolBuilder } from './connection-pool-builder';
 import { DescribeCluster } from '../protocol/requests/lazy-families';
 import { Metadata } from '../protocol/requests/metadata/index';
 
+function hasAddressChanged(broker: Broker, { host, port }: { host: string; port: number }): boolean {
+  return broker.connectionPool.host !== host || broker.connectionPool.port !== port;
+}
+
 function hasBrokerBeenReplaced(
   broker: Broker,
   { host, port, rack }: { host: string; port: number; rack: string | null },
 ): boolean {
-  return (
-    broker.connectionPool.host !== host || broker.connectionPool.port !== port || broker.connectionPool.rack !== rack
-  );
+  return hasAddressChanged(broker, { host, port }) || broker.connectionPool.rack !== rack;
 }
 
 /** KIP-951: the partition's current leader, reported on a stale-leader error response. */
@@ -450,6 +452,12 @@ export class BrokerPool {
       endpointType: ENDPOINT_TYPES.CONTROLLER,
     });
     return clusterMetadataFromDescribeCluster(body);
+  }
+
+  /** Whether the pool holds a broker for `nodeId` at an address other than `host` and `port`. */
+  hasBrokerMoved({ nodeId, host, port }: { nodeId: string; host: string; port: number }): boolean {
+    const broker = this.brokers[nodeId];
+    return broker != null && hasAddressChanged(broker, { host, port });
   }
 
   /** The broker for `nodeId` when it is already connected; `findBroker` connects it otherwise. */

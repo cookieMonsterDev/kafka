@@ -474,6 +474,47 @@ describe('cluster/Cluster', () => {
     });
   });
 
+  describe('findGroupCoordinator', () => {
+    function brokerAt(host: string, port: number): Broker {
+      return { connectionPool: { host, port } } as unknown as Broker;
+    }
+
+    /** A cluster whose cached broker 1 is at `cached`, while FindCoordinator names node 1 at `found`. */
+    function clusterWithCoordinator(cached: Broker, found: { host: string; port: number }) {
+      const cluster = createCluster();
+      cluster.brokerPool.brokers = { '1': cached };
+      vi.spyOn(cluster, 'findGroupCoordinatorMetadata').mockResolvedValue({
+        coordinator: { nodeId: 1, ...found },
+      } as Awaited<ReturnType<Cluster['findGroupCoordinatorMetadata']>>);
+      vi.spyOn(cluster.brokerPool, 'findBroker').mockImplementation(async ({ nodeId }) => {
+        const broker = cluster.brokerPool.brokers[nodeId];
+        if (!broker) throw new KafkaBrokerNotFound(`Broker ${nodeId} not found`);
+        return broker;
+      });
+      return cluster;
+    }
+
+    it('refreshes metadata before returning a coordinator that moved to a new address under the same node id', async () => {
+      const moved = brokerAt('new-host', 9093);
+      const cluster = clusterWithCoordinator(brokerAt('old-host', 9092), { host: 'new-host', port: 9093 });
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary').mockImplementation(async () => {
+        cluster.brokerPool.brokers = { '1': moved };
+      });
+
+      await expect(cluster.findGroupCoordinator({ groupId: 'group' })).resolves.toBe(moved);
+      expect(refresh).toHaveBeenCalledOnce();
+    });
+
+    it('returns the cached broker without a refresh when the coordinator address matches it', async () => {
+      const cached = brokerAt('broker-1', 9092);
+      const cluster = clusterWithCoordinator(cached, { host: 'broker-1', port: 9092 });
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary');
+
+      await expect(cluster.findGroupCoordinator({ groupId: 'group' })).resolves.toBe(cached);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findBroker', () => {
     it('refreshes metadata and rethrows when the broker pool reports a stale broker', async () => {
       const cluster = createCluster();

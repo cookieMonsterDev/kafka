@@ -276,6 +276,23 @@ describe('cluster/BrokerPool', () => {
     });
   });
 
+  describe('hasBrokerMoved', () => {
+    it('reports a cached broker whose address differs, not an unknown node id', () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.brokers = {
+        '1': new Broker({ connectionPool: fakeConnectionPool(), logger: silentLogger, nodeId: 1 }),
+      };
+
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-1', port: 9092 })).toBe(false);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-1', port: 9093 })).toBe(true);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-9', port: 9092 })).toBe(true);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '2', host: 'broker-9', port: 9092 })).toBe(false);
+    });
+  });
+
   describe('refreshMetadata', () => {
     it('assigns the seed broker its nodeId/rack and creates a new broker for every other address', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });

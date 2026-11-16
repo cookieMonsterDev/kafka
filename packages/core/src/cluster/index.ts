@@ -583,7 +583,13 @@ export class Cluster {
     return this.retrier(async (bail, retryCount, retryTime) => {
       try {
         const { coordinator } = await this.findGroupCoordinatorMetadata({ groupId, coordinatorType });
-        return await this.findBroker({ nodeId: String(coordinator.nodeId) });
+        const nodeId = String(coordinator.nodeId);
+        // A coordinator can move to a new address under the same node id before the cached
+        // metadata knows it; the cached broker would keep reaching the old address.
+        if (this.brokerPool.hasBrokerMoved({ nodeId, host: coordinator.host, port: coordinator.port })) {
+          await this.#refreshStaleMetadata();
+        }
+        return await this.findBroker({ nodeId });
       } catch (e) {
         const error = e as Error;
 

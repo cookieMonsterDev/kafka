@@ -7,7 +7,7 @@ export default defineConfig({
     sourcemap: false,
     minify: false,
     lib: {
-      // One bundled module instead of one file per source module: Node's ESM loader pays per file,
+      // A few bundled chunks instead of one file per source module: Node's ESM loader pays per file,
       // and importing ~800 files took ~130 ms. The codec worker and its pool stay separate files at
       // fixed paths: `new Worker()` loads the worker by path, and the smoke and binary scripts load
       // both directly.
@@ -23,6 +23,21 @@ export default defineConfig({
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
+        codeSplitting: {
+          groups: [
+            // Code that both `index.js` and `lazy-requests.js` use (schema, encoder, errors). It
+            // cannot stay in `index.js`: library mode keeps entry exports strict, so the entry
+            // cannot export internals to another chunk. The codec entries keep their own files.
+            {
+              name: 'shared',
+              test: (id) => !/[\\/]protocol[\\/]compression[\\/](off-thread|codec-worker)\.ts$/.test(id),
+              minShareCount: 2,
+            },
+            // Request families that `Broker` imports on first use (see `src/broker/lazy-requests.ts`),
+            // with their dependencies that `shared` did not take.
+            { name: 'lazy-requests', test: /[\\/]src[\\/]broker[\\/]lazy-requests\.ts$/ },
+          ],
+        },
       },
     },
   },

@@ -23,46 +23,34 @@ import type { AddOffsetsToTxnResponseV1Body } from '../protocol/requests/add-off
 import { AddPartitionsToTxn } from '../protocol/requests/add-partitions-to-txn/index';
 import type { AddPartitionsToTxnOptions } from '../protocol/requests/add-partitions-to-txn/index';
 import type { AddPartitionsToTxnResponseV1Body } from '../protocol/requests/add-partitions-to-txn/v1/response';
-import { AlterConfigs } from '../protocol/requests/alter-configs/index';
 import type { AlterConfigsOptions } from '../protocol/requests/alter-configs/index';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
-import { AlterPartitionReassignments } from '../protocol/requests/alter-partition-reassignments/index';
 import type { AlterPartitionReassignmentsRequestV0Options } from '../protocol/requests/alter-partition-reassignments/v0/request';
 import type { AlterPartitionReassignmentsResponseV0Body } from '../protocol/requests/alter-partition-reassignments/v0/response';
 import { ApiVersions } from '../protocol/requests/api-versions/index';
 import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response';
 import type { ApiVersionsResponseV3Body } from '../protocol/requests/api-versions/v3/response';
-import { CreateAcls } from '../protocol/requests/create-acls/index';
 import type { CreateAclsOptions } from '../protocol/requests/create-acls/index';
 import type { CreateAclsResponseV1Body } from '../protocol/requests/create-acls/v1/response';
-import { CreatePartitions } from '../protocol/requests/create-partitions/index';
 import type { CreatePartitionsOptions } from '../protocol/requests/create-partitions/index';
 import type { CreatePartitionsResponseV1Body } from '../protocol/requests/create-partitions/v1/response';
-import { CreateTopics } from '../protocol/requests/create-topics/index';
 import type { CreateTopicsOptions } from '../protocol/requests/create-topics/index';
 import type { CreateTopicsResponseV3Body } from '../protocol/requests/create-topics/v3/response';
-import { DeleteAcls } from '../protocol/requests/delete-acls/index';
 import type { DeleteAclsOptions } from '../protocol/requests/delete-acls/index';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
-import { DeleteGroups } from '../protocol/requests/delete-groups/index';
 import type { DeleteGroupsOptions } from '../protocol/requests/delete-groups/index';
 import type { DeleteGroupsResponseV1Body } from '../protocol/requests/delete-groups/v1/response';
-import { DeleteRecords } from '../protocol/requests/delete-records/index';
 import type { DeleteRecordsOptions } from '../protocol/requests/delete-records/index';
 import type { DeleteRecordsResponseV1Body } from '../protocol/requests/delete-records/v1/response';
-import { DeleteTopics } from '../protocol/requests/delete-topics/index';
 import type { DeleteTopicsOptions } from '../protocol/requests/delete-topics/index';
 import type { DeleteTopicsResponseV1Body } from '../protocol/requests/delete-topics/v1/response';
-import { DescribeAcls } from '../protocol/requests/describe-acls/index';
 import type { DescribeAclsOptions } from '../protocol/requests/describe-acls/index';
 import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
-import { DescribeConfigs } from '../protocol/requests/describe-configs/index';
 import type { DescribeConfigsOptions } from '../protocol/requests/describe-configs/index';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import { DescribeGroups } from '../protocol/requests/describe-groups/index';
 import type { DescribeGroupsOptions } from '../protocol/requests/describe-groups/index';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
-import { ElectLeaders } from '../protocol/requests/elect-leaders/index';
 import type { ElectLeadersOptions } from '../protocol/requests/elect-leaders/index';
 import type { ElectLeadersResponseV1Body } from '../protocol/requests/elect-leaders/v1/response';
 import { EndTxn } from '../protocol/requests/end-txn/index';
@@ -81,7 +69,6 @@ import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-co
 import { Heartbeat } from '../protocol/requests/heartbeat/index';
 import type { HeartbeatOptions } from '../protocol/requests/heartbeat/index';
 import type { HeartbeatResponseV2Body } from '../protocol/requests/heartbeat/v2/response';
-import { IncrementalAlterConfigs } from '../protocol/requests/incremental-alter-configs/index';
 import type { IncrementalAlterConfigsOptions } from '../protocol/requests/incremental-alter-configs/index';
 import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
 import { InitProducerId } from '../protocol/requests/init-producer-id/index';
@@ -93,13 +80,11 @@ import type { JoinGroupResponseV5Body } from '../protocol/requests/join-group/v5
 import { LeaveGroup } from '../protocol/requests/leave-group/index';
 import type { LeaveGroupOptions } from '../protocol/requests/leave-group/index';
 import type { LeaveGroupResponseV3Body } from '../protocol/requests/leave-group/v3/response';
-import { ListGroups } from '../protocol/requests/list-groups/index';
 import type { ListGroupsOptions } from '../protocol/requests/list-groups/index';
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import { ListOffsets } from '../protocol/requests/list-offsets/index';
 import type { ListOffsetsOptions } from '../protocol/requests/list-offsets/index';
 import type { ListOffsetsResponseV3Body } from '../protocol/requests/list-offsets/v3/response';
-import { ListPartitionReassignments } from '../protocol/requests/list-partition-reassignments/index';
 import type { ListPartitionReassignmentsRequestV0Options } from '../protocol/requests/list-partition-reassignments/v0/request';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import { Metadata } from '../protocol/requests/metadata/index';
@@ -108,7 +93,6 @@ import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { OffsetCommit } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitOptions } from '../protocol/requests/offset-commit/index';
 import type { OffsetCommitResponseV4Body } from '../protocol/requests/offset-commit/v4/response';
-import { OffsetDelete } from '../protocol/requests/offset-delete/index';
 import type { OffsetDeleteOptions } from '../protocol/requests/offset-delete/index';
 import type { OffsetDeleteResponseV1Body } from '../protocol/requests/offset-delete/v1/response';
 import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
@@ -131,43 +115,30 @@ import type { SyncGroupResponseV2Body } from '../protocol/requests/sync-group/v2
 import { TxnOffsetCommit } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitOptions } from '../protocol/requests/txn-offset-commit/index';
 import type { TxnOffsetCommitResponseV1Body } from '../protocol/requests/txn-offset-commit/v1/response';
-import { WriteTxnMarkers } from '../protocol/requests/write-txn-markers/index';
 import type { WriteTxnMarkersOptions } from '../protocol/requests/write-txn-markers/index';
 import type { WriteTxnMarkersResponseV1Body } from '../protocol/requests/write-txn-markers/v1/response';
-import { AlterUserScramCredentials } from '../protocol/requests/alter-user-scram-credentials/index';
 import type { AlterUserScramCredentialsOptions } from '../protocol/requests/alter-user-scram-credentials/index';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
-import { DescribeUserScramCredentials } from '../protocol/requests/describe-user-scram-credentials/index';
 import type { DescribeUserScramCredentialsOptions } from '../protocol/requests/describe-user-scram-credentials/index';
 import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
-import { DescribeClientQuotas } from '../protocol/requests/describe-client-quotas/index';
 import type { DescribeClientQuotasOptions } from '../protocol/requests/describe-client-quotas/index';
 import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/describe-client-quotas/v1/response';
-import { AlterClientQuotas } from '../protocol/requests/alter-client-quotas/index';
 import type { AlterClientQuotasOptions } from '../protocol/requests/alter-client-quotas/index';
 import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
-import { DescribeLogDirs } from '../protocol/requests/describe-log-dirs/index';
 import type { DescribeLogDirsOptions } from '../protocol/requests/describe-log-dirs/index';
 import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
-import { AlterReplicaLogDirs } from '../protocol/requests/alter-replica-log-dirs/index';
 import type { AlterReplicaLogDirsOptions } from '../protocol/requests/alter-replica-log-dirs/index';
 import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
-import { DescribeCluster } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterOptions } from '../protocol/requests/describe-cluster/index';
 import type { DescribeClusterResponseV2Body } from '../protocol/requests/describe-cluster/v2/response';
-import { DescribeQuorum } from '../protocol/requests/describe-quorum/index';
 import type { DescribeQuorumOptions } from '../protocol/requests/describe-quorum/index';
 import type { DescribeQuorumResponseBody } from '../protocol/requests/describe-quorum/index';
-import { DescribeProducers } from '../protocol/requests/describe-producers/index';
 import type { DescribeProducersRequestV0Options } from '../protocol/requests/describe-producers/v0/request';
 import type { DescribeProducersResponseV0Body } from '../protocol/requests/describe-producers/v0/response';
-import { DescribeTransactions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsOptions } from '../protocol/requests/describe-transactions/index';
 import type { DescribeTransactionsResponseV0Body } from '../protocol/requests/describe-transactions/v0/response';
-import { DescribeTopicPartitions } from '../protocol/requests/describe-topic-partitions/index';
 import type { DescribeTopicPartitionsOptions } from '../protocol/requests/describe-topic-partitions/index';
 import type { DescribeTopicPartitionsResponseV0Body } from '../protocol/requests/describe-topic-partitions/v0/response';
-import { ListConfigResources } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesOptions } from '../protocol/requests/list-config-resources/index';
 import type { ListConfigResourcesResponseV1Body } from '../protocol/requests/list-config-resources/v1/response';
 import { GetTelemetrySubscriptions } from '../protocol/requests/get-telemetry-subscriptions/index';
@@ -176,46 +147,34 @@ import type { GetTelemetrySubscriptionsResponseV0Body } from '../protocol/reques
 import { PushTelemetry } from '../protocol/requests/push-telemetry/index';
 import type { PushTelemetryOptions } from '../protocol/requests/push-telemetry/index';
 import type { PushTelemetryResponseV0Body } from '../protocol/requests/push-telemetry/v0/response';
-import { ListTransactions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsResponseV0Body } from '../protocol/requests/list-transactions/v0/response';
 import { ConsumerGroupHeartbeat } from '../protocol/requests/consumer-group-heartbeat/index';
 import type { ConsumerGroupHeartbeatOptions } from '../protocol/requests/consumer-group-heartbeat/index';
 import type { ConsumerGroupHeartbeatResponseV1Body } from '../protocol/requests/consumer-group-heartbeat/v1/response';
-import { ConsumerGroupDescribe } from '../protocol/requests/consumer-group-describe/index';
 import type { ConsumerGroupDescribeOptions } from '../protocol/requests/consumer-group-describe/index';
 import type { ConsumerGroupDescribeResponseV1Body } from '../protocol/requests/consumer-group-describe/v1/response';
-import { UpdateFeatures } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesOptions } from '../protocol/requests/update-features/index';
 import type { UpdateFeaturesResponseV0Body } from '../protocol/requests/update-features/v0/response';
-import { UnregisterBroker } from '../protocol/requests/unregister-broker/index';
 import type { UnregisterBrokerOptions } from '../protocol/requests/unregister-broker/index';
 import type { UnregisterBrokerResponseV0Body } from '../protocol/requests/unregister-broker/v0/response';
-import { AssignReplicasToDirs } from '../protocol/requests/assign-replicas-to-dirs/index';
 import type { AssignReplicasToDirsOptions } from '../protocol/requests/assign-replicas-to-dirs/index';
 import type { AssignReplicasToDirsResponseV0Body } from '../protocol/requests/assign-replicas-to-dirs/v0/response';
-import { AddRaftVoter } from '../protocol/requests/add-raft-voter/index';
 import type { AddRaftVoterOptions } from '../protocol/requests/add-raft-voter/index';
 import type { AddRaftVoterResponseV0Body } from '../protocol/requests/add-raft-voter/v0/response';
-import { RemoveRaftVoter } from '../protocol/requests/remove-raft-voter/index';
 import type { RemoveRaftVoterOptions } from '../protocol/requests/remove-raft-voter/index';
 import type { RemoveRaftVoterResponseV0Body } from '../protocol/requests/remove-raft-voter/v0/response';
-import { CreateDelegationToken } from '../protocol/requests/create-delegation-token/index';
 import type { CreateDelegationTokenOptions } from '../protocol/requests/create-delegation-token/index';
 import type { CreateDelegationTokenResponseV3Body } from '../protocol/requests/create-delegation-token/v3/response';
-import { RenewDelegationToken } from '../protocol/requests/renew-delegation-token/index';
 import type { RenewDelegationTokenOptions } from '../protocol/requests/renew-delegation-token/index';
 import type { RenewDelegationTokenResponseV1Body } from '../protocol/requests/renew-delegation-token/v1/response';
-import { ExpireDelegationToken } from '../protocol/requests/expire-delegation-token/index';
 import type { ExpireDelegationTokenOptions } from '../protocol/requests/expire-delegation-token/index';
 import type { ExpireDelegationTokenResponseV1Body } from '../protocol/requests/expire-delegation-token/v1/response';
-import { DescribeDelegationToken } from '../protocol/requests/describe-delegation-token/index';
 import type { DescribeDelegationTokenOptions } from '../protocol/requests/describe-delegation-token/index';
 import type { DescribeDelegationTokenResponseV3Body } from '../protocol/requests/describe-delegation-token/v3/response';
 import { ShareGroupHeartbeat } from '../protocol/requests/share-group-heartbeat/index';
 import type { ShareGroupHeartbeatOptions } from '../protocol/requests/share-group-heartbeat/index';
 import type { ShareGroupHeartbeatResponseV1Body } from '../protocol/requests/share-group-heartbeat/v1/response';
-import { ShareGroupDescribe } from '../protocol/requests/share-group-describe/index';
 import type { ShareGroupDescribeOptions } from '../protocol/requests/share-group-describe/index';
 import type { ShareGroupDescribeResponseV1Body } from '../protocol/requests/share-group-describe/v1/response';
 import { ShareFetch } from '../protocol/requests/share-fetch/index';
@@ -224,15 +183,21 @@ import type { ShareFetchResponseV1Body } from '../protocol/requests/share-fetch/
 import { ShareAcknowledge } from '../protocol/requests/share-acknowledge/index';
 import type { ShareAcknowledgeOptions } from '../protocol/requests/share-acknowledge/index';
 import type { ShareAcknowledgeResponseBody } from '../protocol/requests/share-acknowledge/index';
-import { DescribeShareGroupOffsets } from '../protocol/requests/describe-share-group-offsets/index';
 import type { DescribeShareGroupOffsetsOptions } from '../protocol/requests/describe-share-group-offsets/index';
 import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/requests/describe-share-group-offsets/v1/response';
-import { AlterShareGroupOffsets } from '../protocol/requests/alter-share-group-offsets/index';
 import type { AlterShareGroupOffsetsOptions } from '../protocol/requests/alter-share-group-offsets/index';
 import type { AlterShareGroupOffsetsResponseV0Body } from '../protocol/requests/alter-share-group-offsets/v0/response';
-import { DeleteShareGroupOffsets } from '../protocol/requests/delete-share-group-offsets/index';
 import type { DeleteShareGroupOffsetsOptions } from '../protocol/requests/delete-share-group-offsets/index';
 import type { DeleteShareGroupOffsetsResponseV0Body } from '../protocol/requests/delete-share-group-offsets/v0/response';
+
+type LazyRequests = typeof import('./lazy-requests');
+let lazyRequests: Promise<LazyRequests> | undefined;
+
+/** Loads the families in `./lazy-requests` once, on the first request that needs one. */
+function loadLazyRequests(): Promise<LazyRequests> {
+  lazyRequests ??= import('./lazy-requests');
+  return lazyRequests;
+}
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -631,26 +596,31 @@ export class Broker {
   }
 
   async createTopics(options: CreateTopicsOptions): Promise<CreateTopicsResponseV3Body> {
+    const { CreateTopics } = await loadLazyRequests();
     const createTopics = this.lookupRequest<CreateTopicsOptions>(API_KEYS.CreateTopics, CreateTopics);
     return this.#send(createTopics(options));
   }
 
   async createPartitions(options: CreatePartitionsOptions): Promise<CreatePartitionsResponseV1Body> {
+    const { CreatePartitions } = await loadLazyRequests();
     const createPartitions = this.lookupRequest<CreatePartitionsOptions>(API_KEYS.CreatePartitions, CreatePartitions);
     return this.#send(createPartitions(options));
   }
 
   async deleteTopics(options: DeleteTopicsOptions): Promise<DeleteTopicsResponseV1Body> {
+    const { DeleteTopics } = await loadLazyRequests();
     const deleteTopics = this.lookupRequest<DeleteTopicsOptions>(API_KEYS.DeleteTopics, DeleteTopics);
     return this.#send(deleteTopics(options));
   }
 
   async describeConfigs(options: DescribeConfigsOptions): Promise<DescribeConfigsResponseV2Body> {
+    const { DescribeConfigs } = await loadLazyRequests();
     const describeConfigs = this.lookupRequest<DescribeConfigsOptions>(API_KEYS.DescribeConfigs, DescribeConfigs);
     return this.#send(describeConfigs(options));
   }
 
   async alterConfigs(options: AlterConfigsOptions): Promise<AlterConfigsResponseV1Body> {
+    const { AlterConfigs } = await loadLazyRequests();
     const alterConfigs = this.lookupRequest<AlterConfigsOptions>(API_KEYS.AlterConfigs, AlterConfigs);
     return this.#send(alterConfigs(options));
   }
@@ -658,6 +628,7 @@ export class Broker {
   async incrementalAlterConfigs(
     options: IncrementalAlterConfigsOptions,
   ): Promise<IncrementalAlterConfigsResponseV1Body> {
+    const { IncrementalAlterConfigs } = await loadLazyRequests();
     const incrementalAlterConfigs = this.lookupRequest<IncrementalAlterConfigsOptions>(
       API_KEYS.IncrementalAlterConfigs,
       IncrementalAlterConfigs,
@@ -666,6 +637,7 @@ export class Broker {
   }
 
   async listConfigResources(options: ListConfigResourcesOptions = {}): Promise<ListConfigResourcesResponseV1Body> {
+    const { ListConfigResources } = await loadLazyRequests();
     const listConfigResources = this.lookupRequest<ListConfigResourcesOptions>(
       API_KEYS.ListConfigResources,
       ListConfigResources,
@@ -689,6 +661,7 @@ export class Broker {
   }
 
   async electLeaders(options: ElectLeadersOptions): Promise<ElectLeadersResponseV1Body> {
+    const { ElectLeaders } = await loadLazyRequests();
     const electLeaders = this.lookupRequest<ElectLeadersOptions>(API_KEYS.ElectLeaders, ElectLeaders);
     return this.#send(electLeaders(options));
   }
@@ -696,6 +669,7 @@ export class Broker {
   async describeUserScramCredentials(
     options: DescribeUserScramCredentialsOptions = {},
   ): Promise<DescribeUserScramCredentialsResponseV0Body> {
+    const { DescribeUserScramCredentials } = await loadLazyRequests();
     const describeUserScramCredentials = this.lookupRequest<DescribeUserScramCredentialsOptions>(
       API_KEYS.DescribeUserScramCredentials,
       DescribeUserScramCredentials,
@@ -706,6 +680,7 @@ export class Broker {
   async alterUserScramCredentials(
     options: AlterUserScramCredentialsOptions,
   ): Promise<AlterUserScramCredentialsResponseV0Body> {
+    const { AlterUserScramCredentials } = await loadLazyRequests();
     const alterUserScramCredentials = this.lookupRequest<AlterUserScramCredentialsOptions>(
       API_KEYS.AlterUserScramCredentials,
       AlterUserScramCredentials,
@@ -714,6 +689,7 @@ export class Broker {
   }
 
   async describeClientQuotas(options: DescribeClientQuotasOptions): Promise<DescribeClientQuotasResponseV1Body> {
+    const { DescribeClientQuotas } = await loadLazyRequests();
     const describeClientQuotas = this.lookupRequest<DescribeClientQuotasOptions>(
       API_KEYS.DescribeClientQuotas,
       DescribeClientQuotas,
@@ -722,6 +698,7 @@ export class Broker {
   }
 
   async alterClientQuotas(options: AlterClientQuotasOptions): Promise<AlterClientQuotasResponseV1Body> {
+    const { AlterClientQuotas } = await loadLazyRequests();
     const alterClientQuotas = this.lookupRequest<AlterClientQuotasOptions>(
       API_KEYS.AlterClientQuotas,
       AlterClientQuotas,
@@ -730,11 +707,13 @@ export class Broker {
   }
 
   async describeLogDirs(options: DescribeLogDirsOptions = {}): Promise<DescribeLogDirsResponseV2Body> {
+    const { DescribeLogDirs } = await loadLazyRequests();
     const describeLogDirs = this.lookupRequest<DescribeLogDirsOptions>(API_KEYS.DescribeLogDirs, DescribeLogDirs);
     return this.#send(describeLogDirs(options));
   }
 
   async alterReplicaLogDirs(options: AlterReplicaLogDirsOptions): Promise<AlterReplicaLogDirsResponseV2Body> {
+    const { AlterReplicaLogDirs } = await loadLazyRequests();
     const alterReplicaLogDirs = this.lookupRequest<AlterReplicaLogDirsOptions>(
       API_KEYS.AlterReplicaLogDirs,
       AlterReplicaLogDirs,
@@ -743,21 +722,25 @@ export class Broker {
   }
 
   async describeCluster(options: DescribeClusterOptions = {}): Promise<DescribeClusterResponseV2Body> {
+    const { DescribeCluster } = await loadLazyRequests();
     const describeCluster = this.lookupRequest<DescribeClusterOptions>(API_KEYS.DescribeCluster, DescribeCluster);
     return this.#send(describeCluster(options));
   }
 
   async describeQuorum(options: DescribeQuorumOptions = {}): Promise<DescribeQuorumResponseBody> {
+    const { DescribeQuorum } = await loadLazyRequests();
     const describeQuorum = this.lookupRequest<DescribeQuorumOptions>(API_KEYS.DescribeQuorum, DescribeQuorum);
     return this.#send(describeQuorum(options));
   }
 
   async unregisterBroker(options: UnregisterBrokerOptions): Promise<UnregisterBrokerResponseV0Body> {
+    const { UnregisterBroker } = await loadLazyRequests();
     const unregisterBroker = this.lookupRequest<UnregisterBrokerOptions>(API_KEYS.UnregisterBroker, UnregisterBroker);
     return this.#send(unregisterBroker(options));
   }
 
   async assignReplicasToDirs(options: AssignReplicasToDirsOptions): Promise<AssignReplicasToDirsResponseV0Body> {
+    const { AssignReplicasToDirs } = await loadLazyRequests();
     const assignReplicasToDirs = this.lookupRequest<AssignReplicasToDirsOptions>(
       API_KEYS.AssignReplicasToDirs,
       AssignReplicasToDirs,
@@ -766,16 +749,19 @@ export class Broker {
   }
 
   async addRaftVoter(options: AddRaftVoterOptions): Promise<AddRaftVoterResponseV0Body> {
+    const { AddRaftVoter } = await loadLazyRequests();
     const addRaftVoter = this.lookupRequest<AddRaftVoterOptions>(API_KEYS.AddRaftVoter, AddRaftVoter);
     return this.#send(addRaftVoter(options));
   }
 
   async removeRaftVoter(options: RemoveRaftVoterOptions): Promise<RemoveRaftVoterResponseV0Body> {
+    const { RemoveRaftVoter } = await loadLazyRequests();
     const removeRaftVoter = this.lookupRequest<RemoveRaftVoterOptions>(API_KEYS.RemoveRaftVoter, RemoveRaftVoter);
     return this.#send(removeRaftVoter(options));
   }
 
   async describeProducers(options: DescribeProducersRequestV0Options): Promise<DescribeProducersResponseV0Body> {
+    const { DescribeProducers } = await loadLazyRequests();
     const describeProducers = this.lookupRequest<DescribeProducersRequestV0Options>(
       API_KEYS.DescribeProducers,
       DescribeProducers,
@@ -784,6 +770,7 @@ export class Broker {
   }
 
   async describeTransactions(options: DescribeTransactionsOptions): Promise<DescribeTransactionsResponseV0Body> {
+    const { DescribeTransactions } = await loadLazyRequests();
     const describeTransactions = this.lookupRequest<DescribeTransactionsOptions>(
       API_KEYS.DescribeTransactions,
       DescribeTransactions,
@@ -792,6 +779,7 @@ export class Broker {
   }
 
   async listTransactions(options: ListTransactionsOptions = {}): Promise<ListTransactionsResponseV0Body> {
+    const { ListTransactions } = await loadLazyRequests();
     const listTransactions = this.lookupRequest<ListTransactionsOptions>(API_KEYS.ListTransactions, ListTransactions);
     return this.#send(listTransactions(options));
   }
@@ -805,6 +793,7 @@ export class Broker {
   }
 
   async consumerGroupDescribe(options: ConsumerGroupDescribeOptions): Promise<ConsumerGroupDescribeResponseV1Body> {
+    const { ConsumerGroupDescribe } = await loadLazyRequests();
     const consumerGroupDescribe = this.lookupRequest<ConsumerGroupDescribeOptions>(
       API_KEYS.ConsumerGroupDescribe,
       ConsumerGroupDescribe,
@@ -821,6 +810,7 @@ export class Broker {
   }
 
   async shareGroupDescribe(options: ShareGroupDescribeOptions): Promise<ShareGroupDescribeResponseV1Body> {
+    const { ShareGroupDescribe } = await loadLazyRequests();
     const shareGroupDescribe = this.lookupRequest<ShareGroupDescribeOptions>(
       API_KEYS.ShareGroupDescribe,
       ShareGroupDescribe,
@@ -841,6 +831,7 @@ export class Broker {
   async describeShareGroupOffsets(
     options: DescribeShareGroupOffsetsOptions,
   ): Promise<DescribeShareGroupOffsetsResponseV1Body> {
+    const { DescribeShareGroupOffsets } = await loadLazyRequests();
     const describeShareGroupOffsets = this.lookupRequest<DescribeShareGroupOffsetsOptions>(
       API_KEYS.DescribeShareGroupOffsets,
       DescribeShareGroupOffsets,
@@ -849,6 +840,7 @@ export class Broker {
   }
 
   async alterShareGroupOffsets(options: AlterShareGroupOffsetsOptions): Promise<AlterShareGroupOffsetsResponseV0Body> {
+    const { AlterShareGroupOffsets } = await loadLazyRequests();
     const alterShareGroupOffsets = this.lookupRequest<AlterShareGroupOffsetsOptions>(
       API_KEYS.AlterShareGroupOffsets,
       AlterShareGroupOffsets,
@@ -859,6 +851,7 @@ export class Broker {
   async deleteShareGroupOffsets(
     options: DeleteShareGroupOffsetsOptions,
   ): Promise<DeleteShareGroupOffsetsResponseV0Body> {
+    const { DeleteShareGroupOffsets } = await loadLazyRequests();
     const deleteShareGroupOffsets = this.lookupRequest<DeleteShareGroupOffsetsOptions>(
       API_KEYS.DeleteShareGroupOffsets,
       DeleteShareGroupOffsets,
@@ -869,6 +862,7 @@ export class Broker {
   async describeTopicPartitions(
     options: DescribeTopicPartitionsOptions,
   ): Promise<DescribeTopicPartitionsResponseV0Body> {
+    const { DescribeTopicPartitions } = await loadLazyRequests();
     const describeTopicPartitions = this.lookupRequest<DescribeTopicPartitionsOptions>(
       API_KEYS.DescribeTopicPartitions,
       DescribeTopicPartitions,
@@ -877,6 +871,7 @@ export class Broker {
   }
 
   async updateFeatures(options: UpdateFeaturesOptions): Promise<UpdateFeaturesResponseV0Body> {
+    const { UpdateFeatures } = await loadLazyRequests();
     const updateFeatures = this.lookupRequest<UpdateFeaturesOptions>(API_KEYS.UpdateFeatures, UpdateFeatures);
     return this.#send(updateFeatures(options));
   }
@@ -884,6 +879,7 @@ export class Broker {
   async createDelegationToken(
     options: CreateDelegationTokenOptions = {},
   ): Promise<CreateDelegationTokenResponseV3Body> {
+    const { CreateDelegationToken } = await loadLazyRequests();
     const createDelegationToken = this.lookupRequest<CreateDelegationTokenOptions>(
       API_KEYS.CreateDelegationToken,
       CreateDelegationToken,
@@ -892,6 +888,7 @@ export class Broker {
   }
 
   async renewDelegationToken(options: RenewDelegationTokenOptions): Promise<RenewDelegationTokenResponseV1Body> {
+    const { RenewDelegationToken } = await loadLazyRequests();
     const renewDelegationToken = this.lookupRequest<RenewDelegationTokenOptions>(
       API_KEYS.RenewDelegationToken,
       RenewDelegationToken,
@@ -900,6 +897,7 @@ export class Broker {
   }
 
   async expireDelegationToken(options: ExpireDelegationTokenOptions): Promise<ExpireDelegationTokenResponseV1Body> {
+    const { ExpireDelegationToken } = await loadLazyRequests();
     const expireDelegationToken = this.lookupRequest<ExpireDelegationTokenOptions>(
       API_KEYS.ExpireDelegationToken,
       ExpireDelegationToken,
@@ -910,6 +908,7 @@ export class Broker {
   async describeDelegationToken(
     options: DescribeDelegationTokenOptions = {},
   ): Promise<DescribeDelegationTokenResponseV3Body> {
+    const { DescribeDelegationToken } = await loadLazyRequests();
     const describeDelegationToken = this.lookupRequest<DescribeDelegationTokenOptions>(
       API_KEYS.DescribeDelegationToken,
       DescribeDelegationToken,
@@ -952,41 +951,49 @@ export class Broker {
 
   /** Writes commit or abort markers to partition leaders. Used by Admin.abortTransaction. */
   async writeTxnMarkers(options: WriteTxnMarkersOptions): Promise<WriteTxnMarkersResponseV1Body> {
+    const { WriteTxnMarkers } = await loadLazyRequests();
     const writeTxnMarkers = this.lookupRequest<WriteTxnMarkersOptions>(API_KEYS.WriteTxnMarkers, WriteTxnMarkers);
     return this.#send(writeTxnMarkers(options));
   }
 
   async listGroups(options: ListGroupsOptions = {}): Promise<ListGroupsResponseV2Body> {
+    const { ListGroups } = await loadLazyRequests();
     const listGroups = this.lookupRequest<ListGroupsOptions>(API_KEYS.ListGroups, ListGroups);
     return this.#send(listGroups(options));
   }
 
   async deleteGroups(options: DeleteGroupsOptions): Promise<DeleteGroupsResponseV1Body> {
+    const { DeleteGroups } = await loadLazyRequests();
     const deleteGroups = this.lookupRequest<DeleteGroupsOptions>(API_KEYS.DeleteGroups, DeleteGroups);
     return this.#send(deleteGroups(options));
   }
 
   async offsetDelete(options: OffsetDeleteOptions): Promise<OffsetDeleteResponseV1Body> {
+    const { OffsetDelete } = await loadLazyRequests();
     const offsetDelete = this.lookupRequest<OffsetDeleteOptions>(API_KEYS.OffsetDelete, OffsetDelete);
     return this.#send(offsetDelete(options));
   }
 
   async deleteRecords(options: DeleteRecordsOptions): Promise<DeleteRecordsResponseV1Body> {
+    const { DeleteRecords } = await loadLazyRequests();
     const deleteRecords = this.lookupRequest<DeleteRecordsOptions>(API_KEYS.DeleteRecords, DeleteRecords);
     return this.#send(deleteRecords(options));
   }
 
   async createAcls(options: CreateAclsOptions): Promise<CreateAclsResponseV1Body> {
+    const { CreateAcls } = await loadLazyRequests();
     const createAcls = this.lookupRequest<CreateAclsOptions>(API_KEYS.CreateAcls, CreateAcls);
     return this.#send(createAcls(options));
   }
 
   async describeAcls(options: DescribeAclsOptions): Promise<DescribeAclsResponseV1Body> {
+    const { DescribeAcls } = await loadLazyRequests();
     const describeAcls = this.lookupRequest<DescribeAclsOptions>(API_KEYS.DescribeAcls, DescribeAcls);
     return this.#send(describeAcls(options));
   }
 
   async deleteAcls(options: DeleteAclsOptions): Promise<DeleteAclsResponseV1Body> {
+    const { DeleteAcls } = await loadLazyRequests();
     const deleteAcls = this.lookupRequest<DeleteAclsOptions>(API_KEYS.DeleteAcls, DeleteAcls);
     return this.#send(deleteAcls(options));
   }
@@ -994,6 +1001,7 @@ export class Broker {
   async alterPartitionReassignments(
     options: AlterPartitionReassignmentsRequestV0Options,
   ): Promise<AlterPartitionReassignmentsResponseV0Body> {
+    const { AlterPartitionReassignments } = await loadLazyRequests();
     const alterPartitionReassignments = this.lookupRequest<AlterPartitionReassignmentsRequestV0Options>(
       API_KEYS.AlterPartitionReassignments,
       AlterPartitionReassignments,
@@ -1004,6 +1012,7 @@ export class Broker {
   async listPartitionReassignments(
     options: ListPartitionReassignmentsRequestV0Options,
   ): Promise<ListPartitionReassignmentsResponseV0Body> {
+    const { ListPartitionReassignments } = await loadLazyRequests();
     const listPartitionReassignments = this.lookupRequest<ListPartitionReassignmentsRequestV0Options>(
       API_KEYS.ListPartitionReassignments,
       ListPartitionReassignments,

@@ -94,7 +94,11 @@ async function compressRecords(
   return compressEncoder(compression, new Encoder(sizeOfEncodedRecords(records)).writeEncoderArray(records), level);
 }
 
-export async function encodeRecordBatch({
+/**
+ * Encodes a v2 RecordBatch. Returns the encoder directly for an uncompressed batch and a promise
+ * only when a codec has to compress the records.
+ */
+export function encodeRecordBatch({
   compression = COMPRESSION_TYPES.None,
   compressionLevel,
   firstOffset = 0n,
@@ -110,68 +114,69 @@ export async function encodeRecordBatch({
   recordCount,
   writeRecords,
   estimatedBytes,
-}: EncodeRecordBatchOptions = {}): Promise<Encoder> {
+}: EncodeRecordBatchOptions = {}): Encoder | Promise<Encoder> {
   const compressionCodecBits = compression & COMPRESSION_CODEC_MASK;
   const inTransactionBit = transactional ? TRANSACTIONAL_MASK : 0;
   const attributes = compressionCodecBits | TIMESTAMP_MASK | inTransactionBit;
   const count = recordCount ?? records.length;
 
-  let compressedRecords: Buffer | undefined;
-  if (compression !== COMPRESSION_TYPES.None) {
-    if (writeRecords) {
-      const recordsEncoder = new Encoder(estimatedBytes ?? 511);
-      writeRecords(recordsEncoder);
-      compressedRecords = await compressEncoder(compression, recordsEncoder, compressionLevel);
+  const writeBatch = (compressedRecords: Buffer | undefined): Encoder => {
+    const estimatedSize =
+      estimatedBytes ??
+      (compressedRecords !== undefined
+        ? RECORD_BATCH_OVERHEAD_BYTES + compressedRecords.length
+        : RECORD_BATCH_OVERHEAD_BYTES + sizeOfEncodedRecords(records));
+
+    const encoder = new Encoder(estimatedSize);
+    encoder.writeInt64(firstOffset);
+
+    const lengthOffset = encoder.size();
+    encoder.writeInt32(0);
+
+    encoder.writeInt32(partitionLeaderEpoch);
+    encoder.writeInt8(MAGIC_BYTE);
+
+    const crcOffset = encoder.size();
+    encoder.writeUInt32(0);
+
+    // CRC32C covers attributes through the last record:
+    // https://github.com/apache/kafka/blob/0.11.0.1/clients/src/main/java/org/apache/kafka/common/record/DefaultRecordBatch.java#L148
+    const bodyStart = encoder.size();
+    encoder
+      .writeInt16(attributes)
+      .writeInt32(lastOffsetDelta)
+      .writeInt64(firstTimestamp)
+      .writeInt64(maxTimestamp)
+      .writeInt64(producerId)
+      .writeInt16(producerEpoch)
+      .writeInt32(firstSequence);
+
+    if (compressedRecords !== undefined) {
+      encoder.writeInt32(count).writeBuffer(compressedRecords);
     } else {
-      compressedRecords = await compressRecords(compression, records, compressionLevel);
+      encoder.writeInt32(count);
+      if (writeRecords) {
+        writeRecords(encoder);
+      } else {
+        encoder.writeEncoderArray(records);
+      }
     }
+
+    const end = encoder.size();
+    encoder.writeInt32At(lengthOffset, end - lengthOffset - 4);
+    encoder.writeUInt32At(crcOffset, crc32c(encoder.buffer.subarray(bodyStart)));
+    return encoder;
+  };
+
+  if (compression === COMPRESSION_TYPES.None) {
+    return writeBatch(undefined);
   }
-
-  const estimatedSize =
-    estimatedBytes ??
-    (compressedRecords !== undefined
-      ? RECORD_BATCH_OVERHEAD_BYTES + compressedRecords.length
-      : RECORD_BATCH_OVERHEAD_BYTES + sizeOfEncodedRecords(records));
-
-  const encoder = new Encoder(estimatedSize);
-  encoder.writeInt64(firstOffset);
-
-  const lengthOffset = encoder.size();
-  encoder.writeInt32(0);
-
-  encoder.writeInt32(partitionLeaderEpoch);
-  encoder.writeInt8(MAGIC_BYTE);
-
-  const crcOffset = encoder.size();
-  encoder.writeUInt32(0);
-
-  // CRC32C covers attributes through the last record:
-  // https://github.com/apache/kafka/blob/0.11.0.1/clients/src/main/java/org/apache/kafka/common/record/DefaultRecordBatch.java#L148
-  const bodyStart = encoder.size();
-  encoder
-    .writeInt16(attributes)
-    .writeInt32(lastOffsetDelta)
-    .writeInt64(firstTimestamp)
-    .writeInt64(maxTimestamp)
-    .writeInt64(producerId)
-    .writeInt16(producerEpoch)
-    .writeInt32(firstSequence);
-
-  if (compressedRecords !== undefined) {
-    encoder.writeInt32(count).writeBuffer(compressedRecords);
-  } else {
-    encoder.writeInt32(count);
-    if (writeRecords) {
-      writeRecords(encoder);
-    } else {
-      encoder.writeEncoderArray(records);
-    }
+  if (writeRecords) {
+    const recordsEncoder = new Encoder(estimatedBytes ?? 511);
+    writeRecords(recordsEncoder);
+    return compressEncoder(compression, recordsEncoder, compressionLevel).then(writeBatch);
   }
-
-  const end = encoder.size();
-  encoder.writeInt32At(lengthOffset, end - lengthOffset - 4);
-  encoder.writeUInt32At(crcOffset, crc32c(encoder.buffer.subarray(bodyStart)));
-  return encoder;
+  return compressRecords(compression, records, compressionLevel).then(writeBatch);
 }
 
 export type DecodedRecordBatch = Omit<RecordBatchContext, 'magicByte'> & {

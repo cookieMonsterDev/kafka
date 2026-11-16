@@ -82,10 +82,12 @@ describe('protocol/requests/produce/v8/response', () => {
       }),
     );
 
-    await expect(produceResponseV8.parse(data)).rejects.toMatchObject({
-      type: 'INVALID_RECORD',
-      topic: 'test-topic',
-      partition: 2,
-    });
+    expect(() => produceResponseV8.parse(data)).toThrow(
+      expect.objectContaining({
+        type: 'INVALID_RECORD',
+        topic: 'test-topic',
+        partition: 2,
+      }),
+    );
   });
 });

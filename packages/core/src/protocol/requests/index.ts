@@ -6,13 +6,13 @@ export interface AnyRequestDefinition {
   apiKey: number;
   apiVersion: number;
   apiName: string;
-  encode(): Promise<Encoder>;
+  encode(): Encoder | Promise<Encoder>;
   expectResponse?(): boolean;
 }
 
 export interface AnyResponseDefinition {
-  decode(rawData: Buffer): Promise<unknown>;
-  parse(data: unknown): Promise<unknown>;
+  decode(rawData: Buffer): unknown;
+  parse(data: unknown): unknown;
 }
 
 export interface ProtocolResult {
@@ -98,11 +98,19 @@ function unsupportedApiKeyError(
  * `lookup(brokerVersions)(apiKey, family)` picks the highest `v` in `family.versions` such that
  * `broker.minVersion <= v <= broker.maxVersion`. Throws `KafkaServerDoesNotSupportApiKey` when the
  * broker never advertised the API or when there is no overlap with the versions we implement.
+ * The negotiated factory is cached per family, since `brokerVersions` is fixed for one lookup.
  */
 export function lookup(
   brokerVersions: BrokerVersions,
 ): <Options>(apiKey: number, family: RequestFamily<Options>) => ProtocolFactory<Options> {
-  return (apiKey, family) => {
+  const negotiatedFactories = new Map<RequestFamily<never>, ProtocolFactory<never>>();
+
+  return <Options>(apiKey: number, family: RequestFamily<Options>): ProtocolFactory<Options> => {
+    const cached = negotiatedFactories.get(family) as ProtocolFactory<Options> | undefined;
+    if (cached !== undefined) {
+      return cached;
+    }
+
     const version = brokerVersions[apiKey];
     if (version == null || version.maxVersion == null) {
       throw unsupportedApiKeyError(apiKey);
@@ -121,6 +129,8 @@ export function lookup(
     }
 
     const bestSupportedVersion = Math.max(...overlapping);
-    return family.protocol({ version: bestSupportedVersion });
+    const factory = family.protocol({ version: bestSupportedVersion });
+    negotiatedFactories.set(family, factory);
+    return factory;
   };
 }

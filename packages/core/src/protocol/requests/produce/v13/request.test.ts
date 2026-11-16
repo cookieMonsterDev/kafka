@@ -55,11 +55,11 @@ describe('protocol/requests/produce/v13/request', () => {
     expect(decoder.readUVarInt()).toBe(0);
   });
 
-  it('rejects a request that has no usable topicId', async () => {
+  it('throws for a request that has no usable topicId', () => {
     const request = produceRequestV13({
       ...args,
       topicData: [{ topic: 'test-topic', partitions: [{ partition: 0, firstSequence: 0, messages: [] }] }],
     });
-    await expect(request.encode()).rejects.toThrow(/requires a 16-byte topicId/);
+    expect(() => request.encode()).toThrow(/requires a 16-byte topicId/);
   });
 });

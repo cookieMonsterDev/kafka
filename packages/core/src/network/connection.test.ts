@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
-import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { createLogger, LOG_LEVELS, type LogEntry } from '../loggers/index';
 import { bufferPoolStats, clearBufferPool } from '../protocol/buffer-pool';
 import { Decoder } from '../protocol/decoder';
 import { Encoder } from '../protocol/encoder';
@@ -738,6 +738,98 @@ describe('network/Connection', () => {
       };
 
       await expect(connection.send({ request: metadataRequest(), response })).resolves.toEqual({ greeting: 'hello' });
+    });
+
+    const responseFrame = (correlationId: number, body: Buffer): Buffer =>
+      new Encoder()
+        .writeInt32(4 + body.length)
+        .writeInt32(correlationId)
+        .writeBuffer(body).buffer;
+
+    it('frames a synchronous encode and writes it before send returns', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { enforceRequestTimeout: false });
+      const write = vi.fn().mockReturnValue(true);
+      socket.write = write;
+      const request = { ...metadataRequest(), encode: () => new Encoder().writeInt32(7) };
+      const response = { decode: (rawData: Buffer) => rawData, parse: (data: Buffer) => data };
+
+      void connection.send({ request, response }).catch(() => {});
+
+      expect(write).toHaveBeenCalledOnce();
+    });
+
+    it('rejects instead of throwing when encode throws synchronously', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const write = vi.fn().mockReturnValue(true);
+      socket.write = write;
+      const request = {
+        ...metadataRequest(),
+        encode: (): Encoder => {
+          throw new RangeError('cannot encode');
+        },
+      };
+      const response = { decode: (rawData: Buffer) => rawData, parse: (data: Buffer) => data };
+
+      let sending: Promise<unknown> | undefined;
+      expect(() => {
+        sending = connection.send({ request, response });
+      }).not.toThrow();
+      await expect(sending).rejects.toThrow('cannot encode');
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('decodes and parses synchronously in the response callback', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection);
+      const parse = vi.fn((data: { value: number }) => data);
+      const response = { decode: (rawData: Buffer) => ({ value: new Decoder(rawData).readInt32() }), parse };
+
+      const sending = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      socket.emit('data', responseFrame(0, new Encoder().writeInt32(42).buffer));
+
+      expect(parse).toHaveBeenCalledWith({ value: 42 });
+      await expect(sending).resolves.toEqual({ value: 42 });
+    });
+
+    it('rejects and logs a synchronous parse failure without throwing from the socket data handler', async () => {
+      const entries: LogEntry[] = [];
+      const logger = createLogger({ level: LOG_LEVELS.ERROR, logCreator: () => (entry) => entries.push(entry) });
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { logger });
+      const response = {
+        decode: (rawData: Buffer) => rawData,
+        parse: (): Buffer => {
+          throw new RangeError('bad response');
+        },
+      };
+
+      const sending = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(() => socket.emit('data', responseFrame(0, Buffer.alloc(4)))).not.toThrow();
+      await expect(sending).rejects.toThrow('bad response');
+      expect(entries).toEqual([
+        expect.objectContaining({
+          label: 'ERROR',
+          log: expect.objectContaining({ message: 'Response Metadata(key: 3, version: 0)', error: 'bad response' }),
+        }),
+      ]);
+    });
+
+    it('logs the request and the response at debug level', async () => {
+      const entries: LogEntry[] = [];
+      const logger = createLogger({ level: LOG_LEVELS.DEBUG, logCreator: () => (entry) => entries.push(entry) });
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { logger });
+      const response = { decode: (rawData: Buffer) => rawData.length, parse: (data: number) => data };
+
+      const sending = connection.send({ request: metadataRequest(), response });
+      await new Promise((resolve) => setImmediate(resolve));
+      socket.emit('data', responseFrame(0, Buffer.alloc(4)));
+      await sending;
+
+      const connectionEntries = entries.filter((entry) => entry.namespace === 'Connection');
+      expect(connectionEntries.map((entry) => entry.log.message)).toEqual(
+        expect.arrayContaining(['Request Metadata(key: 3, version: 0)', 'Response Metadata(key: 3, version: 0)']),
+      );
     });
 
     it('returns the framing buffer to the pool only once the socket write completes', async () => {

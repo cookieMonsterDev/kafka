@@ -25,7 +25,9 @@ describe('protocol/requests/join-group/v4/response', () => {
 
   it('throws KafkaMemberIdRequired carrying memberId on MEMBER_ID_REQUIRED', async () => {
     const data = await joinGroupResponseV4.decode(buildWire(79));
-    const error: unknown = await joinGroupResponseV4.parse(data).catch((e: unknown) => e);
+    const error: unknown = await Promise.resolve(data)
+      .then((decoded) => joinGroupResponseV4.parse(decoded))
+      .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(KafkaMemberIdRequired);
     expect((error as KafkaMemberIdRequired).memberId).toBe('member-1');
   });

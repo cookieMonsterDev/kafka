@@ -4,9 +4,10 @@ import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { INT_32_MAX_VALUE } from '../constants';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
-import type { Logger } from '../loggers/index';
+import { isLogLevelEnabled, LOG_LEVELS, type Logger } from '../loggers/index';
 import { createRequest } from '../protocol/request';
 import { Decoder } from '../protocol/decoder';
+import type { Encoder } from '../protocol/encoder';
 import { usesFlexibleResponseHeader } from '../protocol/flexible';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../protocol/requests/index';
@@ -152,8 +153,8 @@ interface ThrottleableResponseData {
 }
 
 export interface ConnectionResponseDefinition<T> {
-  decode(rawData: Buffer): Promise<T>;
-  parse(data: T): Promise<T>;
+  decode(rawData: Buffer): T | Promise<T>;
+  parse(data: T): T | Promise<T>;
 }
 
 export interface SendOptions<T> {
@@ -322,6 +323,10 @@ export class Connection {
 
     this.#shouldLogBuffers = process.env.KAFKA_DEBUG_PROTOCOL_BUFFERS === '1';
     this.#shouldLogFetchBuffer = this.#shouldLogBuffers && process.env.KAFKA_DEBUG_EXTENDED_PROTOCOL_BUFFERS === '1';
+  }
+
+  #isDebugEnabled(): boolean {
+    return isLogLevelEnabled(this.logger, LOG_LEVELS.DEBUG);
   }
 
   #logDebug(message: string, extra: Record<string, unknown> = {}): void {
@@ -643,100 +648,184 @@ export class Connection {
     });
   }
 
-  async send<T>({
-    request,
-    response,
-    requestTimeout = null,
-    logResponseError = true,
-  }: SendOptions<T>): Promise<T | undefined> {
-    if (!this.isAuthenticated() && isAuthenticatedRequest(request)) {
-      await this.#authenticate();
+  /**
+   * Frames and queues the request without a promise hop when its `encode` is synchronous, and
+   * decodes and parses the response in the response callback. Every failure, including a
+   * synchronous `encode` throw, rejects the returned promise.
+   */
+  send<T>(options: SendOptions<T>): Promise<T | undefined> {
+    try {
+      // Without SASL, `#authenticate` has nothing to do, so skip its promise hop.
+      if (this.sasl && !this.isAuthenticated() && isAuthenticatedRequest(options.request)) {
+        return this.#authenticate().then(() => this.#frameAndQueueRequest(options));
+      }
+      return this.#frameAndQueueRequest(options);
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the framing failure as-is
+      return Promise.reject(e);
     }
+  }
 
+  #frameAndQueueRequest<T>(options: SendOptions<T>): Promise<T | undefined> {
     this.#failIfNotAcceptingRequests();
 
+    const correlationId = this.#nextCorrelationId();
+    const requestPayload = createRequest({ request: options.request, correlationId, clientId: this.clientId });
+    if (requestPayload instanceof Promise) {
+      return requestPayload.then((payload) => this.#queueRequest(options, correlationId, payload));
+    }
+    return this.#queueRequest(options, correlationId, requestPayload);
+  }
+
+  #queueRequest<T>(
+    { request, response, requestTimeout = null, logResponseError = true }: SendOptions<T>,
+    correlationId: number,
+    requestPayload: Encoder,
+  ): Promise<T | undefined> {
     const expectResponse = !request.expectResponse || request.expectResponse();
-
-    const sendRequest = async (): Promise<{
-      correlationId: number;
-      size: number;
-      entry: RequestEntry;
-      payload: Buffer | null;
-    }> => {
-      const { clientId } = this;
-      const correlationId = this.#nextCorrelationId();
-
-      const requestPayload = await createRequest({ request, correlationId, clientId });
-      const { apiKey, apiName, apiVersion } = request;
+    if (this.#isDebugEnabled()) {
       this.#logDebug(`Request ${requestInfo(request)}`, {
         correlationId,
         expectResponse,
         size: Buffer.byteLength(requestPayload.buffer),
       });
-
-      return new Promise((resolve, reject) => {
-        try {
-          this.#failIfNotAcceptingRequests();
-          const entry: RequestEntry = { apiKey, apiName, apiVersion, correlationId, resolve, reject };
-
-          this.requestQueue.push({
-            entry,
-            expectResponse,
-            requestTimeout,
-            sendRequest: () => {
-              this.#touchActivity();
-              // A stream may keep reading a chunk until its write callback runs, so pool the
-              // framing buffer only then. A request that is never sent leaves it to the GC.
-              this.#socket!.write(requestPayload.buffer, 'binary', () => requestPayload.release());
-            },
-          });
-        } catch (e) {
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the enqueue failure as-is
-          reject(e);
-        }
-      });
-    };
-
-    const { correlationId, size, entry, payload } = await sendRequest();
-
-    if (!expectResponse) {
-      return undefined;
     }
 
-    try {
-      const payloadDecoded = await response.decode(payload!);
-
-      // KIP-219: if the response says to throttle client-side, do that.
-      this.requestQueue.maybeThrottle((payloadDecoded as ThrottleableResponseData).clientSideThrottleTime);
-
-      const data = await response.parse(payloadDecoded);
-      const isFetchApi = entry.apiName === 'Fetch';
-      this.#logDebug(`Response ${requestInfo(entry)}`, {
+    return new Promise((resolve, reject) => {
+      const { apiKey, apiName, apiVersion } = request;
+      const entry: RequestEntry = {
+        apiKey,
+        apiName,
+        apiVersion,
         correlationId,
-        size,
-        data: isFetchApi && !this.#shouldLogFetchBuffer ? '[filtered]' : data,
-      });
+        resolve: ({ size, payload }) => {
+          if (!expectResponse) {
+            resolve(undefined);
+            return;
+          }
+          this.#settleResponse({ entry, response, size, payload: payload!, logResponseError, resolve, reject });
+        },
+        reject,
+      };
 
-      return data;
-    } catch (e) {
-      const error = e as Error;
-
-      if (logResponseError) {
-        this.#logError(`Response ${requestInfo(entry)}`, {
-          error: error.message,
-          correlationId,
-          size,
+      try {
+        // Encoding may have been asynchronous, so check again before queueing.
+        this.#failIfNotAcceptingRequests();
+        this.requestQueue.push({
+          entry,
+          expectResponse,
+          requestTimeout,
+          sendRequest: () => {
+            this.#touchActivity();
+            // A stream may keep reading a chunk until its write callback runs, so pool the
+            // framing buffer only then. A request that is never sent leaves it to the GC.
+            this.#socket!.write(requestPayload.buffer, 'binary', () => requestPayload.release());
+          },
         });
+      } catch (e) {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the enqueue failure as-is
+        reject(e);
       }
+    });
+  }
 
-      const isBuffer = Buffer.isBuffer(payload);
+  /**
+   * Decodes and parses a response and settles the caller's promise, chaining only when a step
+   * returns a promise. It runs in the socket data callback, so it must never throw.
+   */
+  #settleResponse<T>({
+    entry,
+    response,
+    size,
+    payload,
+    logResponseError,
+    resolve,
+    reject,
+  }: {
+    entry: RequestEntry;
+    response: ConnectionResponseDefinition<T>;
+    size: number;
+    payload: Buffer;
+    logResponseError: boolean;
+    resolve: (data: T) => void;
+    reject: (error: unknown) => void;
+  }): void {
+    const fail = (e: unknown): void => {
+      try {
+        this.#logResponseFailure({ entry, error: e as Error, size, payload, logResponseError });
+        reject(e);
+      } catch (logFailure) {
+        reject(logFailure);
+      }
+    };
+
+    const succeed = (data: T): void => {
+      try {
+        if (this.#isDebugEnabled()) {
+          const isFetchApi = entry.apiName === 'Fetch';
+          this.#logDebug(`Response ${requestInfo(entry)}`, {
+            correlationId: entry.correlationId,
+            size,
+            data: isFetchApi && !this.#shouldLogFetchBuffer ? '[filtered]' : data,
+          });
+        }
+        resolve(data);
+      } catch (e) {
+        fail(e);
+      }
+    };
+
+    const parse = (decoded: T): void => {
+      try {
+        // KIP-219: if the response says to throttle client-side, do that.
+        this.requestQueue.maybeThrottle((decoded as ThrottleableResponseData).clientSideThrottleTime);
+
+        const data = response.parse(decoded);
+        if (data instanceof Promise) {
+          data.then(succeed, fail);
+          return;
+        }
+        succeed(data);
+      } catch (e) {
+        fail(e);
+      }
+    };
+
+    try {
+      const decoded = response.decode(payload);
+      if (decoded instanceof Promise) {
+        decoded.then(parse, fail);
+        return;
+      }
+      parse(decoded);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  #logResponseFailure({
+    entry,
+    error,
+    size,
+    payload,
+    logResponseError,
+  }: {
+    entry: RequestEntry;
+    error: Error;
+    size: number;
+    payload: Buffer;
+    logResponseError: boolean;
+  }): void {
+    const { correlationId } = entry;
+    if (logResponseError) {
+      this.#logError(`Response ${requestInfo(entry)}`, { error: error.message, correlationId, size });
+    }
+    if (this.#isDebugEnabled()) {
       this.#logDebug(`Response ${requestInfo(entry)}`, {
         error: error.message,
         correlationId,
-        payload: isBuffer && !this.#shouldLogBuffers ? { type: 'Buffer', data: '[filtered]' } : payload,
+        payload: this.#shouldLogBuffers ? payload : { type: 'Buffer', data: '[filtered]' },
       });
-
-      throw error;
     }
   }
 

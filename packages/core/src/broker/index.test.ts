@@ -264,6 +264,23 @@ describe('broker/Broker', () => {
       expect(pool.destroy).toHaveBeenCalledOnce();
     });
 
+    it('rejects instead of throwing when the broker does not support Produce', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Metadata]: { minVersion: 0, maxVersion: 12 } },
+      });
+      await broker.connect();
+
+      let producing: Promise<unknown> | undefined;
+      expect(() => {
+        producing = broker.produce({ acks: 1, timeout: 1000, topicData: [] });
+      }).not.toThrow();
+      await expect(producing).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
+      expect(pool.send).not.toHaveBeenCalled();
+    });
+
     it('selects Produce v2 when the broker only advertises MessageSet versions', async () => {
       const pool = createFakeConnectionPool();
       const broker = new Broker({

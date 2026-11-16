@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { bufferPoolStats, clearBufferPool, resetBufferPoolStats } from '../../buffer-pool';
 import { Decoder } from '../../decoder';
+import { COMPRESSION_TYPES, type CompressionType } from '../../compression/index';
 import { Encoder } from '../../encoder';
 import { decodeRecordBatch, encodeRecordBatch } from '../../records/batch';
 import type * as BatchModule from '../../records/batch';
@@ -130,14 +131,104 @@ describe('protocol/requests/produce/shared', () => {
       expect(request.expectResponse?.()).toBe(true);
     });
 
-    it('requires a usable topic UUID on Produce v13', async () => {
-      await expect(
-        createProduceRequest(13, {
-          acks: 1,
-          timeout: 1000,
-          topicData: [{ topic: 'orders', partitions: [{ partition: 0, messages: [{ value: 'a' }] }] }],
-        }).encode(),
-      ).rejects.toThrow(/Produce v13 requires a 16-byte topicId/);
+    it('encodes an uncompressed request synchronously and a compressed one asynchronously', async () => {
+      const options = {
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'a' }] }] }],
+      };
+
+      expect(createProduceRequest(3, options).encode()).toBeInstanceOf(Encoder);
+      const compressed = createProduceRequest(3, { ...options, compression: COMPRESSION_TYPES.GZIP }).encode();
+      expect(compressed).toBeInstanceOf(Promise);
+      await expect(compressed).resolves.toBeInstanceOf(Encoder);
+    });
+
+    it('rejects a compressed request whose partition fails to encode, leaving no rejection unhandled', async () => {
+      const unknownCodec = 7 as CompressionType;
+      const encoding = createProduceRequest(3, {
+        acks: 1,
+        timeout: 1000,
+        compression: unknownCodec,
+        topicData: [
+          {
+            topic: 't',
+            partitions: [
+              { partition: 0, messages: [{ value: 'a' }] },
+              { partition: 1, messages: [{ value: 42 as unknown as string }] },
+            ],
+          },
+        ],
+      }).encode();
+
+      expect(encoding).toBeInstanceOf(Promise);
+      await expect(encoding).rejects.toThrow();
+      // Let the first partition's codec failure settle: an unobserved rejection would fail this run.
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    it.each([
+      ['uncompressed', COMPRESSION_TYPES.None],
+      ['GZIP', COMPRESSION_TYPES.GZIP],
+    ])('keeps every %s topic and partition in request order', async (_label, compression) => {
+      const encoded = await createProduceRequest(3, {
+        acks: 1,
+        timeout: 1000,
+        compression,
+        topicData: [
+          {
+            topic: 'orders',
+            partitions: [
+              { partition: 2, messages: [{ value: 'o2' }] },
+              { partition: 0, messages: [{ value: 'o0' }] },
+            ],
+          },
+          { topic: 'payments', partitions: [{ partition: 1, messages: [{ value: 'p1' }] }] },
+        ],
+      }).encode();
+
+      const decoder = new Decoder(encoded.buffer);
+      decoder.readString(); // transactionalId
+      decoder.readInt16(); // acks
+      decoder.readInt32(); // timeout
+      const topics = decoder.readArray((topicDecoder) => ({
+        topic: topicDecoder.readString(),
+        partitions: topicDecoder.readArray((partitionDecoder) => ({
+          partition: partitionDecoder.readInt32(),
+          recordSet: partitionDecoder.readBytes() ?? Buffer.alloc(0),
+        })),
+      }));
+      const decoded = await Promise.all(
+        topics.map(async ({ topic, partitions }) => ({
+          topic,
+          partitions: await Promise.all(
+            partitions.map(async ({ partition, recordSet }) => {
+              const batch = await decodeRecordBatch(new Decoder(recordSet));
+              return { partition, values: batch.records.map((record) => record.value?.toString()) };
+            }),
+          ),
+        })),
+      );
+
+      expect(decoded).toEqual([
+        {
+          topic: 'orders',
+          partitions: [
+            { partition: 2, values: ['o2'] },
+            { partition: 0, values: ['o0'] },
+          ],
+        },
+        { topic: 'payments', partitions: [{ partition: 1, values: ['p1'] }] },
+      ]);
+    });
+
+    it('requires a usable topic UUID on Produce v13', () => {
+      const request = createProduceRequest(13, {
+        acks: 1,
+        timeout: 1000,
+        topicData: [{ topic: 'orders', partitions: [{ partition: 0, messages: [{ value: 'a' }] }] }],
+      });
+      expect(() => request.encode()).toThrow(/Produce v13 requires a 16-byte topicId/);
     });
 
     it('encodes Produce v13 with a usable topic UUID', async () => {

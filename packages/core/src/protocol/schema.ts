@@ -389,7 +389,8 @@ export interface RequestDefinition {
   apiKey: number;
   apiVersion: number;
   apiName: string;
-  encode(): Promise<Encoder>;
+  /** Returns a promise only when encoding has to wait, such as for a compression codec. */
+  encode(): Encoder | Promise<Encoder>;
   /**
    * Whether the broker actually writes a response to the wire for this request - false only for
    * a `Produce` sent with `acks: 0`, which the broker acknowledges by staying silent. Absent
@@ -421,9 +422,10 @@ export function defineRequest<T>(options: {
   });
 }
 
+/** `decode` and `parse` may return their result directly; a synchronous failure is thrown. */
 export interface ResponseDefinition<T> {
-  decode(rawData: Buffer): Promise<T>;
-  parse(data: T): Promise<T>;
+  decode(rawData: Buffer): T | Promise<T>;
+  parse(data: T): T | Promise<T>;
 }
 
 /**
@@ -433,12 +435,12 @@ export interface ResponseDefinition<T> {
  */
 export function defineResponse<T>(options: {
   schema: FieldCodec<T>;
-  parse?: (data: T) => Promise<T>;
+  parse?: (data: T) => T | Promise<T>;
 }): ResponseDefinition<T> {
   return {
-    // `async` (not a plain arrow returning `Promise.resolve(...)`) so a synchronous throw from
-    // `schema.read` — e.g. a non-nullable field seeing `null` on the wire — becomes a rejected
-    // promise instead of throwing before the caller ever gets a promise to catch.
+    // `async` keeps these families on the promise contract their callers and tests use: a throw
+    // from `schema.read` (e.g. a non-nullable field seeing `null` on the wire) becomes a rejected
+    // promise. `Connection` also accepts a synchronous result or throw, which Produce relies on.
     decode: async (rawData) => options.schema.read(new Decoder(rawData)),
     parse: options.parse ?? (async (data) => data),
   };

@@ -20,16 +20,18 @@ describe('protocol/requests/update-features/v0/response', () => {
   });
 
   it('preserves every failed feature and broker message', async () => {
-    const parsing = updateFeaturesResponseV0.parse({
-      throttleTime: 0,
-      clientSideThrottleTime: 0,
-      errorCode: 0,
-      errorMessage: null,
-      results: [
-        { feature: 'metadata.version', errorCode: 42, errorMessage: 'bad metadata level' },
-        { feature: 'kraft.version', errorCode: 42, errorMessage: 'bad kraft level' },
-      ],
-    });
+    const parsing = Promise.resolve().then(() =>
+      updateFeaturesResponseV0.parse({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        errorCode: 0,
+        errorMessage: null,
+        results: [
+          { feature: 'metadata.version', errorCode: 42, errorMessage: 'bad metadata level' },
+          { feature: 'kraft.version', errorCode: 42, errorMessage: 'bad kraft level' },
+        ],
+      }),
+    );
 
     const error = await parsing.catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(KafkaAggregateError);

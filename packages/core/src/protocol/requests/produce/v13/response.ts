@@ -37,20 +37,17 @@ export function produceResponseV13(
   options: Pick<ProduceRequestOptions, 'topicData'> = { topicData: [] },
 ): ResponseDefinition<ProduceResponseV13Body> {
   return {
-    decode: async (rawData) => {
+    decode: (rawData) => {
       const decoder = new Decoder(rawData);
-      const decoded = bodySchema.read(decoder);
+      const { topics, throttleTime } = bodySchema.read(decoder);
       const nodeEndpoints = readProduceResponseNodeEndpoints(decoder);
-      return {
-        ...decoded,
-        topics: decoded.topics.map((topic, index) => ({
-          ...topic,
-          topicName: resolveProduceTopicName(topic.topicId, index, options.topicData),
-        })),
-        throttleTime: 0,
-        clientSideThrottleTime: decoded.throttleTime,
-        nodeEndpoints,
-      };
+      // Fill `topicName` into the freshly decoded topics instead of copying each one. The cast
+      // holds once the loop below has set `topicName` on every topic, before they are returned.
+      const namedTopics = topics as ProduceResponseV13Body['topics'];
+      namedTopics.forEach((topic, index) => {
+        topic.topicName = resolveProduceTopicName(topic.topicId, index, options.topicData);
+      });
+      return { topics: namedTopics, throttleTime: 0, clientSideThrottleTime: throttleTime, nodeEndpoints };
     },
     parse: parseProduceResponse,
   };

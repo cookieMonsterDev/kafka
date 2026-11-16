@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // import phase, not inside the first test's own timeout window.
 import { startStudio } from './index';
 import type { Runtime } from './runtime';
+import { findFreePort } from './testing/free-port';
 
 function fakeRuntime(overrides: Partial<Runtime> = {}): {
   runtime: Runtime;
@@ -34,14 +35,11 @@ function fakeRuntime(overrides: Partial<Runtime> = {}): {
   return { runtime, stdout, stderr };
 }
 
-// Each test binds its own fixed port, unique across every test file (src/main.test.ts uses
-// 59_106): vitest runs files in parallel processes, and an explicit port is never swapped for a
-// free one, so a port shared between two files fails whichever binds second.
 describe('startStudio', () => {
   it('binds to a free port, serves the built shell, and exposes health/cluster routes', async () => {
     const { runtime, stdout } = fakeRuntime();
 
-    const studio = await startStudio({ host: '127.0.0.1', port: 59_101, browser: 'none' }, runtime);
+    const studio = await startStudio({ host: '127.0.0.1', port: await findFreePort(), browser: 'none' }, runtime);
     try {
       expect(studio.url).toBe(`http://127.0.0.1:${String(studio.port)}/`);
       expect(stdout).toHaveBeenCalledWith(expect.stringContaining(studio.url));
@@ -75,7 +73,10 @@ describe('startStudio', () => {
   it('rejects mutating requests with 403 in --read-only mode, but still allows switching profiles', async () => {
     const { runtime } = fakeRuntime();
 
-    const studio = await startStudio({ host: '127.0.0.1', port: 59_105, browser: 'none', readOnly: true }, runtime);
+    const studio = await startStudio(
+      { host: '127.0.0.1', port: await findFreePort(), browser: 'none', readOnly: true },
+      runtime,
+    );
     try {
       const authHeaders = { 'x-kafka-studio-token': studio.token, 'content-type': 'application/json' };
 
@@ -102,7 +103,8 @@ describe('startStudio', () => {
   it('warns loudly on stderr when bound to a non-loopback host', async () => {
     const { runtime, stderr } = fakeRuntime();
 
-    const studio = await startStudio({ host: '0.0.0.0', port: 59_107, browser: 'none' }, runtime);
+    const host = '0.0.0.0';
+    const studio = await startStudio({ host, port: await findFreePort(host), browser: 'none' }, runtime);
     try {
       expect(stderr).toHaveBeenCalledWith(expect.stringContaining('WARNING'));
     } finally {
@@ -113,7 +115,7 @@ describe('startStudio', () => {
   it('does not attempt to open a browser when browser is "none"', async () => {
     const { runtime } = fakeRuntime();
 
-    const studio = await startStudio({ port: 59_102, browser: 'none' }, runtime);
+    const studio = await startStudio({ port: await findFreePort(), browser: 'none' }, runtime);
     try {
       // No direct spy on the module-private spawn call; absence of a thrown/unhandled rejection
       // plus the explicit "none" contract (covered in server/open-browser.test.ts) is the check.
@@ -124,7 +126,10 @@ describe('startStudio', () => {
   });
 
   it('stop() ends open SSE streams instead of waiting for the client to hang up', async () => {
-    const studio = await startStudio({ host: '127.0.0.1', port: 59_108, browser: 'none' }, fakeRuntime().runtime);
+    const studio = await startStudio(
+      { host: '127.0.0.1', port: await findFreePort(), browser: 'none' },
+      fakeRuntime().runtime,
+    );
     const client = new AbortController();
     try {
       const url = new URL('/api/events', studio.url);
@@ -143,7 +148,10 @@ describe('startStudio', () => {
   });
 
   it('requires an explicit port to be free, rather than silently picking another one', async () => {
-    const first = await startStudio({ host: '127.0.0.1', port: 59_103, browser: 'none' }, fakeRuntime().runtime);
+    const first = await startStudio(
+      { host: '127.0.0.1', port: await findFreePort(), browser: 'none' },
+      fakeRuntime().runtime,
+    );
     try {
       await expect(
         startStudio({ host: '127.0.0.1', port: first.port, browser: 'none' }, fakeRuntime().runtime),
@@ -165,7 +173,7 @@ describe('startStudio', () => {
 
     const { startStudio } = await import('./index');
     const { runtime } = fakeRuntime({ env: { KAFKA_STUDIO_DEV: '1' } });
-    const studio = await startStudio({ port: 59_104, browser: 'none' }, runtime);
+    const studio = await startStudio({ port: await findFreePort(), browser: 'none' }, runtime);
     try {
       const res = await fetch(new URL('/', studio.url));
       expect(middlewares).toHaveBeenCalled();
@@ -190,15 +198,16 @@ describe('startStudio', () => {
     });
 
     it('falls back to port/host/readOnly from the config file when no flag was given', async () => {
+      const configPort = await findFreePort();
       writeFileSync(
         join(dir, 'kafka.config.json'),
-        JSON.stringify({ studio: { port: 59_110, host: '127.0.0.1', readOnly: true, openBrowser: false } }),
+        JSON.stringify({ studio: { port: configPort, host: '127.0.0.1', readOnly: true, openBrowser: false } }),
       );
       const { runtime } = fakeRuntime({ cwd: dir });
 
       const studio = await startStudio({}, runtime);
       try {
-        expect(studio.port).toBe(59_110);
+        expect(studio.port).toBe(configPort);
         expect(studio.host).toBe('127.0.0.1');
         const health = await fetch(new URL('/api/health', studio.url), {
           headers: { 'x-kafka-studio-token': studio.token },
@@ -210,12 +219,15 @@ describe('startStudio', () => {
     });
 
     it('an explicit option always wins over the config file', async () => {
-      writeFileSync(join(dir, 'kafka.config.json'), JSON.stringify({ studio: { port: 59_111 } }));
+      // Never bound: the explicit port below wins.
+      const ignoredConfigPort = 59_111;
+      writeFileSync(join(dir, 'kafka.config.json'), JSON.stringify({ studio: { port: ignoredConfigPort } }));
       const { runtime } = fakeRuntime({ cwd: dir });
 
-      const studio = await startStudio({ port: 59_112, host: '127.0.0.1', browser: 'none' }, runtime);
+      const explicitPort = await findFreePort();
+      const studio = await startStudio({ port: explicitPort, host: '127.0.0.1', browser: 'none' }, runtime);
       try {
-        expect(studio.port).toBe(59_112);
+        expect(studio.port).toBe(explicitPort);
       } finally {
         await studio.stop();
       }

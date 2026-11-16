@@ -90,8 +90,10 @@ interface Transaction {
 }
 ```
 
-A transaction whose `send` failed, or whose `commit()` the broker rejected,
-can only be aborted. If `commit()`/`abort()` fails without a broker answer
+A transaction whose `send` or `sendOffsets` failed, or whose `commit()` the
+broker rejected, can only be aborted: `commit()` and the next
+`producer.transaction()` reject with a `KafkaNonRetriableError` that says so
+until you call `abort()`. If `commit()`/`abort()` fails without a broker answer
 (for example, the connection dropped), call it again. A producer fenced by a
 newer instance with the same `transactionalId` (`PRODUCER_FENCED` or
 `INVALID_PRODUCER_EPOCH`) rejects every further transaction call; create a new

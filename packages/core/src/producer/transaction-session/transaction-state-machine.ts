@@ -31,6 +31,12 @@ const VALID_STATE_TRANSITIONS: Record<TransactionState, readonly TransactionStat
 export const FENCED_PRODUCER_MESSAGE =
   'The producer was fenced by a newer instance with the same transactionalId; create a new producer';
 
+/** `commit()` rejects with this once the transaction can only be aborted. */
+export const ABORT_ONLY_MESSAGE = 'The transaction failed and can only be aborted; call abort()';
+
+/** Beginning a transaction rejects with this while the open one can only be aborted. */
+export const ABORT_BEFORE_BEGIN_MESSAGE = `${ABORT_ONLY_MESSAGE} before beginning another`;
+
 export interface TransitionEvent {
   from: TransactionState;
   to: TransactionState;
@@ -69,8 +75,12 @@ export class TransactionStateMachine extends EventEmitter {
     this.emit('transition', { to: state, from } satisfies TransitionEvent);
   }
 
-  /** The error for `call` made in the current state: the fenced error from `FATAL_ERROR`, a state error otherwise. */
+  /**
+   * The error for `call` made in the current state: the fenced error from `FATAL_ERROR`, the
+   * abort-only error from `ABORTABLE`, a state error otherwise.
+   */
   illegalCallError(call: string): KafkaNonRetriableError {
+    if (this.#currentState === TRANSACTION_STATES.ABORTABLE) return new KafkaNonRetriableError(ABORT_ONLY_MESSAGE);
     return this.#stateError(`Cannot call "${call}" in state "${this.#currentState}"`);
   }
 

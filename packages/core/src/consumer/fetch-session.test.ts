@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FetchTopicRequest } from '../protocol/requests/fetch/shared';
-import { FETCH_SESSION_FINAL_EPOCH, FETCH_SESSION_INITIAL_EPOCH, FetchSessionHandler } from './fetch-session';
+import {
+  FETCH_SESSION_FINAL_EPOCH,
+  FETCH_SESSION_INITIAL_EPOCH,
+  FetchSessionHandler,
+  nextSessionEpoch,
+} from './fetch-session';
 
 const topicId = Buffer.alloc(16, 1);
 
@@ -157,5 +162,11 @@ describe('consumer/fetch-session', () => {
       topics: [],
       forgottenTopics: [],
     });
+  });
+
+  it('moves to the next session epoch, wrapping from 0x7fffffff to 1 rather than the opening epoch 0', () => {
+    expect(nextSessionEpoch(1)).toBe(2);
+    expect(nextSessionEpoch(0x7ffffffe)).toBe(0x7fffffff);
+    expect(nextSessionEpoch(0x7fffffff)).toBe(1);
   });
 });

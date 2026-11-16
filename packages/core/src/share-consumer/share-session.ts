@@ -1,9 +1,8 @@
+import { nextSessionEpoch } from '../consumer/fetch-session';
 import {
   SHARE_SESSION_INITIAL_EPOCH,
   type ShareFetchForgottenTopicInput,
 } from '../protocol/requests/share-fetch/index';
-
-const MAX_EPOCH = 0x7fffffff;
 
 /** A topic's partitions that one node leads, with the topic id ShareFetch addresses the topic by. */
 export interface ShareSessionTopic {
@@ -68,7 +67,7 @@ export class ShareSessionHandler {
   /** The broker accepted the last built request: the session now holds its partitions at the next epoch. */
   handleResponse(): void {
     this.#topics = this.#requestedTopics;
-    this.#epoch = this.#epoch === MAX_EPOCH ? 1 : this.#epoch + 1;
+    this.#epoch = nextSessionEpoch(this.#epoch);
   }
 
   /** Drops the session so the next request opens a new one at epoch 0. */

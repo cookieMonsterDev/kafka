@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
 
 /**
- * Headroom above the 818 files this suite packs (dist, README, package.json). It catches a
+ * Headroom above the 821 files this suite packs (dist, README, package.json). It catches a
  * regression such as re-enabled maps, test files back in the declaration build or a return to one
  * JavaScript file per source module, not ordinary growth. Lower it when a build change shrinks the
  * file count.
@@ -18,8 +18,10 @@ const FILE_COUNT_CEILING = 900;
 /** The bundled build emits only these JavaScript files; a per-module build would emit ~800. */
 const JS_FILES = [
   'dist/index.js',
+  'dist/lazy-requests.js',
   'dist/protocol/compression/codec-worker.js',
   'dist/protocol/compression/off-thread.js',
+  'dist/shared.js',
 ];
 
 /** `new Worker(...)` loads this file by path at runtime, so it must survive any build change. */
@@ -113,9 +115,16 @@ describe('published file count', () => {
     expect(packed.files.length).toBeLessThan(FILE_COUNT_CEILING);
   });
 
-  it('ships the bundled entry, codec pool and codec worker as the only JavaScript files', () => {
+  it('ships the bundled entry, its chunks, codec pool and codec worker as the only JavaScript files', () => {
     const jsFiles = packed.files.map((file) => file.path).filter((path) => path.endsWith('.js'));
     expect(jsFiles.sort()).toEqual(JS_FILES);
+  });
+
+  // A static import would load the lazily loaded request codecs at startup and undo the split.
+  it('loads the lazy request chunk only through a dynamic import', () => {
+    const entry = readFileSync(join(packSource, 'dist', 'index.js'), 'utf8');
+    expect(entry).not.toMatch(/(?:from|import)\s*["']\.\/lazy-requests\.js["']/);
+    expect(entry).toMatch(/import\(\s*["']\.\/lazy-requests\.js["']\s*\)/);
   });
 
   it('exports from the built entry what src/index.ts exports', async () => {

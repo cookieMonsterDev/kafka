@@ -6,7 +6,6 @@ import {
 } from '../errors';
 import { createErrorFromCode, staleMetadata } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
-import { DEFAULT_RESPONSE_PARTITION_LIMIT } from '../protocol/requests/describe-topic-partitions/index';
 import { retrier } from '../retry/index';
 import { parseOffset } from '../consumer/types';
 import type { AdminContext } from './helpers';
@@ -297,7 +296,7 @@ export function createTopicsApi(
 
   const describeTopicPartitions = async ({
     topics,
-    responsePartitionLimit = DEFAULT_RESPONSE_PARTITION_LIMIT,
+    responsePartitionLimit,
     cursor,
   }: DescribeTopicPartitionsOptions): Promise<DescribeTopicPartitionsResult> => {
     if (!Array.isArray(topics)) {

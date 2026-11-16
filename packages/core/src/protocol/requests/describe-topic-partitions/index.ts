@@ -7,7 +7,6 @@ export type {
   DescribeTopicPartitionsRequestV0Options,
   DescribeTopicPartitionsRequestV0Topic,
 } from './v0/request';
-export { DEFAULT_RESPONSE_PARTITION_LIMIT } from './v0/request';
 export type {
   DescribeTopicPartitionsResponseV0Body,
   DescribeTopicPartitionsResponseV0Cursor,

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { KafkaConnectionClosedError, KafkaMemberIdRequired, KafkaProtocolError } from '../errors';
+import {
+  KafkaConnectionClosedError,
+  KafkaMemberIdRequired,
+  KafkaProtocolError,
+  KafkaServerDoesNotSupportApiKey,
+} from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { API_KEYS } from '../protocol/requests/api-keys';
@@ -315,6 +320,49 @@ describe('broker/Broker', () => {
         topicData: [{ topic: 't', topicId, partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
       });
       expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(13);
+    });
+
+    it('negotiates a lazily loaded family against the broker-advertised versions', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [{ apiKey: API_KEYS.CreateTopics, minVersion: 0, maxVersion: 2 }],
+      });
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+      pool.send.mockClear();
+      pool.send.mockResolvedValue({ throttleTime: 0, topicErrors: [] });
+
+      await broker.createTopics({ topics: [{ topic: 'orders' }] });
+      await broker.createTopics({ topics: [{ topic: 'payments' }] });
+
+      const sent = pool.send.mock.calls.map((call) => call[0]?.request);
+      expect(sent.map((request) => [request?.apiKey, request?.apiVersion])).toEqual([
+        [API_KEYS.CreateTopics, 2],
+        [API_KEYS.CreateTopics, 2],
+      ]);
+    });
+
+    it('rejects a lazily loaded family the broker does not advertise', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({ errorCode: 0, throttleTime: 0, apiVersions: [] });
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+      pool.send.mockClear();
+
+      await expect(
+        broker.describeAcls({
+          resourceType: 1,
+          resourceName: null,
+          resourcePatternType: 1,
+          principal: null,
+          host: null,
+          operation: 1,
+          permissionType: 1,
+        }),
+      ).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
+      expect(pool.send).not.toHaveBeenCalled();
     });
 
     it('listGroups sends an empty options object', async () => {

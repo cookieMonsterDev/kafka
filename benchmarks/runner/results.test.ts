@@ -216,6 +216,68 @@ describe('aggregateSession', () => {
   });
 });
 
+describe('E1 latency comparisons', () => {
+  function createE1Run(series: string, repetition: number, p50Ms: number, p99Ms: number): RunRecord {
+    const client: ClientId = series === 'kafkajs' ? 'kafkajs' : 'kafka-core';
+    const run = createRun(client, 'E1', repetition, 5000, series);
+    const { metrics } = run.result;
+    assert.ok(metrics);
+    metrics.latency = { samples: 1000, p50Ms, p95Ms: p99Ms, p99Ms, maxMs: p99Ms };
+    return run;
+  }
+
+  it('compares the median as well as p99 and names the metric of each comparison', async () => {
+    const directory = await createSessionDir();
+    await writeSession(
+      directory,
+      [
+        createE1Run('kafka-core', 1, 1.0, 3.0),
+        createE1Run('kafka-core', 2, 1.01, 3.02),
+        createE1Run('kafkajs', 1, 1.4, 3.01),
+        createE1Run('kafkajs', 2, 1.41, 3.03),
+      ],
+      [],
+    );
+
+    const summary = await aggregateSession(directory);
+
+    const verdicts = Object.fromEntries(summary.comparisons.map((comparison) => [comparison.metric, comparison]));
+    assert.deepEqual(Object.keys(verdicts).sort(), ['latencyP50Ms', 'latencyP99Ms']);
+    assert.equal(verdicts.latencyP50Ms?.verdict, 'worse');
+    assert.equal(verdicts.latencyP99Ms?.verdict, 'inconclusive');
+    assert.equal(verdicts.latencyP99Ms?.reason, 'min-max ranges overlap');
+    assert.deepEqual(await validateSummary(summary), []);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
+    assert.match(report, /\| p99 1\.00× \(inconclusive\); p50 1\.40× \(worse\) \|/);
+  });
+
+  it('applies the A/A floor of the median, not of p99, to the median', async () => {
+    const directory = await createSessionDir();
+    await writeSession(
+      directory,
+      [
+        createE1Run('kafka-core', 1, 1.0, 3.0),
+        createE1Run('kafka-core', 2, 1.0, 3.0),
+        createE1Run('kafka-core#2', 1, 1.02, 4.0),
+        createE1Run('kafka-core#2', 2, 1.02, 4.0),
+        createE1Run('kafkajs', 1, 1.1, 3.6),
+        createE1Run('kafkajs', 2, 1.1, 3.6),
+      ],
+      [],
+    );
+
+    const summary = await aggregateSession(directory);
+
+    assert.ok(Math.abs((summary.aaNoiseFloors.E1?.latencyP50Ms ?? 0) - 0.02) < 0.001);
+    assert.ok(Math.abs((summary.aaNoiseFloors.E1?.latencyP99Ms ?? 0) - 0.3333) < 0.001);
+    const verdicts = Object.fromEntries(summary.comparisons.map((comparison) => [comparison.metric, comparison]));
+    assert.equal(verdicts.latencyP50Ms?.verdict, 'worse');
+    assert.equal(verdicts.latencyP99Ms?.verdict, 'inconclusive');
+    assert.equal(verdicts.latencyP99Ms?.reason, 'difference is within the A/A noise floor');
+    assert.deepEqual(await validateSummary(summary), []);
+  });
+});
+
 describe('noise floors', () => {
   it('measures the A/A floor per scenario and does not compare the A/A series itself', async () => {
     const directory = await createSessionDir();
@@ -234,7 +296,7 @@ describe('noise floors', () => {
 
     const summary = await aggregateSession(directory);
 
-    assert.ok(Math.abs((summary.aaNoiseFloors.P3 ?? 0) - 0.08) < 0.001);
+    assert.ok(Math.abs((summary.aaNoiseFloors.P3?.recordsPerSecond ?? 0) - 0.08) < 0.001);
     assert.deepEqual(
       summary.comparisons.map((comparison) => comparison.series),
       ['kafkajs'],

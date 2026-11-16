@@ -154,6 +154,10 @@ separate, fixed seed, so every session sends the same bytes. The report shows th
 and the coefficient of variation. A cell above the noise threshold is marked noisy, and a comparison is called
 `inconclusive` when either cell is noisy, the min–max ranges overlap, or the difference is within the noise
 floor (the `--noise-floor` passed in, or the A/A floor measured in the same session, whichever is larger).
+Throughput scenarios compare records/s, L1 compares time to the first acknowledged produce, and E1 compares p99
+and p50 latency, each with its own coefficient of variation and A/A floor. Every chart on the docs page, peak
+memory and install size included, names a highest or lowest client on a runtime only when this rule puts it
+ahead of every other client, and otherwise says there is no clear one.
 
 ## Fairness rules
 

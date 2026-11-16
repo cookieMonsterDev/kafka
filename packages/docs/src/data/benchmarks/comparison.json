@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "status": "draft",
   "generator": "scripts/generate-benchmark-docs.mjs",
   "datasets": {
@@ -287,6 +287,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -470,6 +472,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -653,6 +657,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call",
@@ -840,6 +846,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -1028,6 +1036,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -1216,6 +1226,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -1405,6 +1417,8 @@
           "metric": "latencyP50Ms",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -1595,6 +1609,8 @@
           "metric": "latencyP99Ms",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -1785,6 +1801,8 @@
           "metric": "firstAckedProduceMs",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -1968,6 +1986,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -2151,6 +2171,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -2339,6 +2361,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -2854,6 +2878,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -3037,6 +3063,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -3220,6 +3248,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call",
@@ -3407,6 +3437,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -3591,6 +3623,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -3779,6 +3813,8 @@
           "metric": "recordsPerSecond",
           "unit": "records/s",
           "better": "higher",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -3964,6 +4000,8 @@
           "metric": "latencyP50Ms",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -4154,6 +4192,8 @@
           "metric": "latencyP99Ms",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",
@@ -4344,6 +4384,8 @@
           "metric": "firstAckedProduceMs",
           "unit": "ms",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -4527,6 +4569,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "batchBytes: no byte-based batching; a produce batch is exactly the records of one send() call"
@@ -4710,6 +4754,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default"
@@ -4894,6 +4940,8 @@
           "metric": "peakMemoryBytes",
           "unit": "MiB",
           "better": "lower",
+          "noiseThresholdCv": 0.05,
+          "noiseFloor": 0,
           "declaredGaps": {
             "platformatic": [
               "CRC: consumed record batches are not CRC-checked, while kafka-core verifies CRC32C by default",

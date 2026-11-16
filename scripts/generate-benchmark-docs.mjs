@@ -884,7 +884,7 @@ const CAVEATS = [
   'Concurrent sends favour clients that merge separate `send()` calls into one batch, as kafka-core does. Batched send is the fairer produce comparison.',
   "Confluent's client runs on Node.js 24 only. Its consume runs can run out of memory under the 2 GiB limit: a median covers the runs that finished, and a cell where every run failed has no value.",
   'All results come from one machine. Treat small differences as inconclusive.',
-  `A chart names the highest or lowest client on a runtime only when that client's runs separate from each other client's beyond noise: the runs of both are steady, their min–max ranges do not overlap, and their medians differ by more than the measured noise. Otherwise it says there is no clear highest or lowest. The [comparison rule](${BENCHMARKS_README_URL}#comparison-rule) has the details.`,
+  `A chart names the highest or lowest client on a runtime only when that client's runs separate from each other client's beyond noise: neither client's runs are noisy, their min–max ranges do not overlap, and their medians differ by more than the noise floor. Otherwise it says there is no clear highest or lowest. The [comparison rule](${BENCHMARKS_README_URL}#comparison-rule) has the details.`,
 ];
 
 /** One column per stored dataset, headline payload first. */

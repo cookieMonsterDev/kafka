@@ -4,6 +4,8 @@ Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
+Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in a public issue or PR.
+
 Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file requires them to follow this document (tests, docs, commits, PRs).
 
 ## Prerequisites

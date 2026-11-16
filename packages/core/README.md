@@ -124,7 +124,7 @@ From the repo root (after `pnpm install`):
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-core dev        # vite build --watch
-pnpm --filter @cookiemonsterdev/kafka-core build      # JS + .d.ts into dist/
+pnpm --filter @cookiemonsterdev/kafka-core build      # JS + the .d.ts files index.d.ts reaches, into dist/
 pnpm --filter @cookiemonsterdev/kafka-core typecheck  # src + tests, tsc --noEmit
 pnpm --filter @cookiemonsterdev/kafka-core bench      # local microbenches (no Docker; not in pnpm test)
 pnpm --filter @cookiemonsterdev/kafka-core clean      # remove dist/

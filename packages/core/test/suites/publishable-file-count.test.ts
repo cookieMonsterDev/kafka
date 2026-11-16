@@ -6,14 +6,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+const REPO_SCRIPTS = resolve(PACKAGE_ROOT, '../../scripts');
 
 /**
- * Headroom above the 821 files this suite packs (dist, README, package.json). It catches a
- * regression such as re-enabled maps, test files back in the declaration build or a return to one
- * JavaScript file per source module, not ordinary growth. Lower it when a build change shrinks the
- * file count.
+ * Headroom above the 290 files this suite packs (dist, README, package.json). It catches a
+ * regression such as re-enabled maps, test files back in the declaration build, unreachable
+ * declarations no longer pruned or a return to one JavaScript file per source module, not ordinary
+ * growth. Lower it when a build change shrinks the file count.
  */
-const FILE_COUNT_CEILING = 900;
+const FILE_COUNT_CEILING = 350;
 
 /** The bundled build emits only these JavaScript files; a per-module build would emit ~800. */
 const JS_FILES = [
@@ -57,6 +58,10 @@ describe('published file count', () => {
     execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--outDir', distDir], {
       cwd: PACKAGE_ROOT,
     });
+    // The rest of `build:types`, so the declarations packed here are the ones that get published.
+    for (const script of ['add-declaration-extensions.mjs', 'prune-unreachable-declarations.mjs']) {
+      execFileSync(process.execPath, [join(REPO_SCRIPTS, script), distDir]);
+    }
     cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
     cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));
 

@@ -11,9 +11,8 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-// `from '…'` and `import('…')`, including `{@link import('…')}` in JSDoc, which TypeScript
-// resolves the same way.
-const RELATIVE_SPECIFIER = /(\bfrom\s*|\bimport\s*\(\s*)(['"])(\.\.?(?:\/[^'"\n]*)?)\2/g;
+import { RELATIVE_SPECIFIER } from './declaration-specifiers.mjs';
+
 const EXPLICIT_EXTENSION = /\.(?:js|mjs|cjs|json)$/;
 
 function isFile(filePath) {

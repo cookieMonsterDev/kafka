@@ -1,6 +1,33 @@
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
+const NON_ASCII = /[\u0080-\uFFFF]/;
+
+/**
+ * Fails the build when an emitted chunk contains a non-ASCII character. V8 keeps a module source
+ * with any character above Latin-1 as a two-byte string, which doubled the bundle's retained heap.
+ * Escape such characters in source strings (`\u2014`) or rewrite them.
+ */
+function asciiOnlyOutput(): Plugin {
+  return {
+    name: 'ascii-only-output',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type !== 'chunk') continue;
+
+        const index = output.code.search(NON_ASCII);
+        if (index === -1) continue;
+
+        const line = output.code.slice(0, index).split('\n').length;
+        this.error(`${output.fileName}:${line} contains the non-ASCII character "${output.code[index]}"`);
+      }
+    },
+  };
+}
+
 export default defineConfig({
+  plugins: [asciiOnlyOutput()],
   build: {
     target: 'node24',
     // Maps embedding the TS source were half the install size; unminified output stays debuggable without them.
@@ -23,6 +50,9 @@ export default defineConfig({
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
+        // JSDoc already ships in the `.d.ts` files, where editors read it; in the JavaScript it
+        // was about a quarter of the bytes. Legal and `@__PURE__` annotation comments stay.
+        comments: { jsdoc: false, legal: true, annotation: true },
         codeSplitting: {
           groups: [
             // Code that both `index.js` and `lazy-requests.js` use (schema, encoder, errors). It

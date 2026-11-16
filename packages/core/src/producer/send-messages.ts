@@ -164,6 +164,18 @@ export function createSendMessages({
       gatedPartitions = partitions;
     }
 
+    /**
+     * The requested bump resets every sequence, so this send's ranges are dropped rather than handed
+     * back; the next attempt re-acquires the gates, which waits for the bump.
+     */
+    async function releaseGatesForEpochBump(): Promise<void> {
+      const partitions = gatedPartitions;
+      gatedPartitions = undefined;
+      firstSequences.clear();
+      writeUnknownPartitions.clear();
+      if (partitions) await eosManager.releasePartitionGates(partitions);
+    }
+
     /** Partitions still to gate, or `undefined` when already gated or when there are no gates to take. */
     function partitionsToGate(): EosManagerPartition[] | undefined {
       if (gatedPartitions) return undefined;
@@ -421,15 +433,20 @@ export function createSendMessages({
           throw error;
         }
 
-        // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this PID after
-        // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue.
+        // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this producer id after
+        // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue, but
+        // only once every other send holding gates has drained, so this send gives its gates back
+        // and the next attempt waits for the bump. A transaction can only abort, which bumps it.
         if (error.type === 'UNKNOWN_PRODUCER_ID' && eosManager.isInitialized()) {
-          logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
-            retryCount,
-            retryTime,
-          });
-          await eosManager.initProducerId();
-          throw new KafkaProtocolError(error, { retriable: true });
+          eosManager.requestEpochBump();
+          if (!eosManager.isTransactional()) {
+            logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {
+              retryCount,
+              retryTime,
+            });
+            await releaseGatesForEpochBump();
+            throw new KafkaProtocolError(error, { retriable: true });
+          }
         }
 
         logger.error(`${error.message}`, { retryCount, retryTime });

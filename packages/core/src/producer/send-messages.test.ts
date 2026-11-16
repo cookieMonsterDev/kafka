@@ -497,32 +497,6 @@ describe('producer/sendMessages', () => {
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
 
-  it('reallocates the producer id and retries produce on UNKNOWN_PRODUCER_ID', async () => {
-    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    const code = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
-    brokers[1].produce
-      .mockImplementationOnce(() => Promise.reject(createErrorFromCode(code)))
-      .mockImplementationOnce(() => Promise.resolve(fakeProduceResponse(topic, 0)));
-
-    const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({
-      isInitialized: vi.fn().mockReturnValue(true),
-      initProducerId: vi.fn().mockResolvedValue(undefined),
-    });
-    const sendMessages = createSendMessages({
-      logger: silentLogger,
-      cluster: cluster as unknown as Cluster,
-      partitioner: cyclingPartitioner,
-      eosManager,
-      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
-    });
-
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
-
-    expect(eosManager.initProducerId).toHaveBeenCalledTimes(1);
-    expect(brokers[1].produce).toHaveBeenCalledTimes(2);
-  });
-
   it('marks the transaction abort-only on TRANSACTION_ABORTABLE (KIP-890)', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const code = ERROR_CODES.find((entry) => entry.type === 'TRANSACTION_ABORTABLE')!.code;
@@ -932,6 +906,169 @@ describe('producer/sendMessages', () => {
 
       expect(eosManager.updateSequence).not.toHaveBeenCalledWith(topic, expect.any(Number), -1);
       expect(eosManager.requestEpochBump).toHaveBeenCalled();
+    });
+  });
+
+  describe('when the broker no longer knows the producer id', () => {
+    const unknownProducerIdCode = ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_PRODUCER_ID')!.code;
+
+    interface ProduceRequest {
+      producerEpoch: number;
+      topicData: { partitions: { partition: number; firstSequence: number; messages: { value: string }[] }[] }[];
+    }
+
+    /** A partition log that, like the broker, drops a batch whose epoch and first sequence it already appended. */
+    function idempotentLog() {
+      const values = new Map<number, string[]>();
+      const appended = new Set<string>();
+      return {
+        append({ producerEpoch, topicData }: ProduceRequest): void {
+          for (const { partition, firstSequence, messages } of topicData[0]!.partitions) {
+            const batch = `${partition}:${producerEpoch}:${firstSequence}`;
+            if (appended.has(batch)) continue;
+            appended.add(batch);
+            values.set(partition, [...(values.get(partition) ?? []), ...messages.map(({ value }) => value)]);
+          }
+        },
+        values: (partition: number) => values.get(partition) ?? [],
+      };
+    }
+
+    async function initializedEosManager() {
+      let epoch = -1;
+      const initProducerId = vi.fn(() => Promise.resolve({ producerId: 1000n, producerEpoch: (epoch += 1) }));
+      const eosCluster = {
+        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+        findControllerBroker: vi.fn().mockResolvedValue({ initProducerId }),
+        brokerPool: { versions: undefined },
+      };
+      const eosManager = createEosManager({ logger: silentLogger, cluster: eosCluster as unknown as Cluster });
+      await eosManager.initProducerId();
+      return { eosManager, initProducerId };
+    }
+
+    function delay(ms: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    it("waits for another send's retries before bumping, so that send's written batch is not resent", async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const log = idempotentLog();
+      const { eosManager, initProducerId } = await initializedEosManager();
+
+      // Partition 0 lost its producer id; partition 1's first request is written but its response is lost.
+      let timeOutPartition1: () => void = () => {};
+      brokers[1].produce.mockImplementation((request: ProduceRequest) => {
+        if (request.producerEpoch === 0) return Promise.reject(createErrorFromCode(unknownProducerIdCode));
+        log.append(request);
+        return Promise.resolve(fakeProduceResponse(topic, 0));
+      });
+      brokers[2].produce
+        .mockImplementationOnce(
+          (request: ProduceRequest) =>
+            new Promise((_, reject) => {
+              timeOutPartition1 = () => {
+                log.append(request);
+                reject(new KafkaRequestTimeoutError('Request timed out', { broker: 'h:2' }));
+              };
+            }),
+        )
+        .mockImplementation((request: ProduceRequest) => {
+          log.append(request);
+          return Promise.resolve(fakeProduceResponse(topic, 1));
+        });
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: ({ message }: PartitionerArgs) => Number(message.key),
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+
+      const sends = Promise.all([
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '0', value: 'a' }] }] }),
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '1', value: 'b' }] }] }),
+      ]);
+      // Give the producer-id recovery time to run while partition 1's request is still in flight.
+      await delay(20);
+      timeOutPartition1();
+      await sends;
+
+      expect(log.values(0)).toEqual(['a']);
+      expect(log.values(1)).toEqual(['b']);
+      expect(initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(1);
+    });
+
+    it('re-initializes the producer id once when several sends lose it together', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const log = idempotentLog();
+      const { eosManager, initProducerId } = await initializedEosManager();
+      for (const [nodeId, broker] of Object.entries(brokers)) {
+        broker.produce.mockImplementation((request: ProduceRequest) => {
+          if (request.producerEpoch === 0) return Promise.reject(createErrorFromCode(unknownProducerIdCode));
+          log.append(request);
+          return Promise.resolve(fakeProduceResponse(topic, Number(nodeId) - 1));
+        });
+      }
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: ({ message }: PartitionerArgs) => Number(message.key),
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+
+      await Promise.all(
+        ['0', '1', '2'].map((key) =>
+          sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key, value: key }] }] }),
+        ),
+      );
+
+      expect(initProducerId).toHaveBeenCalledTimes(2);
+      expect([log.values(0), log.values(1), log.values(2)]).toEqual([['0'], ['1'], ['2']]);
+    });
+
+    it('fails a transactional send so the transaction aborts, bumping the epoch then', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      brokers[1].produce.mockRejectedValue(createErrorFromCode(unknownProducerIdCode));
+      let epoch = -1;
+      const coordinator = {
+        initProducerId: vi.fn(() => Promise.resolve({ producerId: 1000n, producerEpoch: (epoch += 1) })),
+        addPartitionsToTxn: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockResolvedValue(undefined),
+      };
+      const eosManager = createEosManager({
+        logger: silentLogger,
+        cluster: {
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
+          brokerPool: { versions: undefined },
+        } as unknown as Cluster,
+        transactional: true,
+        transactionalId: 'transactional-id',
+      });
+      await eosManager.initProducerId();
+      eosManager.beginTransaction();
+
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: fakeCluster(brokers) as unknown as Cluster,
+        partitioner: () => 0,
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+
+      await expect(
+        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] }),
+      ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
+      expect(brokers[1].produce).toHaveBeenCalledTimes(1);
+
+      await eosManager.abort();
+      expect(coordinator.initProducerId).toHaveBeenCalledTimes(2);
+      expect(eosManager.getProducerEpoch()).toBe(1);
     });
   });
 

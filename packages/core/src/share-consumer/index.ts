@@ -79,7 +79,20 @@ export function createShareConsumer({
 }: ShareConsumerOptions): ShareConsumer {
   const logger = rootLogger.namespace('ShareConsumer');
   const instrumentationEmitter = rootInstrumentationEmitter ?? new InstrumentationEventEmitter();
-  const shareGroup = new ShareGroup({ cluster, groupId, logger, retry, rackId });
+  const shareGroup = new ShareGroup({
+    cluster,
+    groupId,
+    logger,
+    retry,
+    rackId,
+    maxWaitTimeInMs,
+    minBytes,
+    maxBytes,
+    maxRecords,
+    batchSize,
+    shareAcquireMode,
+    instrumentationEmitter,
+  });
   let runner: ShareRunner | null = null;
 
   async function connect({ signal }: ConnectOptions = {}): Promise<void> {
@@ -123,12 +136,6 @@ export function createShareConsumer({
       eachBatch,
       eachBatchAutoAck,
       heartbeatInterval,
-      maxWaitTimeInMs,
-      minBytes,
-      maxBytes,
-      maxRecords,
-      batchSize,
-      shareAcquireMode,
       concurrency: partitionsConsumedConcurrently,
       prefetchMaxBatches,
       prefetchMaxBytes,

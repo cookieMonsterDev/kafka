@@ -12,7 +12,7 @@ export const payloadShapes: Readonly<Record<PayloadSize, PayloadShape>> = {
   medium: { keyBytes: 16, valueBytes: 1024, headerCount: 2 },
 };
 
-const headerValueBytes = 16;
+export const headerValueBytes = 16;
 
 // Printable ASCII only, so the same bytes can be written one per line into the payload file that
 // kafka-producer-perf-test.sh reads when the runner seeds a topic.

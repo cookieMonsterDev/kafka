@@ -13,6 +13,7 @@ import { defaultProfiles, defaultScenarios } from './schedule.ts';
 const maxSeed = 0xffff_ffff;
 const maxRepetitions = 1000;
 const defaultMinRepetitions = 5;
+const defaultPayload: PayloadSize = 'medium';
 
 export const usage = `Usage: node runner/cli.ts <command> [flags]
 
@@ -33,7 +34,8 @@ Commands:
             --repetitions <n>       measured repetitions per cell (default 5; 1 for smoke)
             --seed <n>              run-order shuffle seed, 0..${maxSeed} (default random, recorded);
                                     record contents always use the fixed payload seed
-            --payload <size>        ${payloadSizes.join(' | ')} (default small)
+            --payload <size>        ${payloadSizes.join(' | ')} (default ${defaultPayload}: 1 KiB values with headers;
+                                    small is the 100 B per-record overhead stress test)
             --count-scale <factor>  multiply message counts and E1 duration (default 1)
             --aa                    add a second kafka-core series (${aaSeries}) for the A/A noise test
             --force                 run despite failed doctor checks (the session cannot be published)
@@ -247,7 +249,7 @@ export function parseRunArgs(args: string[]): RunArgs | null {
     profiles: parseList(values.profiles, profiles, 'profiles') ?? defaultProfiles(tier),
     repetitions: parseInteger(values.repetitions, 'repetitions', 1, maxRepetitions) ?? (tier === 'smoke' ? 1 : 5),
     seed: parseInteger(values.seed, 'seed', 0, maxSeed) ?? randomInt(0, maxSeed + 1),
-    payload: parseChoice(values.payload, payloadSizes, 'payload', 'small'),
+    payload: parseChoice(values.payload, payloadSizes, 'payload', defaultPayload),
     countScale: parsePositiveNumber(values['count-scale'], 'count-scale') ?? 1,
     isAaTest: values.aa === true,
   };

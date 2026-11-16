@@ -6,8 +6,8 @@ packages:
 # Packages reference these with "typescript": "catalog:".
 catalog:
   typescript: ^7.0.2
-  astro: ^7.4.7
-  vite: ^8.3.6
+  astro: ^7.4.11
+  vite: ^8.3.8
   vitest: ^5.1.0
   '@vitest/coverage-v8': ^5.1.0
   '@types/node': ^26.6.6

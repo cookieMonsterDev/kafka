@@ -1,6 +1,13 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
-import { crc32c, crc32cJs, getCrc32cImplementation, selectCrc32c } from './crc32c';
+import { describe, expect, it, type Mock, vi } from 'vitest';
+import {
+  createDeferredCrc32c,
+  crc32c,
+  crc32cJs,
+  getCrc32cImplementation,
+  NATIVE_CRC32C_MIN_BYTES,
+  selectCrc32c,
+} from './crc32c';
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -144,5 +151,79 @@ describe('protocol/crc32c implementation selection', () => {
     ],
   ])('falls back to the JS table when the loaded module %s', (_case, loaded) => {
     expect(selectCrc32c(() => loaded).implementation).toBe('javascript');
+  });
+});
+
+describe('protocol/crc32c deferred native loading', () => {
+  const smallBatches = [Buffer.alloc(0), Buffer.from('123456789'), Buffer.alloc(NATIVE_CRC32C_MIN_BYTES - 1, 0x5a)];
+  const largeBatch = Buffer.from(Array.from({ length: NATIVE_CRC32C_MIN_BYTES }, (_, i) => (i * 151 + 7) & 0xff));
+
+  /** A binding that passes the check-value test and counts its calls, standing in for `@node-rs/crc32`. */
+  function fakeBinding(): { requireModule: Mock<(id: string) => unknown>; nativeCrc32c: Mock<typeof crc32cJs> } {
+    const nativeCrc32c = vi.fn(crc32cJs);
+    const requireModule = vi.fn((_id: string): unknown => ({ crc32c: nativeCrc32c }));
+    return { requireModule, nativeCrc32c };
+  }
+
+  it('checksums batches below the threshold without loading @node-rs/crc32', () => {
+    const { requireModule } = fakeBinding();
+    const deferred = createDeferredCrc32c(requireModule);
+    for (const batch of smallBatches) {
+      expect(deferred.checksum(batch)).toBe(crc32cJs(batch));
+    }
+    expect(requireModule).not.toHaveBeenCalled();
+  });
+
+  it('loads @node-rs/crc32 on the first batch at the threshold and uses it for every batch after', () => {
+    const { requireModule, nativeCrc32c } = fakeBinding();
+    const deferred = createDeferredCrc32c(requireModule);
+    deferred.checksum(smallBatches[1] as Buffer);
+
+    expect(deferred.checksum(largeBatch)).toBe(crc32cJs(largeBatch));
+    expect(requireModule).toHaveBeenCalledTimes(1);
+    expect(nativeCrc32c).toHaveBeenLastCalledWith(largeBatch);
+
+    for (const batch of smallBatches) {
+      expect(deferred.checksum(batch)).toBe(crc32cJs(batch));
+      expect(nativeCrc32c).toHaveBeenLastCalledWith(batch);
+    }
+    expect(deferred.implementation()).toBe('native');
+    expect(requireModule).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads @node-rs/crc32 when implementation() is called before any large batch', () => {
+    const { requireModule, nativeCrc32c } = fakeBinding();
+    const deferred = createDeferredCrc32c(requireModule);
+
+    expect(deferred.implementation()).toBe('native');
+    expect(requireModule).toHaveBeenCalledTimes(1);
+    deferred.checksum(smallBatches[1] as Buffer);
+    expect(nativeCrc32c).toHaveBeenLastCalledWith(smallBatches[1]);
+  });
+
+  it('keeps the JS table and tries to load only once when @node-rs/crc32 is missing', () => {
+    const requireModule = vi.fn((id: string): unknown => {
+      throw new Error(`Cannot find module '${id}'`);
+    });
+    const deferred = createDeferredCrc32c(requireModule);
+
+    expect(deferred.checksum(largeBatch)).toBe(crc32cJs(largeBatch));
+    expect(deferred.checksum(largeBatch)).toBe(crc32cJs(largeBatch));
+    for (const batch of smallBatches) {
+      expect(deferred.checksum(batch)).toBe(crc32cJs(batch));
+    }
+    expect(deferred.implementation()).toBe('javascript');
+    expect(requireModule).toHaveBeenCalledTimes(1);
+  });
+
+  it.skipIf(!isNodeRsInstalled)('gives the same checksums before and after switching to @node-rs/crc32', () => {
+    const deferred = createDeferredCrc32c(requireFromHere);
+    const batches = [...smallBatches, largeBatch];
+    const before = smallBatches.map((batch) => deferred.checksum(batch));
+    const after = batches.map((batch) => deferred.checksum(batch));
+
+    expect(deferred.implementation()).toBe('native');
+    expect(before).toEqual(smallBatches.map(crc32cJs));
+    expect(after).toEqual(batches.map(crc32cJs));
   });
 });

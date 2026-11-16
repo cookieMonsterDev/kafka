@@ -38,13 +38,16 @@ instructions where available. It ships prebuilt binaries for Linux (glibc and
 musl), macOS, Windows, FreeBSD, and Android. It has no install script, so Bun
 needs no `trustedDependencies` entry for it.
 
-The client loads the package the first time it checksums a record batch. If the
-package isn't installed, or has no binary for the platform, the client uses its
-built-in JavaScript implementation, which processes about 2.8 GB/s on an Apple
-silicon Mac on Node.js and Bun. Both produce the same checksums.
+The client loads the package the first time it checksums a record batch of 4 KiB
+or more, and uses it for every batch after that. Until then, smaller batches use
+the client's built-in JavaScript implementation, so a process that only sends
+small batches doesn't spend the time and memory the package takes to load. If
+the package isn't installed, or has no binary for the platform, the client uses
+the JavaScript implementation for every batch. It processes about 2.8 GB/s on an
+Apple silicon Mac on Node.js and Bun. Both produce the same checksums.
 
 To see which implementation is in use, call `getCrc32cImplementation()`. It
-returns `'native'` or `'javascript'`:
+returns `'native'` or `'javascript'`, and loads the package if no batch has yet:
 
 ```ts
 import { getCrc32cImplementation } from '@cookiemonsterdev/kafka-core';

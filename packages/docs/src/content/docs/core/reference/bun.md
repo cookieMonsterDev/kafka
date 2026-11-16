@@ -112,6 +112,13 @@ To rule out a Bun-native path while debugging, set `KAFKA_BUN_NATIVE=0` in the e
 turns off every Bun-native path, which today means ZSTD compression uses `node:zlib` as on Node.js.
 The variable is read on each use and has no effect on Node.js.
 
+### Socket reads
+
+On Node.js, the client passes the `onread` socket option, so the rest of a response that spans
+several socket reads is read straight into that response's buffer. Bun ignores `onread` and emits
+`'data'` events, so the client copies each chunk into the buffer instead. Responses are the same on
+both runtimes.
+
 ### Compression workers
 
 Snappy and LZ4 run on a `worker_threads` pool on both runtimes. Bun ignores worker

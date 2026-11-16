@@ -82,16 +82,24 @@ export class PartitionPipeline {
   }
 
   /**
-   * Replaces the assignment. Every partition's next fetch starts from its position, and unsettled
-   * batches stop counting, so a batch that was never settled cannot hold a partition back for good.
+   * Replaces the assignment. A retained partition keeps its fetch state, like its offsets in the
+   * offset tracker: its unsettled batches still settle, so its next fetch can continue after them.
+   * Every other partition's next fetch starts from its position, and its unsettled batches stop
+   * counting, so a batch counted under an earlier assignment cannot hold it back.
    */
   assign(topicPartitions: readonly TopicPartitions[]): void {
     this.#subscriptionState.assign(topicPartitions);
-    for (const states of this.#states.values()) {
+    const assignedPartitionsByTopic = new Map(
+      topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)] as const),
+    );
+    for (const [topic, states] of this.#states) {
+      const assignedPartitions = assignedPartitionsByTopic.get(topic);
       for (const state of states.values()) {
+        state.isPaused = this.#subscriptionState.isPaused(topic, state.partition);
+        if (state.isAssigned && assignedPartitions?.has(state.partition) === true) continue;
+
         state.isAssigned = false;
         state.unsettledBatches = 0;
-        state.isPaused = this.#subscriptionState.isPaused(state.topic, state.partition);
         this.#resetPrefetch(state);
       }
     }

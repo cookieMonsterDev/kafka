@@ -1,4 +1,4 @@
-import { defineRequestFamily, type VersionFactories } from '../index';
+import { defineRequestFamily, type VersionFactories, type VersionResponse } from '../index';
 import { KAFKA_APIS } from '../kafka-apis';
 import { initProducerIdRequestV0 } from './v0/request';
 import { initProducerIdResponseV0 } from './v0/response';
@@ -43,6 +43,9 @@ const VERSIONS = {
     response: initProducerIdResponseV4,
   }),
 } satisfies VersionFactories<InitProducerIdOptions>;
+
+/** An InitProducerId response, for every version. */
+export type InitProducerIdResponse = VersionResponse<typeof VERSIONS>;
 
 /**
  * Kafka 2.4 advertised InitProducerId maxVersion=2 where v2 was the first flexible version

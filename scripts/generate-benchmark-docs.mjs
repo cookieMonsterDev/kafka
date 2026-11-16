@@ -10,7 +10,8 @@
 //   2. Writes the whole page, `packages/docs/src/content/docs/core/reference/benchmarks.md`: the setup
 //      (payloads, record counts, wire settings, environment), then one ```chart block (ApexCharts options
 //      as JSON, rendered by `packages/docs/src/lib/rehype-chart.ts`) and one table per entry in `CHARTS`,
-//      with both payloads side by side. Change the page here, not in the Markdown file.
+//      with both payloads side by side, and last the install-size table, which compares nothing. Change
+//      the page here, not in the Markdown file.
 //
 // Usage:
 //   node scripts/generate-benchmark-docs.mjs --competitors <session dir> --core <session dir>
@@ -32,13 +33,21 @@ import { parseArgs } from 'node:util';
 import { createRecordPool, headerValueBytes, payloadShapes } from '../benchmarks/client/payload.ts';
 import { payloadSeed, scenarioIds, scenarios as scenarioDefinitions } from '../benchmarks/client/spec.ts';
 import { effectiveNoiseFloor, findClearBest, summarize, summarySchemaVersion } from '../benchmarks/runner/aggregate.ts';
+import { formatNativeAddon } from '../benchmarks/runner/report.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
 const PAGE_PATH = join(ROOT, 'packages/docs/src/content/docs/core/reference/benchmarks.md');
 const BENCHMARKS_README_URL = 'https://github.com/cookieMonsterDev/kafka/blob/develop/benchmarks/README.md';
+const COMPATIBILITY_PAGE_URL = '../compatibility/';
+
+/**
+ * What each client implements, for the install-size section. Checked against the installed packages of
+ * the competitor versions pinned in `benchmarks/package.json`; re-check it when one of them is bumped.
+ */
+const CLIENT_COVERAGE = `kafka-core implements KIP-848 consumer groups, KIP-932 share groups and transactions (see [Compatibility](${COMPATIBILITY_PAGE_URL})), Platformatic and Confluent's client implement KIP-848 and transactions but not share groups, KafkaJS implements transactions but neither KIP-848 nor share groups, and Confluent's client bundles librdkafka as a native addon`;
 const NEW_ISSUE_URL = 'https://github.com/cookieMonsterDev/kafka/issues/new/choose';
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 /** Payloads in page order: the headline first. `id` is the runner's `--payload` value. */
 const PAYLOADS = [
@@ -67,8 +76,8 @@ const METRICS = {
   latencyP99Ms: { unit: 'ms', axisTitle: 'milliseconds', decimals: 3 },
   firstAckedProduceMs: { unit: 'ms', axisTitle: 'milliseconds from process start', decimals: 1 },
   peakMemoryBytes: { unit: 'MiB', axisTitle: 'MiB (peak container memory)', decimals: 0, divisor: MEBIBYTE },
-  installBytes: { unit: 'MB', axisTitle: 'megabytes (1 MB = 1,000,000 bytes)', decimals: 0, divisor: 1_000_000 },
 };
+const MEGABYTE = 1_000_000;
 
 /**
  * Every chart on the page, in page order. `id` is the SVG file name, `section` the page's `##` heading,
@@ -210,16 +219,6 @@ const CHARTS = [
     metric: 'peakMemoryBytes',
     better: 'lower',
     description: 'Peak container memory while consuming in batches, under a 2 GiB limit.',
-  },
-  {
-    id: 'install-size',
-    section: 'Install size',
-    name: 'Install size',
-    scenario: 'F1',
-    profile: null,
-    metric: 'installBytes',
-    better: 'lower',
-    description: 'Size of the package and its production dependencies as installed.',
   },
 ];
 
@@ -408,16 +407,15 @@ function declaredGaps(chart, sources) {
 function buildFootprints(sources) {
   return CLIENTS.map(({ id }) => {
     for (const [source, session] of sessionCandidates(id, sources)) {
-      const footprint = session.summary.footprints.find((entry) => entry.client === id);
-      if (footprint === undefined || footprint.installBytes === null) continue;
+      const footprint = session.summary.footprints?.find((entry) => entry.client === id);
+      if (footprint === undefined || footprint.required === null) continue;
       return {
         client: id,
         status: 'ok',
         packageName: footprint.packageName,
         version: footprint.version,
-        installBytes: footprint.installBytes,
-        dependencyCount: footprint.dependencyCount,
-        hasNativeAddon: footprint.hasNativeAddon,
+        required: footprint.required,
+        optional: footprint.optional,
         source,
         sessionId: session.summary.sessionId,
         ...(id === CORE_CLIENT_ID ? { coreSha: session.summary.manifest.core.sha } : {}),
@@ -499,7 +497,7 @@ function buildDataset(sources) {
       );
     }
   }
-  const charts = CHARTS.filter((chart) => chart.scenario !== 'F1').map((chart) => ({
+  const charts = CHARTS.map((chart) => ({
     id: chart.id,
     scenario: chart.scenario,
     profile: chart.profile,
@@ -569,7 +567,6 @@ function formatChartValue(value, metric) {
     return scaled.toFixed(0);
   }
   if (metric === 'peakMemoryBytes' || metric === 'firstAckedProduceMs') return `${scaled.toFixed(0)} ${unit}`;
-  if (metric === 'installBytes') return `${scaled.toFixed(1)} ${unit}`;
   return `${scaled.toFixed(2)} ${unit}`;
 }
 
@@ -644,26 +641,11 @@ function chartData(chart, dataset) {
 
 /** Whether the dataset has anything to show for the chart: a value, or runs that failed. */
 function hasResults(chart, dataset) {
-  if (chart.scenario === 'F1') return dataset.footprints.some((footprint) => footprint.status === 'ok');
   return chartData(chart, dataset).cells.some((cell) => isMeasured(cell) || cell.status === 'failed');
 }
 
-/** Rows of one chart, grouped by runtime (or one group for install size). */
+/** Rows of one chart, grouped by runtime. */
 function chartGroups(chart, dataset) {
-  if (chart.scenario === 'F1') {
-    return [
-      {
-        label: 'Package and production dependencies',
-        rows: dataset.footprints.map((footprint) => ({
-          ...footprint,
-          median: footprint.installBytes,
-          min: footprint.installBytes,
-          max: footprint.installBytes,
-          cv: 0,
-        })),
-      },
-    ];
-  }
   return RUNTIMES.map((runtime) => ({
     label: runtimeLabel(runtime.id),
     rows: chartData(chart, dataset).cells.filter((cell) => cell.runtime === runtime.id),
@@ -676,12 +658,9 @@ function markdownTable(header, rows) {
   return [line(header), `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`, ...rows.map(line)].join('\n');
 }
 
-/** The comparison rule for a chart; install size is one exact measurement per client, so any gap counts. */
 function comparisonRule(chart, dataset) {
-  const isLowerBetter = chart.better === 'lower';
-  if (chart.scenario === 'F1') return { noiseThresholdCv: 0, noiseFloor: 0, isLowerBetter };
   const { noiseThresholdCv, noiseFloor } = chartData(chart, dataset);
-  return { noiseThresholdCv, noiseFloor, isLowerBetter };
+  return { noiseThresholdCv, noiseFloor, isLowerBetter: chart.better === 'lower' };
 }
 
 /** Per group, the client the comparison rule puts ahead of every other one, or "no clear highest/lowest". */
@@ -698,7 +677,7 @@ function bestPerGroupText(chart, dataset) {
         best === null
           ? noClearBestText
           : `${clientLabel(best.client)} (${formatChartValue(best.median, chart.metric)}${unitSuffix})`;
-      return chart.scenario === 'F1' ? text : `${group.label}: ${text}`;
+      return `${group.label}: ${text}`;
     })
     .join(', ');
 }
@@ -707,9 +686,7 @@ function bestPerGroupText(chart, dataset) {
 function chartSubtitle(chart, dataset) {
   const rows = chartGroups(chart, dataset).flatMap((group) => group.rows);
   const parts = [
-    chart.scenario === 'F1'
-      ? 'Draft. One measurement per client.'
-      : `Draft. ${payloadLabel(dataset.payload)} values, median of ${dataset.sessions.competitors.repetitions} runs.`,
+    `Draft. ${payloadLabel(dataset.payload)} values, median of ${dataset.sessions.competitors.repetitions} runs.`,
   ];
   if (rows.some((row) => isEarlierCoreBuild(row, dataset))) parts.push('kafka-core: earlier build.');
   return parts.join(' ');
@@ -741,19 +718,16 @@ function chartBlock(chart, dataset) {
   }));
   const bestLabel = chart.better === 'higher' ? 'Highest' : 'Lowest';
   const largestValue = Math.max(...series.flatMap((entry) => entry.data).filter((value) => value !== null));
-  const subject =
-    chart.scenario === 'F1'
-      ? `${chart.name.toLowerCase()} by client`
-      : `${chart.name.toLowerCase()} with ${payloadLabel(dataset.payload)} values by runtime and client`;
+  const subject = `${chart.name.toLowerCase()} with ${payloadLabel(dataset.payload)} values by runtime and client`;
   const options = {
     description: `Bar chart of ${subject}, ${chart.better} is better. ${bestLabel}: ${bestPerGroupText(chart, dataset)}. The table below lists every value.`,
-    chart: { type: 'bar', height: groups.length === 1 ? 240 : 420 },
+    chart: { type: 'bar', height: 420 },
     plotOptions: { bar: { horizontal: true, barHeight: '85%' } },
     title: { text: chartTitle(chart) },
     subtitle: { text: chartSubtitle(chart, dataset) },
     series,
     xaxis: {
-      categories: groups.map((group) => (chart.scenario === 'F1' ? 'Install size' : group.label)),
+      categories: groups.map((group) => group.label),
       title: { text: METRICS[chart.metric].axisTitle },
       max: axisMaxWithLabelRoom(largestValue),
     },
@@ -775,13 +749,6 @@ function resultCells(cell, metric) {
 /** Every value of the chart, with one median and range column pair per payload that has results. */
 function chartTable(chart, datasets) {
   const metric = METRICS[chart.metric];
-  if (chart.scenario === 'F1') {
-    const rows = datasets[0].footprints.map((footprint) => [
-      clientLabel(footprint.client),
-      footprint.status === 'ok' ? formatTableValue(footprint.installBytes, chart.metric) : 'not measured',
-    ]);
-    return markdownTable(['Client', `Install size (${metric.unit})`], rows);
-  }
   const header = ['Runtime', 'Client'];
   for (const dataset of datasets) {
     const label = payloadLabel(dataset.payload);
@@ -805,9 +772,53 @@ function chartTable(chart, datasets) {
 function chartSection(chart, comparison) {
   const datasets = orderedDatasets(comparison).filter((dataset) => hasResults(chart, dataset));
   if (datasets.length === 0) return ['Not measured in the published sessions yet.'];
-  // Install size does not depend on the payload, so it shows one session's measurement.
-  const shown = chart.scenario === 'F1' ? datasets.slice(0, 1) : datasets;
-  return [chartBlock(chart, shown[0]), '', chartTable(chart, shown)];
+  return [chartBlock(chart, datasets[0]), '', chartTable(chart, datasets)];
+}
+
+function footprintPartCells(part) {
+  return [(part.bytes / MEGABYTE).toFixed(2), String(part.dependencyCount), formatCount(part.fileCount)];
+}
+
+/**
+ * Install size as information only: no chart, verdict or winner, because a client's size follows what it
+ * implements and bundles. It does not depend on the payload, so it shows the first dataset that measured it.
+ */
+function installSizeText(comparison) {
+  const lines = [
+    '## Install size',
+    '',
+    'What installing each client adds, measured in the benchmark image. Required is the package and everything it reaches through `dependencies`; optional is what its `optionalDependencies` add, which npm and pnpm skip when they cannot be installed.',
+    '',
+    `This is information, not a ranking, because size follows what each client implements and bundles: ${CLIENT_COVERAGE}.`,
+    '',
+  ];
+  const dataset = orderedDatasets(comparison).find((entry) =>
+    entry.footprints.some((footprint) => footprint.status === 'ok'),
+  );
+  if (dataset === undefined) return [...lines, 'Not measured in the published sessions yet.'];
+  const header = [
+    'Client',
+    'Version',
+    'Required (MB)',
+    'Required dependencies',
+    'Required files',
+    'Optional (MB)',
+    'Optional dependencies',
+    'Optional files',
+    'Native addon',
+  ];
+  const rows = dataset.footprints.map((footprint) => {
+    const client = clientLabel(footprint.client);
+    if (footprint.status !== 'ok') return [client, 'not measured', ...Array(header.length - 2).fill('—')];
+    return [
+      client,
+      footprint.version ?? '—',
+      ...footprintPartCells(footprint.required),
+      ...footprintPartCells(footprint.optional),
+      formatNativeAddon(footprint),
+    ];
+  });
+  return [...lines, markdownTable(header, rows), '', 'MB is 1,000,000 bytes.'];
 }
 
 function listText(items) {
@@ -1128,7 +1139,7 @@ function renderPage(comparison) {
     if (chart.heading !== undefined) lines.push('', `### ${chart.heading}`);
     lines.push('', chart.description, '', ...chartSection(chart, comparison));
   }
-  lines.push('', ...reproduceText(comparison));
+  lines.push('', ...installSizeText(comparison), '', ...reproduceText(comparison));
   return lines.join('\n');
 }
 

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "status": "draft",
   "generator": "scripts/generate-benchmark-docs.mjs",
   "datasets": {
@@ -2552,9 +2552,18 @@
           "status": "ok",
           "packageName": "@cookiemonsterdev/kafka-core",
           "version": "2.8.1",
-          "installBytes": 2694018,
-          "dependencyCount": 5,
-          "hasNativeAddon": true,
+          "required": {
+            "bytes": 2155686,
+            "fileCount": 891,
+            "dependencyCount": 3,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 538332,
+            "fileCount": 9,
+            "dependencyCount": 2,
+            "hasNativeAddon": true
+          },
           "source": "core",
           "sessionId": "20261116123949-ba6f0ab417cf",
           "coreSha": "ba6f0ab417cf9077a2388bb32da86399f90b2d3a"
@@ -2564,9 +2573,18 @@
           "status": "ok",
           "packageName": "@platformatic/kafka",
           "version": "2.15.0",
-          "installBytes": 9077212,
-          "dependencyCount": 20,
-          "hasNativeAddon": true,
+          "required": {
+            "bytes": 4620854,
+            "fileCount": 1797,
+            "dependencyCount": 16,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 4456358,
+            "fileCount": 129,
+            "dependencyCount": 4,
+            "hasNativeAddon": true
+          },
           "source": "competitors",
           "sessionId": "20261116123949-ba6f0ab417cf"
         },
@@ -2575,9 +2593,18 @@
           "status": "ok",
           "packageName": "kafkajs",
           "version": "2.2.4",
-          "installBytes": 732117,
-          "dependencyCount": 0,
-          "hasNativeAddon": false,
+          "required": {
+            "bytes": 732117,
+            "fileCount": 391,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 0,
+            "fileCount": 0,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
           "source": "competitors",
           "sessionId": "20261116123949-ba6f0ab417cf"
         },
@@ -2586,9 +2613,18 @@
           "status": "ok",
           "packageName": "@confluentinc/kafka-javascript",
           "version": "1.11.0",
-          "installBytes": 47225478,
-          "dependencyCount": 25,
-          "hasNativeAddon": true,
+          "required": {
+            "bytes": 47225478,
+            "fileCount": 1316,
+            "dependencyCount": 25,
+            "hasNativeAddon": true
+          },
+          "optional": {
+            "bytes": 0,
+            "fileCount": 0,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
           "source": "competitors",
           "sessionId": "20261116123949-ba6f0ab417cf"
         }
@@ -5127,9 +5163,18 @@
           "status": "ok",
           "packageName": "@cookiemonsterdev/kafka-core",
           "version": "2.7.0",
-          "installBytes": 2145680,
-          "dependencyCount": 3,
-          "hasNativeAddon": false,
+          "required": {
+            "bytes": 2145680,
+            "fileCount": 891,
+            "dependencyCount": 3,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 0,
+            "fileCount": 0,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
           "source": "core",
           "sessionId": "20261113170453-7a9308c82c8d",
           "coreSha": "7a9308c82c8d9d44e23723d873c37d8bdf0b3c55"
@@ -5139,9 +5184,18 @@
           "status": "ok",
           "packageName": "@platformatic/kafka",
           "version": "2.15.0",
-          "installBytes": 9077212,
-          "dependencyCount": 20,
-          "hasNativeAddon": true,
+          "required": {
+            "bytes": 4620854,
+            "fileCount": 1797,
+            "dependencyCount": 16,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 4456358,
+            "fileCount": 129,
+            "dependencyCount": 4,
+            "hasNativeAddon": true
+          },
           "source": "competitors",
           "sessionId": "20261113170453-7a9308c82c8d"
         },
@@ -5150,9 +5204,18 @@
           "status": "ok",
           "packageName": "kafkajs",
           "version": "2.2.4",
-          "installBytes": 732117,
-          "dependencyCount": 0,
-          "hasNativeAddon": false,
+          "required": {
+            "bytes": 732117,
+            "fileCount": 391,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
+          "optional": {
+            "bytes": 0,
+            "fileCount": 0,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
           "source": "competitors",
           "sessionId": "20261113170453-7a9308c82c8d"
         },
@@ -5161,9 +5224,18 @@
           "status": "ok",
           "packageName": "@confluentinc/kafka-javascript",
           "version": "1.11.0",
-          "installBytes": 47225478,
-          "dependencyCount": 25,
-          "hasNativeAddon": true,
+          "required": {
+            "bytes": 47225478,
+            "fileCount": 1316,
+            "dependencyCount": 25,
+            "hasNativeAddon": true
+          },
+          "optional": {
+            "bytes": 0,
+            "fileCount": 0,
+            "dependencyCount": 0,
+            "hasNativeAddon": false
+          },
           "source": "competitors",
           "sessionId": "20261113170453-7a9308c82c8d"
         }

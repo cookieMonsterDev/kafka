@@ -26,6 +26,8 @@ export function createFetchManager<T extends FetchBatch>({
   prefetchMaxBytes = DEFAULT_PREFETCH_MAX_BYTES,
   getBatchBytes = estimatePrefetchBytes as (batch: T) => number,
   isStale,
+  isBatchCurrent,
+  settleBatch,
 }: {
   logger: Logger;
   getNodeIds: () => string[];
@@ -35,7 +37,12 @@ export function createFetchManager<T extends FetchBatch>({
   prefetchMaxBatches?: number;
   prefetchMaxBytes?: number;
   getBatchBytes?: (batch: T) => number;
+  /** Checked before a worker takes a batch; `true` drops it. Defaults to the inverse of `isBatchCurrent`. */
   isStale?: (batch: T) => boolean;
+  /** See {@link createFetcher}. */
+  isBatchCurrent?: (batch: T) => boolean;
+  /** See {@link createFetcher}. */
+  settleBatch?: (batch: T) => void;
 }): FetchManager<T> {
   const logger = rootLogger.namespace('FetchManager');
   const workers = seq(concurrency, (workerId) => createWorker({ handler, workerId }));
@@ -44,7 +51,7 @@ export function createFetchManager<T extends FetchBatch>({
     maxBatchesPerNode: prefetchMaxBatches,
     maxBytesPerNode: prefetchMaxBytes,
     getBatchBytes,
-    isStale,
+    isStale: isStale ?? (isBatchCurrent ? (batch) => !isBatchCurrent(batch) : undefined),
   });
 
   let fetchers: Fetcher<T>[] = [];
@@ -76,6 +83,8 @@ export function createFetchManager<T extends FetchBatch>({
           validateShouldRebalance();
           return fetch(id);
         },
+        isBatchCurrent,
+        settleBatch,
         logger,
       }),
     );

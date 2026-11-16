@@ -6,20 +6,40 @@ import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
+import type { Deadline } from '../utils/deadline';
 import { createTopicData } from './create-topic-data';
-import type { EosManager } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
-import { partitionKey } from './idempotence-ledger';
+import { partitionKey, type IdempotenceLedger } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
 import { Produce } from '../protocol/requests/produce/index';
 
+export interface TransactionTopicPartitions {
+  topic: string;
+  partitions: readonly { partition: number }[];
+}
+
+/** What a send reports to the transaction it produces into. */
+export interface OpenTransaction {
+  readonly transactionalId: string;
+  /**
+   * Partitions about to be produced. Returns a promise only when the transaction coordinator must
+   * add some of them first; otherwise `undefined`, so the send awaits nothing.
+   */
+  enrollPartitions: (topicData: readonly TransactionTopicPartitions[]) => Promise<void> | undefined;
+  /** The send failed after a possible partial write, so the transaction may only abort. */
+  sendFailed: () => void;
+}
+
 export interface SendMessagesOptions {
   logger: Logger;
   cluster: Cluster;
   partitioner: ReturnType<CustomPartitioner>;
-  eosManager: EosManager;
+  /** Producer id, epoch and sequence numbers; sequences are not tracked until it has a producer id. */
+  ledger: IdempotenceLedger;
+  /** The transaction to produce into; absent for a non-transactional producer. */
+  transaction?: OpenTransaction;
   retrier: Retrier;
   /** Shared across a producer's lifetime. Defaults to a fresh tracker. */
   nodeLatencyTracker?: NodeLatencyTracker;
@@ -33,26 +53,16 @@ export interface SendMessagesRequest {
   compression?: CompressionType;
   compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
-  /** Ends the retry cycle (the delivery deadline): no new attempt starts and queued gate waits give up. */
-  signal?: AbortSignal;
+  /** Key and value bytes of every record in `topicMessages`, counted by the caller; reported in produce metrics. */
+  bytes: number;
+  /** The delivery deadline. Once it expires, no new attempt starts and queued gate waits give up. */
+  deadline?: Deadline;
 }
 
-function payloadBytes(value: Message['key'] | Message['value']): number {
-  if (value == null) return 0;
-  if (Buffer.isBuffer(value)) return value.byteLength;
-  return Buffer.byteLength(String(value));
-}
-
-function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: number; bytes: number } {
+function recordCount(topicMessages: readonly TopicMessages[]): number {
   let records = 0;
-  let bytes = 0;
-  for (const { messages } of topicMessages) {
-    for (const message of messages) {
-      records += 1;
-      bytes += payloadBytes(message.key) + payloadBytes(message.value);
-    }
-  }
-  return { records, bytes };
+  for (const { messages } of topicMessages) records += messages.length;
+  return records;
 }
 
 /** Errors the broker returns although the records may already be on the leader's log. */
@@ -80,25 +90,24 @@ export function createSendMessages({
   logger,
   cluster,
   partitioner,
-  eosManager,
+  ledger,
+  transaction,
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
   metrics,
 }: SendMessagesOptions) {
-  const { ledger } = eosManager;
-
   return ({
     acks,
     timeout,
     compression,
     compressionLevel,
     topicMessages,
-    signal,
+    bytes,
+    deadline,
   }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
-    const produceSize = topicMessagesSize(topicMessages);
     const topicNames = topicMessages.map(({ topic }) => topic);
     /**
      * Holds this send's partition gates and sequences from its first attempt until it settles, so a
@@ -157,7 +166,7 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       if (cluster.needsMetadataRefresh()) await cluster.refreshMetadataIfNecessary();
       assignMessages();
-      const gateWait = lease.acquire(signal);
+      const gateWait = lease.acquire(deadline);
       if (gateWait) await gateWait;
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
@@ -204,8 +213,9 @@ export function createSendMessages({
       }
 
       return [...topicDataByBroker.entries()].map(async ([broker, topicData]) => {
-        if (eosManager.isTransactional()) {
-          await eosManager.addPartitionsToTransaction(topicData);
+        if (transaction) {
+          const enrolling = transaction.enrollPartitions(topicData);
+          if (enrolling) await enrolling;
         }
 
         // Without a producer id, sequences are not tracked and the encoder writes the default.
@@ -218,7 +228,7 @@ export function createSendMessages({
         const producedAt = Date.now();
         const response = await broker
           .send(Produce, {
-            transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
+            transactionalId: transaction?.transactionalId,
             producerId: ledger.getProducerId(),
             producerEpoch: ledger.getProducerEpoch(),
             acks,
@@ -275,7 +285,7 @@ export function createSendMessages({
           if (rejection) throw rejection.reason;
         }
         const collected = collectResponse();
-        const produceMetrics = { ...produceSize, retries: retryCount };
+        const produceMetrics = { records: recordCount(topicMessages), bytes, retries: retryCount };
         metrics?.recordProduce(produceMetrics);
         cluster.recordProduceMetrics?.(produceMetrics);
         return collected;
@@ -368,7 +378,7 @@ export function createSendMessages({
       }
     };
 
-    return retrier(attempt, { signal }).then(
+    return retrier(attempt, { deadline }).then(
       (metadata) => {
         lease.release();
         return metadata;
@@ -376,9 +386,8 @@ export function createSendMessages({
       (error: unknown) => {
         lease.release(ackedPartitions);
         // Some partitions may already be written inside the transaction (and KIP-890's
-        // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
-        // client's abortable error state; a later `commit()` must not keep a partial send.
-        if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
+        // TRANSACTION_ABORTABLE says so outright); a later `commit()` must not keep a partial send.
+        transaction?.sendFailed();
         throw error;
       },
     );

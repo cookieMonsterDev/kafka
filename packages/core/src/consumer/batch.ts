@@ -1,4 +1,5 @@
 import { filterAbortedMessages, type AbortedTransaction } from './filter-aborted-messages';
+import type { PartitionState } from './partition-pipeline';
 import type { KafkaMessage } from './types';
 
 export interface BatchPartitionData {
@@ -33,8 +34,19 @@ export class Batch {
   readonly rawMessages: readonly KafkaMessage[];
   readonly messagesWithinOffset: KafkaMessage[];
   readonly messages: KafkaMessage[];
+  /**
+   * The partition's fetch state when the batch came from a fetch; `null` otherwise. Always set by
+   * the constructor; optional only so `Batch`-shaped objects built elsewhere stay assignable.
+   * @internal Read and written by the consumer's fetch pipeline only.
+   */
+  readonly partitionState?: PartitionState | null;
 
-  constructor(topic: string, fetchedOffset: bigint, partitionData: BatchPartitionData) {
+  constructor(
+    topic: string,
+    fetchedOffset: bigint,
+    partitionData: BatchPartitionData,
+    partitionState: PartitionState | null = null,
+  ) {
     this.fetchedOffset = fetchedOffset;
     this.topic = topic;
     this.partition = partitionData.partition;
@@ -49,6 +61,7 @@ export class Batch {
     });
     // Handlers can mutate the public `messages`; sharing the array would change `lastOffset()`.
     this.messages = messages === this.messagesWithinOffset ? messages.slice() : messages;
+    this.partitionState = partitionState;
   }
 
   isEmpty(): boolean {

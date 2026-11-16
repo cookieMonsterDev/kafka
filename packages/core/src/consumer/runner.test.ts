@@ -10,6 +10,7 @@ import { sleep, waitFor } from '../utils/wait';
 import { Batch } from './batch';
 import { ConsumerGroup, type ConsumerGroupHandle } from './consumer-group';
 import { REBALANCING } from './instrumentation-events';
+import { PartitionPipeline, type PartitionState } from './partition-pipeline';
 import { Runner } from './runner';
 import type { EachBatchHandler, EachMessageHandler, EachMessagePayload, KafkaMessage, OnConsumeEvent } from './types';
 import { withSend } from '../broker/test-send';
@@ -57,6 +58,19 @@ describe('consumer/runner', () => {
   const topicName = 'topic-test';
   const partition = 0;
 
+  /** A pipeline with the test partition assigned, reading its position from `readPosition`. */
+  function assignedPipeline(readPosition: () => bigint | null = () => 0n): PartitionPipeline {
+    const pipeline = new PartitionPipeline({ readPosition });
+    pipeline.assign([{ topic: topicName, partitions: [partition] }]);
+    return pipeline;
+  }
+
+  function partitionState(pipeline: PartitionPipeline): PartitionState {
+    const state = pipeline.state(topicName, partition);
+    if (!state) throw new Error('expected the test partition to be assigned');
+    return state;
+  }
+
   function fakeConsumerGroup(overrides: Partial<Record<string, unknown>> = {}): ConsumerGroupHandle {
     return withSend({
       groupId: 'group',
@@ -74,10 +88,9 @@ describe('consumer/runner', () => {
       nextHeartbeatAt: Infinity,
       assigned: vi.fn(() => []),
       isLeader: vi.fn(() => true),
-      isPaused: vi.fn().mockReturnValue(false),
+      partitionPipeline: new PartitionPipeline({ readPosition: () => null }),
       pause: vi.fn(),
       resume: vi.fn(),
-      hasSeekOffset: vi.fn().mockReturnValue(false),
       recoverRejectedMember: vi.fn(async () => undefined),
       position: vi.fn(() => null),
       ...overrides,
@@ -271,10 +284,20 @@ describe('consumer/runner', () => {
     const prefetched = new Promise<void>((resolve) => {
       releasePrefetch = resolve;
     });
-    const batchFromZero = () =>
-      new Batch(topicName, 0n, { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] });
+    const pipeline = assignedPipeline(() => position);
+    const batchFromZero = (): Batch => {
+      const batch = new Batch(
+        topicName,
+        0n,
+        { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] },
+        partitionState(pipeline),
+      );
+      pipeline.track(batch);
+      return batch;
+    };
     const consumerGroup = fakeConsumerGroup(
       withSend({
+        partitionPipeline: pipeline,
         getNodeIds: vi.fn(() => ['1']),
         // The second fetch is issued while the first batch is in flight, so it still reads from 0
         // and only returns once that batch has been processed.
@@ -290,7 +313,6 @@ describe('consumer/runner', () => {
           position = offset + 1n;
           if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
         }),
-        position: vi.fn(() => position),
       }),
     );
     const seenOffsets: bigint[] = [];
@@ -312,31 +334,27 @@ describe('consumer/runner', () => {
   });
 
   it('keeps a seek pending for a partition still being processed so the worker stops at it', async () => {
-    const pendingSeeks = new Set<string>();
+    const pipeline = assignedPipeline();
     const consumerGroup = fakeConsumerGroup(
       withSend({
+        partitionPipeline: pipeline,
         getNodeIds: vi.fn(() => ['1']),
-        // Mirrors ConsumerGroup.fetch: applying (popping) every pending seek it is allowed to.
+        // Mirrors ConsumerGroup.fetch: applying every pending seek it is allowed to.
         fetch: vi
           .fn()
           .mockResolvedValueOnce([
-            new Batch(topicName, 0n, {
-              partition,
-              highWatermark: 3n,
-              messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)],
-            }),
+            new Batch(
+              topicName,
+              0n,
+              { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)] },
+              partitionState(pipeline),
+            ),
           ])
-          .mockImplementation(
-            async (
-              _nodeId: string,
-              options?: { isProcessing?: (topic: string, partition: number) => boolean },
-            ): Promise<Batch[]> => {
-              if (!options?.isProcessing?.(topicName, partition)) pendingSeeks.clear();
-              await new Promise((resolve) => setTimeout(resolve, 1));
-              return [];
-            },
-          ),
-        hasSeekOffset: vi.fn(() => pendingSeeks.size > 0),
+          .mockImplementation(async (): Promise<Batch[]> => {
+            await pipeline.applyPendingSeeks([{ topic: topicName, partitions: [partition] }], async () => undefined);
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            return [];
+          }),
       }),
     );
     const seenOffsets: bigint[] = [];
@@ -348,7 +366,7 @@ describe('consumer/runner', () => {
       eachMessage: async ({ message }) => {
         seenOffsets.push(message.offset);
         if (message.offset === 0n) {
-          pendingSeeks.add('seek');
+          pipeline.seek({ topic: topicName, partition, offset: 0n });
           const fetchCalls = vi.mocked(consumerGroup.fetch).mock.calls.length;
           await waitFor(() => vi.mocked(consumerGroup.fetch).mock.calls.length > fetchCalls + 1);
         }
@@ -828,12 +846,13 @@ describe('consumer/runner', () => {
   });
 
   describe('eachMessage loop', () => {
-    const threeMessages = (): Batch =>
-      new Batch(topicName, 0n, {
-        partition,
-        highWatermark: 5n,
-        messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)],
-      });
+    const threeMessages = (state: PartitionState | null = null): Batch =>
+      new Batch(
+        topicName,
+        0n,
+        { partition, highWatermark: 5n, messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)] },
+        state,
+      );
 
     async function startRunner(consumerGroup: ConsumerGroupHandle, eachMessage: EachMessageHandler): Promise<Runner> {
       const started = new Runner({
@@ -854,12 +873,10 @@ describe('consumer/runner', () => {
     }
 
     it('stops after the message whose handler pauses the partition', async () => {
-      let paused = false;
+      const pipeline = assignedPipeline();
       const consumerGroup = fakeConsumerGroup({
-        pause: vi.fn(() => {
-          paused = true;
-        }),
-        isPaused: vi.fn(() => paused),
+        partitionPipeline: pipeline,
+        pause: vi.fn((topicPartitions: { topic: string; partitions?: number[] }[]) => pipeline.pause(topicPartitions)),
       });
       const seen: bigint[] = [];
       runner = await startRunner(consumerGroup, async ({ message, pause }) => {
@@ -867,7 +884,7 @@ describe('consumer/runner', () => {
         if (message.offset === 2n) pause();
       });
 
-      await runner.handleBatch(threeMessages());
+      await runner.handleBatch(threeMessages(partitionState(pipeline)));
 
       expect(seen).toEqual([1n, 2n]);
       expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
@@ -875,19 +892,18 @@ describe('consumer/runner', () => {
     });
 
     it('stops before the next message once the handler seeks the partition', async () => {
-      let hasSeek = false;
-      const consumerGroup = fakeConsumerGroup({ hasSeekOffset: vi.fn(() => hasSeek) });
+      const pipeline = assignedPipeline();
+      const consumerGroup = fakeConsumerGroup({ partitionPipeline: pipeline });
       const seen: bigint[] = [];
       runner = await startRunner(consumerGroup, async ({ message }) => {
         seen.push(message.offset);
-        hasSeek = true;
+        pipeline.seek({ topic: topicName, partition, offset: 0n });
       });
 
-      await runner.handleBatch(threeMessages());
+      await runner.handleBatch(threeMessages(partitionState(pipeline)));
 
       expect(seen).toEqual([1n]);
       expect(resolvedOffsets(consumerGroup)).toEqual([1n]);
-      expect(consumerGroup.hasSeekOffset).toHaveBeenCalledWith({ topic: topicName, partition });
     });
 
     it('hands every message the same heartbeat callback, which heartbeats the group', async () => {
@@ -979,12 +995,10 @@ describe('consumer/runner', () => {
     });
 
     it('does not resolve past trailing control records when the handler pauses the partition', async () => {
-      let paused = false;
+      const pipeline = assignedPipeline();
       const consumerGroup = fakeConsumerGroup({
-        pause: vi.fn(() => {
-          paused = true;
-        }),
-        isPaused: vi.fn(() => paused),
+        partitionPipeline: pipeline,
+        pause: vi.fn((topicPartitions: { topic: string; partitions?: number[] }[]) => pipeline.pause(topicPartitions)),
       });
       runner = await startRunner(consumerGroup, async ({ message, pause }) => {
         if (message.offset === 2n) pause();
@@ -992,11 +1006,12 @@ describe('consumer/runner', () => {
 
       const controlRecord = { ...kafkaMessage(4n), isControlRecord: true };
       await runner.handleBatch(
-        new Batch(topicName, 0n, {
-          partition,
-          highWatermark: 5n,
-          messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord],
-        }),
+        new Batch(
+          topicName,
+          0n,
+          { partition, highWatermark: 5n, messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord] },
+          partitionState(pipeline),
+        ),
       );
 
       expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
@@ -1179,11 +1194,10 @@ describe('consumer/runner', () => {
 
       await runner.fetch('1');
 
-      // `Runner#fetch` only forwards the node id (plus the in-flight partition check for seeks):
-      // `maxRecords` never reaches the Fetch request, so the wire-level `maxBytes`/
-      // `maxBytesPerPartition` configured on the consumer group (owned by `ConsumerGroup`, not
-      // `Runner`) are never altered by it.
-      expect(consumerGroup.fetch).toHaveBeenCalledWith('1', { isProcessing: expect.any(Function) });
+      // `Runner#fetch` only forwards the node id: `maxRecords` never reaches the Fetch request,
+      // so the wire-level `maxBytes`/`maxBytesPerPartition` configured on the consumer group
+      // (owned by `ConsumerGroup`, not `Runner`) are never altered by it.
+      expect(consumerGroup.fetch).toHaveBeenCalledWith('1');
       expect(consumerGroup.fetch).toHaveBeenCalledTimes(1);
     });
   });

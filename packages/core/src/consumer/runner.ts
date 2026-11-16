@@ -42,10 +42,6 @@ export interface RunnerOptions {
   maxRecords?: number;
 }
 
-function processingKey(topic: string, partition: number): string {
-  return `${topic}\0${partition}`;
-}
-
 function sliceMessages<T>(items: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
   for (let i = 0; i < items.length; i += size) {
@@ -101,8 +97,6 @@ export class Runner extends EventEmitter {
   #consuming = false;
   #starting = false;
   #stopPromise: Promise<void> | null = null;
-  /** Partitions a worker is handling right now; a pending seek on one waits until it is released. */
-  readonly #processingPartitions = new Set<string>();
 
   constructor({
     logger,
@@ -139,30 +133,21 @@ export class Runner extends EventEmitter {
       getNodeIds: () => this.consumerGroup.getNodeIds(),
       fetch: (nodeId) => this.fetch(nodeId),
       handler: async (batch) => {
-        const key = processingKey(batch.topic, batch.partition);
-        this.#processingPartitions.add(key);
+        const { partitionPipeline } = this.consumerGroup;
+        partitionPipeline.beginProcessing(batch);
         try {
           await this.handleBatch(batch);
         } finally {
-          this.#processingPartitions.delete(key);
+          partitionPipeline.endProcessing(batch);
         }
       },
       concurrency,
       prefetchMaxBatches,
       prefetchMaxBytes,
       getBatchBytes: (batch) => estimatePrefetchBytes(batch),
-      isStale: (batch) => this.isStaleBatch(batch),
+      isBatchCurrent: (batch) => this.consumerGroup.partitionPipeline.isBatchCurrent(batch),
+      settleBatch: (batch) => this.consumerGroup.partitionPipeline.settle(batch),
     });
-  }
-
-  /**
-   * A prefetch issued while the partition's previous batch was still in flight reads from the
-   * old position; once that batch has been processed, its records would be delivered twice.
-   */
-  isStaleBatch({ topic, partition, fetchedOffset }: Batch): boolean {
-    if (this.consumerGroup.hasSeekOffset({ topic, partition })) return true;
-    const position = this.consumerGroup.position(topic, partition);
-    return position != null && position !== fetchedOffset;
   }
 
   get consuming(): boolean {
@@ -351,11 +336,10 @@ export class Runner extends EventEmitter {
   }
 
   async processEachMessage(batch: Batch): Promise<void> {
-    const { topic, partition } = batch;
+    const { topic, partition, partitionState } = batch;
     const eachMessage = this.eachMessage;
     if (!eachMessage) return;
 
-    const topicPartition = { topic, partition };
     const pause = (): (() => void) => {
       this.consumerGroup.pause([{ topic, partitions: [partition] }]);
       return () => this.consumerGroup.resume([{ topic, partitions: [partition] }]);
@@ -372,7 +356,7 @@ export class Runner extends EventEmitter {
 
     for (const message of batch.messages) {
       // Checked before every message: the handler, or anything else, may seek this partition.
-      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset(topicPartition)) {
+      if (!this.running || this.shuttingDown || partitionState?.pendingSeek != null) {
         return;
       }
 
@@ -407,7 +391,7 @@ export class Runner extends EventEmitter {
       if (heartbeatDue) await heartbeatDue;
 
       // Checked after every message: the handler may pause through `pause()` or `consumer.pause()`.
-      if (this.consumerGroup.isPaused(topic, partition)) {
+      if (partitionState?.isPaused === true) {
         return;
       }
 
@@ -425,14 +409,14 @@ export class Runner extends EventEmitter {
       handledMessages === batch.messages.length &&
       lastMessage &&
       lastOffset > lastMessage.offset &&
-      !this.consumerGroup.hasSeekOffset(topicPartition)
+      partitionState?.pendingSeek == null
     ) {
       this.consumerGroup.resolveOffset({ topic, partition, offset: lastOffset });
     }
   }
 
   async processEachBatch(batch: Batch): Promise<void> {
-    const { topic, partition } = batch;
+    const { topic, partition, partitionState } = batch;
     const eachBatch = this.eachBatch;
     if (!eachBatch) return;
 
@@ -455,7 +439,7 @@ export class Runner extends EventEmitter {
       const slice = slices[i]!;
       const isLastSlice = i === slices.length - 1;
 
-      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
+      if (!this.running || this.shuttingDown || partitionState?.pendingSeek != null) {
         break;
       }
 
@@ -487,7 +471,7 @@ export class Runner extends EventEmitter {
           },
           uncommittedOffsets: () => this.consumerGroup.uncommittedOffsets(),
           isRunning: () => this.running && !this.shuttingDown,
-          isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
+          isStale: () => partitionState?.pendingSeek != null,
         });
       } catch (e) {
         if (!isKafkaError(e)) {
@@ -535,11 +519,7 @@ export class Runner extends EventEmitter {
     const startFetch = Date.now();
     this.instrumentationEmitter.emit(FETCH_START, { nodeId });
 
-    // Applying a seek while its partition is mid-batch would hide it from the worker, which then
-    // keeps resolving offsets past it; leave it pending so the worker stops first.
-    const batches = await this.consumerGroup.fetch(nodeId, {
-      isProcessing: (topic, partition) => this.#processingPartitions.has(processingKey(topic, partition)),
-    });
+    const batches = await this.consumerGroup.fetch(nodeId);
 
     this.instrumentationEmitter.emit(FETCH, {
       // Always 0: fetchers deliver batches asynchronously, so a count isn't available here.

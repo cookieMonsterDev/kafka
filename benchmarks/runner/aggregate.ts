@@ -6,7 +6,7 @@ import type { ClientId, Profile, RunRecord, RuntimeId, ScenarioId, ScenarioKind 
 import { readJson, sessionPaths, writeJson } from './session.ts';
 import type { EnvironmentReport, Footprint, SessionManifest, SupportMatrix } from './types.ts';
 
-export const summarySchemaVersion = 2;
+export const summarySchemaVersion = 3;
 
 /** Coefficient of variation above which a cell is flagged `noisy`; replace it with the calibrated value. */
 export const defaultNoiseThresholdCv = 0.05;
@@ -353,6 +353,18 @@ async function readJsonIfPresent<T>(path: string): Promise<T | null> {
   }
 }
 
+/**
+ * The session's F1 footprints. A session recorded before F1 split required and optional dependencies has
+ * only totals, which F1 no longer reports, so its footprints are left out.
+ */
+async function readSplitFootprints(path: string): Promise<Footprint[] | null> {
+  const footprints = await readJsonIfPresent<Footprint[]>(path);
+  if (footprints === null || !footprints.every((footprint) => 'required' in footprint)) {
+    return null;
+  }
+  return footprints;
+}
+
 export async function readRunRecords(sessionDir: string): Promise<RunRecord[]> {
   const { runsDir } = sessionPaths(sessionDir);
   const names = (await readdir(runsDir)).filter((name) => name.endsWith('.json')).sort();
@@ -444,7 +456,7 @@ export async function aggregateSession(sessionDir: string, options: AggregateOpt
     manifest,
     environment: await readJsonIfPresent<EnvironmentReport>(paths.environment),
     supportMatrix: await readJsonIfPresent<SupportMatrix>(paths.supportMatrix),
-    footprints: await readJsonIfPresent<Footprint[]>(paths.footprint),
+    footprints: await readSplitFootprints(paths.footprint),
     noiseThresholdCv,
     noiseFloor,
     aaNoiseFloors,

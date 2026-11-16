@@ -8,7 +8,6 @@ import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { MemberAssignment } from './assigner-protocol';
 import type { Batch } from './batch';
 import { ConsumerGroup, nextAdaptiveMaxBytes, type ConsumerGroupOptions } from './consumer-group';
-import { isFetchBatchCurrent, settleFetchBatch } from './fetcher';
 import { GROUP_JOIN } from './instrumentation-events';
 import type { OffsetTracker } from './offset-manager/offset-tracker';
 import type { TopicOffsetConfiguration } from './offset-reset';
@@ -128,7 +127,7 @@ describe('consumer/consumer-group', () => {
     };
     const consumerGroup = createGroup({ cluster });
     consumerGroup.assigners = [assigner];
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     const groupJoins: unknown[] = [];
     consumerGroup.instrumentationEmitter.addListener(GROUP_JOIN, (event) => groupJoins.push(event));
     const onPartitionsRevoked = vi.fn();
@@ -183,7 +182,7 @@ describe('consumer/consumer-group', () => {
     };
     const consumerGroup = createGroup({ cluster });
     consumerGroup.assigners = [assigner];
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     const callOrder: string[] = [];
     const onPartitionsRevoked = vi.fn(() => {
       callOrder.push('revoked');
@@ -273,7 +272,7 @@ describe('consumer/consumer-group', () => {
         protocol: vi.fn(() => ({ name: 'eager', metadata: Buffer.alloc(0) })),
       },
     ];
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     consumerGroup.onPartitionsRevoked = vi.fn(() => {
       throw new Error('boom from onPartitionsRevoked');
     });
@@ -320,7 +319,7 @@ describe('consumer/consumer-group', () => {
       autoCommitThreshold: null,
       retry: { retries: 0 },
     });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0, 1] }]);
     const onPartitionsRevoked = vi.fn();
     const onPartitionsLost = vi.fn();
     consumerGroup.onPartitionsRevoked = onPartitionsRevoked;
@@ -931,7 +930,7 @@ describe('consumer/consumer-group', () => {
       autoCommitInterval: null,
       autoCommitThreshold: null,
     });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
     const seek = vi.fn(async () => undefined);
     consumerGroup.offsetTracker = {
       hasCommittedOffset: () => true,
@@ -978,7 +977,7 @@ describe('consumer/consumer-group', () => {
     } as unknown as Cluster;
 
     const consumerGroup = createGroup({ cluster });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
     consumerGroup.offsetTracker = {
       hasCommittedOffset: () => true,
       nextOffset: () => 100n,
@@ -1022,7 +1021,7 @@ describe('consumer/consumer-group', () => {
       autoCommitInterval: null,
       autoCommitThreshold: null,
     });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
     consumerGroup.offsetTracker = {
       hasCommittedOffset: () => true,
       nextOffset: () => 100n,
@@ -1074,7 +1073,7 @@ describe('consumer/consumer-group', () => {
       autoCommitInterval: null,
       autoCommitThreshold: null,
     });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
     const seek = vi.fn(async () => undefined);
     consumerGroup.offsetTracker = {
       hasCommittedOffset: () => true,
@@ -1177,29 +1176,6 @@ describe('consumer/consumer-group', () => {
     });
   });
 
-  it('caches getActiveTopicPartitions until pause, resume, or assign', () => {
-    const consumerGroup = createGroup();
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
-
-    const first = consumerGroup.getActiveTopicPartitions();
-    const second = consumerGroup.getActiveTopicPartitions();
-    expect(first).toBe(second);
-    expect([...(first.topic1 ?? [])]).toEqual([0, 1]);
-
-    consumerGroup.pause([{ topic: 'topic1', partitions: [1] }]);
-    const paused = consumerGroup.getActiveTopicPartitions();
-    expect(paused).not.toBe(first);
-    expect([...(paused.topic1 ?? [])]).toEqual([0]);
-
-    const pausedAgain = consumerGroup.getActiveTopicPartitions();
-    expect(pausedAgain).toBe(paused);
-
-    consumerGroup.resume([{ topic: 'topic1', partitions: [1] }]);
-    const resumed = consumerGroup.getActiveTopicPartitions();
-    expect(resumed).not.toBe(paused);
-    expect([...(resumed.topic1 ?? [])]).toEqual([0, 1]);
-  });
-
   it('sleeps the short empty-node interval instead of maxWaitTime', async () => {
     vi.useFakeTimers();
     const consumerGroup = new ConsumerGroup({
@@ -1228,7 +1204,7 @@ describe('consumer/consumer-group', () => {
       autoCommitInterval: null,
       autoCommitThreshold: null,
     });
-    consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+    consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
     consumerGroup.pause([{ topic: 'topic1' }]);
     consumerGroup.offsetTracker = {
       hasCommittedOffset: () => true,
@@ -1323,7 +1299,7 @@ describe('consumer/consumer-group', () => {
         autoCommitInterval: null,
         autoCommitThreshold: null,
       });
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
       consumerGroup.offsetTracker = {
         hasCommittedOffset: () => true,
         nextOffset: () => position,
@@ -1378,7 +1354,7 @@ describe('consumer/consumer-group', () => {
         expect(isDone).toBe(false);
 
         setPosition(2n);
-        settleFetchBatch(first);
+        consumerGroup.partitionPipeline.settle(first);
         await expect(waiting).resolves.toEqual([]);
         await fetchOne(consumerGroup);
 
@@ -1394,10 +1370,10 @@ describe('consumer/consumer-group', () => {
       const first = await fetchOne(consumerGroup);
       const second = await fetchOne(consumerGroup);
       setPosition(2n);
-      settleFetchBatch(first);
+      consumerGroup.partitionPipeline.settle(first);
       await fetchOne(consumerGroup);
       setPosition(4n);
-      settleFetchBatch(second);
+      consumerGroup.partitionPipeline.settle(second);
 
       // The newest batch is still buffered, so the next fetch continues after it.
       await fetchOne(consumerGroup);
@@ -1409,7 +1385,7 @@ describe('consumer/consumer-group', () => {
 
       const first = await fetchOne(consumerGroup);
       setPosition(2n);
-      settleFetchBatch(first);
+      consumerGroup.partitionPipeline.settle(first);
       setPosition(7n);
       await fetchOne(consumerGroup);
 
@@ -1422,7 +1398,7 @@ describe('consumer/consumer-group', () => {
       const first = await fetchOne(consumerGroup);
       await fetchOne(consumerGroup);
       setPosition(1n);
-      settleFetchBatch(first);
+      consumerGroup.partitionPipeline.settle(first);
       await fetchOne(consumerGroup);
 
       expect(fetchOffsets()).toEqual([0n, 2n, 1n]);
@@ -1465,9 +1441,9 @@ describe('consumer/consumer-group', () => {
       const { consumerGroup } = createPrefetchGroup();
 
       const batch = await fetchOne(consumerGroup);
-      expect(isFetchBatchCurrent(batch)).toBe(true);
+      expect(consumerGroup.partitionPipeline.isBatchCurrent(batch)).toBe(true);
       consumerGroup.pause([{ topic: 'topic1', partitions: [0] }]);
-      expect(isFetchBatchCurrent(batch)).toBe(false);
+      expect(consumerGroup.partitionPipeline.isBatchCurrent(batch)).toBe(false);
     });
 
     it('does not continue after an empty batch', async () => {
@@ -1483,7 +1459,7 @@ describe('consumer/consumer-group', () => {
       const { consumerGroup, requestedMaxBytes } = createPrefetchGroup({ messagesPerFetch: 0 });
 
       for (let index = 0; index < 12; index++) {
-        settleFetchBatch(await fetchOne(consumerGroup));
+        consumerGroup.partitionPipeline.settle(await fetchOne(consumerGroup));
       }
 
       expect(requestedMaxBytes()[0]).toBe(8192);
@@ -1561,7 +1537,7 @@ describe('consumer/consumer-group', () => {
         autoCommitInterval: null,
         autoCommitThreshold: null,
       });
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0, 1] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0, 1] }]);
       consumerGroup.offsetTracker = {
         hasCommittedOffset: () => true,
         nextOffset: (_topic: string, partition: number) => positions.get(partition) ?? 0n,
@@ -1590,7 +1566,7 @@ describe('consumer/consumer-group', () => {
     async function holdBackPartition0(consumerGroup: ConsumerGroup): Promise<{ first: Batch }> {
       const batches = [...(await consumerGroup.fetch('1')), ...(await consumerGroup.fetch('1'))];
       for (const batch of batches) {
-        if (batch.partition === 1) settleFetchBatch(batch);
+        if (batch.partition === 1) consumerGroup.partitionPipeline.settle(batch);
       }
       const first = batches.find((batch) => batch.partition === 0);
       if (!first) throw new Error('expected a partition 0 batch');
@@ -1643,7 +1619,7 @@ describe('consumer/consumer-group', () => {
         const [empty] = await waiting;
         expect(empty?.partition).toBe(1);
         expect(empty?.isEmpty()).toBe(true);
-        if (empty) settleFetchBatch(empty);
+        if (empty) consumerGroup.partitionPipeline.settle(empty);
         expect(requests()[2]).toEqual({ maxWaitTime: 0, partitions: [1] });
       } finally {
         vi.useRealTimers();
@@ -1662,7 +1638,7 @@ describe('consumer/consumer-group', () => {
         expect(state.isDone).toBe(false);
 
         setPosition(0, 2n);
-        settleFetchBatch(first);
+        consumerGroup.partitionPipeline.settle(first);
         await waiting;
         expect(state.isDone).toBe(true);
 
@@ -1682,7 +1658,7 @@ describe('consumer/consumer-group', () => {
 
         onFetch = () => {
           setPosition(0, 2n);
-          settleFetchBatch(first);
+          consumerGroup.partitionPipeline.settle(first);
         };
         const state = { isDone: false };
         const waiting = markDone(consumerGroup.fetch('1'), state);
@@ -1718,7 +1694,7 @@ describe('consumer/consumer-group', () => {
   describe('position', () => {
     it('returns the offset tracker next offset for an assigned partition', () => {
       const consumerGroup = createGroup();
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
       consumerGroup.offsetTracker = {
         nextOffset: vi.fn(() => 42n),
       } as unknown as OffsetTracker;
@@ -1728,7 +1704,7 @@ describe('consumer/consumer-group', () => {
 
     it('returns null for a partition that is not currently assigned', () => {
       const consumerGroup = createGroup();
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
       consumerGroup.offsetTracker = {
         nextOffset: vi.fn(() => 42n),
       } as unknown as OffsetTracker;
@@ -1783,7 +1759,7 @@ describe('consumer/consumer-group', () => {
         autoCommitInterval: null,
         autoCommitThreshold: null,
       });
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
       consumerGroup.offsetTracker = {
         hasCommittedOffset: () => true,
         nextOffset: () => 0n,
@@ -1830,7 +1806,7 @@ describe('consumer/consumer-group', () => {
         autoCommitInterval: null,
         autoCommitThreshold: null,
       });
-      consumerGroup.subscriptionState.assign([{ topic: 'topic1', partitions: [0] }]);
+      consumerGroup.partitionPipeline.assign([{ topic: 'topic1', partitions: [0] }]);
       consumerGroup.offsetTracker = {
         hasCommittedOffset: () => true,
         nextOffset: () => 100n,
@@ -2038,14 +2014,14 @@ describe('consumer/consumer-group', () => {
       await consumerGroup.joinAndSync();
 
       consumerGroup.pause([{ topic: 'topic1', partitions: [0] }]);
-      expect(consumerGroup.isPaused('topic1', 0)).toBe(true);
+      expect(consumerGroup.partitionPipeline.state('topic1', 0)?.isPaused).toBe(true);
       expect(consumerGroup.paused()).toEqual([{ topic: 'topic1', partitions: [0] }]);
 
       consumerGroup.resume([{ topic: 'topic1', partitions: [0] }]);
-      expect(consumerGroup.isPaused('topic1', 0)).toBe(false);
+      expect(consumerGroup.partitionPipeline.state('topic1', 0)?.isPaused).toBe(false);
 
       consumerGroup.seek({ topic: 'topic1', partition: 0, offset: 500n });
-      expect(consumerGroup.hasSeekOffset({ topic: 'topic1', partition: 0 })).toBe(true);
+      expect(consumerGroup.partitionPipeline.state('topic1', 0)?.pendingSeek).toBe(500n);
     });
 
     it('seek overrides the fetch offset on the next fetch', async () => {

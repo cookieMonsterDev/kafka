@@ -4,10 +4,10 @@ import { KafkaRequestTimeoutError } from '../errors';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { retrier } from '../retry/index';
-import { createEosManager, type EosManager } from './eos-manager/index';
-import { createIdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
+import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createNodeLatencyTracker } from './node-latency-tracker';
-import { createSendMessages } from './send-messages';
+import { createSendMessages, type OpenTransaction } from './send-messages';
+import { createTransactionSession } from './transaction-session/index';
 import type { PartitionerArgs } from './types';
 import { withSend } from '../broker/test-send';
 
@@ -58,23 +58,25 @@ function inMemoryLedger() {
   });
 }
 
-/** Transaction calls are mocked; sequences and gates run on a real ledger, uninitialized unless one is passed. */
-function fakeEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = {}) {
+/** A transaction whose calls are mocked; it enrolls partitions without a coordinator round trip. */
+function fakeTransaction(transactionalId = 'transactional-id') {
   return {
-    ledger: inMemoryLedger().ledger,
-    getTransactionalId: vi.fn().mockReturnValue(undefined),
-    isTransactional: vi.fn().mockReturnValue(false),
-    addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-    markTransactionAbortable: vi.fn(),
-    ...overrides,
-  } as unknown as EosManager;
+    transactionalId,
+    enrollPartitions: vi.fn((): Promise<void> | undefined => undefined),
+    sendFailed: vi.fn(),
+  } satisfies OpenTransaction;
 }
 
-/** An idempotent producer's EOS manager, its producer id initialized at epoch 0. */
-async function idempotentEosManager(overrides: Partial<Record<keyof EosManager, unknown>> = {}) {
+/** Sequences and gates run on a real ledger, uninitialized unless one is passed; no transaction unless one is passed. */
+function sendOptions(overrides: { ledger?: IdempotenceLedger; transaction?: OpenTransaction } = {}) {
+  return { ledger: inMemoryLedger().ledger, ...overrides };
+}
+
+/** An idempotent producer's send options, its producer id initialized at epoch 0. */
+async function idempotentSendOptions(overrides: { transaction?: OpenTransaction } = {}) {
   const { ledger, initProducerId } = inMemoryLedger();
   await ledger.initProducerId();
-  return withSend({ eosManager: fakeEosManager({ ledger, ...overrides }), ledger, initProducerId });
+  return withSend({ options: sendOptions({ ledger, ...overrides }), ledger, initProducerId });
 }
 
 interface SequencedProduceRequest {
@@ -144,23 +146,22 @@ describe('producer/sendMessages', () => {
       .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 2)));
 
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
     expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalled();
-    expect(eosManager.addPartitionsToTransaction).not.toHaveBeenCalled();
 
     expect(brokers[1].produce).toHaveBeenCalledTimes(2);
     expect(brokers[2].produce).toHaveBeenCalledTimes(1);
@@ -187,13 +188,14 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: cluster as unknown as Cluster,
         partitioner: cyclingPartitioner,
-        eosManager: fakeEosManager(),
+        ...sendOptions(),
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -220,13 +222,14 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -249,23 +252,28 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
 
   it("continues each partition's sequence on the next send", async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    const { eosManager } = await idempotentEosManager();
+    const { options } = await idempotentSendOptions();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: fakeCluster(brokers) as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
@@ -273,6 +281,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
     }
@@ -284,16 +293,21 @@ describe('producer/sendMessages', () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const code = ERROR_CODES.find((entry) => entry.type === 'MESSAGE_TOO_LARGE')!.code;
     brokers[1].produce.mockImplementationOnce(() => Promise.reject(createErrorFromCode(code, { topic, partition: 0 })));
-    const { eosManager, initProducerId } = await idempotentEosManager();
+    const { options, initProducerId } = await idempotentSendOptions();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: fakeCluster(brokers) as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
     const send = () =>
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] });
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+      });
 
     await expect(send()).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
     await send();
@@ -304,16 +318,21 @@ describe('producer/sendMessages', () => {
 
   it('does not hand back a range after the producer id was re-initialized under the send', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    const { eosManager, ledger } = await idempotentEosManager();
+    const { options, ledger } = await idempotentSendOptions();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: fakeCluster(brokers) as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
     const send = () =>
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }] });
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+      });
 
     await send();
     brokers[1].produce.mockImplementationOnce(async () => {
@@ -333,26 +352,31 @@ describe('producer/sendMessages', () => {
   it('adds partitions to the transaction when transactional', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const transaction = fakeTransaction();
 
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...sendOptions({ transaction }),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledTimes(3);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+    expect(transaction.enrollPartitions).toHaveBeenCalledTimes(3);
+    expect(transaction.enrollPartitions).toHaveBeenCalledWith([
       { topic, partitions: [expect.objectContaining({ partition: 0 })] },
     ]);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+    expect(transaction.enrollPartitions).toHaveBeenCalledWith([
       { topic, partitions: [expect.objectContaining({ partition: 1 })] },
     ]);
-    expect(eosManager.addPartitionsToTransaction).toHaveBeenCalledWith([
+    expect(transaction.enrollPartitions).toHaveBeenCalledWith([
       { topic, partitions: [expect.objectContaining({ partition: 2 })] },
     ]);
   });
@@ -360,20 +384,22 @@ describe('producer/sendMessages', () => {
   it('produces with the transactional id and producer id & epoch when transactional', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const cluster = fakeCluster(brokers);
-    const { eosManager } = await idempotentEosManager({
-      isTransactional: vi.fn().mockReturnValue(true),
-      getTransactionalId: vi.fn().mockReturnValue('transactionalid'),
-    });
+    const { options } = await idempotentSendOptions({ transaction: fakeTransaction('transactionalid') });
 
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     for (const nodeId of [1, 2, 3]) {
       expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
@@ -385,19 +411,22 @@ describe('producer/sendMessages', () => {
   it('produces with the producer id & epoch but no transactional id when idempotent', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     const cluster = fakeCluster(brokers);
-    const { eosManager } = await idempotentEosManager({
-      getTransactionalId: vi.fn().mockReturnValue('transactionalid'),
-    });
+    const { options } = await idempotentSendOptions();
 
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     for (const nodeId of [1, 2, 3]) {
       expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
@@ -414,13 +443,14 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     const response = await sendMessages({
       acks: 0,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
     expect(response).toEqual([]);
@@ -438,13 +468,14 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -472,11 +503,16 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+    });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
@@ -487,42 +523,52 @@ describe('producer/sendMessages', () => {
     brokers[1].produce.mockRejectedValue(createErrorFromCode(code));
 
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const transaction = fakeTransaction();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...sendOptions({ transaction }),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
 
-    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
+    expect(transaction.sendFailed).toHaveBeenCalled();
   });
 
   it('marks the transaction abort-only when a transactional send fails after a partial write', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
     brokers[1].produce.mockRejectedValue(createErrorFromCode(5));
 
-    const eosManager = fakeEosManager({ isTransactional: vi.fn().mockReturnValue(true) });
+    const transaction = fakeTransaction();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: fakeCluster(brokers) as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager,
+      ...sendOptions({ transaction }),
       retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
 
     // Partitions 1 and 2 were written inside the transaction; committing now would keep a partial send.
     expect(brokers[2].produce).toHaveBeenCalledTimes(1);
-    expect(eosManager.markTransactionAbortable).toHaveBeenCalled();
+    expect(transaction.sendFailed).toHaveBeenCalled();
   });
 
   it('does not recover UNKNOWN_PRODUCER_ID when the producer is not initialized', async () => {
@@ -536,12 +582,17 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager({ ledger }),
+      ledger,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
 
     expect(initProducerId).not.toHaveBeenCalled();
@@ -558,13 +609,14 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     const response = await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -588,12 +640,17 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await expect(
-      sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: ninePartitionedMessages() }] }),
+      sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      }),
     ).rejects.toMatchObject({ name: 'KafkaNumberOfRetriesExceeded' });
 
     expect(brokers[2].produce).toHaveBeenCalledTimes(1);
@@ -610,13 +667,14 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 0,
       topicMessages: [{ topic, messages: ninePartitionedMessages() }],
     });
 
@@ -636,7 +694,7 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: cluster as unknown as Cluster,
         partitioner: cyclingPartitioner,
-        eosManager: fakeEosManager(),
+        ...sendOptions(),
         retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
         nodeLatencyTracker,
       });
@@ -646,6 +704,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -662,7 +721,7 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: cluster as unknown as Cluster,
         partitioner: cyclingPartitioner,
-        eosManager: fakeEosManager(),
+        ...sendOptions(),
         retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
         nodeLatencyTracker,
       });
@@ -670,6 +729,7 @@ describe('producer/sendMessages', () => {
       await sendMessages({
         acks: 0,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -687,7 +747,7 @@ describe('producer/sendMessages', () => {
       logger: silentLogger,
       cluster: cluster as unknown as Cluster,
       partitioner: cyclingPartitioner,
-      eosManager: fakeEosManager(),
+      ...sendOptions(),
       retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
       metrics: { recordProduce } as never,
     });
@@ -695,6 +755,7 @@ describe('producer/sendMessages', () => {
     await sendMessages({
       acks: -1,
       timeout: 30_000,
+      bytes: 4,
       topicMessages: [{ topic, messages: [{ key: 'ab', value: 'cd' }] }],
     });
 
@@ -715,21 +776,26 @@ describe('producer/sendMessages', () => {
       },
     );
 
-    const { eosManager } = await idempotentEosManager();
+    const { options } = await idempotentSendOptions();
     const sendMessages = createSendMessages({
       logger: silentLogger,
       cluster: fakeCluster(brokers) as unknown as Cluster,
       partitioner: () => 0,
-      eosManager,
+      ...options,
       retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
     });
 
     await Promise.all(
       ['first', 'second'].map((value) =>
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value }] }] }),
+        sendMessages({ acks: -1, timeout: 30_000, bytes: 0, topicMessages: [{ topic, messages: [{ value }] }] }),
       ),
     );
-    await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'third' }] }] });
+    await sendMessages({
+      acks: -1,
+      timeout: 30_000,
+      bytes: 0,
+      topicMessages: [{ topic, messages: [{ value: 'third' }] }],
+    });
 
     // The timed-out request may already be on the log, so its retry must reuse sequence 0 and the
     // queued send must never be handed that range (the broker would dedupe it away as a duplicate).
@@ -762,19 +828,29 @@ describe('producer/sendMessages', () => {
         },
       );
 
-      const { eosManager, initProducerId } = await idempotentEosManager();
+      const { options, initProducerId } = await idempotentSendOptions();
       const sendMessages = createSendMessages({
         logger: silentLogger,
         cluster: fakeCluster(brokers) as unknown as Cluster,
         partitioner: () => 0,
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
       await expect(
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'first' }] }] }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ value: 'first' }] }],
+        }),
       ).rejects.toBeDefined();
-      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'second' }] }] });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'second' }] }],
+      });
 
       // Reusing sequence 0 under epoch 0 would let the broker drop 'second' as a duplicate of a
       // 'first' that may be on the log; a new epoch restarts sequences without that ambiguity.
@@ -790,7 +866,7 @@ describe('producer/sendMessages', () => {
 
     it("does not bump the epoch inside another send's retries, which may resend a written batch", async () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-      const { eosManager, ledger, initProducerId } = await idempotentEosManager();
+      const { options, ledger, initProducerId } = await idempotentSendOptions();
 
       const requests: { producerEpoch: number; firstSequence: number }[] = [];
       brokers[1].produce.mockImplementation(
@@ -810,10 +886,15 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: fakeCluster(brokers) as unknown as Cluster,
         partitioner: () => 0,
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
-      await sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: [{ value: 'a' }] }],
+      });
 
       // The retry must reuse its sequence under the same epoch so the broker can dedupe it.
       expect(requests).toEqual([
@@ -830,13 +911,13 @@ describe('producer/sendMessages', () => {
       brokers[1].produce.mockRejectedValue(createErrorFromCode(code, { topic, partition: 0 }));
       const cluster = fakeCluster(brokers);
       cluster.findLeaderForPartitions.mockReturnValue({ 1: [0, 1] });
-      const { eosManager, ledger, initProducerId } = await idempotentEosManager();
+      const { options, ledger, initProducerId } = await idempotentSendOptions();
 
       const sendMessages = createSendMessages({
         logger: silentLogger,
         cluster: cluster as unknown as Cluster,
         partitioner: ({ message }: PartitionerArgs) => Number(message.key),
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 1, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
@@ -844,6 +925,7 @@ describe('producer/sendMessages', () => {
         sendMessages({
           acks: -1,
           timeout: 30_000,
+          bytes: 0,
           topicMessages: [
             {
               topic,
@@ -889,7 +971,7 @@ describe('producer/sendMessages', () => {
     it("waits for another send's retries before bumping, so that send's written batch is not resent", async () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
       const log = idempotentLog();
-      const { eosManager, ledger, initProducerId } = await idempotentEosManager();
+      const { options, ledger, initProducerId } = await idempotentSendOptions();
 
       // Partition 0 lost its producer id; partition 1's first request is written but its response is lost.
       let timeOutPartition1: () => void = () => {};
@@ -917,13 +999,23 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: fakeCluster(brokers) as unknown as Cluster,
         partitioner: ({ message }: PartitionerArgs) => Number(message.key),
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
       const sends = Promise.all([
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '0', value: 'a' }] }] }),
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key: '1', value: 'b' }] }] }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ key: '0', value: 'a' }] }],
+        }),
+        sendMessages({
+          acks: -1,
+          timeout: 30_000,
+          bytes: 0,
+          topicMessages: [{ topic, messages: [{ key: '1', value: 'b' }] }],
+        }),
       ]);
       // Give the producer-id recovery time to run while partition 1's request is still in flight.
       await delay(20);
@@ -939,7 +1031,7 @@ describe('producer/sendMessages', () => {
     it('re-initializes the producer id once when several sends lose it together', async () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
       const log = idempotentLog();
-      const { eosManager, ledger, initProducerId } = await idempotentEosManager();
+      const { options, ledger, initProducerId } = await idempotentSendOptions();
       for (const [nodeId, broker] of Object.entries(brokers)) {
         broker.produce.mockImplementation((request: SequencedProduceRequest) => {
           if (request.producerEpoch === 0) return Promise.reject(createErrorFromCode(unknownProducerIdCode));
@@ -952,13 +1044,18 @@ describe('producer/sendMessages', () => {
         logger: silentLogger,
         cluster: fakeCluster(brokers) as unknown as Cluster,
         partitioner: ({ message }: PartitionerArgs) => Number(message.key),
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
       await Promise.all(
         ['0', '1', '2'].map((key) =>
-          sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ key, value: key }] }] }),
+          sendMessages({
+            acks: -1,
+            timeout: 30_000,
+            bytes: 0,
+            topicMessages: [{ topic, messages: [{ key, value: key }] }],
+          }),
         ),
       );
 
@@ -976,35 +1073,39 @@ describe('producer/sendMessages', () => {
         addPartitionsToTxn: vi.fn().mockResolvedValue(undefined),
         endTxn: vi.fn().mockResolvedValue(undefined),
       });
-      const eosManager = createEosManager({
+      const session = createTransactionSession({
         logger: silentLogger,
         cluster: withSend({
-          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
           findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
           brokerPool: { versions: undefined },
         }) as unknown as Cluster,
-        transactional: true,
         transactionalId: 'transactional-id',
+        transactionTimeout: 60_000,
+        retry: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
-      await eosManager.initProducerId();
-      eosManager.beginTransaction();
+      const txn = await session.begin(() => ({
+        send: vi.fn(),
+        sendBatch: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
+      }));
 
       const sendMessages = createSendMessages({
         logger: silentLogger,
         cluster: fakeCluster(brokers) as unknown as Cluster,
         partitioner: () => 0,
-        eosManager,
+        ledger: session.ledger,
+        transaction: session,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
 
       await expect(
-        sendMessages({ acks: -1, timeout: 30_000, topicMessages: [{ topic, messages: [{ value: 'a' }] }] }),
+        sendMessages({ acks: -1, timeout: 30_000, bytes: 0, topicMessages: [{ topic, messages: [{ value: 'a' }] }] }),
       ).rejects.toMatchObject({ type: 'UNKNOWN_PRODUCER_ID' });
       expect(brokers[1].produce).toHaveBeenCalledTimes(1);
 
-      await eosManager.abort();
+      await txn.abort();
       expect(coordinator.initProducerId).toHaveBeenCalledTimes(2);
-      expect(eosManager.ledger.getProducerEpoch()).toBe(1);
+      expect(session.ledger.getProducerEpoch()).toBe(1);
     });
   });
 
@@ -1022,12 +1123,12 @@ describe('producer/sendMessages', () => {
       return cluster;
     }
 
-    function createFastPathSend(cluster: ReturnType<typeof fakeCluster>, eosManager: EosManager = fakeEosManager()) {
+    function createFastPathSend(cluster: ReturnType<typeof fakeCluster>, options = sendOptions()) {
       return createSendMessages({
         logger: silentLogger,
         cluster: cluster as unknown as Cluster,
         partitioner: cyclingPartitioner,
-        eosManager,
+        ...options,
         retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
       });
     }
@@ -1039,6 +1140,7 @@ describe('producer/sendMessages', () => {
       const response = await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1057,6 +1159,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1072,6 +1175,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1086,6 +1190,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(cluster)({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1099,6 +1204,7 @@ describe('producer/sendMessages', () => {
       const response = await createFastPathSend(fastPathCluster(brokers))({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
       });
 
@@ -1118,6 +1224,7 @@ describe('producer/sendMessages', () => {
         createFastPathSend(cluster)({
           acks: -1,
           timeout: 30_000,
+          bytes: 0,
           topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
         }),
       ).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
@@ -1125,14 +1232,15 @@ describe('producer/sendMessages', () => {
 
     it('still tracks sequences for an idempotent producer', async () => {
       const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-      const { eosManager } = await idempotentEosManager();
+      const { options } = await idempotentSendOptions();
 
       await createFastPathSend(
         fastPathCluster(brokers),
-        eosManager,
+        options,
       )({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 
@@ -1145,6 +1253,7 @@ describe('producer/sendMessages', () => {
       await createFastPathSend(fastPathCluster(brokers))({
         acks: -1,
         timeout: 30_000,
+        bytes: 0,
         topicMessages: [{ topic, messages: ninePartitionedMessages() }],
       });
 

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { KafkaInvariantViolation } from '../../errors';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { KafkaInvariantViolation, KafkaRequestTimeoutError } from '../../errors';
 import { InstrumentationEventEmitter } from '../../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { sleep } from '../../utils/wait';
@@ -23,8 +23,9 @@ describe('network/request-queue/RequestQueue', () => {
     reject: vi.fn(),
   });
 
-  const createRequestQueue = (overrides: Partial<RequestQueueOptions> = {}) =>
-    new RequestQueue({
+  const requestQueues: RequestQueue[] = [];
+  const createRequestQueue = (overrides: Partial<RequestQueueOptions> = {}) => {
+    const requestQueue = new RequestQueue({
       maxInFlightRequests: 2,
       requestTimeout: 50,
       enforceRequestTimeout: true,
@@ -33,6 +34,15 @@ describe('network/request-queue/RequestQueue', () => {
       logger: testLogger,
       ...overrides,
     });
+    requestQueues.push(requestQueue);
+    return requestQueue;
+  };
+
+  // A queue left with requests in flight would time them out during a later test, sending its pending
+  // requests and arming a timer under that test's fake timers.
+  afterEach(() => {
+    for (const requestQueue of requestQueues.splice(0)) requestQueue.destroy();
+  });
 
   const createPushedRequest = (overrides: Partial<PushedRequest> = {}): PushedRequest => ({
     sendRequest: vi.fn(),
@@ -251,6 +261,165 @@ describe('network/request-queue/RequestQueue', () => {
       expect(requestQueue.inflight.size).toBe(1);
       await requestQueue.waitForPendingRequests();
       expect(requestQueue.inflight.size).toBe(0);
+    });
+  });
+
+  describe('request timeout', () => {
+    afterEach(() => {
+      // Restore spies before the fake timers, or restoring a spy would reinstall a fake setTimeout.
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    const fulfill = (requestQueue: RequestQueue, request: PushedRequest): void =>
+      requestQueue.fulfillRequest({ correlationId: request.entry.correlationId, payload: Buffer.alloc(0), size: 0 });
+
+    it('rejects an in-flight request with its timing fields once requestTimeout elapses', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200 });
+      const request = createPushedRequest();
+      requestQueue.push(request);
+      const socketRequest = requestQueue.inflight.get(request.entry.correlationId)!;
+
+      await vi.advanceTimersByTimeAsync(199);
+      expect(request.entry.reject).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      const error = vi.mocked(request.entry.reject).mock.calls[0]?.[0] as KafkaRequestTimeoutError;
+      expect(error).toBeInstanceOf(KafkaRequestTimeoutError);
+      expect(error.message).toBe('Request Produce(key: 0, version: 4) timed out');
+      expect(error).toMatchObject({
+        broker: 'localhost:9092',
+        correlationId: request.entry.correlationId,
+        createdAt: socketRequest.createdAt,
+        sentAt: socketRequest.sentAt,
+        pendingDuration: socketRequest.pendingDuration,
+      });
+      expect(requestQueue.inflight.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('arms one timer for the connection, not one per request', () => {
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const requestQueue = createRequestQueue({ maxInFlightRequests: null });
+
+      const concurrent = [createPushedRequest(), createPushedRequest()];
+      for (const request of concurrent) requestQueue.push(request);
+      for (const request of concurrent) fulfill(requestQueue, request);
+      for (let index = 0; index < 3; index++) {
+        const request = createPushedRequest();
+        requestQueue.push(request);
+        fulfill(requestQueue, request);
+      }
+
+      expect(setTimeoutSpy).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(1);
+    });
+
+    it('times out the next request at its own deadline once the oldest completes', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200 });
+      const oldest = createPushedRequest();
+      requestQueue.push(oldest);
+      await vi.advanceTimersByTimeAsync(100);
+      const next = createPushedRequest();
+      requestQueue.push(next);
+      await vi.advanceTimersByTimeAsync(50);
+      fulfill(requestQueue, oldest);
+
+      // The timer still fires at the oldest's deadline, then re-arms for the next one's.
+      await vi.advanceTimersByTimeAsync(149);
+      expect(next.entry.reject).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(next.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
+      expect(oldest.entry.reject).not.toHaveBeenCalled();
+    });
+
+    it('times out each request at its own deadline when a longer custom requestTimeout is sent first', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200 });
+      const custom = createPushedRequest({ requestTimeout: 1000 });
+      const regular = createPushedRequest();
+      requestQueue.push(custom);
+      requestQueue.push(regular);
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(regular.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
+      expect(custom.entry.reject).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(799);
+      expect(custom.entry.reject).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(custom.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
+    });
+
+    it('is not moved by a wall-clock jump', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200 });
+      const request = createPushedRequest();
+      requestQueue.push(request);
+
+      vi.setSystemTime(Date.now() + 60_000);
+      await vi.advanceTimersByTimeAsync(199);
+      expect(request.entry.reject).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(request.entry.reject).toHaveBeenCalledWith(expect.any(KafkaRequestTimeoutError));
+    });
+
+    it('waits out a requestTimeout beyond the longest timer delay without firing every millisecond', async () => {
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const requestQueue = createRequestQueue({ requestTimeout: 2 ** 31 + 1000 });
+      const request = createPushedRequest();
+      requestQueue.push(request);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(setTimeoutSpy).toHaveBeenCalledOnce();
+      expect(request.entry.reject).not.toHaveBeenCalled();
+    });
+
+    it('does not time out a request that already completed', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200 });
+      const request = createPushedRequest();
+      requestQueue.push(request);
+      fulfill(requestQueue, request);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(request.entry.reject).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('arms no timer when enforceRequestTimeout is false', async () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue({ requestTimeout: 200, enforceRequestTimeout: false });
+      const request = createPushedRequest();
+      requestQueue.push(request);
+      expect(vi.getTimerCount()).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(request.entry.reject).not.toHaveBeenCalled();
+    });
+
+    it('arms no timer for a request that expects no response', () => {
+      vi.useFakeTimers();
+      const requestQueue = createRequestQueue();
+      requestQueue.push(createPushedRequest({ expectResponse: false }));
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("keeps the timer unref'd and clears it on destroy", () => {
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const requestQueue = createRequestQueue();
+      requestQueue.push(createPushedRequest());
+
+      const timer = setTimeoutSpy.mock.results[0]?.value as NodeJS.Timeout;
+      expect(timer.hasRef()).toBe(false);
+      requestQueue.destroy();
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 

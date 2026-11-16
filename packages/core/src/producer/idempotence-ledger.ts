@@ -1,6 +1,7 @@
 import { INT_32_MAX_VALUE } from '../constants';
 import type { Logger } from '../loggers/index';
 import { rejectOnAbort } from '../utils/abort';
+import type { Deadline } from '../utils/deadline';
 import { Lock, type AcquireOptions } from '../utils/lock';
 
 const NO_PRODUCER_ID = -1n;
@@ -30,8 +31,9 @@ export interface SequenceLease {
   /**
    * Takes this send's partition gates, after any pending epoch bump. Returns a promise only when it
    * has to wait for a held gate or a bump: never once the gates are held or without a producer id.
+   * The wait gives up when `deadline` expires; only a wait reads its signal.
    */
-  acquire: (signal?: AbortSignal) => Promise<void> | undefined;
+  acquire: (deadline?: Deadline) => Promise<void> | undefined;
   /**
    * The first sequence of this send's records on the partition, the same on every retry under one
    * producer epoch, or `undefined` while the lease holds no gates.
@@ -132,7 +134,7 @@ export function createIdempotenceLedger({
    * distinct partitions on one broker may overlap. The broker's idempotent window is 5, but without
    * a single sender thread pipelining one partition risks OUT_OF_ORDER_SEQUENCE_NUMBER. A holder
    * keeps its gate for its whole retry cycle, which may outlast any fixed lock timeout during a
-   * leader outage, so waiters have none: each is bounded by its own send's deadline signal.
+   * leader outage, so waiters have none: each is bounded by its own send's delivery deadline.
    */
   const partitionGates = new Map<string, Lock>();
 
@@ -233,14 +235,14 @@ export function createIdempotenceLedger({
       this.#records = records;
     }
 
-    acquire(signal?: AbortSignal): Promise<void> | undefined {
+    acquire(deadline?: Deadline): Promise<void> | undefined {
       if (this.#holdsGates || !isInitialized()) return undefined;
       this.#gates ??= gatesInOrder(this.#records);
       if (!isEpochBumpDue() && tryAcquireGates(this.#gates)) {
         this.#holdGates();
         return undefined;
       }
-      return this.#waitForGates(this.#gates, signal);
+      return this.#waitForGates(this.#gates, deadline?.signal);
     }
 
     async #waitForGates(gates: readonly Lock[], signal: AbortSignal | undefined): Promise<void> {

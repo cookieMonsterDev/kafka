@@ -14,6 +14,7 @@ import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression
 import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import { runHooks } from '../utils/run-hooks';
+import { DeliveryDeadlines } from './delivery-deadlines';
 import type { IdempotenceLedger } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { createSendMessages, type OpenTransaction, type SendMessagesRequest } from './send-messages';
@@ -103,27 +104,13 @@ const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
 /** Java `max.request.size` default. @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size */
 const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 
-/**
- * Races `promise` against `deliveryTimeoutMs`, so the caller sees the rejection as soon as the
- * deadline is up even while an attempt is still in flight. `dispatch` stops the retries themselves.
- * Used for linger-buffered sends; with lingerMs 0, `dispatch` rejects at the deadline instead.
- */
-function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
-  if (!(deliveryTimeoutMs > 0)) return promise;
-
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs)), deliveryTimeoutMs);
-    promise.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
-}
-
 interface PendingSend {
   topicMessages: TopicMessages[];
   acks: number;
   compression: CompressionType | undefined;
   compressionLevel: number | undefined;
   timeout: number;
-  /** Epoch ms at which the caller is rejected with `KafkaDeliveryTimeoutError`. */
+  /** `performance.now()` ms at which the caller is rejected with `KafkaDeliveryTimeoutError`. */
   deadline: number;
   resolve: (metadata: RecordMetadata[]) => void;
   reject: (error: unknown) => void;
@@ -198,6 +185,8 @@ export function createMessageProducer({
     nodeLatencyTracker,
     metrics,
   });
+  /** Every pending send's delivery deadline, on one timer. */
+  const deliveryDeadlines = new DeliveryDeadlines(() => new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
   const pending: PendingSend[] = [];
   let lingerTimer: ReturnType<typeof setTimeout> | null = null;
   let flushInProgress: Promise<void> | null = null;
@@ -308,37 +297,53 @@ export function createMessageProducer({
   }
 
   /**
+   * Races a linger-buffered call against its `deadline`, so the caller sees the rejection as soon
+   * as the deadline is up even while an attempt is still in flight. `dispatch` stops the retries
+   * themselves. With lingerMs 0, `dispatch` rejects at the deadline instead.
+   */
+  function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deadline: number): Promise<T> {
+    if (!Number.isFinite(deadline)) return promise;
+
+    return new Promise<T>((resolve, reject) => {
+      const tracked = deliveryDeadlines.track(deadline, reject);
+      promise.then(
+        (value) => {
+          deliveryDeadlines.untrack(tracked);
+          resolve(value);
+        },
+        (error: unknown) => {
+          deliveryDeadlines.untrack(tracked);
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the send rejection as-is
+          reject(error);
+        },
+      );
+    });
+  }
+
+  /**
    * Sends one Produce request under `deadline`: once it passes, retries stop and the partition
-   * gates are released instead of being held by a send nobody is waiting for. One timer covers it.
-   * With `rejectAtDeadline`, the returned promise also rejects then, even while an attempt is in
-   * flight. Only a lingerMs 0 send may do that: a linger flush waits for its attempt to settle so
-   * the next flush can't overtake it.
+   * gates are released instead of being held by a send nobody is waiting for. The producer's one
+   * deadline timer covers it. With `rejectAtDeadline`, the returned promise also rejects then, even
+   * while an attempt is in flight. Only a lingerMs 0 send may do that: a linger flush waits for its
+   * attempt to settle so the next flush can't overtake it.
    */
   function dispatch(
-    request: Omit<SendMessagesRequest, 'signal'>,
+    request: Omit<SendMessagesRequest, 'deadline'>,
     { deadline, rejectAtDeadline }: { deadline: number; rejectAtDeadline: boolean },
   ): Promise<RecordMetadata[]> {
-    const remaining = deadline - Date.now();
-    if (!Number.isFinite(remaining)) return sendMessages(request);
+    if (!Number.isFinite(deadline)) return sendMessages(request);
     // Expired while lingering behind an earlier flush: its caller was already rejected.
-    if (remaining <= 0) return Promise.reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
+    if (deadline <= performance.now()) return Promise.reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
 
-    const controller = new AbortController();
     return new Promise<RecordMetadata[]>((resolve, reject) => {
-      const sending = sendMessages({ ...request, signal: controller.signal });
-      const timer = setTimeout(() => {
-        const error = new KafkaDeliveryTimeoutError(deliveryTimeoutMs);
-        controller.abort(error);
-        if (rejectAtDeadline) reject(error);
-      }, remaining);
-
-      sending.then(
+      const tracked = deliveryDeadlines.track(deadline, rejectAtDeadline ? reject : undefined);
+      sendMessages({ ...request, deadline: tracked }).then(
         (metadata) => {
-          clearTimeout(timer);
+          deliveryDeadlines.untrack(tracked);
           resolve(metadata);
         },
         (error: unknown) => {
-          clearTimeout(timer);
+          deliveryDeadlines.untrack(tracked);
           // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the send rejection as-is
           reject(error);
         },
@@ -347,7 +352,8 @@ export function createMessageProducer({
   }
 
   function deliveryDeadline(): number {
-    return deliveryTimeoutMs > 0 ? Date.now() + deliveryTimeoutMs : Number.POSITIVE_INFINITY;
+    // Monotonic, so a wall-clock jump moves no deadline.
+    return deliveryTimeoutMs > 0 ? performance.now() + deliveryTimeoutMs : Number.POSITIVE_INFINITY;
   }
 
   function hasBufferLimit(): boolean {
@@ -575,7 +581,7 @@ export function createMessageProducer({
 
     const [only] = entries;
     if (entries.length === 1 && only) {
-      // The common sequential case: send it exactly as an uncoalesced call, with one deadline timer.
+      // The common sequential case: send it exactly as an uncoalesced call.
       const { topicMessages, acks, timeout, compression, compressionLevel, deadline } = only;
       dispatch(
         { topicMessages, acks, timeout, compression, compressionLevel },
@@ -596,7 +602,7 @@ export function createMessageProducer({
    * so calls made together leave as one Produce per broker without adding a timer.
    */
   function queueSameTurnSend(
-    request: Pick<PendingSend, 'topicMessages' | 'acks' | 'timeout' | 'compression' | 'compressionLevel'>,
+    request: Pick<PendingSend, 'topicMessages' | 'acks' | 'timeout' | 'compression' | 'compressionLevel' | 'deadline'>,
     bytes: number,
   ): Promise<RecordMetadata[]> {
     if (!sameTurnSends) {
@@ -606,7 +612,7 @@ export function createMessageProducer({
     const entries = sameTurnSends;
 
     return new Promise<RecordMetadata[]>((resolve, reject) => {
-      entries.push({ ...request, deadline: deliveryDeadline(), resolve, reject, bytes });
+      entries.push({ ...request, resolve, reject, bytes });
     });
   }
 
@@ -679,6 +685,7 @@ export function createMessageProducer({
       await runHooks(hooks.onSend, hookEvent, 'onSend', logger);
     }
 
+    const deadline = deliveryDeadline();
     const produce =
       lingerMs <= 0
         ? queueSameTurnSend(
@@ -688,6 +695,7 @@ export function createMessageProducer({
               timeout: resolvedTimeout,
               compression: resolvedCompression,
               compressionLevel: resolvedCompressionLevel,
+              deadline,
             },
             totalBytes,
           )
@@ -699,9 +707,9 @@ export function createMessageProducer({
               resolvedCompression,
               resolvedCompressionLevel,
               totalBytes,
-              deliveryDeadline(),
+              deadline,
             ),
-            deliveryTimeoutMs,
+            deadline,
           );
 
     const settled = rejectOnAbort(produce, signal);

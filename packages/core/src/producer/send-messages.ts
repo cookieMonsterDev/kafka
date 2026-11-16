@@ -6,6 +6,7 @@ import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
+import type { Deadline } from '../utils/deadline';
 import { createTopicData } from './create-topic-data';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
 import { partitionKey, type IdempotenceLedger } from './idempotence-ledger';
@@ -51,8 +52,8 @@ export interface SendMessagesRequest {
   compression?: CompressionType;
   compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
-  /** Ends the retry cycle (the delivery deadline): no new attempt starts and queued gate waits give up. */
-  signal?: AbortSignal;
+  /** The delivery deadline. Once it expires, no new attempt starts and queued gate waits give up. */
+  deadline?: Deadline;
 }
 
 function payloadBytes(value: Message['key'] | Message['value']): number {
@@ -110,7 +111,7 @@ export function createSendMessages({
     compression,
     compressionLevel,
     topicMessages,
-    signal,
+    deadline,
   }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
@@ -174,7 +175,7 @@ export function createSendMessages({
     async function createProducerRequests(): Promise<Promise<void>[]> {
       if (cluster.needsMetadataRefresh()) await cluster.refreshMetadataIfNecessary();
       assignMessages();
-      const gateWait = lease.acquire(signal);
+      const gateWait = lease.acquire(deadline);
       if (gateWait) await gateWait;
 
       const topicDataByBroker = new Map<Broker, ReturnType<typeof createTopicData>>();
@@ -386,7 +387,7 @@ export function createSendMessages({
       }
     };
 
-    return retrier(attempt, { signal }).then(
+    return retrier(attempt, { deadline }).then(
       (metadata) => {
         lease.release();
         return metadata;

@@ -14,38 +14,6 @@ export interface Fetcher<T extends FetchBatch> {
   getWorkerQueue: () => WorkerQueue<T>;
 }
 
-export interface FetchBatchHooks {
-  /** Checked before a held batch is enqueued; `false` drops it, e.g. its partition was paused while it waited. */
-  isCurrent: () => boolean;
-  /** Runs once the batch leaves the pipeline: handled, dropped as stale, discarded, or never enqueued. */
-  onSettled: () => void;
-}
-
-const hooksByBatch = new WeakMap<object, FetchBatchHooks>();
-
-export function topicPartitionKey(topic: string, partition: number): string {
-  return `${topic}|${partition}`;
-}
-
-/** Attaches hooks to a batch returned by a fetch; a later call for the same batch replaces them. */
-export function trackFetchBatch(batch: object, hooks: FetchBatchHooks): void {
-  hooksByBatch.set(batch, hooks);
-}
-
-/** `true` for a batch without hooks. */
-export function isFetchBatchCurrent(batch: object): boolean {
-  const hooks = hooksByBatch.get(batch);
-  return hooks == null || hooks.isCurrent();
-}
-
-/** Runs and forgets the batch's `onSettled` hook, if any. */
-export function settleFetchBatch(batch: object): void {
-  const hooks = hooksByBatch.get(batch);
-  if (hooks == null) return;
-  hooksByBatch.delete(batch);
-  hooks.onSettled();
-}
-
 /**
  * Fetches for one node and enqueues the batches. A partition has at most one batch in the worker
  * queue: a batch returned while its partition's earlier batch is still queued or in flight is held
@@ -57,12 +25,18 @@ export function createFetcher<T extends FetchBatch>({
   workerQueue,
   partitionAssignments,
   fetch,
+  isBatchCurrent = () => true,
+  settleBatch = () => {},
   logger: rootLogger,
 }: {
   nodeId: string;
   workerQueue: WorkerQueue<T>;
   partitionAssignments: Map<string, string>;
   fetch: (nodeId: string) => Promise<T[]>;
+  /** Checked before a batch is enqueued; `false` drops it, e.g. its partition was paused while it waited. */
+  isBatchCurrent?: (batch: T) => boolean;
+  /** Runs once per batch when it leaves the pipeline: handled, dropped as stale, discarded, or never enqueued. */
+  settleBatch?: (batch: T) => void;
   logger: Logger;
 }): Fetcher<T> {
   const logger = rootLogger.namespace(`Fetcher ${nodeId}`);
@@ -71,16 +45,16 @@ export function createFetcher<T extends FetchBatch>({
   const heldBatches = new Map<string, T>();
 
   const getWorkerQueue = (): WorkerQueue<T> => workerQueue;
-  const assignmentKey = ({ topic, partition }: FetchBatch): string => topicPartitionKey(topic, partition);
+  const assignmentKey = ({ topic, partition }: FetchBatch): string => `${topic}|${partition}`;
 
   const releaseHeldBatches = (): void => {
     const held = [...heldBatches.values()];
     heldBatches.clear();
-    held.forEach(settleFetchBatch);
+    held.forEach(settleBatch);
   };
 
   const settleAssignedBatch = (batch: T): void => {
-    settleFetchBatch(batch);
+    settleBatch(batch);
     const key = assignmentKey(batch);
     if (partitionAssignments.get(key) !== nodeId) return;
     partitionAssignments.delete(key);
@@ -88,8 +62,8 @@ export function createFetcher<T extends FetchBatch>({
     const held = heldBatches.get(key);
     if (held == null) return;
     heldBatches.delete(key);
-    if (!isRunning || !isFetchBatchCurrent(held)) {
-      settleFetchBatch(held);
+    if (!isRunning || !isBatchCurrent(held)) {
+      settleBatch(held);
       return;
     }
     // A failed push also fails the worker queue, which the fetch manager already watches.
@@ -124,8 +98,8 @@ export function createFetcher<T extends FetchBatch>({
       const key = assignmentKey(batch);
       const assignedFetcher = partitionAssignments.get(key);
       if (assignedFetcher == null) {
-        if (isFetchBatchCurrent(batch)) ready.push(batch);
-        else settleFetchBatch(batch);
+        if (isBatchCurrent(batch)) ready.push(batch);
+        else settleBatch(batch);
       } else if (assignedFetcher === nodeId && !heldBatches.has(key)) {
         heldBatches.set(key, batch);
         held += 1;
@@ -136,7 +110,7 @@ export function createFetcher<T extends FetchBatch>({
           assignedFetcher,
           fetcher: nodeId,
         });
-        settleFetchBatch(batch);
+        settleBatch(batch);
       }
     }
     if (ready.length > 0) await enqueue(ready);
@@ -151,7 +125,7 @@ export function createFetcher<T extends FetchBatch>({
       try {
         const batches = await fetch(nodeId);
         if (!isRunning) {
-          batches.forEach(settleFetchBatch);
+          batches.forEach(settleBatch);
           break;
         }
 

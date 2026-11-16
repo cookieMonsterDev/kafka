@@ -7,6 +7,7 @@ import { benchProduceLinger } from './produce-linger';
 import { benchConsumeHandlers } from './consume-handlers';
 import { benchCrc32c } from './crc32c';
 import { benchCompressionZlib } from './compression-zlib';
+import { benchShareAcknowledgements } from './share-acknowledgements';
 
 export async function main(): Promise<void> {
   console.log('kafka-core microbenches (local, not CI-gated)');
@@ -29,6 +30,8 @@ export async function main(): Promise<void> {
   await benchCrc32c();
   console.log('');
   await benchCompressionZlib();
+  console.log('');
+  await benchShareAcknowledgements();
 }
 
 const isDirect = process.argv[1] !== undefined && process.argv[1].includes('bench/run');

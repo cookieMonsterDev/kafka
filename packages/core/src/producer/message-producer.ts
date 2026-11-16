@@ -287,6 +287,9 @@ export function createMessageProducer({
   }
 
   function mergeCallTopicMessages(topicMessages: readonly TopicMessages[]): TopicMessages[] {
+    const [onlyTopic] = topicMessages;
+    if (topicMessages.length === 1 && onlyTopic) return [{ topic: onlyTopic.topic, messages: [...onlyTopic.messages] }];
+
     const mergedByTopic = new Map<string, Message[]>();
     for (const { topic, messages } of topicMessages) {
       const current = mergedByTopic.get(topic);

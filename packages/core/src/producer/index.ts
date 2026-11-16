@@ -1,5 +1,6 @@
 import { supportsTransactions } from '../broker/capabilities';
-import type { Cluster, TopicOffsets, TopicPartitionInfo } from '../cluster/index';
+import type { Cluster, TopicPartitionInfo } from '../cluster/index';
+import { sendInitProducerId } from '../cluster/init-producer-id';
 import { KafkaNonRetriableError } from '../errors';
 import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
@@ -9,13 +10,22 @@ import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-
 import type { CompressionType } from '../protocol/compression/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
-import { createEosManager, type EosManager } from './eos-manager/index';
-import { FENCED_PRODUCER_MESSAGE } from './eos-manager/transaction-state-machine';
+import { createIdempotenceLedger } from './idempotence-ledger';
 import { CONNECT, DISCONNECT, events, unwrap, wrap, type ProducerEventName } from './instrumentation-events';
 import { createMessageProducer } from './message-producer';
 import { createNodeLatencyTracker } from './node-latency-tracker';
 import { DefaultPartitioner } from './partitioners/index';
-import type { CustomPartitioner, ProducerBatch, ProducerHooks, ProducerRecord, RecordMetadata } from './types';
+import { createTransactionSession, type TransactionSession } from './transaction-session/index';
+import type {
+  CustomPartitioner,
+  ProducerBatch,
+  ProducerHooks,
+  ProducerRecord,
+  RecordMetadata,
+  Transaction,
+} from './types';
+
+export type { Transaction } from './types';
 
 export interface ProducerOptions {
   cluster: Cluster;
@@ -37,20 +47,6 @@ export interface ProducerOptions {
   /** Ordered async `onSend`/`onAck` hooks, also used by every {@link Transaction} this producer starts. */
   hooks?: ProducerHooks;
   metrics?: MetricsRecorder | null;
-}
-
-/**
- * In-flight producer transaction. Exactly one may be active per transactional producer.
- * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
- */
-export interface Transaction {
-  send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
-  sendBatch(batch: ProducerBatch & { signal?: AbortSignal }): Promise<RecordMetadata[]>;
-  /** Commit consumer-group offsets as part of this transaction (exactly-once consume-transform-produce). */
-  sendOffsets(options: { consumerGroupId: string; topics: readonly TopicOffsets[] }): Promise<void>;
-  commit(): Promise<void>;
-  abort(): Promise<void>;
-  isActive(): boolean;
 }
 
 /**
@@ -99,7 +95,7 @@ export function createProducer({
   retry,
   idempotent = false,
   transactionalId,
-  transactionTimeout,
+  transactionTimeout = 60_000,
   instrumentationEmitter: rootInstrumentationEmitter,
   acks,
   compression,
@@ -131,13 +127,13 @@ export function createProducer({
   // Shared across the idempotent producer and every transaction() below - it's about how fast
   // this producer's broker nodes respond, not anything specific to one message-producer instance.
   const nodeLatencyTracker = createNodeLatencyTracker();
-  const idempotentEosManager = createEosManager({
+  const idempotenceLedger = createIdempotenceLedger({
     logger,
-    cluster,
-    transactionTimeout,
-    transactional: false,
-    transactionalId,
-    retry: producerRetry,
+    initProducerId: (current) =>
+      sendInitProducerId(
+        { cluster, retry: producerRetrier, logger },
+        { transactionalId: null, transactionTimeout, ...current },
+      ),
   });
 
   const messageProducerOptions = {
@@ -161,12 +157,11 @@ export function createProducer({
 
   const { send, sendBatch, flush } = createMessageProducer({
     ...messageProducerOptions,
-    eosManager: idempotentEosManager,
+    ledger: idempotenceLedger,
     idempotent,
   });
 
-  let transactionalEosManager: EosManager | undefined;
-  let transactionalFlush: (() => Promise<void>) | undefined;
+  let transactionSession: TransactionSession | undefined;
 
   function on(
     eventName: ProducerEventName,
@@ -192,92 +187,22 @@ export function createProducer({
 
     assertBrokerSupportsTransactions();
 
-    let transactionDidEnd = false;
-    transactionalEosManager ??= createEosManager({
+    transactionSession ??= createTransactionSession({
       logger,
       cluster,
-      transactionTimeout,
-      transactional: true,
       transactionalId,
-      retry: producerRetry,
+      transactionTimeout,
+      retry: producerRetrier,
     });
-    const activeEosManager = transactionalEosManager;
-
-    if (activeEosManager.isInTransaction()) {
-      throw new KafkaNonRetriableError(
-        'There is already an ongoing transaction for this producer. Please end the transaction before beginning another.',
-      );
-    }
-
-    // We only initialize the producer id once.
-    if (!activeEosManager.isInitialized()) {
-      await activeEosManager.initProducerId();
-    }
-    await activeEosManager.ledger.bumpEpochIfRequested();
-    activeEosManager.beginTransaction();
-
-    const {
-      send: sendTxn,
-      sendBatch: sendBatchTxn,
-      flush: flushTxn,
-    } = createMessageProducer({
-      ...messageProducerOptions,
-      eosManager: activeEosManager,
-      idempotent: true,
-    });
-    transactionalFlush = flushTxn;
-
-    const isActive = (): boolean => activeEosManager.isInTransaction() && !transactionDidEnd;
-
-    function unusableReason(): string {
-      if (activeEosManager.isFenced()) return FENCED_PRODUCER_MESSAGE;
-      if (transactionDidEnd) return 'Cannot continue to use transaction once ended';
-      return 'Cannot send or add offsets once the transaction is ending or can only be aborted';
-    }
-
-    function transactionGuard<Args extends unknown[], R>(
-      fn: (...args: Args) => Promise<R>,
-      isUsable: () => boolean = isActive,
-    ): (...args: Args) => Promise<R> {
-      return (...args: Args) => {
-        if (!isUsable()) {
-          return Promise.reject(new KafkaNonRetriableError(unusableReason()));
-        }
-
-        return fn(...args);
-      };
-    }
-
-    // Ending stays callable after the transaction left TRANSACTING (abort-only, or a failed
-    // EndTxn to resend); the EOS manager's state machine decides which end is still legal.
-    const isNotEnded = (): boolean => !transactionDidEnd;
-
-    return {
-      sendBatch: transactionGuard(sendBatchTxn),
-      send: transactionGuard(sendTxn),
-      abort: transactionGuard(async () => {
-        await flushTxn();
-        await activeEosManager.abort();
-        transactionDidEnd = true;
-      }, isNotEnded),
-      commit: transactionGuard(async () => {
-        await flushTxn();
-        await activeEosManager.commit();
-        transactionDidEnd = true;
-      }, isNotEnded),
-      sendOffsets: transactionGuard(
-        async ({ consumerGroupId, topics }: { consumerGroupId: string; topics: readonly TopicOffsets[] }) => {
-          await activeEosManager.sendOffsets({ consumerGroupId, topics });
-
-          for (const { topic, partitions } of topics) {
-            for (const { partition, offset } of partitions) {
-              cluster.markOffsetAsCommitted({ groupId: consumerGroupId, topic, partition, offset });
-            }
-          }
-        },
-      ),
-      isActive,
-    };
+    const session = transactionSession;
+    return session.begin(() =>
+      createMessageProducer({
+        ...messageProducerOptions,
+        ledger: session.ledger,
+        transaction: session,
+        idempotent: true,
+      }),
+    );
   }
 
   function assertBrokerSupportsTransactions(): void {
@@ -297,14 +222,14 @@ export function createProducer({
       assertBrokerSupportsTransactions();
     }
 
-    if (idempotent && !idempotentEosManager.isInitialized()) {
-      await rejectOnAbort(idempotentEosManager.initProducerId(), signal);
+    if (idempotent && !idempotenceLedger.isInitialized()) {
+      await rejectOnAbort(idempotenceLedger.initProducerId(), signal);
     }
   }
 
   async function flushAll(): Promise<void> {
     await flush();
-    if (transactionalFlush) await transactionalFlush();
+    if (transactionSession) await transactionSession.flush();
   }
 
   async function disconnect({ signal }: ConnectOptions = {}): Promise<void> {

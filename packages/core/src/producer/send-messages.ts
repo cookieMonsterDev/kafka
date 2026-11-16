@@ -8,18 +8,37 @@ import type { Retrier, Retryable } from '../retry/index';
 import type { MetricsRecorder } from '../instrumentation/metrics';
 import type { Deadline } from '../utils/deadline';
 import { createTopicData } from './create-topic-data';
-import type { EosManager } from './eos-manager/index';
 import { groupMessagesPerPartition } from './group-messages-per-partition';
-import { partitionKey } from './idempotence-ledger';
+import { partitionKey, type IdempotenceLedger } from './idempotence-ledger';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
 import { responseSerializer } from './response-serializer';
 import type { CustomPartitioner, Message, RecordMetadata, TopicMessages } from './types';
+
+export interface TransactionTopicPartitions {
+  topic: string;
+  partitions: readonly { partition: number }[];
+}
+
+/** What a send reports to the transaction it produces into. */
+export interface OpenTransaction {
+  readonly transactionalId: string;
+  /**
+   * Partitions about to be produced. Returns a promise only when the transaction coordinator must
+   * add some of them first; otherwise `undefined`, so the send awaits nothing.
+   */
+  enrollPartitions: (topicData: readonly TransactionTopicPartitions[]) => Promise<void> | undefined;
+  /** The send failed after a possible partial write, so the transaction may only abort. */
+  sendFailed: () => void;
+}
 
 export interface SendMessagesOptions {
   logger: Logger;
   cluster: Cluster;
   partitioner: ReturnType<CustomPartitioner>;
-  eosManager: EosManager;
+  /** Producer id, epoch and sequence numbers; sequences are not tracked until it has a producer id. */
+  ledger: IdempotenceLedger;
+  /** The transaction to produce into; absent for a non-transactional producer. */
+  transaction?: OpenTransaction;
   retrier: Retrier;
   /** Shared across a producer's lifetime. Defaults to a fresh tracker. */
   nodeLatencyTracker?: NodeLatencyTracker;
@@ -70,13 +89,12 @@ export function createSendMessages({
   logger,
   cluster,
   partitioner,
-  eosManager,
+  ledger,
+  transaction,
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
   metrics,
 }: SendMessagesOptions) {
-  const { ledger } = eosManager;
-
   return ({
     acks,
     timeout,
@@ -194,8 +212,9 @@ export function createSendMessages({
       }
 
       return [...topicDataByBroker.entries()].map(async ([broker, topicData]) => {
-        if (eosManager.isTransactional()) {
-          await eosManager.addPartitionsToTransaction(topicData);
+        if (transaction) {
+          const enrolling = transaction.enrollPartitions(topicData);
+          if (enrolling) await enrolling;
         }
 
         // Without a producer id, sequences are not tracked and the encoder writes the default.
@@ -208,7 +227,7 @@ export function createSendMessages({
         const producedAt = Date.now();
         const response = await broker
           .produce({
-            transactionalId: eosManager.isTransactional() ? eosManager.getTransactionalId() : undefined,
+            transactionalId: transaction?.transactionalId,
             producerId: ledger.getProducerId(),
             producerEpoch: ledger.getProducerEpoch(),
             acks,
@@ -366,9 +385,8 @@ export function createSendMessages({
       (error: unknown) => {
         lease.release(ackedPartitions);
         // Some partitions may already be written inside the transaction (and KIP-890's
-        // TRANSACTION_ABORTABLE says so outright), so it may only abort from here, like the Java
-        // client's abortable error state; a later `commit()` must not keep a partial send.
-        if (eosManager.isTransactional()) eosManager.markTransactionAbortable();
+        // TRANSACTION_ABORTABLE says so outright); a later `commit()` must not keep a partial send.
+        transaction?.sendFailed();
         throw error;
       },
     );

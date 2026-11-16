@@ -1,16 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { InstrumentationEvent } from '../instrumentation/event';
-import { KafkaRequestTimeoutError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { SHARE_ACKNOWLEDGE_TYPE } from './acknowledge-types';
-import { ACKNOWLEDGE, FETCH, FETCH_START, type ShareAcknowledgePayload } from './instrumentation-events';
+import { FETCH, FETCH_START } from './instrumentation-events';
+import { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
 import { ShareRunner } from './share-runner';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
-const TOPIC_ID = Buffer.alloc(16, 9);
 
 const BATCH_CONTEXT = {
   firstOffset: 10n,
@@ -27,73 +26,74 @@ const BATCH_CONTEXT = {
   magicByte: 2,
 } as const;
 
-function createShareGroup(overrides: Record<string, unknown> = {}) {
-  const shareFetch = vi.fn().mockResolvedValue({
-    errorCode: 0,
-    responses: [
+function shareBatch(partition = 0): ShareBatch {
+  return new ShareBatch('events', {
+    partition,
+    messages: [
       {
-        topicId: TOPIC_ID,
-        partitions: [
-          {
-            partitionIndex: 0,
-            errorCode: 0,
-            records: [
-              {
-                magicByte: 2,
-                attributes: 0,
-                timestamp: 1n,
-                offset: 10n,
-                key: Buffer.from('k'),
-                value: Buffer.from('v'),
-                headers: {},
-                isControlRecord: false,
-                batchContext: BATCH_CONTEXT,
-              },
-            ],
-            acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
-          },
-        ],
+        magicByte: 2,
+        attributes: 0,
+        timestamp: 1n,
+        offset: 10n,
+        key: Buffer.from('k'),
+        value: Buffer.from('v'),
+        headers: {},
+        isControlRecord: false,
+        byteSize: 1,
+        batchContext: BATCH_CONTEXT,
       },
     ],
+    acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
   });
-  const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-  const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
+}
+
+/** Resolves empty after a short wait, as a long-polling ShareFetch that acquired nothing would. */
+async function emptyFetch(): Promise<ShareBatch[]> {
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  return [];
+}
+
+function errorOfType(type: string): Error {
+  const code = ERROR_CODES.find((entry) => entry.type === type)?.code;
+  if (code == null) throw new Error(`Unknown error type ${type}`);
+  return createErrorFromCode(code);
+}
+
+function createShareGroup(overrides: Record<string, unknown> = {}) {
+  const fetch = vi.fn().mockResolvedValueOnce([shareBatch()]).mockImplementation(emptyFetch);
+  const acknowledge = vi.fn();
+  const closeShareSessions = vi.fn().mockResolvedValue(undefined);
+  const leave = vi.fn().mockResolvedValue(undefined);
   const shareGroup = {
     groupId: 'share-1',
     memberId: 'member-1',
     heartbeatIntervalMs: 50,
-    cluster: {
-      refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-      findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-      findBroker,
-    },
     connect: vi.fn().mockResolvedValue(undefined),
     joinAndSync: vi.fn().mockResolvedValue(undefined),
-    leave: vi.fn().mockResolvedValue(undefined),
+    leave,
     disconnect: vi.fn().mockResolvedValue(undefined),
     heartbeat: vi.fn().mockResolvedValue(undefined),
     heartbeatDue: vi.fn().mockReturnValue(false),
     getNodeIds: vi.fn().mockReturnValue(['1']),
-    filterPartitionsByNode: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0] }]),
-    assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0] }]),
     hasAssignment: vi.fn().mockReturnValue(true),
     recoverFromFetch: vi.fn(),
+    fetch,
+    acknowledge,
+    closeShareSessions,
     ...overrides,
   } as unknown as ShareGroup;
 
-  return { shareGroup, shareFetch, shareAcknowledge };
+  return { shareGroup, fetch, acknowledge, closeShareSessions, leave };
 }
 
 describe('share-consumer/share-runner', () => {
-  it('fetches acquired records, accepts them, and closes the share session on stop', async () => {
-    const leave = vi.fn().mockResolvedValue(undefined);
-    const { shareGroup, shareFetch, shareAcknowledge } = createShareGroup({ leave });
+  it('accepts handled records, then closes the share sessions before leaving on stop', async () => {
+    const { shareGroup, acknowledge, closeShareSessions, leave } = createShareGroup();
     const handled: bigint[] = [];
     const runner = new ShareRunner({
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
       eachMessage: async ({ message }) => {
         handled.push(message.offset);
@@ -106,31 +106,18 @@ describe('share-consumer/share-runner', () => {
     await vi.waitFor(() => expect(handled).toEqual([10n]));
     await runner.stop();
 
-    expect(handled).toEqual([10n]);
-    expect(shareFetch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        shareAcquireMode: 0,
-        isRenewAck: false,
-      }),
-    );
-    expect(shareAcknowledge).toHaveBeenCalledWith(
-      expect.objectContaining({
-        groupId: 'share-1',
-        memberId: 'member-1',
-        shareSessionEpoch: -1,
-      }),
-    );
-    expect(leave).toHaveBeenCalled();
+    expect(acknowledge).toHaveBeenCalledWith(expect.objectContaining({ partition: 0 }), SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
+    expect(closeShareSessions).toHaveBeenCalledTimes(1);
+    expect(closeShareSessions.mock.invocationCallOrder[0]).toBeLessThan(leave.mock.invocationCallOrder[0] ?? 0);
   });
 
-  it('releases acquired records when the handler fails', async () => {
-    const { shareGroup, shareAcknowledge } = createShareGroup();
+  it('releases acquired records and crashes when the handler fails', async () => {
+    const { shareGroup, acknowledge } = createShareGroup();
     const onCrash = vi.fn();
     const runner = new ShareRunner({
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
       eachMessage: async () => {
         throw new Error('boom');
@@ -143,53 +130,21 @@ describe('share-consumer/share-runner', () => {
     runner.shuttingDown = true;
     await runner.stop();
 
-    const closeCall = shareAcknowledge.mock.calls[0]?.[0] as {
-      topics: { partitions: { acknowledgementBatches: { acknowledgeTypes: number[] }[] }[] }[];
-    };
-    expect(closeCall.topics[0]?.partitions[0]?.acknowledgementBatches[0]?.acknowledgeTypes).toEqual([
-      SHARE_ACKNOWLEDGE_TYPE.RELEASE,
-    ]);
+    expect(acknowledge).toHaveBeenCalledTimes(1);
+    expect(acknowledge).toHaveBeenCalledWith(expect.any(ShareBatch), SHARE_ACKNOWLEDGE_TYPE.RELEASE);
   });
 
-  it('sends ShareFetch v2 record-limit mode and marks renew acknowledgements', async () => {
-    const { shareGroup, shareFetch } = createShareGroup();
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
-      shareAcquireMode: 1,
-      retry: { retries: 0 },
-      eachMessage: async () => {
-        runner.shuttingDown = true;
-      },
-      onCrash: vi.fn(),
-    });
-
-    await runner.start();
-    await vi.waitFor(() => expect(shareFetch).toHaveBeenCalled());
-    await runner.stop();
-
-    expect(shareFetch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        shareAcquireMode: 1,
-        isRenewAck: false,
-      }),
-    );
-  });
-
-  it('exposes eachBatch and auto-acks acquired records', async () => {
-    const { shareGroup, shareAcknowledge } = createShareGroup();
+  it('acknowledges an eachBatch batch with the type its handler chose', async () => {
+    const { shareGroup, acknowledge } = createShareGroup();
     const seen: string[] = [];
     const runner = new ShareRunner({
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
-      eachBatch: async ({ batch, acknowledge }) => {
+      eachBatch: async ({ batch, acknowledge: acknowledgeBatch }) => {
         seen.push(`${batch.topic}:${batch.partition}`);
-        acknowledge();
+        acknowledgeBatch(SHARE_ACKNOWLEDGE_TYPE.REJECT);
         runner.shuttingDown = true;
       },
       onCrash: vi.fn(),
@@ -199,199 +154,94 @@ describe('share-consumer/share-runner', () => {
     await vi.waitFor(() => expect(seen).toEqual(['events:0']));
     await runner.stop();
 
-    const closeCall = shareAcknowledge.mock.calls[0]?.[0] as {
-      topics: { partitions: { acknowledgementBatches: { acknowledgeTypes: number[] }[] }[] }[];
-    };
-    expect(closeCall.topics[0]?.partitions[0]?.acknowledgementBatches[0]?.acknowledgeTypes).toEqual([
-      SHARE_ACKNOWLEDGE_TYPE.ACCEPT,
-    ]);
+    expect(acknowledge).toHaveBeenCalledTimes(1);
+    expect(acknowledge).toHaveBeenCalledWith(expect.any(ShareBatch), SHARE_ACKNOWLEDGE_TYPE.REJECT);
   });
 
+  it.each([
+    { eachBatchAutoAck: true, expected: [[expect.any(ShareBatch), SHARE_ACKNOWLEDGE_TYPE.ACCEPT]] },
+    { eachBatchAutoAck: false, expected: [] },
+  ])(
+    'with eachBatchAutoAck $eachBatchAutoAck, settles a batch its handler did not acknowledge',
+    async ({ eachBatchAutoAck, expected }) => {
+      const { shareGroup, acknowledge } = createShareGroup();
+      let handled = false;
+      const runner = new ShareRunner({
+        logger: silentLogger,
+        shareGroup,
+        heartbeatInterval: 50,
+        retry: { retries: 0 },
+        eachBatchAutoAck,
+        eachBatch: async () => {
+          handled = true;
+          runner.shuttingDown = true;
+        },
+        onCrash: vi.fn(),
+      });
+
+      await runner.start();
+      await vi.waitFor(() => expect(handled).toBe(true));
+      await runner.stop();
+
+      expect(acknowledge.mock.calls).toEqual(expected);
+    },
+  );
+
   it('fetches from each assigned node in parallel', async () => {
-    const shareFetchA = vi.fn().mockImplementation(async () => {
+    const fetch = vi.fn(async () => {
       await new Promise((resolve) => setTimeout(resolve, 40));
-      return { errorCode: 0, responses: [] };
+      return [];
     });
-    const shareFetchB = vi.fn().mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      return { errorCode: 0, responses: [] };
-    });
-    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const findBroker = vi.fn(async ({ nodeId }: { nodeId: string }) => ({
-      shareFetch: nodeId === '1' ? shareFetchA : shareFetchB,
-      shareAcknowledge,
-    }));
-    const { shareGroup } = createShareGroup({
-      getNodeIds: vi.fn().mockReturnValue(['1', '2']),
-      filterPartitionsByNode: vi.fn((nodeId: string) => [{ topic: 'events', partitions: nodeId === '1' ? [0] : [1] }]),
-      assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker,
-      },
-    });
+    const { shareGroup } = createShareGroup({ fetch, getNodeIds: vi.fn().mockReturnValue(['1', '2']) });
     const runner = new ShareRunner({
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
-      eachMessage: async () => {
-        runner.shuttingDown = true;
-      },
+      eachMessage: async () => undefined,
       onCrash: vi.fn(),
     });
 
     const started = Date.now();
     await runner.start();
-    await vi.waitFor(() => expect(shareFetchA).toHaveBeenCalled());
-    await vi.waitFor(() => expect(shareFetchB).toHaveBeenCalled());
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('1'));
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('2'));
     const elapsed = Date.now() - started;
+    runner.shuttingDown = true;
     await runner.stop();
     expect(elapsed).toBeLessThan(80);
   });
 
-  it('forgets a partition dropped from the assignment on the next share fetch for that node', async () => {
-    const shareFetch = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
-    let assignedPartitions = [0, 1];
-    const { shareGroup } = createShareGroup({
-      filterPartitionsByNode: vi.fn(() => [{ topic: 'events', partitions: assignedPartitions }]),
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker,
-      },
+  it('drops fetched batches whose partition is no longer assigned', async () => {
+    const { shareGroup } = createShareGroup({ hasAssignment: vi.fn().mockReturnValue(false) });
+    const instrumentationEmitter = new InstrumentationEventEmitter();
+    const fetches: { numberOfBatches: number }[] = [];
+    instrumentationEmitter.addListener(FETCH, (event: InstrumentationEvent<unknown>) => {
+      fetches.push(event.payload as { numberOfBatches: number });
     });
-
+    const eachMessage = vi.fn();
     const runner = new ShareRunner({
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
+      instrumentationEmitter,
+      eachMessage,
       onCrash: vi.fn(),
     });
 
-    type ShareFetchCallArgs = { forgottenTopics: { topicId: Buffer; partitions: number[] }[] };
-    const findForgetCall = () =>
-      (shareFetch.mock.calls as [ShareFetchCallArgs][]).find(([opts]) => opts.forgottenTopics.length > 0);
-
     await runner.start();
-    await vi.waitFor(() => expect(shareFetch).toHaveBeenCalled());
-    expect(findForgetCall()).toBeUndefined();
-
-    assignedPartitions = [0];
-    await vi.waitFor(() => expect(findForgetCall()).toBeDefined());
+    await vi.waitFor(() => expect(fetches.length).toBeGreaterThan(0));
     runner.shuttingDown = true;
     await runner.stop();
 
-    expect(findForgetCall()?.[0]?.forgottenTopics).toEqual([{ topicId: TOPIC_ID, partitions: [1] }]);
-  });
-
-  it('resets the share session epoch after the broker invalidates it, then retries fresh', async () => {
-    const code = ERROR_CODES.find((entry) => entry.type === 'INVALID_SHARE_SESSION_EPOCH')!.code;
-    const shareFetch = vi
-      .fn()
-      .mockResolvedValueOnce({ errorCode: 0, responses: [] })
-      .mockRejectedValueOnce(createErrorFromCode(code))
-      .mockResolvedValueOnce({ errorCode: 0, responses: [] });
-    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker,
-      },
-    });
-
-    const onCrash = vi.fn();
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
-      retry: { retries: 0 },
-      onCrash,
-    });
-
-    await runner.start();
-    // The mock's fourth call (unconfigured) returns `undefined`, which crashes the runner - a
-    // deterministic stopping point once the three configured responses above have been used.
-    await vi.waitFor(() => expect(onCrash).toHaveBeenCalled());
-    runner.shuttingDown = true;
-    await runner.stop();
-
-    expect(shareFetch.mock.calls[0]?.[0]?.shareSessionEpoch).toBe(0);
-    expect(shareFetch.mock.calls[1]?.[0]?.shareSessionEpoch).toBe(1);
-    expect(shareFetch.mock.calls[2]?.[0]?.shareSessionEpoch).toBe(0);
-  });
-
-  it('retries a failed ShareFetch on a fresh session instead of replaying its epoch and acknowledgements', async () => {
-    type ShareFetchArgs = {
-      shareSessionEpoch: number;
-      topics: { partitions: { acknowledgementBatches: unknown[] }[] }[];
-    };
-    const { shareGroup, shareFetch } = createShareGroup();
-    const recordResponse: unknown = await shareFetch();
-    shareFetch.mockReset();
-    const requests: ShareFetchArgs[] = [];
-    let failed = false;
-    shareFetch.mockImplementation(async (request: ShareFetchArgs) => {
-      requests.push(request);
-      if (requests.length === 1) return recordResponse;
-      const carriesAcks = request.topics.some(({ partitions }) =>
-        partitions.some(({ acknowledgementBatches }) => acknowledgementBatches.length > 0),
-      );
-      if (carriesAcks && !failed) {
-        failed = true;
-        throw new KafkaRequestTimeoutError('Request timed out', { broker: 'h:1' });
-      }
-      return { errorCode: 0, responses: [] };
-    });
-
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 1000,
-      maxWaitTimeInMs: 10,
-      retry: { retries: 1, initialRetryTime: 1, maxRetryTime: 5 },
-      eachMessage: async () => undefined,
-      onCrash: vi.fn(),
-    });
-
-    try {
-      await runner.start();
-      await vi.waitFor(() => expect(failed).toBe(true));
-      const failedIndex = requests.findIndex(
-        (request, index) => index > 0 && request.topics[0]?.partitions[0]?.acknowledgementBatches.length,
-      );
-      await vi.waitFor(() => expect(requests.length).toBeGreaterThan(failedIndex + 1));
-
-      // The broker may already have applied the timed-out request, so its epoch and
-      // acknowledgements must not be sent again; the retry opens a fresh session instead.
-      const retry = requests[failedIndex + 1]!;
-      expect(retry.shareSessionEpoch).toBe(0);
-      expect(retry.topics[0]?.partitions[0]?.acknowledgementBatches).toEqual([]);
-    } finally {
-      runner.shuttingDown = true;
-      await runner.stop();
-    }
+    expect(fetches[0]?.numberOfBatches).toBe(0);
+    expect(eachMessage).not.toHaveBeenCalled();
   });
 
   it('crashes on a non-retriable fetch error instead of retrying it forever', async () => {
-    const code = ERROR_CODES.find((entry) => entry.type === 'TOPIC_AUTHORIZATION_FAILED')!.code;
-    const shareFetch = vi.fn().mockRejectedValue(createErrorFromCode(code));
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
-      },
-    });
+    const fetch = vi.fn().mockRejectedValue(errorOfType('TOPIC_AUTHORIZATION_FAILED'));
+    const { shareGroup } = createShareGroup({ fetch });
     const onCrash = vi.fn();
     const runner = new ShareRunner({
       logger: silentLogger,
@@ -404,7 +254,7 @@ describe('share-consumer/share-runner', () => {
     try {
       await runner.start();
       await vi.waitFor(() => expect(onCrash).toHaveBeenCalledWith(expect.objectContaining({ retriable: false })));
-      expect(shareFetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(1);
     } finally {
       runner.shuttingDown = true;
       await runner.stop();
@@ -412,15 +262,8 @@ describe('share-consumer/share-runner', () => {
   });
 
   it('backs off before retrying a retriable fetch error', async () => {
-    const code = ERROR_CODES.find((entry) => entry.type === 'LEADER_NOT_AVAILABLE')!.code;
-    const shareFetch = vi.fn().mockRejectedValue(createErrorFromCode(code));
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
-      },
-    });
+    const fetch = vi.fn().mockRejectedValue(errorOfType('LEADER_NOT_AVAILABLE'));
+    const { shareGroup } = createShareGroup({ fetch });
     const onCrash = vi.fn();
     const runner = new ShareRunner({
       logger: silentLogger,
@@ -434,179 +277,11 @@ describe('share-consumer/share-runner', () => {
       await runner.start();
       await new Promise((resolve) => setTimeout(resolve, 50));
       expect(onCrash).not.toHaveBeenCalled();
-      expect(shareFetch.mock.calls.length).toBeLessThan(5);
+      expect(fetch.mock.calls.length).toBeLessThan(5);
     } finally {
       runner.shuttingDown = true;
       await runner.stop();
     }
-  });
-
-  it('keeps healthy partitions and logs a failed acknowledgement when other partitions report errors', async () => {
-    const partitionResponse = (overrides: Record<string, unknown>) => ({
-      partitionIndex: 1,
-      errorCode: 0,
-      acknowledgeErrorCode: 0,
-      currentLeader: { leaderId: -1, leaderEpoch: -1 },
-      records: [],
-      acquiredRecords: [],
-      ...overrides,
-    });
-    const record = { offset: 10n, key: null, value: Buffer.from('v'), headers: {}, batchContext: BATCH_CONTEXT };
-    const shareFetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        errorCode: 0,
-        responses: [
-          {
-            topicId: TOPIC_ID,
-            partitions: [
-              partitionResponse({ partitionIndex: 0, errorCode: 6, acknowledgeErrorCode: 121 }), // NOT_LEADER_OR_FOLLOWER, INVALID_RECORD_STATE
-              partitionResponse({
-                acknowledgeErrorCode: 121,
-                records: [record],
-                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
-              }),
-            ],
-          },
-        ],
-      })
-      .mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({ errorCode: 0, responses: [] }), 10)),
-      );
-    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadata,
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge: vi.fn() }),
-      },
-      filterPartitionsByNode: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
-      assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
-    });
-    const warnings: { message: string; extra: Record<string, unknown> }[] = [];
-    const logger = createLogger({
-      level: LOG_LEVELS.WARN,
-      logCreator:
-        () =>
-        ({ log: { message, ...extra } }) =>
-          warnings.push({ message, extra }),
-    });
-    const onCrash = vi.fn();
-    const handled: { partition: number; offset: bigint }[] = [];
-    const runner = new ShareRunner({
-      logger,
-      shareGroup,
-      heartbeatInterval: 1000,
-      maxWaitTimeInMs: 10,
-      retry: { retries: 0 },
-      eachMessage: async ({ partition, message }) => {
-        handled.push({ partition, offset: message.offset });
-      },
-      onCrash,
-    });
-
-    try {
-      await runner.start();
-      await vi.waitFor(() => expect(handled).toEqual([{ partition: 1, offset: 10n }]));
-      await vi.waitFor(() => expect(refreshMetadata).toHaveBeenCalled());
-      expect(onCrash).not.toHaveBeenCalled();
-      expect(warnings).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            extra: expect.objectContaining({
-              topic: 'events',
-              partition: 1,
-              error: expect.stringMatching(/record state/),
-            }),
-          }),
-          expect.objectContaining({
-            extra: expect.objectContaining({ topic: 'events', partition: 0, error: expect.stringMatching(/leader/i) }),
-          }),
-        ]),
-      );
-    } finally {
-      runner.shuttingDown = true;
-      await runner.stop();
-    }
-  });
-
-  it("crashes on a non-retriable partition fetch error and releases the healthy partitions' records", async () => {
-    const shareFetch = vi.fn().mockImplementation(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      return {
-        errorCode: 0,
-        responses: [
-          {
-            topicId: TOPIC_ID,
-            partitions: [
-              {
-                partitionIndex: 0,
-                errorCode: 29, // TOPIC_AUTHORIZATION_FAILED
-                acknowledgeErrorCode: 0,
-                currentLeader: { leaderId: -1, leaderEpoch: -1 },
-                records: [],
-                acquiredRecords: [],
-              },
-              {
-                partitionIndex: 1,
-                errorCode: 0,
-                acknowledgeErrorCode: 0,
-                currentLeader: { leaderId: -1, leaderEpoch: -1 },
-                records: [],
-                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
-              },
-            ],
-          },
-        ],
-      };
-    });
-    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge }),
-      },
-      filterPartitionsByNode: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
-      assigned: vi.fn().mockReturnValue([{ topic: 'events', partitions: [0, 1] }]),
-    });
-    const onCrash = vi.fn();
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 1000,
-      retry: { retries: 0 },
-      onCrash,
-    });
-
-    try {
-      await runner.start();
-      await vi.waitFor(() =>
-        expect(onCrash).toHaveBeenCalledWith(expect.objectContaining({ type: 'TOPIC_AUTHORIZATION_FAILED' })),
-      );
-    } finally {
-      runner.shuttingDown = true;
-      await runner.stop();
-    }
-
-    expect(shareAcknowledge).toHaveBeenCalledWith(
-      expect.objectContaining({
-        topics: [
-          {
-            topicId: TOPIC_ID,
-            partitions: [
-              {
-                partitionIndex: 1,
-                acknowledgementBatches: [
-                  { firstOffset: 10n, lastOffset: 10n, acknowledgeTypes: [SHARE_ACKNOWLEDGE_TYPE.RELEASE] },
-                ],
-              },
-            ],
-          },
-        ],
-      }),
-    );
   });
 
   it('emits FETCH_START and FETCH around each fetch round', async () => {
@@ -625,7 +300,6 @@ describe('share-consumer/share-runner', () => {
       logger: silentLogger,
       shareGroup,
       heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
       retry: { retries: 0 },
       instrumentationEmitter,
       eachMessage: async () => {
@@ -639,93 +313,7 @@ describe('share-consumer/share-runner', () => {
     await runner.stop();
 
     expect(fetchStarts[0]).toEqual({ nodeId: '1' });
-    expect(fetches[0]).toEqual(
-      expect.objectContaining({ nodeId: '1', numberOfBatches: expect.any(Number), duration: expect.any(Number) }),
-    );
-  });
-
-  it('emits ACKNOWLEDGE with the acknowledged offsets and type once a fetch piggybacks them', async () => {
-    // The ack for a record acquired on fetch #1 is only sent piggybacked on fetch #2's request
-    // (there is no standalone ShareAcknowledge on the happy path) - so respond with the record
-    // once, then empty responses, and only stop once that piggybacked ACKNOWLEDGE is observed.
-    const shareFetch = vi
-      .fn()
-      .mockResolvedValueOnce({
-        errorCode: 0,
-        responses: [
-          {
-            topicId: TOPIC_ID,
-            partitions: [
-              {
-                partitionIndex: 0,
-                errorCode: 0,
-                records: [
-                  {
-                    magicByte: 2,
-                    attributes: 0,
-                    timestamp: 1n,
-                    offset: 10n,
-                    key: Buffer.from('k'),
-                    value: Buffer.from('v'),
-                    headers: {},
-                    isControlRecord: false,
-                    batchContext: BATCH_CONTEXT,
-                  },
-                ],
-                acquiredRecords: [{ firstOffset: 10n, lastOffset: 10n, deliveryCount: 1 }],
-              },
-            ],
-          },
-        ],
-      })
-      .mockResolvedValue({ errorCode: 0, responses: [] });
-    const shareAcknowledge = vi.fn().mockResolvedValue({ errorCode: 0, responses: [] });
-    const findBroker = vi.fn().mockResolvedValue({ shareFetch, shareAcknowledge });
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker,
-      },
-    });
-
-    const instrumentationEmitter = new InstrumentationEventEmitter();
-    const acks: ShareAcknowledgePayload[] = [];
-    instrumentationEmitter.addListener(ACKNOWLEDGE, (event: InstrumentationEvent<unknown>) => {
-      acks.push(event.payload as ShareAcknowledgePayload);
-    });
-
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
-      retry: { retries: 0 },
-      instrumentationEmitter,
-      eachMessage: async ({ message }) => {
-        expect(message.offset).toBe(10n);
-      },
-      onCrash: vi.fn(),
-    });
-
-    await runner.start();
-    await vi.waitFor(() => expect(acks.length).toBeGreaterThan(0));
-    runner.shuttingDown = true;
-    await runner.stop();
-
-    expect(acks[0]).toEqual({
-      groupId: 'share-1',
-      memberId: 'member-1',
-      nodeId: '1',
-      topics: [
-        {
-          topic: 'events',
-          partitions: [
-            { partition: 0, firstOffset: 10n, lastOffset: 10n, acknowledgeType: SHARE_ACKNOWLEDGE_TYPE.ACCEPT },
-          ],
-        },
-      ],
-    });
+    expect(fetches[0]).toEqual({ nodeId: '1', numberOfBatches: 1, duration: expect.any(Number) });
   });
 
   it('observes a heartbeat-loop rejection instead of leaving it unhandled, and invokes onCrash', async () => {
@@ -767,13 +355,7 @@ describe('share-consumer/share-runner', () => {
 
   it('observes a fetch-loop rejection instead of leaving it unhandled, and invokes onCrash', async () => {
     const fetchError = new Error('fetch boom');
-    const { shareGroup } = createShareGroup({
-      cluster: {
-        refreshMetadataIfNecessary: vi.fn().mockRejectedValue(fetchError),
-        findTopicId: vi.fn().mockReturnValue(TOPIC_ID),
-        findBroker: vi.fn(),
-      },
-    });
+    const { shareGroup } = createShareGroup({ fetch: vi.fn().mockRejectedValue(fetchError) });
     const onCrash = vi.fn().mockImplementation((error: Error) => {
       throw error;
     });
@@ -803,54 +385,5 @@ describe('share-consumer/share-runner', () => {
       runner.shuttingDown = true;
       await runner.stop();
     }
-  });
-
-  it('emits ACKNOWLEDGE for the explicit ShareAcknowledge sent when a share session closes', async () => {
-    // Mirrors the "fetches acquired records..." scenario: `eachMessage` shuts the runner down
-    // synchronously as it handles the record, so the ACCEPT ack is queued but the runner never
-    // gets another fetch round to piggyback it on - it is only flushed by `stop()`'s explicit
-    // ShareAcknowledge (close-session) call.
-    const { shareGroup, shareAcknowledge } = createShareGroup();
-    const instrumentationEmitter = new InstrumentationEventEmitter();
-    const acks: ShareAcknowledgePayload[] = [];
-    instrumentationEmitter.addListener(ACKNOWLEDGE, (event: InstrumentationEvent<unknown>) => {
-      acks.push(event.payload as ShareAcknowledgePayload);
-    });
-
-    const handled: bigint[] = [];
-    const runner = new ShareRunner({
-      logger: silentLogger,
-      shareGroup,
-      heartbeatInterval: 50,
-      maxWaitTimeInMs: 10,
-      retry: { retries: 0 },
-      instrumentationEmitter,
-      eachMessage: async ({ message }) => {
-        handled.push(message.offset);
-        runner.shuttingDown = true;
-      },
-      onCrash: vi.fn(),
-    });
-
-    await runner.start();
-    await vi.waitFor(() => expect(handled).toEqual([10n]));
-    await runner.stop();
-
-    expect(shareAcknowledge).toHaveBeenCalled();
-    expect(acks).toEqual([
-      {
-        groupId: 'share-1',
-        memberId: 'member-1',
-        nodeId: '1',
-        topics: [
-          {
-            topic: 'events',
-            partitions: [
-              { partition: 0, firstOffset: 10n, lastOffset: 10n, acknowledgeType: SHARE_ACKNOWLEDGE_TYPE.ACCEPT },
-            ],
-          },
-        ],
-      },
-    ]);
   });
 });

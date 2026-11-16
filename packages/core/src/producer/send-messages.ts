@@ -1,6 +1,11 @@
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
-import { staleMetadata } from '../protocol/error-codes';
+import {
+  isConnectionError,
+  isStaleMetadata,
+  isUnknownProducerId,
+  isWriteOutcomeUnknown,
+} from '../cluster/error-classifier';
 import type { CompressionType } from '../protocol/compression/index';
 import { KafkaMetadataNotLoaded, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
@@ -65,13 +70,6 @@ function recordCount(topicMessages: readonly TopicMessages[]): number {
   return records;
 }
 
-/** Errors the broker returns although the records may already be on the leader's log. */
-const WRITE_UNKNOWN_ERROR_TYPES = new Set([
-  'REQUEST_TIMED_OUT',
-  'NOT_ENOUGH_REPLICAS_AFTER_APPEND',
-  'OUT_OF_ORDER_SEQUENCE_NUMBER',
-]);
-
 /**
  * Whether the broker definitely did not append this partition's records: only a partition-level
  * error names it. Anything else (a timeout, a dropped connection, a sibling's error failing the
@@ -82,7 +80,7 @@ function wasRejected(error: unknown, topic: string, partition: number): boolean 
     error instanceof KafkaProtocolError &&
     error.topic === topic &&
     error.partition === partition &&
-    !WRITE_UNKNOWN_ERROR_TYPES.has(error.type ?? '')
+    !isWriteOutcomeUnknown(error)
   );
 }
 
@@ -292,8 +290,6 @@ export function createSendMessages({
       } catch (e) {
         const error = e as Error & {
           name: string;
-          host?: string;
-          port?: number;
           retriable?: boolean;
           type?: string;
           topic?: string;
@@ -302,9 +298,7 @@ export function createSendMessages({
           nodeEndpoints?: { nodeId: number; host: string; port: number; rack: string | null }[];
         };
 
-        if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
-          cluster.removeBroker({ host: error.host, port: error.port });
-        }
+        cluster.onConnectionClosed(error);
 
         if (!cluster.isConnected()) {
           logger.debug(`Cluster has disconnected, reconnecting: ${error.message}`, { retryCount, retryTime });
@@ -317,7 +311,7 @@ export function createSendMessages({
         // client didn't already have it cached). Patch the cache locally instead of paying for a
         // full Metadata round trip before the retrier's next attempt.
         if (
-          staleMetadata(error) &&
+          isStaleMetadata(error) &&
           error.topic != null &&
           error.partition != null &&
           error.currentLeader != null &&
@@ -345,22 +339,21 @@ export function createSendMessages({
         // This is necessary in case the metadata is stale and the number of partitions for this
         // topic has increased in the meantime.
         if (
-          staleMetadata(error) ||
+          isStaleMetadata(error) ||
           error.name === 'KafkaMetadataNotLoaded' ||
-          error.name === 'KafkaConnectionError' ||
-          error.name === 'KafkaConnectionClosedError' ||
+          isConnectionError(error) ||
           error.name === 'KafkaRequestTimeoutError' ||
           (error.name === 'KafkaProtocolError' && error.retriable)
         ) {
           logger.error(`Failed to send messages: ${error.message}`, { retryCount, retryTime });
-          await cluster.refreshMetadata();
+          await cluster.refreshStaleMetadata();
           throw error;
         }
 
         // UNKNOWN_PRODUCER_ID is not marked retriable: the broker dropped this producer id after
         // retention. KIP-360 lets a v3+ InitProducerId bump the epoch so produce can continue, once
         // every other send has drained. A transaction can only abort, which bumps it then.
-        if (error.type === 'UNKNOWN_PRODUCER_ID') {
+        if (isUnknownProducerId(error)) {
           const canRetry = lease.retryUnderNewEpoch();
           if (canRetry) {
             logger.warn(`Producer id was fenced or expired; reallocating: ${error.message}`, {

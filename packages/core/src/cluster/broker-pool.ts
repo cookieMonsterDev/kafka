@@ -3,13 +3,13 @@ import { supportsDescribeClusterControllers } from '../broker/capabilities';
 import { KafkaBrokerNotFound, KafkaConnectionError, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
-import { staleMetadata } from '../protocol/error-codes';
 import type { BrokerVersions } from '../protocol/requests/index';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { arrayDiff } from '../utils/array-diff';
 import { shuffle } from '../utils/shuffle';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
+import { isIllegalSaslState, isRebootstrapRequired, isStaleMetadata } from './error-classifier';
 import type { ConnectionPoolBuilder } from './connection-pool-builder';
 import { DescribeCluster } from '../protocol/requests/lazy-families';
 import { Metadata } from '../protocol/requests/metadata/index';
@@ -165,9 +165,9 @@ export class BrokerPool {
         await this.seedBroker!.connect();
         this.versions = this.seedBroker!.versions;
       } catch (e) {
-        const error = e as Error & { name: string; type?: string; retriable?: boolean };
+        const error = e as Error & { retriable?: boolean };
 
-        if (e instanceof KafkaConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
+        if (e instanceof KafkaConnectionError || isIllegalSaslState(error)) {
           // The connection pool builder always rotates the seed broker.
           await this.createSeedBroker();
           this.logger.error(`Failed to connect to seed broker, trying another broker from the list: ${error.message}`, {
@@ -300,7 +300,7 @@ export class BrokerPool {
         }
         this.brokers = nextBrokers;
       } catch (e) {
-        const error = e as Error & { type?: string; name?: string };
+        const error = e as Error & { type?: string };
 
         if (generation !== this.#generation) {
           // findConnectedBroker() may have reconnected the seed during this attempt.
@@ -311,7 +311,7 @@ export class BrokerPool {
 
         if (
           this.metadataRecovery === 'rebootstrap' &&
-          (error.type === 'REBOOTSTRAP_REQUIRED' || e instanceof KafkaConnectionError)
+          (isRebootstrapRequired(error) || e instanceof KafkaConnectionError)
         ) {
           this.logger.warn('Rediscovering the cluster from the bootstrap broker list', {
             reason: error.type ?? error.name,
@@ -320,7 +320,7 @@ export class BrokerPool {
           throw new KafkaProtocolError({ message: error.message, retriable: true });
         }
 
-        if (staleMetadata(error)) {
+        if (isStaleMetadata(error)) {
           throw error;
         }
         bail(error);
@@ -343,6 +343,11 @@ export class BrokerPool {
 
     await this.createSeedBroker();
     await this.connect();
+  }
+
+  /** Marks the cached metadata stale, so the next `refreshMetadataIfNecessary` fetches it. */
+  expireMetadata(): void {
+    this.metadataExpireAt = null;
   }
 
   /** Re-checked inside the update queue, so concurrent stale callers share one Metadata request. */
@@ -511,10 +516,11 @@ export class BrokerPool {
       try {
         await broker.connect();
       } catch (e) {
-        const error = e as Error & { name: string; type?: string; retriable?: boolean };
+        const error = e as Error & { retriable?: boolean };
 
         const isConnectionError = e instanceof KafkaConnectionError;
-        if (isConnectionError || error.type === 'ILLEGAL_SASL_STATE') {
+        const isSaslStateLost = isIllegalSaslState(error);
+        if (isConnectionError || isSaslStateLost) {
           await broker.disconnect();
         }
 
@@ -525,7 +531,7 @@ export class BrokerPool {
           return;
         }
 
-        if (error.type === 'ILLEGAL_SASL_STATE') {
+        if (isSaslStateLost) {
           // Rebuild the connection pool since it can't recover from illegal SASL state.
           broker.connectionPool = await this.connectionPoolBuilder.build({
             host: broker.connectionPool.host,

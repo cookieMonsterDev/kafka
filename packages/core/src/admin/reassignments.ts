@@ -1,9 +1,10 @@
 import { KafkaNonRetriableError } from '../errors';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { protocolType, formatUnknown } from './helpers';
+import { formatUnknown } from './helpers';
 import type { PartitionReassignment, TopicPartitions } from './types';
 import {
   AlterPartitionReassignments,
@@ -24,7 +25,9 @@ export interface ReassignmentsApi {
   }) => Promise<{ results: ElectLeadersResponseV0Body['results'] }>;
 }
 
-export function createReassignmentsApi({ cluster, logger, retry }: AdminContext): ReassignmentsApi {
+export function createReassignmentsApi({ cluster, retry }: AdminContext): ReassignmentsApi {
+  const retrier = createRetrier(retry);
+
   const alterPartitionReassignments = async ({
     topics,
     timeout,
@@ -71,24 +74,13 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       }
     }
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
         await broker.send(AlterPartitionReassignments, { topics, timeout });
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not reassign partitions', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not reassign partitions' },
+    );
   };
 
   const listPartitionReassignments = async ({
@@ -125,26 +117,14 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       }
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const response = await broker.send(ListPartitionReassignments, { topics, timeout });
         return { topics: response.topics };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not reassign partitions', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { topics: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not reassign partitions' },
+    );
   };
 
   const electLeaders = async ({
@@ -185,26 +165,14 @@ export function createReassignmentsApi({ cluster, logger, retry }: AdminContext)
       }
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const response = await broker.send(ElectLeaders, { topicPartitions, electionType, timeout });
         return { results: response.results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not elect leaders', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { results: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not elect leaders' },
+    );
   };
 
   return { alterPartitionReassignments, listPartitionReassignments, electLeaders };

@@ -3,6 +3,7 @@ import type { Cluster } from '../cluster/index';
 import type { Logger } from '../loggers/index';
 import { createProducersApi } from './producers';
 import { withSend } from '../broker/test-send';
+import { fakeRunCluster } from '../cluster/test-run';
 
 function response(topic: string, partition: number, producerId: bigint) {
   return {
@@ -35,11 +36,14 @@ describe('admin.producers', () => {
   it('fans requests out to partition leaders and flattens their state', async () => {
     const brokerOne = withSend({ describeProducers: vi.fn().mockResolvedValue(response('orders', 0, 10n)) });
     const brokerTwo = withSend({ describeProducers: vi.fn().mockResolvedValue(response('orders', 1, 11n)) });
-    const cluster = withSend({
-      metadata: vi.fn().mockResolvedValue({}),
-      findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0], 2: [1] }),
-      findBroker: vi.fn(({ nodeId }: { nodeId: string }) => Promise.resolve(nodeId === '1' ? brokerOne : brokerTwo)),
-    });
+    const cluster = fakeRunCluster(
+      {},
+      {
+        metadata: vi.fn().mockResolvedValue({}),
+        findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0], 2: [1] }),
+        findBroker: vi.fn(({ nodeId }: { nodeId: string }) => Promise.resolve(nodeId === '1' ? brokerOne : brokerTwo)),
+      },
+    );
     const api = createProducersApi({
       cluster: cluster as unknown as Cluster,
       logger: {} as Logger,
@@ -60,6 +64,11 @@ describe('admin.producers', () => {
         activeProducers: [expect.objectContaining({ producerId: 11n, currentTransactionStartOffset: null })],
       },
     ]);
+    expect(cluster.run).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      expect.objectContaining({ retryRetriable: true }),
+    );
     expect(brokerOne.describeProducers).toHaveBeenCalledWith({
       topics: [{ topic: 'orders', partitions: [0] }],
     });

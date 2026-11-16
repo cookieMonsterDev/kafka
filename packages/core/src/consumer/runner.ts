@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { isKafkaError, isRebalancing } from '../errors';
+import { isRebalancing, isRejectedMember } from '../cluster/error-classifier';
+import { isKafkaError } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { retrier, type RetryOptions } from '../retry/index';
@@ -9,7 +10,6 @@ import { Batch } from './batch';
 import type { ConsumerGroupHandle } from './consumer-group';
 import { createFetchManager, type FetchManager } from './fetch-manager';
 import { END_BATCH_PROCESS, FETCH, FETCH_START, REBALANCING, START_BATCH_PROCESS } from './instrumentation-events';
-import { isRejectedMemberError } from './membership/group-membership';
 import type { ConsumerHooks, EachBatchHandler, EachMessageHandler, Offsets } from './types';
 import { DEFAULT_PREFETCH_MAX_BATCHES, DEFAULT_PREFETCH_MAX_BYTES, estimatePrefetchBytes } from './worker-queue';
 
@@ -222,7 +222,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (isRejectedMemberError(error)) {
+        if (isRejectedMember(error)) {
           if (!this.running || this.shuttingDown) return;
 
           this.logger.error('The coordinator is not aware of this member, re-joining the group', {
@@ -320,7 +320,7 @@ export class Runner extends EventEmitter {
     try {
       await this.consumerGroup.heartbeat();
     } catch (e) {
-      if (isRebalancing(e as { type?: string })) {
+      if (isRebalancing(e)) {
         await this.autoCommitOffsets();
       }
       throw e;

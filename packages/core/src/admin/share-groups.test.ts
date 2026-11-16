@@ -5,11 +5,14 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode } from '../protocol/error-codes';
 import { createShareGroupsApi } from './share-groups';
 import { withSend } from '../broker/test-send';
+import { COORDINATOR_LOADING_ERRORS } from '../cluster/error-classifier';
+import { coordinatorTarget, nodeTarget } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const fastRetry = { retries: 1, initialRetryTime: 1, maxRetryTime: 20, factor: 0, multiplier: 1 };
 
-function makeApi(cluster: Record<string, unknown>, retry?: { retries?: number } & Record<string, number>) {
+function makeApi(cluster: object, retry?: { retries?: number } & Record<string, number>) {
   return createShareGroupsApi({
     cluster: cluster as unknown as Cluster,
     logger: silentLogger.namespace('Admin'),
@@ -21,11 +24,9 @@ function makeApi(cluster: Record<string, unknown>, retry?: { retries?: number } 
 describe('admin/share-groups', () => {
   describe('describeShareGroups', () => {
     it('returns immediately for an empty group id list', async () => {
-      const findGroupCoordinator = vi.fn();
-      await expect(makeApi(withSend({ findGroupCoordinator })).describeShareGroups([])).resolves.toEqual({
-        groups: [],
-      });
-      expect(findGroupCoordinator).not.toHaveBeenCalled();
+      const cluster = fakeRunCluster({});
+      await expect(makeApi(cluster).describeShareGroups([])).resolves.toEqual({ groups: [] });
+      expect(cluster.run).not.toHaveBeenCalled();
     });
 
     it('rejects a non-array or empty-string group id', async () => {
@@ -48,15 +49,13 @@ describe('admin/share-groups', () => {
           groups: groupIds.map((groupId) => ({ groupId, groupState: 'Empty' })),
         })),
       });
-      const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-        groupId === 'share-c' ? second : first,
-      );
+      const cluster = fakeRunCluster({ coordinator: (groupId) => (groupId === 'share-c' ? second : first) });
 
-      const result = await makeApi(withSend({ findGroupCoordinator })).describeShareGroups([
-        'share-a',
-        'share-b',
-        'share-c',
-      ]);
+      const result = await makeApi(cluster).describeShareGroups(['share-a', 'share-b', 'share-c']);
+
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('share-a'));
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('share-b'));
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('share-c'));
 
       expect(first.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-a', 'share-b'] });
       expect(second.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-c'] });
@@ -74,12 +73,13 @@ describe('admin/share-groups', () => {
         nodeId: 2,
         shareGroupDescribe: vi.fn().mockResolvedValue({ groups: [{ groupId: 'share-a', groupState: 'Stable' }] }),
       });
-      const findGroupCoordinator = vi
-        .fn()
-        .mockResolvedValueOnce(staleCoordinator)
-        .mockResolvedValue(currentCoordinator);
+      const cluster = fakeRunCluster({
+        coordinator: vi.fn().mockReturnValueOnce(staleCoordinator).mockReturnValue(currentCoordinator),
+      });
 
-      const result = await makeApi(withSend({ findGroupCoordinator }), fastRetry).describeShareGroups(['share-a']);
+      const result = await makeApi(cluster, fastRetry).describeShareGroups(['share-a']);
+
+      expect(cluster.resolveTarget).toHaveBeenCalledTimes(2);
 
       expect(staleCoordinator.shareGroupDescribe).toHaveBeenCalledTimes(1);
       expect(currentCoordinator.shareGroupDescribe).toHaveBeenCalledWith({ groupIds: ['share-a'] });
@@ -109,9 +109,10 @@ describe('admin/share-groups', () => {
         nodeId: 1,
         describeShareGroupOffsets: vi.fn(async () => ({ groups: [{ groupId: 'share-1', topics: [] }] })),
       });
-      const cluster = withSend({
-        findGroupCoordinator: vi.fn(async () => coordinator),
-      });
+      const cluster = fakeRunCluster(
+        { node: coordinator },
+        { findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) },
+      );
 
       const result = await makeApi(cluster).listShareGroupOffsets({
         groups: [
@@ -148,15 +149,29 @@ describe('admin/share-groups', () => {
           groups: groups.map(({ groupId }) => ({ groupId, topics: [] })),
         })),
       });
-      const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-        groupId === 'share-b' ? second : first,
+      const cluster = fakeRunCluster(
+        { node: (nodeId) => (nodeId === '2' ? second : first) },
+        {
+          findGroupCoordinator: vi.fn(async ({ groupId }: { groupId: string }) =>
+            groupId === 'share-b' ? second : first,
+          ),
+        },
       );
 
-      const result = await makeApi(withSend({ findGroupCoordinator })).listShareGroupOffsets({
+      const result = await makeApi(cluster).listShareGroupOffsets({
         groups: [{ groupId: 'share-a' }, { groupId: 'share-b' }, { groupId: 'share-c' }],
       });
 
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('1'));
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('2'));
+
       expect(first.describeShareGroupOffsets).toHaveBeenCalledTimes(1);
+      expect(first.describeShareGroupOffsets).toHaveBeenCalledWith({
+        groups: [
+          { groupId: 'share-a', topics: null },
+          { groupId: 'share-c', topics: null },
+        ],
+      });
       expect(second.describeShareGroupOffsets).toHaveBeenCalledTimes(1);
       expect(result.groups.map(({ groupId }) => groupId)).toEqual(['share-a', 'share-c', 'share-b']);
     });
@@ -181,29 +196,22 @@ describe('admin/share-groups', () => {
       const coordinator = withSend({
         alterShareGroupOffsets: vi.fn(async () => ({ responses: [{ topicName: 'orders', partitions: [] }] })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster).alterShareGroupOffsets({ groupId: 'share-1', topics })).resolves.toEqual({
         responses: [{ topicName: 'orders', partitions: [] }],
       });
       expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('share-1'));
       expect(coordinator.alterShareGroupOffsets).toHaveBeenCalledWith({ groupId: 'share-1', topics });
     });
 
     it('retries GROUP_COORDINATOR_NOT_AVAILABLE then succeeds', async () => {
+      const moving = Object.assign(new Error('moving'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' });
       const coordinator = withSend({
-        alterShareGroupOffsets: vi
-          .fn()
-          .mockRejectedValueOnce(Object.assign(new Error('moving'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' }))
-          .mockResolvedValueOnce({ responses: [] }),
+        alterShareGroupOffsets: vi.fn().mockRejectedValueOnce(moving).mockResolvedValueOnce({ responses: [] }),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster, fastRetry).alterShareGroupOffsets({ groupId: 'share-1', topics })).resolves.toEqual(
         {
@@ -211,6 +219,8 @@ describe('admin/share-groups', () => {
         },
       );
       expect(coordinator.alterShareGroupOffsets).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.recover).toHaveBeenCalledWith(moving);
     });
 
     it('does not retry a non-coordinator error', async () => {
@@ -219,10 +229,7 @@ describe('admin/share-groups', () => {
           .fn()
           .mockRejectedValue(Object.assign(new Error('denied'), { type: 'GROUP_AUTHORIZATION_FAILED' })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster, fastRetry).alterShareGroupOffsets({ groupId: 'share-1', topics })).rejects.toThrow(
         'denied',
@@ -246,14 +253,14 @@ describe('admin/share-groups', () => {
       const coordinator = withSend({
         deleteShareGroupOffsets: vi.fn(async () => ({ responses: [{ topicName: 'orders', errorCode: 0 }] })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster).deleteShareGroupOffsets({ groupId: 'share-1', topics })).resolves.toEqual({
         responses: [{ topicName: 'orders', errorCode: 0 }],
       });
+      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('share-1'));
+      expect(coordinator.deleteShareGroupOffsets).toHaveBeenCalledWith({ groupId: 'share-1', topics });
     });
 
     it('retries NOT_COORDINATOR_FOR_GROUP then succeeds', async () => {
@@ -263,10 +270,7 @@ describe('admin/share-groups', () => {
           .mockRejectedValueOnce(Object.assign(new Error('stale'), { type: 'NOT_COORDINATOR_FOR_GROUP' }))
           .mockResolvedValueOnce({ responses: [] }),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster, fastRetry).deleteShareGroupOffsets({ groupId: 'share-1', topics }),
@@ -285,11 +289,9 @@ describe('admin/share-groups', () => {
     });
 
     it('returns an empty list without contacting brokers', async () => {
-      const findGroupCoordinator = vi.fn();
-      await expect(
-        makeApi(withSend({ refreshMetadata: vi.fn(), findGroupCoordinator })).deleteShareGroups([]),
-      ).resolves.toEqual([]);
-      expect(findGroupCoordinator).not.toHaveBeenCalled();
+      const cluster = fakeRunCluster({});
+      await expect(makeApi(cluster).deleteShareGroups([])).resolves.toEqual([]);
+      expect(cluster.resolveTarget).not.toHaveBeenCalled();
     });
 
     it('deletes groups grouped by coordinator node', async () => {
@@ -305,10 +307,7 @@ describe('admin/share-groups', () => {
           results: groupIds.map((groupId) => ({ groupId, errorCode: 0 })),
         })),
       });
-      const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-        groupId === 'share-c' ? second : first,
-      );
-      const cluster = withSend({ refreshMetadata: vi.fn().mockResolvedValue(undefined), findGroupCoordinator });
+      const cluster = fakeRunCluster({ coordinator: (groupId) => (groupId === 'share-c' ? second : first) });
 
       const results = await makeApi(cluster).deleteShareGroups(['share-a', 'share-b', 'share-c']);
 
@@ -327,10 +326,7 @@ describe('admin/share-groups', () => {
           ],
         })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       const error = await makeApi(cluster, { retries: 0 })
         .deleteShareGroups(['share-ok', 'share-bad'])
@@ -349,29 +345,39 @@ describe('admin/share-groups', () => {
           .mockRejectedValueOnce(Object.assign(new Error('loading'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' }))
           .mockResolvedValueOnce({ results: [{ groupId: 'share-1', errorCode: 0 }] }),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster, fastRetry).deleteShareGroups(['share-1'])).resolves.toEqual([
         { groupId: 'share-1', errorCode: 0 },
       ]);
     });
 
-    it('exhausts retries on a persistent NOT_CONTROLLER error', async () => {
+    it('exhausts retries on a persistent GROUP_LOAD_IN_PROGRESS error', async () => {
       const coordinator = withSend({
         nodeId: 1,
-        deleteGroups: vi.fn().mockRejectedValue(Object.assign(new Error('moved'), { type: 'NOT_CONTROLLER' })),
+        deleteGroups: vi
+          .fn()
+          .mockRejectedValue(Object.assign(new Error('loading'), { type: 'GROUP_LOAD_IN_PROGRESS' })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster, { retries: 0 }).deleteShareGroups(['share-1'])).rejects.toBeInstanceOf(
         KafkaNumberOfRetriesExceeded,
       );
+      expect(cluster.run).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.any(Function),
+        expect.objectContaining({ refreshMetadata: true, retryOn: COORDINATOR_LOADING_ERRORS }),
+      );
+    });
+
+    it('does not retry a NOT_CONTROLLER error, which a coordinator does not return', async () => {
+      const moved = Object.assign(new Error('moved'), { type: 'NOT_CONTROLLER' });
+      const coordinator = withSend({ nodeId: 1, deleteGroups: vi.fn().mockRejectedValue(moved) });
+      const cluster = fakeRunCluster({ coordinator });
+
+      await expect(makeApi(cluster, fastRetry).deleteShareGroups(['share-1'])).rejects.toBe(moved);
+      expect(coordinator.deleteGroups).toHaveBeenCalledTimes(1);
     });
   });
 });

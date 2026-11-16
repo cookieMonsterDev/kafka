@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { STALE_METADATA_ERRORS } from '../cluster/error-classifier';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
@@ -15,11 +18,7 @@ function fakeCluster(
   }),
 ) {
   const broker = withSend({ listConfigResources });
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 describe('admin/configs', () => {
@@ -36,7 +35,7 @@ describe('admin/configs', () => {
     });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
-    expect(cluster.findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.broker.listConfigResources).toHaveBeenCalledWith({ resourceTypes: undefined });
   });
 
@@ -64,7 +63,7 @@ describe('admin/configs', () => {
     });
 
     await expect(api.listConfigResources({ resourceTypes: [99] })).rejects.toThrow(KafkaNonRetriableError);
-    expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 
   it('allows an empty resourceTypes list', async () => {
@@ -93,12 +92,8 @@ function fakeAdminCluster(
     alterConfigs: overrides.alterConfigs ?? vi.fn().mockResolvedValue({ resources: [] }),
     incrementalAlterConfigs: overrides.incrementalAlterConfigs ?? vi.fn().mockResolvedValue({ resources: [] }),
   });
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(controller),
-    findBroker: vi.fn().mockResolvedValue(overrides.brokerNode ? withSend(overrides.brokerNode) : controller),
-    controller,
-  };
+  const findBroker = vi.fn().mockResolvedValue(overrides.brokerNode ? withSend(overrides.brokerNode) : controller);
+  return fakeRunCluster({ controller }, { findBroker, controller });
 }
 
 describe('admin/configs describeConfigs', () => {
@@ -187,7 +182,13 @@ describe('admin/configs describeConfigs', () => {
       includeDocumentation: true,
     });
 
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.findBroker).toHaveBeenCalledWith({ nodeId: '1' });
+    expect(cluster.run).toHaveBeenCalledWith(
+      CONTROLLER,
+      expect.any(Function),
+      expect.objectContaining({ refreshMetadata: true, retryOn: STALE_METADATA_ERRORS }),
+    );
     expect(controllerDescribe).toHaveBeenCalledWith({
       resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders' }],
       includeSynonyms: true,
@@ -203,7 +204,8 @@ describe('admin/configs describeConfigs', () => {
 
   it('retries and rethrows on stale metadata errors', async () => {
     const error = Object.assign(new Error('stale'), { type: 'NOT_LEADER_OR_FOLLOWER' });
-    const cluster = fakeAdminCluster(withSend({ describeConfigs: vi.fn().mockRejectedValue(error) }));
+    const describeConfigs = vi.fn().mockRejectedValue(error);
+    const cluster = fakeAdminCluster(withSend({ describeConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -214,6 +216,8 @@ describe('admin/configs describeConfigs', () => {
     await expect(
       api.describeConfigs({ resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders' }] }),
     ).rejects.toThrow();
+    expect(describeConfigs).toHaveBeenCalledTimes(1);
+    expect(cluster.recover).toHaveBeenCalledWith(error);
   });
 
   it('bails immediately on a non-retriable broker error', async () => {
@@ -229,6 +233,7 @@ describe('admin/configs describeConfigs', () => {
     await expect(
       api.describeConfigs({ resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders' }] }),
     ).rejects.toThrow('boom');
+    expect(cluster.recover).not.toHaveBeenCalled();
     expect(describeConfigs).toHaveBeenCalledTimes(1);
   });
 });
@@ -346,7 +351,8 @@ describe('admin/configs alterConfigs', () => {
 
   it('retries and rethrows on NOT_CONTROLLER', async () => {
     const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-    const cluster = fakeAdminCluster(withSend({ alterConfigs: vi.fn().mockRejectedValue(error) }));
+    const alterConfigs = vi.fn().mockRejectedValue(error);
+    const cluster = fakeAdminCluster(withSend({ alterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -359,6 +365,8 @@ describe('admin/configs alterConfigs', () => {
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders', configEntries: validEntries }],
       }),
     ).rejects.toThrow();
+    expect(alterConfigs).toHaveBeenCalledTimes(1);
+    expect(cluster.recover).toHaveBeenCalledWith(error);
   });
 
   it('bails immediately on a non-retriable broker error', async () => {
@@ -375,6 +383,7 @@ describe('admin/configs alterConfigs', () => {
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders', configEntries: validEntries }],
       }),
     ).rejects.toThrow('boom');
+    expect(cluster.recover).not.toHaveBeenCalled();
     expect(alterConfigs).toHaveBeenCalledTimes(1);
   });
 });
@@ -522,7 +531,8 @@ describe('admin/configs incrementalAlterConfigs', () => {
 
   it('retries and rethrows on NOT_CONTROLLER', async () => {
     const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs: vi.fn().mockRejectedValue(error) }));
+    const incrementalAlterConfigs = vi.fn().mockRejectedValue(error);
+    const cluster = fakeAdminCluster(withSend({ incrementalAlterConfigs }));
     const api = createConfigsApi({
       cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
@@ -535,6 +545,8 @@ describe('admin/configs incrementalAlterConfigs', () => {
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders', configs: validConfigs }],
       }),
     ).rejects.toThrow();
+    expect(incrementalAlterConfigs).toHaveBeenCalledTimes(1);
+    expect(cluster.recover).toHaveBeenCalledWith(error);
   });
 
   it('bails immediately on a non-retriable broker error', async () => {
@@ -551,6 +563,7 @@ describe('admin/configs incrementalAlterConfigs', () => {
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: 'orders', configs: validConfigs }],
       }),
     ).rejects.toThrow('boom');
+    expect(cluster.recover).not.toHaveBeenCalled();
     expect(incrementalAlterConfigs).toHaveBeenCalledTimes(1);
   });
 });

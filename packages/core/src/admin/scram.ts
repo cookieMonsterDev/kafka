@@ -2,9 +2,10 @@ import { KafkaNonRetriableError } from '../errors';
 import { SCRAM_MECHANISMS } from '../protocol/enums/scram-mechanisms';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
 import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import { AlterUserScramCredentials, DescribeUserScramCredentials } from '../protocol/requests/lazy-families';
 
 const DEFAULT_ITERATIONS = 4096;
@@ -91,30 +92,20 @@ async function toWireUpsertion(upsertion: ScramCredentialUpsertionInput) {
   };
 }
 
-export function createScramApi({ cluster, logger, retry }: AdminContext): ScramApi {
+export function createScramApi({ cluster, retry }: AdminContext): ScramApi {
+  const retrier = createRetrier(retry);
+
   const describeUserScramCredentials = async (
     options: { users?: string[] | null } = {},
   ): Promise<{ results: DescribeUserScramCredentialsResponseV0Body['results'] }> => {
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const { results } = await broker.send(DescribeUserScramCredentials, { users: options.users });
         return { results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe SCRAM credentials', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe SCRAM credentials' },
+    );
   };
 
   const alterUserScramCredentials = async ({
@@ -142,26 +133,14 @@ export function createScramApi({ cluster, logger, retry }: AdminContext): ScramA
 
     const wireUpsertions = await Promise.all(upsertions.map(toWireUpsertion));
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const { results } = await broker.send(AlterUserScramCredentials, { deletions, upsertions: wireUpsertions });
         return { results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not alter SCRAM credentials', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not alter SCRAM credentials' },
+    );
   };
 
   return { describeUserScramCredentials, alterUserScramCredentials };

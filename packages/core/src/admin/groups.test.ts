@@ -5,11 +5,14 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode } from '../protocol/error-codes';
 import { createGroupsApi } from './groups';
 import { withSend } from '../broker/test-send';
+import { COORDINATOR_LOADING_ERRORS } from '../cluster/error-classifier';
+import { coordinatorTarget } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const fastRetry = { retries: 1, initialRetryTime: 1, maxRetryTime: 20, factor: 0, multiplier: 1 };
 
-function makeApi(cluster: Record<string, unknown>, retry?: typeof fastRetry | { retries: number }) {
+function makeApi(cluster: object, retry?: typeof fastRetry | { retries: number }) {
   return createGroupsApi({
     cluster: cluster as unknown as Cluster,
     logger,
@@ -32,15 +35,16 @@ describe('admin/groups', () => {
         groups: groupIds.map((groupId) => ({ groupId, groupState: 'Stable' })),
       })),
     });
-    const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-      groupId === 'g-c' ? secondCoordinator : firstCoordinator,
-    );
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createGroupsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({
+      coordinator: (groupId) => (groupId === 'g-c' ? secondCoordinator : firstCoordinator),
+    });
 
-    const result = await api.describeConsumerGroups(['g-a', 'g-b', 'g-c']);
+    const result = await makeApi(cluster).describeConsumerGroups(['g-a', 'g-b', 'g-c']);
 
-    expect(findGroupCoordinator).toHaveBeenCalledTimes(3);
+    expect(cluster.resolveTarget).toHaveBeenCalledTimes(3);
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-a'));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-b'));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-c'));
     expect(firstCoordinator.consumerGroupDescribe).toHaveBeenCalledWith({ groupIds: ['g-a', 'g-b'] });
     expect(secondCoordinator.consumerGroupDescribe).toHaveBeenCalledWith({ groupIds: ['g-c'] });
     expect(result.groups.map(({ groupId }) => groupId)).toEqual(['g-a', 'g-b', 'g-c']);
@@ -55,22 +59,23 @@ describe('admin/groups', () => {
       nodeId: 2,
       [request]: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g-a', groupState: 'Stable' }] }),
     });
-    const findGroupCoordinator = vi.fn().mockResolvedValueOnce(staleCoordinator).mockResolvedValue(currentCoordinator);
+    const cluster = fakeRunCluster({
+      coordinator: vi.fn().mockReturnValueOnce(staleCoordinator).mockReturnValue(currentCoordinator),
+    });
 
-    const result = await makeApi(withSend({ findGroupCoordinator }), fastRetry)[method](['g-a']);
+    const result = await makeApi(cluster, fastRetry)[method](['g-a']);
 
+    expect(cluster.resolveTarget).toHaveBeenCalledTimes(2);
     expect(staleCoordinator[request]).toHaveBeenCalledTimes(1);
     expect(currentCoordinator[request]).toHaveBeenCalledWith({ groupIds: ['g-a'] });
     expect(result.groups).toEqual([{ groupId: 'g-a', groupState: 'Stable' }]);
   });
 
   it('returns immediately for an empty describeConsumerGroups list', async () => {
-    const findGroupCoordinator = vi.fn();
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createGroupsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({});
 
-    await expect(api.describeConsumerGroups([])).resolves.toEqual({ groups: [] });
-    expect(findGroupCoordinator).not.toHaveBeenCalled();
+    await expect(makeApi(cluster).describeConsumerGroups([])).resolves.toEqual({ groups: [] });
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 
   it('rejects invalid describeConsumerGroups group IDs', async () => {
@@ -88,9 +93,7 @@ describe('admin/groups', () => {
         groups: groupIds.map((groupId) => ({ groupId, state: 'Stable', members: [] })),
       })),
     });
-    const findGroupCoordinator = vi.fn(async () => coordinator);
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createGroupsApi({ cluster, logger, rootLogger: logger });
+    const api = makeApi(fakeRunCluster({ coordinator }));
 
     const classic = await api.describeClassicGroups(['g-1']);
     const legacy = await api.describeGroups(['g-1']);
@@ -125,11 +128,9 @@ describe('admin/groups', () => {
     });
 
     it('returns an empty list without contacting brokers', async () => {
-      const findGroupCoordinator = vi.fn();
-      await expect(
-        makeApi(withSend({ refreshMetadata: vi.fn(), findGroupCoordinator })).deleteGroups([]),
-      ).resolves.toEqual([]);
-      expect(findGroupCoordinator).not.toHaveBeenCalled();
+      const cluster = fakeRunCluster({});
+      await expect(makeApi(cluster).deleteGroups([])).resolves.toEqual([]);
+      expect(cluster.resolveTarget).not.toHaveBeenCalled();
     });
 
     it('deletes groups grouped by coordinator node', async () => {
@@ -145,16 +146,16 @@ describe('admin/groups', () => {
           results: groupIds.map((groupId) => ({ groupId, errorCode: 0 })),
         })),
       });
-      const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-        groupId === 'g-c' ? second : first,
-      );
+      const cluster = fakeRunCluster({ coordinator: (groupId) => (groupId === 'g-c' ? second : first) });
 
-      const results = await makeApi(
-        withSend({
-          refreshMetadata: vi.fn().mockResolvedValue(undefined),
-          findGroupCoordinator,
-        }),
-      ).deleteGroups(['g-a', 'g-b', 'g-c']);
+      const results = await makeApi(cluster).deleteGroups(['g-a', 'g-b', 'g-c']);
+
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(1);
+      expect(cluster.run).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.any(Function),
+        expect.objectContaining({ refreshMetadata: true, retryOn: COORDINATOR_LOADING_ERRORS }),
+      );
 
       expect(first.deleteGroups).toHaveBeenCalledWith({ groupIds: ['g-a', 'g-b'] });
       expect(second.deleteGroups).toHaveBeenCalledWith({ groupIds: ['g-c'] });
@@ -172,13 +173,7 @@ describe('admin/groups', () => {
         })),
       });
 
-      const error = await makeApi(
-        withSend({
-          refreshMetadata: vi.fn().mockResolvedValue(undefined),
-          findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-        }),
-        { retries: 0 },
-      )
+      const error = await makeApi(fakeRunCluster({ coordinator }), { retries: 0 })
         .deleteGroups(['g-ok', 'g-bad'])
         .catch((e) => e);
 
@@ -201,16 +196,15 @@ describe('admin/groups', () => {
           })
           .mockResolvedValueOnce({ results: [{ groupId: 'g-moved', errorCode: 0 }] }),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(makeApi(cluster, fastRetry).deleteGroups(['g-ok', 'g-moved'])).resolves.toEqual([
         { groupId: 'g-ok', errorCode: 0 },
         { groupId: 'g-moved', errorCode: 0 },
       ]);
       expect(coordinator.deleteGroups).toHaveBeenNthCalledWith(2, { groupIds: ['g-moved'] });
+      expect(cluster.resolveTarget).toHaveBeenLastCalledWith(coordinatorTarget('g-moved'));
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -236,10 +230,7 @@ describe('admin/groups', () => {
       const coordinator = withSend({
         offsetDelete: vi.fn(async () => ({ topics: [{ topic: 'orders', partitions: [] }] })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster).deleteGroupOffsets({ groupId: 'g-1', topics: [{ topic: 'orders', partitions: [0, 2] }] }),
@@ -248,19 +239,16 @@ describe('admin/groups', () => {
         groupId: 'g-1',
         topics: [{ topic: 'orders', partitions: [0, 2] }],
       });
+      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-1'));
     });
 
     it('retries GROUP_COORDINATOR_NOT_AVAILABLE then succeeds', async () => {
+      const moving = Object.assign(new Error('moving'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' });
       const coordinator = withSend({
-        offsetDelete: vi
-          .fn()
-          .mockRejectedValueOnce(Object.assign(new Error('moving'), { type: 'GROUP_COORDINATOR_NOT_AVAILABLE' }))
-          .mockResolvedValueOnce({ topics: [] }),
+        offsetDelete: vi.fn().mockRejectedValueOnce(moving).mockResolvedValueOnce({ topics: [] }),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster, fastRetry).deleteGroupOffsets({
@@ -269,6 +257,8 @@ describe('admin/groups', () => {
         }),
       ).resolves.toEqual({ topics: [] });
       expect(coordinator.offsetDelete).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.recover).toHaveBeenCalledWith(moving);
     });
   });
 
@@ -298,10 +288,7 @@ describe('admin/groups', () => {
           members: [{ memberId: 'm-1', groupInstanceId: null, errorCode: 0 }],
         })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster).removeMembersFromConsumerGroup({ groupId: 'g-1', members: [{ memberId: 'm-1' }] }),
@@ -310,6 +297,8 @@ describe('admin/groups', () => {
         groupId: 'g-1',
         members: [{ memberId: 'm-1', groupInstanceId: null, reason: null }],
       });
+      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-1'));
     });
 
     it('does not retry a non-coordinator error', async () => {
@@ -318,10 +307,7 @@ describe('admin/groups', () => {
           .fn()
           .mockRejectedValue(Object.assign(new Error('unknown'), { type: 'UNKNOWN_MEMBER_ID' })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster, fastRetry).removeMembersFromConsumerGroup({
@@ -338,10 +324,7 @@ describe('admin/groups', () => {
           .fn()
           .mockRejectedValue(Object.assign(new Error('stale'), { type: 'NOT_COORDINATOR_FOR_GROUP' })),
       });
-      const cluster = withSend({
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-      });
+      const cluster = fakeRunCluster({ coordinator });
 
       await expect(
         makeApi(cluster, { retries: 0 }).removeMembersFromConsumerGroup({

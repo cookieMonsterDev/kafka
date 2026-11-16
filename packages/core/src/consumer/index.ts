@@ -677,16 +677,14 @@ export function createConsumer({
     };
 
     const onCrash = async (e: Error): Promise<void> => {
-      const error = e as Error & { retryCount?: number; retryTime?: number; host?: string; port?: number };
+      const error = e as Error & { retryCount?: number; retryTime?: number };
       logger.error(`Crash: ${error.name}: ${error.message}`, {
         groupId,
         retryCount: error.retryCount,
         stack: error.stack,
       });
 
-      if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
-        cluster.removeBroker({ host: error.host, port: error.port });
-      }
+      cluster.onConnectionClosed(error);
 
       await disconnect();
 

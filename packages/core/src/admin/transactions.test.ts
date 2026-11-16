@@ -4,8 +4,16 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import { createTransactionsApi } from './transactions';
 import { withSend } from '../broker/test-send';
+import { REPLICA_UNAVAILABLE_ERRORS, STALE_COORDINATOR_ERRORS } from '../cluster/error-classifier';
+import { coordinatorTarget, leaderTarget, nodeTarget } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
+import type { RetryOptions } from '../retry/index';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
+
+function makeApi(cluster: object, retry?: RetryOptions) {
+  return createTransactionsApi({ cluster: cluster as unknown as Cluster, logger, rootLogger: logger, retry });
+}
 
 describe('admin/transactions', () => {
   it('groups transactional IDs by transaction coordinator', async () => {
@@ -21,31 +29,26 @@ describe('admin/transactions', () => {
         transactionStates: transactionalIds.map((transactionalId) => ({ transactionalId })),
       })),
     });
-    const findGroupCoordinator = vi.fn(async ({ groupId }: { groupId: string }) =>
-      groupId === 'tx-c' ? secondCoordinator : firstCoordinator,
-    );
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
-
-    const result = await api.describeTransactions(['tx-a', 'tx-b', 'tx-c']);
-
-    expect(findGroupCoordinator).toHaveBeenCalledTimes(3);
-    expect(findGroupCoordinator).toHaveBeenCalledWith({
-      groupId: 'tx-a',
-      coordinatorType: COORDINATOR_TYPES.TRANSACTION,
+    const cluster = fakeRunCluster({
+      coordinator: (key) => (key === 'tx-c' ? secondCoordinator : firstCoordinator),
     });
+
+    const result = await makeApi(cluster).describeTransactions(['tx-a', 'tx-b', 'tx-c']);
+
+    expect(cluster.resolveTarget).toHaveBeenCalledTimes(3);
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('tx-a', COORDINATOR_TYPES.TRANSACTION));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('tx-b', COORDINATOR_TYPES.TRANSACTION));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('tx-c', COORDINATOR_TYPES.TRANSACTION));
     expect(firstCoordinator.describeTransactions).toHaveBeenCalledWith({ transactionalIds: ['tx-a', 'tx-b'] });
     expect(secondCoordinator.describeTransactions).toHaveBeenCalledWith({ transactionalIds: ['tx-c'] });
     expect(result.transactionStates.map(({ transactionalId }) => transactionalId)).toEqual(['tx-a', 'tx-b', 'tx-c']);
   });
 
   it('returns immediately for an empty list', async () => {
-    const findGroupCoordinator = vi.fn();
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({});
 
-    await expect(api.describeTransactions([])).resolves.toEqual({ transactionStates: [] });
-    expect(findGroupCoordinator).not.toHaveBeenCalled();
+    await expect(makeApi(cluster).describeTransactions([])).resolves.toEqual({ transactionStates: [] });
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 
   it('rejects invalid transactional IDs', async () => {
@@ -73,17 +76,21 @@ describe('admin/transactions', () => {
         ],
       })),
     });
-    const refreshMetadata = vi.fn().mockResolvedValue(undefined);
-    const cluster = {
-      refreshMetadata,
-      getNodeIds: vi.fn(() => ['1', '2']),
-      findBroker: vi.fn(async ({ nodeId }: { nodeId: string }) => (nodeId === '1' ? firstBroker : secondBroker)),
-    } as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster(
+      { node: (nodeId) => (nodeId === '1' ? firstBroker : secondBroker) },
+      { getNodeIds: vi.fn(() => ['1', '2']) },
+    );
 
-    const result = await api.listTransactions({ stateFilters: ['Ongoing'], producerIdFilters: [1n] });
+    const result = await makeApi(cluster).listTransactions({ stateFilters: ['Ongoing'], producerIdFilters: [1n] });
 
-    expect(refreshMetadata).toHaveBeenCalled();
+    expect(cluster.refreshMetadata).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('1'));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('2'));
+    expect(cluster.run).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.any(Function),
+      expect.objectContaining({ refreshMetadata: true, retryOn: STALE_COORDINATOR_ERRORS }),
+    );
     expect(firstBroker.listTransactions).toHaveBeenCalledWith({
       stateFilters: ['Ongoing'],
       producerIdFilters: [1n],
@@ -103,14 +110,9 @@ describe('admin/transactions', () => {
     const broker = withSend({
       listTransactions: vi.fn(async () => ({ transactionStates: [] })),
     });
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      getNodeIds: vi.fn(() => ['1']),
-      findBroker: vi.fn(async () => broker),
-    } as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({ node: broker }, { getNodeIds: vi.fn(() => ['1']) });
 
-    await expect(api.listTransactions()).resolves.toEqual({ transactionStates: [] });
+    await expect(makeApi(cluster).listTransactions()).resolves.toEqual({ transactionStates: [] });
     expect(broker.listTransactions).toHaveBeenCalledWith({});
   });
 
@@ -131,13 +133,11 @@ describe('admin/transactions', () => {
     const coordinator = withSend({
       initProducerId: vi.fn(async () => ({ producerId: 7n, producerEpoch: 0, errorCode: 0 })),
     });
-    const findGroupCoordinator = vi.fn(async () => coordinator);
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({ coordinator });
 
-    const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
+    const result = await makeApi(cluster).fenceProducers({ transactionalIds: ['tx-a'] });
 
-    expect(findGroupCoordinator).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('tx-a', COORDINATOR_TYPES.TRANSACTION));
     expect(coordinator.initProducerId).toHaveBeenCalledWith({
       transactionalId: 'tx-a',
       transactionTimeout: 60_000,
@@ -162,14 +162,8 @@ describe('admin/transactions', () => {
         )
         .mockResolvedValueOnce({ producerId: 7n, producerEpoch: 1, errorCode: 0 }),
     });
-    const findGroupCoordinator = vi.fn(async () => coordinator);
-    const cluster = withSend({ findGroupCoordinator }) as unknown as Cluster;
-    const api = createTransactionsApi({
-      cluster,
-      logger,
-      rootLogger: logger,
-      retry: { maxRetryTime: 1_000, initialRetryTime: 10, factor: 0.2, multiplier: 2, retries: 3 },
-    });
+    const cluster = fakeRunCluster({ coordinator });
+    const api = makeApi(cluster, { maxRetryTime: 1_000, initialRetryTime: 10, factor: 0.2, multiplier: 2, retries: 3 });
 
     const result = await api.fenceProducers({ transactionalIds: ['tx-a'] });
 
@@ -183,13 +177,8 @@ describe('admin/transactions', () => {
       writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
       describeProducers: vi.fn(),
     });
-    const cluster = withSend({
-      metadata: vi.fn(async () => ({ topics: [] })),
-      findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
-      findBroker: vi.fn(async () => leader),
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({ leader });
+    const api = makeApi(cluster);
 
     await api.abortTransaction({
       topic: 'orders',
@@ -199,6 +188,12 @@ describe('admin/transactions', () => {
       coordinatorEpoch: 1,
     });
 
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(leaderTarget('orders', 0));
+    expect(cluster.run).toHaveBeenCalledWith(
+      leaderTarget('orders', 0),
+      expect.any(Function),
+      expect.objectContaining({ retryOn: REPLICA_UNAVAILABLE_ERRORS }),
+    );
     expect(leader.describeProducers).not.toHaveBeenCalled();
     expect(leader.writeTxnMarkers).toHaveBeenCalledWith({
       markers: [
@@ -213,6 +208,26 @@ describe('admin/transactions', () => {
     });
   });
 
+  it('retries abortTransaction on the new leader after NOT_LEADER_OR_FOLLOWER', async () => {
+    const { KafkaProtocolError } = await import('../errors');
+    const notLeader = new KafkaProtocolError({ message: 'Not leader', type: 'NOT_LEADER_OR_FOLLOWER', code: 6 });
+    const staleLeader = withSend({ writeTxnMarkers: vi.fn().mockRejectedValue(notLeader) });
+    const currentLeader = withSend({ writeTxnMarkers: vi.fn(async () => ({ markers: [] })) });
+    const cluster = fakeRunCluster({ leader: vi.fn().mockReturnValueOnce(staleLeader).mockReturnValue(currentLeader) });
+
+    await makeApi(cluster, { retries: 1, initialRetryTime: 1 }).abortTransaction({
+      topic: 'orders',
+      partition: 0,
+      producerId: 9n,
+      producerEpoch: 2,
+      coordinatorEpoch: 1,
+    });
+
+    expect(staleLeader.writeTxnMarkers).toHaveBeenCalledTimes(1);
+    expect(currentLeader.writeTxnMarkers).toHaveBeenCalledTimes(1);
+    expect(cluster.recover).toHaveBeenCalledWith(notLeader);
+  });
+
   it('resolves coordinatorEpoch from describeProducers when omitted', async () => {
     const leader = withSend({
       writeTxnMarkers: vi.fn(async () => ({ markers: [] })),
@@ -225,13 +240,8 @@ describe('admin/transactions', () => {
         ],
       })),
     });
-    const cluster = withSend({
-      metadata: vi.fn(async () => ({ topics: [] })),
-      findLeaderForPartitions: vi.fn(() => ({ '1': [0] })),
-      findBroker: vi.fn(async () => leader),
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({ leader });
+    const api = makeApi(cluster);
 
     await api.abortTransaction({
       topic: 'orders',
@@ -240,7 +250,7 @@ describe('admin/transactions', () => {
       producerEpoch: 2,
     });
 
-    expect(leader.describeProducers).toHaveBeenCalled();
+    expect(leader.describeProducers).toHaveBeenCalledWith({ topics: [{ topic: 'orders', partitions: [0] }] });
     expect(leader.writeTxnMarkers).toHaveBeenCalledWith(
       expect.objectContaining({
         markers: [expect.objectContaining({ coordinatorEpoch: 4 })],
@@ -252,12 +262,9 @@ describe('admin/transactions', () => {
     const coordinator = withSend({
       initProducerId: vi.fn(async () => ({ producerId: 3n, producerEpoch: 0, errorCode: 0 })),
     });
-    const cluster = withSend({
-      findGroupCoordinator: vi.fn(async () => coordinator),
-    }) as unknown as Cluster;
-    const api = createTransactionsApi({ cluster, logger, rootLogger: logger });
+    const cluster = fakeRunCluster({ coordinator });
 
-    const result = await api.forceTerminateTransaction({ transactionalId: 'tx-z' });
+    const result = await makeApi(cluster).forceTerminateTransaction({ transactionalId: 'tx-z' });
 
     expect(result).toEqual({
       transactionalId: 'tx-z',
@@ -265,5 +272,6 @@ describe('admin/transactions', () => {
       producerId: 3n,
       producerEpoch: 0,
     });
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('tx-z', COORDINATOR_TYPES.TRANSACTION));
   });
 });

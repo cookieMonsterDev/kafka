@@ -6,10 +6,10 @@ import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import {
   findTopicPartitions,
   formatUnknown,
+  groupByBroker,
   groupResourcesByBroker,
   isBrokerConfig,
   isConsumerGroupIdle,
-  protocolType,
   requireMetadata,
   retryOnLeaderNotAvailable,
 } from './helpers';
@@ -20,19 +20,6 @@ describe('admin/helpers', () => {
       expect(formatUnknown('abc')).toBe('abc');
       expect(formatUnknown(12)).toBe('12');
       expect(formatUnknown(null)).toBe('null');
-    });
-  });
-
-  describe('protocolType', () => {
-    it('reads a string type off an error-like object', () => {
-      expect(protocolType({ type: 'LEADER_NOT_AVAILABLE' })).toBe('LEADER_NOT_AVAILABLE');
-    });
-
-    it('returns undefined for anything without a string type', () => {
-      expect(protocolType(undefined)).toBeUndefined();
-      expect(protocolType('LEADER_NOT_AVAILABLE')).toBeUndefined();
-      expect(protocolType({ message: 'no type' })).toBeUndefined();
-      expect(protocolType({ type: 5 })).toBeUndefined();
     });
   });
 
@@ -114,6 +101,20 @@ describe('admin/helpers', () => {
       expect(isBrokerConfig(CONFIG_RESOURCE_TYPES.BROKER_LOGGER)).toBe(true);
       expect(isBrokerConfig(CONFIG_RESOURCE_TYPES.TOPIC)).toBe(false);
       expect(isBrokerConfig(CONFIG_RESOURCE_TYPES.UNKNOWN)).toBe(false);
+    });
+  });
+
+  describe('groupByBroker', () => {
+    it('groups items by the broker at the same index, keeping first-seen order', () => {
+      const first = { nodeId: 1 } as unknown as Broker;
+      const second = { nodeId: 2 } as unknown as Broker;
+
+      const grouped = groupByBroker(['g-a', 'g-b', 'g-c'], [first, second, first]);
+
+      expect([...grouped]).toEqual([
+        [first, ['g-a', 'g-c']],
+        [second, ['g-b']],
+      ]);
     });
   });
 

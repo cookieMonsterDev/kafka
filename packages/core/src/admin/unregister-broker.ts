@@ -1,7 +1,8 @@
 import { KafkaNonRetriableError } from '../errors';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import type { UnregisterBrokerOptions } from './types';
 import { UnregisterBroker } from '../protocol/requests/lazy-families';
 
@@ -16,29 +17,19 @@ function validateBrokerId(brokerId: unknown): number {
   return brokerId as number;
 }
 
-export function createUnregisterBrokerApi({ cluster, logger, retry }: AdminContext): UnregisterBrokerApi {
+export function createUnregisterBrokerApi({ cluster, retry }: AdminContext): UnregisterBrokerApi {
+  const retrier = createRetrier(retry);
+
   const unregisterBroker = async ({ brokerId }: UnregisterBrokerOptions): Promise<void> => {
     const normalizedBrokerId = validateBrokerId(brokerId);
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
         await broker.send(UnregisterBroker, { brokerId: normalizedBrokerId });
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not unregister broker', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not unregister broker' },
+    );
   };
 
   return { unregisterBroker };

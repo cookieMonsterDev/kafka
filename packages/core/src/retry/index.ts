@@ -42,7 +42,8 @@ function isErrorUnrecoverable(error: Error): boolean {
   return UNRECOVERABLE_ERROR_NAMES.has(error.name);
 }
 
-function isErrorRetriable(error: Error & { retriable?: boolean }): boolean {
+/** Whether the retrier tries again after `error`, instead of rejecting with a `KafkaNonRetriableError`. */
+export function isErrorRetriable(error: Error & { retriable?: boolean }): boolean {
   return error.retriable !== false && !isErrorUnrecoverable(error);
 }
 

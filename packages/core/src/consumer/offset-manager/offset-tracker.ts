@@ -1,3 +1,4 @@
+import { isStaleCoordinator } from '../../cluster/error-classifier';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
@@ -274,9 +275,8 @@ export class OffsetTracker {
         await runHooks(this.#hooks.onCommit, payload, 'onCommit', this.#logger);
       }
     } catch (e) {
-      const error = e as { type?: string };
-      if (error.type === 'NOT_COORDINATOR_FOR_GROUP') {
-        await this.#cluster.refreshMetadata();
+      if (isStaleCoordinator(e)) {
+        await this.#cluster.recover(e);
       }
 
       if (this.#hooks?.onCommit?.length) {

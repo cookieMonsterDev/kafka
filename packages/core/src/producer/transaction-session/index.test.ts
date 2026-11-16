@@ -8,6 +8,7 @@ import { API_KEYS } from '../../protocol/requests/api-keys';
 import { retrier, type RetryOptions } from '../../retry/index';
 import { createTransactionSession, type TransactionSession } from './index';
 import { withSend } from '../../broker/test-send';
+import { fakeRunCluster } from '../../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const transactionalId = 'transactional-id';
@@ -39,11 +40,18 @@ function fakeBroker() {
 
 /** `transactionV2` mirrors a broker advertising Produce v12 (Kafka 4.0+, KIP-890 part 2). */
 function fakeCluster(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
-  return withSend({
+  const cluster = withSend({
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     markOffsetAsCommitted: vi.fn(),
     brokerPool: { versions: transactionV2 ? { [API_KEYS.Produce]: { maxVersion: 12 } } : undefined },
   });
+  // `Cluster.run` resolves a coordinator target through the lookup EndTxn uses directly, read at
+  // call time so a test can replace it.
+  const runCluster = fakeRunCluster({
+    coordinator: (groupId, coordinatorType) =>
+      (cluster.findGroupCoordinator as (options: object) => Promise<object>)({ groupId, coordinatorType }),
+  });
+  return Object.assign(cluster, { run: runCluster.run, recover: runCluster.recover });
 }
 
 function fakeSender() {

@@ -33,7 +33,7 @@ into `dist/` can have no types.
 | `METRIC_NAMES`                                                                        | OpenTelemetry / KIP-714 metric name constants                                                   | [Observability](../../guides/observability/)               |
 | `getCrc32cImplementation`                                                             | Active CRC32C implementation: `'native'` (`@node-rs/crc32`) or `'javascript'`                   | [Installation](../../start/installation/#native-crc32c)    |
 
-`isRebalancing` and `isKafkaError` are not part of the public barrel.
+`isKafkaError` is not part of the public barrel.
 Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
 
 ## Types

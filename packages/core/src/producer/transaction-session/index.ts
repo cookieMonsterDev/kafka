@@ -1,7 +1,14 @@
 import { supportsTransactionV2 } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
+import {
+  COORDINATOR_LOADING_ERRORS,
+  isProducerFenced,
+  STALE_METADATA_ERRORS,
+  unionOf,
+} from '../../cluster/error-classifier';
 import { sendInitProducerId } from '../../cluster/init-producer-id';
+import { coordinatorTarget } from '../../cluster/run';
 import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
@@ -16,15 +23,11 @@ import { AddPartitionsToTxn } from '../../protocol/requests/add-partitions-to-tx
 import { EndTxn } from '../../protocol/requests/end-txn/index';
 import { TxnOffsetCommit } from '../../protocol/requests/txn-offset-commit/index';
 
-/** Retry while the coordinator is still loading; refresh the coordinator once it moves. */
-const COMMIT_RETRIABLE_PROTOCOL_ERRORS = new Set(['UNKNOWN_TOPIC_OR_PARTITION', 'GROUP_LOAD_IN_PROGRESS']);
-const COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS = new Set([
-  'GROUP_COORDINATOR_NOT_AVAILABLE',
-  'NOT_COORDINATOR_FOR_GROUP',
-]);
-
-/** EndTxn errors meaning a newer producer took over this transactionalId (Java treats them as fatal). */
-const FENCED_PROTOCOL_ERRORS = new Set(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH']);
+/**
+ * TxnOffsetCommit also retries while the group coordinator is still loading, or does not know a
+ * topic yet; a moved coordinator is looked up again by `Cluster.run`.
+ */
+const TXN_OFFSET_COMMIT_RETRY_ON = unionOf(COORDINATOR_LOADING_ERRORS, STALE_METADATA_ERRORS);
 
 type TransactionCall = 'send' | 'commit' | 'abort';
 
@@ -103,7 +106,7 @@ export function createTransactionSession({
     logger,
     initProducerId: async (current) => {
       const identity = await sendInitProducerId(
-        { cluster, retry, logger },
+        { cluster, retry },
         { transactionalId, transactionTimeout, ...current },
       );
       stateMachine.transitionTo(TRANSACTION_STATES.READY);
@@ -294,7 +297,8 @@ export function createTransactionSession({
       // Anything but a broker rejection (exhausted retries, a lost connection) keeps `nextState` so
       // the caller can resend EndTxn; a rejected commit can still be aborted.
       if (error instanceof KafkaProtocolError && !error.retriable) {
-        if (FENCED_PROTOCOL_ERRORS.has(error.type ?? '')) {
+        // A newer producer took over this transactionalId (Java treats it as fatal).
+        if (isProducerFenced(error)) {
           logger.error('Producer was fenced by a newer instance; it cannot be used anymore', { transactionalId });
           stateMachine.transitionTo(TRANSACTION_STATES.FATAL_ERROR);
         } else if (transactionResult) {
@@ -341,57 +345,23 @@ export function createTransactionSession({
 
     hasOffsetsAddedToTransaction = true;
 
-    let groupCoordinator = await cluster.findGroupCoordinator({
-      groupId: consumerGroupId,
-      coordinatorType: COORDINATOR_TYPES.GROUP,
-    });
-
     const requestTopics = topics.map(({ topic, partitions }) => ({
       topic,
       partitions: partitions.map(({ partition, offset }) => ({ partition, offset, metadata: null })),
     }));
 
-    await retry(async (bail, retryCount, retryTime) => {
-      try {
-        await groupCoordinator.send(TxnOffsetCommit, {
+    await cluster.run(
+      coordinatorTarget(consumerGroupId, COORDINATOR_TYPES.GROUP),
+      (groupCoordinator) =>
+        groupCoordinator.send(TxnOffsetCommit, {
           transactionalId,
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),
           groupId: consumerGroupId,
           topics: requestTopics,
-        });
-      } catch (e) {
-        const error = e as Error & { type?: string; code?: string };
-
-        if (error.type && COMMIT_RETRIABLE_PROTOCOL_ERRORS.has(error.type)) {
-          logger.debug('Group coordinator is not ready yet, retrying', {
-            error: error.message,
-            stack: error.stack,
-            transactionalId,
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        if ((error.type && COMMIT_STALE_COORDINATOR_PROTOCOL_ERRORS.has(error.type)) || error.code === 'ECONNREFUSED') {
-          logger.debug('Invalid group coordinator, finding new group coordinator and retrying', {
-            error: error.message,
-            stack: error.stack,
-            transactionalId,
-            retryCount,
-            retryTime,
-          });
-          groupCoordinator = await cluster.findGroupCoordinator({
-            groupId: consumerGroupId,
-            coordinatorType: COORDINATOR_TYPES.GROUP,
-          });
-          throw error;
-        }
-
-        bail(error);
-      }
-    });
+        }),
+      { retrier: retry, retryOn: TXN_OFFSET_COMMIT_RETRY_ON },
+    );
 
     for (const { topic, partitions } of topics) {
       for (const { partition, offset } of partitions) {

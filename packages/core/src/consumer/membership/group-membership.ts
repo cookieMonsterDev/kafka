@@ -87,11 +87,3 @@ export function partitionsNotIn(
     }))
     .filter(({ partitions }) => partitions.length > 0);
 }
-
-/**
- * `UNKNOWN_MEMBER_ID` (the session expired) or `FENCED_MEMBER_EPOCH` (the member was fenced): the
- * coordinator no longer accepts this member, so its assignment is lost.
- */
-export function isRejectedMemberError(error: { type?: string }): boolean {
-  return error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH';
-}

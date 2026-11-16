@@ -69,7 +69,7 @@ function createTracker(options: TrackerOptions = {}): Harness {
     ...committedOffsetCalls(),
     findGroupCoordinator: vi.fn(async () => coordinator),
     findBroker: vi.fn(async () => coordinator),
-    refreshMetadata: vi.fn(async () => undefined),
+    recover: vi.fn(async () => undefined),
     defaultOffset: vi.fn(() => -1n),
     fetchTopicsOffset: vi.fn(async () => []),
     ...options.cluster,
@@ -386,11 +386,11 @@ describe('consumer/offset-manager/offset-tracker', () => {
         expect(nextHook).toHaveBeenCalledTimes(1);
       });
 
-      it('refreshes metadata on a NOT_COORDINATOR_FOR_GROUP error', async () => {
-        const refreshMetadata = vi.fn(async () => undefined);
+      it('recovers from a NOT_COORDINATOR_FOR_GROUP error through the cluster', async () => {
+        const recover = vi.fn(async () => undefined);
         const { tracker } = create({
           assignment: { 'topic-1': [0] },
-          cluster: { refreshMetadata },
+          cluster: { recover },
           coordinator: withSend({
             offsetCommit: vi.fn(() => {
               throw createErrorFromCode(NOT_COORDINATOR_FOR_GROUP_CODE);
@@ -400,7 +400,7 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
         const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 1n }] }] };
         await expect(tracker.commitOffsets(offsets)).rejects.toThrow(KafkaProtocolError);
-        expect(refreshMetadata).toHaveBeenCalled();
+        expect(recover).toHaveBeenCalledWith(expect.objectContaining({ type: 'NOT_COORDINATOR_FOR_GROUP' }));
       });
     });
 

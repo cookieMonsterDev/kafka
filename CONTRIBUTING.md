@@ -232,7 +232,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 [`benchmarks/`](benchmarks/README.md) compares kafka-core from `develop` with other Kafka clients on
 Node.js and Bun, each run in its own Docker container against a single-node broker. It is a
 standalone project, not a workspace member, and never runs in `pnpm test` or CI. Run it with
-`pnpm benchmarks:run` (see its README for tiers and the publishing rules). The microbenches in
+`pnpm benchmarks:run` (see its README for tiers, payloads and the publishing rules), and regenerate the docs
+page from its sessions with `pnpm docs:benchmarks`. The microbenches in
 `packages/core/bench/` are separate and measure kafka-core internals without a broker.
 
 ### Bun

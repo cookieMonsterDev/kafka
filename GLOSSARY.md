@@ -202,3 +202,6 @@ _Avoid_: leased, claimed
 **Acknowledgement**:
 A share group member's verdict on an acquired message: accept, release (make it available for redelivery), reject, or renew the lock.
 _Avoid_: ack (in prose), commit
+
+**Share session**:
+A share group member's per-broker fetch state (KIP-932), the share group counterpart of a fetch session. Opening a new one releases the messages the previous one acquired.

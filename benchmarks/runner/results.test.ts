@@ -10,7 +10,7 @@ import { aggregateSession, summarize } from './aggregate.ts';
 import { findPublishBlockers, publishSession } from './publish.ts';
 import { writeReport } from './report.ts';
 import { validateSummary } from './schema.ts';
-import type { EnvironmentReport, SessionManifest } from './types.ts';
+import type { EnvironmentReport, Footprint, SessionManifest } from './types.ts';
 
 const sessionId = '20261112000000-abcdef123456';
 
@@ -345,6 +345,57 @@ describe('writeReport', () => {
     assert.match(report, /\| node24 \| normalized \| kafkajs\[\^1\] \| 50,000 \|/);
     assert.match(report, /\[\^1\]: lingerMs: no linger support/);
     assert.match(report, /Doctor warnings/);
+  });
+});
+
+describe('F1 footprints', () => {
+  const footprints: Footprint[] = [
+    {
+      client: 'kafka-core',
+      packageName: '@cookiemonsterdev/kafka-core',
+      version: '2.8.1',
+      required: { bytes: 2_155_686, fileCount: 891, dependencyCount: 3, hasNativeAddon: false },
+      optional: { bytes: 538_332, fileCount: 9, dependencyCount: 2, hasNativeAddon: true },
+    },
+    {
+      client: 'confluent',
+      packageName: '@confluentinc/kafka-javascript',
+      version: null,
+      required: null,
+      optional: null,
+    },
+  ];
+
+  it('keeps required and optional parts in the summary and renders them without a verdict', async () => {
+    const directory = await createSessionDir();
+    await writeSession(directory, [createRun('kafka-core', 'P3', 1, 100_000)], []);
+    await writeFile(join(directory, 'footprint.json'), JSON.stringify(footprints));
+
+    const summary = await aggregateSession(directory);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
+
+    assert.deepEqual(summary.footprints, footprints);
+    assert.deepEqual(await validateSummary(summary), []);
+    assert.match(
+      report,
+      /\| @cookiemonsterdev\/kafka-core \| 2\.8\.1 \| 2\.1 \| 3 \| 891 \| 0\.5 \| 2 \| 9 \| optional only \|/,
+    );
+    assert.match(
+      report,
+      /\| @confluentinc\/kafka-javascript \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \|/,
+    );
+  });
+
+  it('leaves out footprints recorded before the required and optional split', async () => {
+    const directory = await createSessionDir();
+    await writeSession(directory, [createRun('kafka-core', 'P3', 1, 100_000)], []);
+    const legacy = [{ ...footprints[0], required: undefined, optional: undefined, installBytes: 2_694_018 }];
+    await writeFile(join(directory, 'footprint.json'), JSON.stringify(legacy));
+
+    const summary = await aggregateSession(directory);
+
+    assert.equal(summary.footprints, null);
+    assert.deepEqual(await validateSummary(summary), []);
   });
 });
 

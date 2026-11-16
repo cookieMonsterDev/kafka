@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 2
+      "const": 3
     },
     "sessionId": {
       "type": "string"
@@ -205,7 +205,7 @@
       "type": ["array", "null"],
       "items": {
         "type": "object",
-        "required": ["client", "packageName", "version", "installBytes", "dependencyCount", "hasNativeAddon"],
+        "required": ["client", "packageName", "version", "required", "optional"],
         "properties": {
           "client": {
             "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
@@ -216,14 +216,11 @@
           "version": {
             "type": ["string", "null"]
           },
-          "installBytes": {
-            "type": ["integer", "null"]
+          "required": {
+            "$ref": "#/$defs/footprintPart"
           },
-          "dependencyCount": {
-            "type": ["integer", "null"]
-          },
-          "hasNativeAddon": {
-            "type": ["boolean", "null"]
+          "optional": {
+            "$ref": "#/$defs/footprintPart"
           }
         }
       }
@@ -466,6 +463,28 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "footprintPart": {
+      "type": ["object", "null"],
+      "required": ["bytes", "fileCount", "dependencyCount", "hasNativeAddon"],
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dependencyCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasNativeAddon": {
+          "type": "boolean"
+        }
+      }
+    },
     "metricFloors": {
       "type": "object",
       "additionalProperties": false,

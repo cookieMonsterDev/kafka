@@ -136,13 +136,24 @@ describe('cluster/Cluster', () => {
     });
   });
 
-  describe('committedOffsets / markOffsetAsCommitted', () => {
-    it('initializes an empty record for a new group and remembers committed offsets', () => {
+  describe('committedOffset / markOffsetAsCommitted / forgetCommittedOffset', () => {
+    it('remembers committed offsets per group until they are forgotten', () => {
       const cluster = createCluster();
-      expect(cluster.committedOffsets({ groupId: 'g' })).toEqual({});
+      const partition = { topic: 't', partition: 0 };
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBeUndefined();
 
-      cluster.markOffsetAsCommitted({ groupId: 'g', topic: 't', partition: 0, offset: 42n });
-      expect(cluster.committedOffsets({ groupId: 'g' })).toEqual({ t: { 0: 42n } });
+      cluster.markOffsetAsCommitted({ groupId: 'g', ...partition, offset: 42n });
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBe(42n);
+      expect(cluster.committedOffset({ groupId: 'other', ...partition })).toBeUndefined();
+
+      cluster.forgetCommittedOffset({ groupId: 'g', ...partition });
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBeUndefined();
+    });
+
+    it('keeps a topic named __proto__ as an ordinary key', () => {
+      const cluster = createCluster();
+      cluster.markOffsetAsCommitted({ groupId: 'g', topic: '__proto__', partition: 1, offset: 7n });
+      expect(cluster.committedOffset({ groupId: 'g', topic: '__proto__', partition: 1 })).toBe(7n);
     });
   });
 

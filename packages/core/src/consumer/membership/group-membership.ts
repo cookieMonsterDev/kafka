@@ -63,8 +63,6 @@ export interface MembershipHost {
    * calls `onPartitionsAssigned` with the gained ones.
    */
   changeAssignment(change: AssignmentChange): Promise<void>;
-  /** Tags later commits with the consumer protocol's `memberEpoch`, which can change without a new assignment. */
-  updateMemberEpoch(memberEpoch: number): void;
   emitGroupJoin(durationMs: number): void;
 }
 

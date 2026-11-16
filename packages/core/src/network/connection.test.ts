@@ -5,6 +5,7 @@ import type { Mock } from 'vitest';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
+import { bufferPoolStats, clearBufferPool } from '../protocol/buffer-pool';
 import { Decoder } from '../protocol/decoder';
 import { Encoder } from '../protocol/encoder';
 import { API_KEYS } from '../protocol/requests/api-keys';
@@ -589,6 +590,25 @@ describe('network/Connection', () => {
       };
 
       await expect(connection.send({ request: metadataRequest(), response })).resolves.toEqual({ greeting: 'hello' });
+    });
+
+    it('returns the framing buffer to the pool only once the socket write completes', async () => {
+      const { connection, socket } = await connectWithFakeSocket(createConnection, { enforceRequestTimeout: false });
+      let completeWrite: (() => void) | undefined;
+      socket.write = vi.fn((_chunk: unknown, _encoding: unknown, callback?: () => void) => {
+        completeWrite = callback;
+        return true;
+      });
+
+      const response = { decode: async (rawData: Buffer) => rawData, parse: async (data: Buffer) => data };
+      void connection.send({ request: metadataRequest(), response }).catch(() => {});
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // A release before the write completes would land before this reset and leave the count at 0.
+      clearBufferPool();
+      expect(completeWrite).toBeTypeOf('function');
+      completeWrite?.();
+      expect(bufferPoolStats().releaseCount).toBe(1);
     });
 
     it('strips flexible response header tagged fields before decode', async () => {

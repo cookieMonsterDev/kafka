@@ -1,7 +1,7 @@
 import { COMPRESSION_TYPES, lookupCodec, type CompressionType } from '../../compression/index';
 import { Encoder } from '../../encoder';
 import { encodeMessageSet } from '../../message-set/index';
-import { array, bytes, field, int16, int32, object, string, type RequestDefinition } from '../../schema';
+import { array, field, int16, int32, object, ownedEncoderBytes, string, type RequestDefinition } from '../../schema';
 import { API_KEYS } from '../api-keys';
 import type { ProducePartitionData, ProduceRequestOptions } from './shared';
 
@@ -13,7 +13,7 @@ const requestBodySchema = object([
     array(
       object([
         field('topic', string),
-        field('partitions', array(object([field('partition', int32), field('recordSet', bytes)]))),
+        field('partitions', array(object([field('partition', int32), field('recordSet', ownedEncoderBytes)]))),
       ]),
     ),
   ),
@@ -22,7 +22,7 @@ const requestBodySchema = object([
 async function encodePartition(
   { partition, messages }: ProducePartitionData,
   { apiVersion, compression }: { apiVersion: number; compression: CompressionType },
-): Promise<{ partition: number; recordSet: Buffer }> {
+): Promise<{ partition: number; recordSet: Encoder }> {
   const messageVersion = apiVersion >= 2 ? 1 : 0;
   const messageSet = encodeMessageSet({
     messageVersion,
@@ -31,7 +31,7 @@ async function encodePartition(
   });
 
   if (apiVersion < 2 || compression === COMPRESSION_TYPES.None) {
-    return { partition, recordSet: messageSet.buffer };
+    return { partition, recordSet: messageSet };
   }
 
   const codec = lookupCodec(compression);
@@ -46,7 +46,7 @@ async function encodePartition(
     entries: [{ compression, timestamp, value: compressedValue }],
   });
 
-  return { partition, recordSet: compressedMessageSet.buffer };
+  return { partition, recordSet: compressedMessageSet };
 }
 
 /**

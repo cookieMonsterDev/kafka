@@ -395,6 +395,57 @@ describe('producer/transactionSession', () => {
       expect(session.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
     });
 
+    it('makes the next transaction wait for the bump still running after the previous one', async () => {
+      const broker = fakeBroker();
+      let finishBump!: (response: typeof mockBumpedInitProducerIdResponse) => void;
+      const bumped = new Promise<typeof mockBumpedInitProducerIdResponse>((resolve) => {
+        finishBump = resolve;
+      });
+      broker.initProducerId.mockResolvedValueOnce(mockInitProducerIdResponse).mockReturnValueOnce(bumped);
+      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+
+      const committed = txn.commit();
+      await vi.waitFor(() => expect(broker.initProducerId).toHaveBeenCalledTimes(2));
+      let hasBegun = false;
+      const next = session.begin(fakeSender).then((transaction) => {
+        hasBegun = true;
+        return transaction;
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(hasBegun).toBe(false);
+
+      finishBump(mockBumpedInitProducerIdResponse);
+      await committed;
+      const nextTxn = await next;
+
+      expect(nextTxn.isActive()).toBe(true);
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(session.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(session.ledger.isEpochBumpRequested()).toBe(false);
+    });
+
+    it('lets only one of two transactions begun during that bump open', async () => {
+      const broker = fakeBroker();
+      let finishBump!: (response: typeof mockBumpedInitProducerIdResponse) => void;
+      const bumped = new Promise<typeof mockBumpedInitProducerIdResponse>((resolve) => {
+        finishBump = resolve;
+      });
+      broker.initProducerId.mockResolvedValueOnce(mockInitProducerIdResponse).mockReturnValueOnce(bumped);
+      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+
+      const committed = txn.commit();
+      await vi.waitFor(() => expect(broker.initProducerId).toHaveBeenCalledTimes(2));
+      const createSecondSender = vi.fn(fakeSender);
+      const first = session.begin(fakeSender);
+      const second = session.begin(createSecondSender);
+      finishBump(mockBumpedInitProducerIdResponse);
+      await committed;
+
+      await expect(first).resolves.toEqual(expect.objectContaining({ isActive: expect.any(Function) }));
+      await expect(second).rejects.toThrow('There is already an ongoing transaction');
+      expect(createSecondSender).not.toHaveBeenCalled();
+    });
+
     it('defers a requested bump until the transaction is aborted', async () => {
       const broker = fakeBroker();
       broker.initProducerId

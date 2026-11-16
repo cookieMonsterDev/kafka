@@ -18,6 +18,7 @@ function errorOfType(type: string): KafkaProtocolError {
 function fakeCluster() {
   const broker = withSend({ initProducerId: vi.fn().mockResolvedValue(response) });
   const cluster = withSend({
+    refreshMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findControllerBroker: vi.fn().mockResolvedValue(broker),
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
@@ -71,6 +72,34 @@ describe('cluster/sendInitProducerId', () => {
 
       expect(broker.initProducerId).toHaveBeenCalledTimes(2);
       expect(cluster.findGroupCoordinator).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(['NOT_COORDINATOR_FOR_GROUP', 'GROUP_COORDINATOR_NOT_AVAILABLE'])(
+    'refreshes the metadata before looking a moved coordinator up again after %s',
+    async (type) => {
+      const { broker, cluster } = fakeCluster();
+      broker.initProducerId.mockRejectedValueOnce(errorOfType(type));
+
+      await sendInitProducerId(context(cluster), { transactionalId: 'tx', transactionTimeout: 30_000 });
+
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(1);
+      expect(cluster.refreshMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+        cluster.findGroupCoordinator.mock.invocationCallOrder[1]!,
+      );
+    },
+  );
+
+  it.each(['CONCURRENT_TRANSACTIONS', 'GROUP_LOAD_IN_PROGRESS'])(
+    'retries %s from the same coordinator without refreshing the metadata',
+    async (type) => {
+      const { broker, cluster } = fakeCluster();
+      broker.initProducerId.mockRejectedValueOnce(errorOfType(type));
+
+      await sendInitProducerId(context(cluster), { transactionalId: 'tx', transactionTimeout: 30_000 });
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).not.toHaveBeenCalled();
     },
   );
 

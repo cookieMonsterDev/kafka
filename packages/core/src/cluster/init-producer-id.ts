@@ -10,12 +10,21 @@ import type { Retrier } from '../retry/index';
 import type { Cluster } from './index';
 
 /**
+ * Errors from a transaction coordinator that has moved or is unavailable. The next attempt looks it
+ * up by node id in the cached metadata, which may still map that id to a stale address, so the
+ * metadata is refreshed first.
+ */
+const STALE_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
+  'NOT_COORDINATOR_FOR_GROUP',
+  'GROUP_COORDINATOR_NOT_AVAILABLE',
+]);
+
+/**
  * Errors from a transaction coordinator that has moved, is still loading, or is still ending the
  * transactional id's previous transaction. Each is worth another attempt.
  */
 const RETRIABLE_COORDINATOR_ERRORS: ReadonlySet<string> = new Set([
-  'NOT_COORDINATOR_FOR_GROUP',
-  'GROUP_COORDINATOR_NOT_AVAILABLE',
+  ...STALE_COORDINATOR_ERRORS,
   'GROUP_LOAD_IN_PROGRESS',
   // The previous producer may have crashed mid-transaction; retrying lets the coordinator abort it.
   // https://github.com/apache/kafka/blob/201da0542726472d954080d54bc585b111aaf86f/clients/src/main/java/org/apache/kafka/clients/producer/internals/TransactionManager.java#L1001-L1002
@@ -39,8 +48,9 @@ export interface SendInitProducerIdContext {
 
 /**
  * Sends InitProducerId to the transaction coordinator of `transactionalId`, or to the controller
- * without one. The broker is looked up again on every attempt, so a retry reaches a moved
- * coordinator. Retries only the coordinator errors above; any other error rejects as is.
+ * without one. The broker is looked up again on every attempt, after a metadata refresh when the
+ * coordinator moved, so a retry reaches it. Retries only the coordinator errors above; any other
+ * error rejects as is.
  */
 export function sendInitProducerId(
   { cluster, retry, logger }: SendInitProducerIdContext,
@@ -62,6 +72,7 @@ export function sendInitProducerId(
           retryCount,
           retryTime,
         });
+        if (STALE_COORDINATOR_ERRORS.has(error.type)) await cluster.refreshMetadata();
         throw error;
       }
 

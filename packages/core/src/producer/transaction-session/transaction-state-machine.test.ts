@@ -6,7 +6,7 @@ import { TRANSACTION_STATES } from './transaction-states';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-describe('producer/eosManager/TransactionStateMachine', () => {
+describe('producer/transactionSession/TransactionStateMachine', () => {
   it('starts uninitialized and reports its current state', () => {
     const machine = new TransactionStateMachine({ logger: silentLogger });
     expect(machine.state()).toBe(TRANSACTION_STATES.UNINITIALIZED);
@@ -69,62 +69,22 @@ describe('producer/eosManager/TransactionStateMachine', () => {
     expect(listener).toHaveBeenCalledWith({ from: TRANSACTION_STATES.UNINITIALIZED, to: TRANSACTION_STATES.READY });
   });
 
-  describe('createGuarded', () => {
-    it('runs the method when the state is legal', () => {
-      const machine = new TransactionStateMachine({ logger: silentLogger, initialState: TRANSACTION_STATES.READY });
-      const guarded = machine.createGuarded(
-        { greet: () => 'hello' },
-        { greet: { legalStates: [TRANSACTION_STATES.READY] } },
-      );
-
-      expect(guarded.greet()).toBe('hello');
-    });
-
-    it('rejects an async-guarded method called in an illegal state', async () => {
+  describe('illegalCallError', () => {
+    it('names the call and the current state', () => {
       const machine = new TransactionStateMachine({ logger: silentLogger });
-      const guarded = machine.createGuarded(
-        { commit: async () => 'committed' },
-        { commit: { legalStates: [TRANSACTION_STATES.TRANSACTING] } },
-      );
 
-      await expect(guarded.commit()).rejects.toEqual(
+      expect(machine.illegalCallError('commit')).toEqual(
         new KafkaNonRetriableError('Transaction state exception: Cannot call "commit" in state "UNINITIALIZED"'),
       );
     });
 
-    it('throws synchronously for a method guarded with async: false', () => {
-      const machine = new TransactionStateMachine({ logger: silentLogger });
-      const guarded = machine.createGuarded(
-        { beginTransaction: () => undefined },
-        { beginTransaction: { legalStates: [TRANSACTION_STATES.READY], async: false } },
-      );
+    it('reports the fenced error from FATAL_ERROR', () => {
+      const machine = new TransactionStateMachine({
+        logger: silentLogger,
+        initialState: TRANSACTION_STATES.FATAL_ERROR,
+      });
 
-      expect(() => guarded.beginTransaction()).toThrow(
-        new KafkaNonRetriableError(
-          'Transaction state exception: Cannot call "beginTransaction" in state "UNINITIALIZED"',
-        ),
-      );
-    });
-
-    it('re-checks the state at call time, not at guard-creation time', async () => {
-      const machine = new TransactionStateMachine({ logger: silentLogger });
-      const guarded = machine.createGuarded(
-        { commit: async () => 'committed' },
-        { commit: { legalStates: [TRANSACTION_STATES.TRANSACTING] } },
-      );
-
-      await expect(guarded.commit()).rejects.toThrow();
-
-      machine.transitionTo(TRANSACTION_STATES.READY);
-      machine.transitionTo(TRANSACTION_STATES.TRANSACTING);
-
-      await expect(guarded.commit()).resolves.toBe('committed');
-    });
-
-    it('leaves methods without a declared guard untouched', () => {
-      const machine = new TransactionStateMachine({ logger: silentLogger });
-      const guarded = machine.createGuarded({ isTransactional: () => true }, {});
-      expect(guarded.isTransactional()).toBe(true);
+      expect(machine.illegalCallError('commit')).toEqual(new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE));
     });
   });
 });

@@ -1,4 +1,5 @@
 import { KafkaBrokerNotFound, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
+import { sendInitProducerId } from '../cluster/init-producer-id';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { DescribeTransactionsState } from '../protocol/requests/describe-transactions/v0/response';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
@@ -23,14 +24,6 @@ export interface TransactionsApi {
 }
 
 const DEFAULT_FENCE_TRANSACTION_TIMEOUT = 60_000;
-
-const FENCE_PRODUCER_RETRIABLE_ERRORS = new Set([
-  'CONCURRENT_TRANSACTIONS',
-  'GROUP_LOAD_IN_PROGRESS',
-  'NOT_COORDINATOR_FOR_GROUP',
-  'GROUP_COORDINATOR_NOT_AVAILABLE',
-  'COORDINATOR_NOT_AVAILABLE',
-]);
 
 const ABORT_TRANSACTION_RETRIABLE_ERRORS = new Set([
   'NOT_LEADER_OR_FOLLOWER',
@@ -224,74 +217,25 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
     }
     if (transactionalIds.length === 0) return { results: [] };
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        const results = await Promise.all(
-          transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> =>
-            retrier(retry)(async (bail, retryCount, retryTime) => {
-              try {
-                const coordinator = await cluster.findGroupCoordinator({
-                  groupId: transactionalId,
-                  coordinatorType: COORDINATOR_TYPES.TRANSACTION,
-                });
-                const response = await coordinator.initProducerId({
-                  transactionalId,
-                  transactionTimeout,
-                  producerId: -1n,
-                  producerEpoch: -1,
-                });
-                return {
-                  transactionalId,
-                  errorCode: 0,
-                  producerId: response.producerId,
-                  producerEpoch: response.producerEpoch,
-                };
-              } catch (error) {
-                if (error instanceof KafkaProtocolError) {
-                  const type = error.type;
-                  if (type && FENCE_PRODUCER_RETRIABLE_ERRORS.has(type)) {
-                    logger.debug('Retrying fenceProducers after retriable coordinator error', {
-                      transactionalId,
-                      type,
-                      retryCount,
-                      retryTime,
-                    });
-                    if (
-                      type === 'NOT_COORDINATOR_FOR_GROUP' ||
-                      type === 'GROUP_COORDINATOR_NOT_AVAILABLE' ||
-                      type === 'COORDINATOR_NOT_AVAILABLE'
-                    ) {
-                      await cluster.refreshMetadata();
-                    }
-                    throw error;
-                  }
-                  return {
-                    transactionalId,
-                    errorCode: error.code ?? -1,
-                  };
-                }
-                bail(error as Error);
-                throw error;
-              }
-            }),
-          ),
-        );
-        return { results };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not fence producers', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
+    const initProducerIdContext = { cluster, retry: retrier(retry), logger };
+    const results = await Promise.all(
+      transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> => {
+        try {
+          // A fresh InitProducerId bumps the epoch, fencing the producer that holds the transactional id.
+          const { producerId, producerEpoch } = await sendInitProducerId(initProducerIdContext, {
+            transactionalId,
+            transactionTimeout,
+            producerId: -1n,
+            producerEpoch: -1,
           });
+          return { transactionalId, errorCode: 0, producerId, producerEpoch };
+        } catch (error) {
+          if (error instanceof KafkaProtocolError) return { transactionalId, errorCode: error.code ?? -1 };
           throw error;
         }
-
-        bail(error as Error);
-        return { results: [] };
-      }
-    });
+      }),
+    );
+    return { results };
   };
 
   const abortTransaction = async ({

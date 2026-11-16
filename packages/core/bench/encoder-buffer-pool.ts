@@ -18,9 +18,8 @@ function smallRequest() {
 /**
  * `createRequest` allocates a throwaway request-body encoder per RPC (via `encode()`); once its
  * bytes are copied into the header-wrapping encoder it's released back to the pool. The
- * header-wrapping encoder itself is deliberately left unpooled — it's handed to
- * `socket.write()`, whose buffer must stay valid until the OS write completes, which the
- * connection layer doesn't currently track — so steady state should land near a 50% miss rate:
+ * connection layer releases the header-wrapping encoder only after `socket.write()` completes,
+ * and this bench never writes to a socket, so steady state should land near a 50% miss rate:
  * every body encoder is a pool hit, every header encoder is a fresh allocation.
  */
 export async function benchEncoderBufferPool(): Promise<BenchStats> {

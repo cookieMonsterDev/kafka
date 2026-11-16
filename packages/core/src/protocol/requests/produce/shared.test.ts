@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bufferPoolStats, clearBufferPool, resetBufferPoolStats } from '../../buffer-pool';
 import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
 import { decodeRecordBatch } from '../../records/batch';
@@ -129,6 +130,31 @@ describe('protocol/requests/produce/shared', () => {
         ],
       }).encode();
       expect(encoded.size()).toBeGreaterThan(16);
+    });
+
+    it('returns its record batch buffers to the pool once the request body is written', async () => {
+      const value = Buffer.alloc(1024, 1);
+      const request = createProduceRequest(3, {
+        acks: 1,
+        timeout: 1000,
+        topicData: [
+          {
+            topic: 't',
+            partitions: [0, 1, 2].map((partition) => ({
+              partition,
+              messages: Array.from({ length: 20 }, () => ({ value })),
+            })),
+          },
+        ],
+      });
+
+      clearBufferPool();
+      (await request.encode()).release();
+      resetBufferPoolStats();
+      (await request.encode()).release();
+
+      // Every buffer the second encode needs, batches included, comes back from the first one.
+      expect(bufferPoolStats().allocCount).toBe(0);
     });
   });
 

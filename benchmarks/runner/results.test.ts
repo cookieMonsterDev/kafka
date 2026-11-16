@@ -8,7 +8,7 @@ import { resultSchemaVersion, scenarios } from '../client/spec.ts';
 import type { ClientId, RunRecord, RunSpec, ScenarioId } from '../client/spec.ts';
 import { aggregateSession, summarize } from './aggregate.ts';
 import { findPublishBlockers, publishSession } from './publish.ts';
-import { writeReport } from './report.ts';
+import { footprintTotal, formatNativeAddon, writeReport } from './report.ts';
 import { validateSummary } from './schema.ts';
 import type { EnvironmentReport, Footprint, SessionManifest } from './types.ts';
 
@@ -386,16 +386,59 @@ describe('F1 footprints', () => {
     );
   });
 
-  it('leaves out footprints recorded before the required and optional split', async () => {
+  it('keeps only the total of footprints recorded before the required and optional split', async () => {
     const directory = await createSessionDir();
     await writeSession(directory, [createRun('kafka-core', 'P3', 1, 100_000)], []);
-    const legacy = [{ ...footprints[0], required: undefined, optional: undefined, installBytes: 2_694_018 }];
-    await writeFile(join(directory, 'footprint.json'), JSON.stringify(legacy));
+    const unsplit = [
+      {
+        client: 'kafka-core',
+        packageName: '@cookiemonsterdev/kafka-core',
+        version: '2.8.1',
+        installBytes: 2_694_018,
+        dependencyCount: 5,
+        hasNativeAddon: true,
+      },
+      {
+        client: 'confluent',
+        packageName: '@confluentinc/kafka-javascript',
+        version: null,
+        installBytes: null,
+        dependencyCount: null,
+        hasNativeAddon: null,
+      },
+    ];
+    await writeFile(join(directory, 'footprint.json'), JSON.stringify(unsplit));
 
     const summary = await aggregateSession(directory);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
 
-    assert.equal(summary.footprints, null);
+    assert.deepEqual(summary.footprints, [
+      {
+        client: 'kafka-core',
+        packageName: '@cookiemonsterdev/kafka-core',
+        version: '2.8.1',
+        required: null,
+        optional: null,
+        unsplitTotal: { bytes: 2_694_018, dependencyCount: 5, hasNativeAddon: true },
+      },
+      footprints[1],
+    ]);
     assert.deepEqual(await validateSummary(summary), []);
+    assert.match(report, /\| Version \| Total MiB \| Total dependencies \| Required MiB \|/);
+    assert.match(
+      report,
+      /\| @cookiemonsterdev\/kafka-core \| 2\.8\.1 \| 2\.6 \| 5 \|( not split \|){6} yes, not split \|/,
+    );
+    assert.match(report, /\| @confluentinc\/kafka-javascript \| n\/a \|( n\/a \|){9}/);
+  });
+
+  it('totals the required and optional parts like an unsplit footprint', () => {
+    const [split, notInstalled] = footprints;
+    assert.ok(split && notInstalled);
+
+    assert.deepEqual(footprintTotal(split), { bytes: 2_694_018, dependencyCount: 5 });
+    assert.equal(footprintTotal(notInstalled), null);
+    assert.equal(formatNativeAddon(split), 'optional only');
   });
 });
 

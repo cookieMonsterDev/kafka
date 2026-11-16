@@ -32,8 +32,14 @@ function formatMebibytes(stat: StatSummary | null): string {
   return formatNumber(stat.median / 1_048_576, 0);
 }
 
-/** Where a client's closure holds a native addon: `yes` when it is required, `optional only`, or `no`. */
+/**
+ * Where a client's closure holds a native addon: `yes` when it is required, `optional only`, or `no`. A
+ * session recorded before the split knows only whether the whole closure holds one: `yes, not split`.
+ */
 export function formatNativeAddon(footprint: Footprint): string {
+  if (footprint.unsplitTotal !== undefined) {
+    return footprint.unsplitTotal.hasNativeAddon ? 'yes, not split' : 'no';
+  }
   if (footprint.required === null || footprint.optional === null) {
     return 'n/a';
   }
@@ -43,11 +49,44 @@ export function formatNativeAddon(footprint: Footprint): string {
   return footprint.optional.hasNativeAddon ? 'optional only' : 'no';
 }
 
-function footprintPartCells(part: FootprintPart | null): string[] {
+/**
+ * Bytes and dependencies of the whole closure: required plus optional, or the total of a session recorded
+ * before the split. Null when the package is not installed.
+ */
+export function footprintTotal(footprint: Footprint): { bytes: number; dependencyCount: number } | null {
+  if (footprint.unsplitTotal !== undefined) {
+    const { bytes, dependencyCount } = footprint.unsplitTotal;
+    return { bytes, dependencyCount };
+  }
+  const { required, optional } = footprint;
+  if (required === null || optional === null) {
+    return null;
+  }
+  return {
+    bytes: required.bytes + optional.bytes,
+    dependencyCount: required.dependencyCount + optional.dependencyCount,
+  };
+}
+
+/** Whether any footprint comes from a session recorded before the split, so its table needs total columns. */
+export function hasUnsplitFootprint(footprints: readonly Footprint[]): boolean {
+  return footprints.some((footprint) => footprint.unsplitTotal !== undefined);
+}
+
+function footprintPartCells(part: FootprintPart | null, footprint: Footprint): string[] {
   if (part === null) {
-    return ['n/a', 'n/a', 'n/a'];
+    const missing = footprint.unsplitTotal === undefined ? 'n/a' : 'not split';
+    return [missing, missing, missing];
   }
   return [formatNumber(part.bytes / 1_048_576, 1), String(part.dependencyCount), formatNumber(part.fileCount)];
+}
+
+function footprintTotalCells(footprint: Footprint): string[] {
+  const total = footprintTotal(footprint);
+  if (total === null) {
+    return ['n/a', 'n/a'];
+  }
+  return [formatNumber(total.bytes / 1_048_576, 1), String(total.dependencyCount)];
 }
 
 function formatPercent(fraction: number): string {
@@ -257,16 +296,19 @@ function renderFootprints(summary: SessionSummary): string {
   if (!summary.footprints || summary.footprints.length === 0) {
     return '';
   }
+  const hasTotals = hasUnsplitFootprint(summary.footprints);
   const rows = summary.footprints.map((footprint) => [
     footprint.packageName,
     footprint.version ?? 'n/a',
-    ...footprintPartCells(footprint.required),
-    ...footprintPartCells(footprint.optional),
+    ...(hasTotals ? footprintTotalCells(footprint) : []),
+    ...footprintPartCells(footprint.required, footprint),
+    ...footprintPartCells(footprint.optional, footprint),
     formatNativeAddon(footprint),
   ]);
   const header = [
     'Package',
     'Version',
+    ...(hasTotals ? ['Total MiB', 'Total dependencies'] : []),
     'Required MiB',
     'Required dependencies',
     'Required files',
@@ -280,6 +322,9 @@ function renderFootprints(summary: SessionSummary): string {
     '',
     'Information, not a comparison: what installing each client adds. Required is the package and what it reaches',
     'through `dependencies`; optional is what installed `optionalDependencies` add on top.',
+    ...(hasTotals
+      ? ['This session was recorded before F1 split the two, so it has only totals, and no file counts.']
+      : []),
     '',
     table(header, rows),
   ].join('\n');

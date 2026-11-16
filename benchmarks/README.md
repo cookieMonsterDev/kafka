@@ -146,7 +146,8 @@ report repeats this note under each of these scenarios.
 ² F1 is read from the image, not run. For each client it reports bytes, files and dependencies twice: the required
 part is the package and everything it reaches through `dependencies`; the optional part is what installed
 `optionalDependencies` add on top. It names no smaller or larger client, because a client's size follows what it
-implements and bundles. A session recorded before this split has no F1 data once it is re-aggregated.
+implements and bundles. A session recorded before this split measured only totals, without file counts; once
+re-aggregated, its rows show those totals and mark the required and optional cells as not split.
 
 Each run warms up in-process, then measures. Per run: records/s and MB/s (10^6 bytes, values only), latency
 percentiles from a preallocated sample buffer, process and cgroup CPU seconds, records per CPU second, cgroup peak

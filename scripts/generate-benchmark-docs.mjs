@@ -33,7 +33,7 @@ import { parseArgs } from 'node:util';
 import { createRecordPool, headerValueBytes, payloadShapes } from '../benchmarks/client/payload.ts';
 import { payloadSeed, scenarioIds, scenarios as scenarioDefinitions } from '../benchmarks/client/spec.ts';
 import { effectiveNoiseFloor, findClearBest, summarize, summarySchemaVersion } from '../benchmarks/runner/aggregate.ts';
-import { formatNativeAddon } from '../benchmarks/runner/report.ts';
+import { footprintTotal, formatNativeAddon, hasUnsplitFootprint } from '../benchmarks/runner/report.ts';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
@@ -404,18 +404,25 @@ function declaredGaps(chart, sources) {
   return gapsByClient;
 }
 
+/**
+ * One install-size entry per client. A session recorded before F1 split required and optional dependencies
+ * gives an `unsplit` entry that keeps only the measured total.
+ */
 function buildFootprints(sources) {
   return CLIENTS.map(({ id }) => {
     for (const [source, session] of sessionCandidates(id, sources)) {
       const footprint = session.summary.footprints?.find((entry) => entry.client === id);
-      if (footprint === undefined || footprint.required === null) continue;
+      if (footprint === undefined) continue;
+      const isUnsplit = footprint.unsplitTotal !== undefined;
+      if (footprint.required === null && !isUnsplit) continue;
       return {
         client: id,
-        status: 'ok',
+        status: isUnsplit ? 'unsplit' : 'ok',
         packageName: footprint.packageName,
         version: footprint.version,
         required: footprint.required,
         optional: footprint.optional,
+        ...(isUnsplit ? { unsplitTotal: footprint.unsplitTotal } : {}),
         source,
         sessionId: session.summary.sessionId,
         ...(id === CORE_CLIENT_ID ? { coreSha: session.summary.manifest.core.sha } : {}),
@@ -775,8 +782,22 @@ function chartSection(chart, comparison) {
   return [chartBlock(chart, datasets[0]), '', chartTable(chart, datasets)];
 }
 
+function formatMegabytes(bytes) {
+  return (bytes / MEGABYTE).toFixed(2);
+}
+
 function footprintPartCells(part) {
-  return [(part.bytes / MEGABYTE).toFixed(2), String(part.dependencyCount), formatCount(part.fileCount)];
+  if (part === null) return ['not split', 'not split', 'not split'];
+  return [formatMegabytes(part.bytes), String(part.dependencyCount), formatCount(part.fileCount)];
+}
+
+function footprintTotalCells(footprint) {
+  const { bytes, dependencyCount } = footprintTotal(footprint);
+  return [formatMegabytes(bytes), String(dependencyCount)];
+}
+
+function isFootprintMeasured(footprint) {
+  return footprint.status === 'ok' || footprint.status === 'unsplit';
 }
 
 /**
@@ -792,13 +813,14 @@ function installSizeText(comparison) {
     `This is information, not a ranking, because size follows what each client implements and bundles: ${CLIENT_COVERAGE}.`,
     '',
   ];
-  const dataset = orderedDatasets(comparison).find((entry) =>
-    entry.footprints.some((footprint) => footprint.status === 'ok'),
-  );
+  const dataset = orderedDatasets(comparison).find((entry) => entry.footprints.some(isFootprintMeasured));
   if (dataset === undefined) return [...lines, 'Not measured in the published sessions yet.'];
+  // Split rows show their totals too, so the total columns have a value for every measured client.
+  const hasTotals = hasUnsplitFootprint(dataset.footprints);
   const header = [
     'Client',
     'Version',
+    ...(hasTotals ? ['Total (MB)', 'Total dependencies'] : []),
     'Required (MB)',
     'Required dependencies',
     'Required files',
@@ -809,16 +831,23 @@ function installSizeText(comparison) {
   ];
   const rows = dataset.footprints.map((footprint) => {
     const client = clientLabel(footprint.client);
-    if (footprint.status !== 'ok') return [client, 'not measured', ...Array(header.length - 2).fill('—')];
+    if (!isFootprintMeasured(footprint)) return [client, 'not measured', ...Array(header.length - 2).fill('—')];
     return [
       client,
       footprint.version ?? '—',
+      ...(hasTotals ? footprintTotalCells(footprint) : []),
       ...footprintPartCells(footprint.required),
       ...footprintPartCells(footprint.optional),
       formatNativeAddon(footprint),
     ];
   });
-  return [...lines, markdownTable(header, rows), '', 'MB is 1,000,000 bytes.'];
+  const notes = ['MB is 1,000,000 bytes.'];
+  if (hasTotals) {
+    notes.push(
+      'Rows marked not split come from a session recorded before required and optional were measured apart, so they have only the total, without a file count.',
+    );
+  }
+  return [...lines, markdownTable(header, rows), '', notes.join(' ')];
 }
 
 function listText(items) {

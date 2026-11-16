@@ -76,6 +76,9 @@ describe('producer/sendMessages', () => {
   function fakeCluster(brokers: Record<number, ReturnType<typeof fakeBroker>>) {
     return {
       addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
+      hasLoadedTargetTopics: vi.fn().mockReturnValue(false),
+      needsMetadataRefresh: vi.fn().mockReturnValue(true),
+      connectedBroker: vi.fn().mockReturnValue(undefined),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       applyLeaderUpdate: vi.fn().mockResolvedValue(true),
@@ -279,7 +282,10 @@ describe('producer/sendMessages', () => {
     brokers[1].produce.mockImplementationOnce(() => Promise.reject(createErrorFromCode(code, { topic, partition: 0 })));
 
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({ getProducerEpoch: vi.fn().mockReturnValue(0) });
+    const eosManager = fakeEosManager({
+      getProducerEpoch: vi.fn().mockReturnValue(0),
+      isInitialized: vi.fn().mockReturnValue(true),
+    });
 
     const sendMessages = createSendMessages({
       logger: silentLogger,
@@ -310,7 +316,10 @@ describe('producer/sendMessages', () => {
     });
 
     const cluster = fakeCluster(brokers);
-    const eosManager = fakeEosManager({ getProducerEpoch: vi.fn(() => epoch) });
+    const eosManager = fakeEosManager({
+      getProducerEpoch: vi.fn(() => epoch),
+      isInitialized: vi.fn().mockReturnValue(true),
+    });
 
     const sendMessages = createSendMessages({
       logger: silentLogger,
@@ -892,7 +901,10 @@ describe('producer/sendMessages', () => {
       brokers[1].produce.mockRejectedValue(createErrorFromCode(code, { topic, partition: 0 }));
       const cluster = fakeCluster(brokers);
       cluster.findLeaderForPartitions.mockReturnValue({ 1: [0, 1] });
-      const eosManager = fakeEosManager({ getProducerEpoch: vi.fn().mockReturnValue(0) });
+      const eosManager = fakeEosManager({
+        getProducerEpoch: vi.fn().mockReturnValue(0),
+        isInitialized: vi.fn().mockReturnValue(true),
+      });
 
       const sendMessages = createSendMessages({
         logger: silentLogger,
@@ -920,6 +932,166 @@ describe('producer/sendMessages', () => {
 
       expect(eosManager.updateSequence).not.toHaveBeenCalledWith(topic, expect.any(Number), -1);
       expect(eosManager.requestEpochBump).toHaveBeenCalled();
+    });
+  });
+
+  describe('when metadata is fresh and the leaders are connected', () => {
+    function fastPathCluster(
+      brokers: Record<number, ReturnType<typeof fakeBroker>>,
+      disconnectedNodeIds: readonly string[] = [],
+    ) {
+      const cluster = fakeCluster(brokers);
+      cluster.hasLoadedTargetTopics.mockReturnValue(true);
+      cluster.needsMetadataRefresh.mockReturnValue(false);
+      cluster.connectedBroker.mockImplementation((nodeId: string) =>
+        disconnectedNodeIds.includes(nodeId) ? undefined : brokers[Number(nodeId)],
+      );
+      return cluster;
+    }
+
+    function createFastPathSend(cluster: ReturnType<typeof fakeCluster>, eosManager: EosManager = fakeEosManager()) {
+      return createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        eosManager,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
+    }
+
+    it('produces without the async target-topic, metadata or broker lookups', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fastPathCluster(brokers);
+
+      const response = await createFastPathSend(cluster)({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(cluster.hasLoadedTargetTopics).toHaveBeenCalledWith([topic]);
+      expect(cluster.addMultipleTargetTopics).not.toHaveBeenCalled();
+      expect(cluster.refreshMetadataIfNecessary).not.toHaveBeenCalled();
+      expect(cluster.findBroker).not.toHaveBeenCalled();
+      expect(response.map(({ partition }) => partition)).toEqual([0, 1, 2]);
+    });
+
+    it('awaits addMultipleTargetTopics when a topic is not yet targeted', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fastPathCluster(brokers);
+      cluster.hasLoadedTargetTopics.mockReturnValue(false);
+
+      await createFastPathSend(cluster)({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(cluster.addMultipleTargetTopics).toHaveBeenCalledExactlyOnceWith([topic]);
+      expect(cluster.refreshMetadataIfNecessary).not.toHaveBeenCalled();
+    });
+
+    it('awaits refreshMetadataIfNecessary when the metadata is stale', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fastPathCluster(brokers);
+      cluster.needsMetadataRefresh.mockReturnValue(true);
+
+      await createFastPathSend(cluster)({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(cluster.refreshMetadataIfNecessary).toHaveBeenCalledOnce();
+      expect(cluster.addMultipleTargetTopics).not.toHaveBeenCalled();
+    });
+
+    it('falls back to findBroker for a leader that is not connected', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fastPathCluster(brokers, ['2']);
+
+      await createFastPathSend(cluster)({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      expect(cluster.findBroker).toHaveBeenCalledExactlyOnceWith({ nodeId: '2' });
+      expect(brokers[2].produce).toHaveBeenCalledOnce();
+    });
+
+    it('resolves with the record metadata when its only request succeeds', async () => {
+      const brokers = { 1: fakeBroker(1) };
+
+      const response = await createFastPathSend(fastPathCluster(brokers))({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+      });
+
+      expect(brokers[1].produce).toHaveBeenCalledOnce();
+      expect(response).toEqual([
+        { topicName: topic, partition: 0, errorCode: 0, baseOffset: 0n, logAppendTime: -1n, logStartOffset: 0n },
+      ]);
+    });
+
+    it('rejects with the broker error when its only request fails', async () => {
+      const brokers = { 1: fakeBroker(1) };
+      const code = ERROR_CODES.find((entry) => entry.type === 'MESSAGE_TOO_LARGE')!.code;
+      brokers[1].produce.mockRejectedValue(createErrorFromCode(code, { topic, partition: 0 }));
+      const cluster = fastPathCluster(brokers);
+
+      await expect(
+        createFastPathSend(cluster)({
+          acks: -1,
+          timeout: 30_000,
+          topicMessages: [{ topic, messages: [{ value: 'v0', key: '0' }] }],
+        }),
+      ).rejects.toMatchObject({ type: 'MESSAGE_TOO_LARGE' });
+    });
+
+    it('still tracks sequences for an idempotent producer', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const eosManager = fakeEosManager({
+        getSequence: vi.fn().mockReturnValue(7),
+        isInitialized: vi.fn().mockReturnValue(true),
+      });
+
+      await createFastPathSend(
+        fastPathCluster(brokers),
+        eosManager,
+      )({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      for (const nodeId of [1, 2, 3] as const) {
+        const request = brokers[nodeId].produce.mock.calls[0]?.[0];
+        expect(request.topicData[0]?.partitions[0]).toEqual(expect.objectContaining({ firstSequence: 7 }));
+      }
+      expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 0, 3);
+      expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 1, 3);
+      expect(eosManager.updateSequence).toHaveBeenCalledWith(topic, 2, 3);
+    });
+
+    it('skips sequence tracking when no producer id is initialised', async () => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const eosManager = fakeEosManager();
+
+      await createFastPathSend(
+        fastPathCluster(brokers),
+        eosManager,
+      )({
+        acks: -1,
+        timeout: 30_000,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
+
+      const request = brokers[1].produce.mock.calls[0]?.[0];
+      expect(request.topicData[0]?.partitions[0]?.firstSequence).toBeUndefined();
+      expect(eosManager.getSequence).not.toHaveBeenCalled();
+      expect(eosManager.updateSequence).not.toHaveBeenCalled();
     });
   });
 });

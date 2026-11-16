@@ -280,6 +280,9 @@ describe('producer', () => {
     const broker = { nodeId: 1, produce };
     const cluster = fakeCluster({
       addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
+      hasLoadedTargetTopics: vi.fn().mockReturnValue(false),
+      needsMetadataRefresh: vi.fn().mockReturnValue(true),
+      connectedBroker: vi.fn().mockReturnValue(undefined),
       refreshMetadata: vi.fn().mockResolvedValue(undefined),
       refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
       findTopicPartitionMetadata: vi

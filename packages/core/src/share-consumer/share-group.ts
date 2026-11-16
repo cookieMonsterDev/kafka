@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Broker } from '../broker/index';
 import type { Cluster } from '../cluster/index';
 import type { TopicPartitions } from '../consumer/types';
@@ -207,7 +206,7 @@ export class ShareGroup {
   }
 
   #ensureMemberId(): string {
-    if (!this.memberId) this.memberId = randomUUID();
+    if (!this.memberId) this.memberId = globalThis.crypto.randomUUID();
     return this.memberId;
   }
 

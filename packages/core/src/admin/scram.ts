@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { KafkaNonRetriableError } from '../errors';
 import { SCRAM_MECHANISMS } from '../protocol/enums/scram-mechanisms';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
@@ -9,6 +8,11 @@ import { formatUnknown, protocolType } from './helpers';
 
 const DEFAULT_ITERATIONS = 4096;
 const DEFAULT_SALT_BYTES = 16;
+
+/** Loaded on first SCRAM credential change, so importing the client does not load `node:crypto`. */
+function nodeCrypto() {
+  return process.getBuiltinModule('node:crypto');
+}
 
 export interface ScramCredentialDeletionInput {
   name: string;
@@ -54,7 +58,7 @@ function hi(
   digest: { length: number; type: string },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    crypto.pbkdf2(password, salt, iterations, digest.length, digest.type, (err, derivedKey) =>
+    nodeCrypto().pbkdf2(password, salt, iterations, digest.length, digest.type, (err, derivedKey) =>
       err ? reject(err) : resolve(derivedKey),
     );
   });
@@ -75,7 +79,7 @@ async function toWireUpsertion(upsertion: ScramCredentialUpsertionInput) {
   if (iterations < DEFAULT_ITERATIONS) {
     throw new KafkaNonRetriableError(`SCRAM iterations must be at least ${DEFAULT_ITERATIONS}`);
   }
-  const salt = upsertion.salt ?? crypto.randomBytes(DEFAULT_SALT_BYTES);
+  const salt = upsertion.salt ?? nodeCrypto().randomBytes(DEFAULT_SALT_BYTES);
   const saltedPassword = await hi(upsertion.password, salt, iterations, digestFor(upsertion.mechanism));
   return {
     name: upsertion.name,

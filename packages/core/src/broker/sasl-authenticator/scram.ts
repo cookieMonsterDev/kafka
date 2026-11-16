@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import { KafkaNonRetriableError, KafkaSASLAuthenticationError } from '../../errors';
 import type { Logger } from '../../loggers/index';
 import { scramFinalMessageRequest, scramFirstMessageRequest, scramResponse } from '../../protocol/sasl/scram';
@@ -15,6 +14,11 @@ const URLSAFE_BASE64_TRAILING_EQUAL_REGEX = /=+$/;
 
 const HMAC_CLIENT_KEY = 'Client Key';
 const HMAC_SERVER_KEY = 'Server Key';
+
+/** Loaded on first SCRAM use, so importing the client does not load `node:crypto`. */
+function nodeCrypto() {
+  return process.getBuiltinModule('node:crypto');
+}
 
 export interface DigestDefinition {
   length: number;
@@ -117,7 +121,7 @@ export class SCRAM {
 
   /** A nonce ensures old communications cannot be reused in replay attacks. */
   static nonce(): string {
-    return crypto
+    return nodeCrypto()
       .randomBytes(16)
       .toString('base64')
       .replace(URLSAFE_BASE64_PLUS_REGEX, '-') // make it url safe
@@ -131,8 +135,13 @@ export class SCRAM {
    */
   static hi(password: string, salt: Buffer, iterations: number, digestDefinition: DigestDefinition): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      crypto.pbkdf2(password, salt, iterations, digestDefinition.length, digestDefinition.type, (err, derivedKey) =>
-        err ? reject(err) : resolve(derivedKey),
+      nodeCrypto().pbkdf2(
+        password,
+        salt,
+        iterations,
+        digestDefinition.length,
+        digestDefinition.type,
+        (err, derivedKey) => (err ? reject(err) : resolve(derivedKey)),
       );
     });
   }
@@ -296,10 +305,10 @@ export class SCRAM {
   }
 
   H(data: Buffer): Buffer {
-    return crypto.createHash(this.#digestDefinition.type).update(data).digest();
+    return nodeCrypto().createHash(this.#digestDefinition.type).update(data).digest();
   }
 
   HMAC(key: Buffer, data: string): Buffer {
-    return crypto.createHmac(this.#digestDefinition.type, key).update(data).digest();
+    return nodeCrypto().createHmac(this.#digestDefinition.type, key).update(data).digest();
   }
 }

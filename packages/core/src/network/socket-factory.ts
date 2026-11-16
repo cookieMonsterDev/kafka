@@ -1,5 +1,5 @@
 import net from 'node:net';
-import tls from 'node:tls';
+import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { HAPPY_EYEBALLS_DELAY_MS } from './dns-lookup';
 
 const KEEP_ALIVE_DELAY = 60_000; // ms
@@ -7,7 +7,7 @@ const KEEP_ALIVE_DELAY = 60_000; // ms
 export interface SocketFactoryArgs {
   host: string;
   port: number;
-  ssl?: tls.ConnectionOptions | null;
+  ssl?: TlsConnectionOptions | null;
   onConnect: () => void;
   /**
    * TLS SNI when `host` is an IP (the original broker hostname). Ignored for plain TCP.
@@ -46,8 +46,11 @@ function tlsServername(host: string, servername: string | undefined): { serverna
 export function createDefaultSocketFactory(): SocketFactory {
   return ({ host, port, ssl, onConnect, servername, onread }) => {
     const readOptions = onread ? { onread } : {};
+    // `node:tls` loads on the first TLS connect, so importing the client does not load it.
     const socket = ssl
-      ? tls.connect({ host, port, ...tlsServername(host, servername), ...ssl, ...readOptions }, onConnect)
+      ? process
+          .getBuiltinModule('node:tls')
+          .connect({ host, port, ...tlsServername(host, servername), ...ssl, ...readOptions }, onConnect)
       : net.connect(
           net.isIP(host)
             ? { host, port, ...readOptions }

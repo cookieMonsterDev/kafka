@@ -33,26 +33,16 @@ export interface SendMessagesRequest {
   compression?: CompressionType;
   compressionLevel?: number;
   topicMessages: readonly TopicMessages[];
+  /** Key and value bytes of every record in `topicMessages`, counted by the caller; reported in produce metrics. */
+  bytes: number;
   /** The delivery deadline. Once it expires, no new attempt starts and queued gate waits give up. */
   deadline?: Deadline;
 }
 
-function payloadBytes(value: Message['key'] | Message['value']): number {
-  if (value == null) return 0;
-  if (Buffer.isBuffer(value)) return value.byteLength;
-  return Buffer.byteLength(String(value));
-}
-
-function topicMessagesSize(topicMessages: readonly TopicMessages[]): { records: number; bytes: number } {
+function recordCount(topicMessages: readonly TopicMessages[]): number {
   let records = 0;
-  let bytes = 0;
-  for (const { messages } of topicMessages) {
-    for (const message of messages) {
-      records += 1;
-      bytes += payloadBytes(message.key) + payloadBytes(message.value);
-    }
-  }
-  return { records, bytes };
+  for (const { messages } of topicMessages) records += messages.length;
+  return records;
 }
 
 /** Errors the broker returns although the records may already be on the leader's log. */
@@ -93,12 +83,12 @@ export function createSendMessages({
     compression,
     compressionLevel,
     topicMessages,
+    bytes,
     deadline,
   }: SendMessagesRequest): Promise<RecordMetadata[]> => {
     const assignment = new Map<string, Map<number, Message[]>>();
     const ackedPartitions = new Set<string>();
     const metadataByPartition = new Map<string, RecordMetadata>();
-    const produceSize = topicMessagesSize(topicMessages);
     const topicNames = topicMessages.map(({ topic }) => topic);
     /**
      * Holds this send's partition gates and sequences from its first attempt until it settles, so a
@@ -275,7 +265,7 @@ export function createSendMessages({
           if (rejection) throw rejection.reason;
         }
         const collected = collectResponse();
-        const produceMetrics = { ...produceSize, retries: retryCount };
+        const produceMetrics = { records: recordCount(topicMessages), bytes, retries: retryCount };
         metrics?.recordProduce(produceMetrics);
         cluster.recordProduceMetrics?.(produceMetrics);
         return collected;

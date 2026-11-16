@@ -1,16 +1,23 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
-import { decodeRecordBatch } from '../../records/batch';
+import { decodeRecordBatch, encodeRecordBatch } from '../../records/batch';
+import type * as BatchModule from '../../records/batch';
 import {
   createProduceRequest,
   isUsableTopicId,
   readProducePartitionTaggedFields,
   readProduceResponseNodeEndpoints,
   resolveProduceTopicName,
+  type ProduceMessage,
 } from './shared';
 
-async function decodeFirstBatch(messages: { value: string; timestamp?: number }[]) {
+vi.mock('../../records/batch', async (importOriginal) => {
+  const actual = await importOriginal<typeof BatchModule>();
+  return { ...actual, encodeRecordBatch: vi.fn(actual.encodeRecordBatch) };
+});
+
+async function encodeFirstRecordSet(messages: ProduceMessage[]): Promise<Buffer> {
   const encoded = await createProduceRequest(3, {
     acks: 1,
     timeout: 1000,
@@ -27,7 +34,11 @@ async function decodeFirstBatch(messages: { value: string; timestamp?: number }[
   decoder.readInt32(); // partition
   const recordSet = decoder.readBytes();
   if (recordSet === null) throw new Error('expected a record set');
-  return decodeRecordBatch(new Decoder(recordSet));
+  return recordSet;
+}
+
+async function decodeFirstBatch(messages: ProduceMessage[]) {
+  return decodeRecordBatch(new Decoder(await encodeFirstRecordSet(messages)));
 }
 
 describe('protocol/requests/produce/shared', () => {
@@ -59,6 +70,18 @@ describe('protocol/requests/produce/shared', () => {
     ]);
     expect(batch.firstTimestamp).toBe(50n);
     expect(batch.maxTimestamp).toBe(200n);
+  });
+
+  it('sizes the record batch estimate to cover header bytes, so the encoder never grows', async () => {
+    vi.mocked(encodeRecordBatch).mockClear();
+
+    const recordSet = await encodeFirstRecordSet([
+      { key: 'k', value: 'v', headers: { trace: 'x'.repeat(300), tags: ['a', 'b'], empty: null } },
+      { value: 'v', headers: { trace: 'y'.repeat(300) } },
+    ]);
+
+    const estimatedBytes = vi.mocked(encodeRecordBatch).mock.calls[0]?.[0]?.estimatedBytes;
+    expect(estimatedBytes).toBeGreaterThanOrEqual(recordSet.length);
   });
 
   describe('isUsableTopicId', () => {

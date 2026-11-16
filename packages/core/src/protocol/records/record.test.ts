@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { Decoder } from '../decoder';
 import { Encoder } from '../encoder';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
-import { decodeRecord, encodeRecord, type RecordBatchContext } from './record';
+import {
+  decodeRecord,
+  encodeRecord,
+  sizeOfRecordHeaders,
+  type HeaderValue,
+  type RecordBatchContext,
+  type RecordHeaders,
+} from './record';
 
 // Record with a key, a value, and two headers (one single-valued, one repeated).
 const V0_RECORD_FIXTURE = Buffer.from([
@@ -20,6 +27,27 @@ function unwrapRecordBody(encoded: Buffer): Buffer {
   const body = new Decoder(encoded).readVarIntBytes();
   if (body === null) throw new Error('expected a non-null record body');
   return body;
+}
+
+// Reference headers array: `Object.entries` order, one entry per array element, holes skipped.
+function encodeHeadersWithFlatten(headers: RecordHeaders): Buffer {
+  const entries = Object.entries(headers).flatMap(([key, value]) =>
+    Array.isArray(value) ? value.map((item) => ({ key, value: item })) : [{ key, value }],
+  );
+  const encoder = new Encoder().writeVarInt(entries.length);
+  for (const entry of entries) encoder.writeVarIntString(entry.key).writeVarIntBytes(entry.value);
+  return encoder.buffer;
+}
+
+function encodeReferenceRecord(headers: RecordHeaders): Buffer {
+  const body = new Encoder()
+    .writeInt8(0)
+    .writeVarLong(0n)
+    .writeVarInt(0)
+    .writeVarIntBytes('k')
+    .writeVarIntBytes('v')
+    .writeBuffer(encodeHeadersWithFlatten(headers));
+  return new Encoder().writeVarIntBytes(body.buffer).buffer;
 }
 
 function baseBatchContext(overrides: Partial<RecordBatchContext> = {}): RecordBatchContext {
@@ -269,6 +297,63 @@ describe('protocol/records/record', () => {
       const truncatedBody = body.subarray(0, probe.offset);
 
       expect(() => decodeRecord(new Decoder(truncatedBody), baseBatchContext())).toThrow(RangeError);
+    });
+  });
+
+  describe('header encoding', () => {
+    const headerShapes: [string, RecordHeaders][] = [
+      ['no headers', {}],
+      ['a single header', { 'trace-id': 'abc' }],
+      ['multiple headers', { a: '1', b: '2', c: '3' }],
+      ['array values', { repeated: ['x', 'y', 'z'], single: 'v' }],
+      ['an empty array value', { empty: [], after: 'v' }],
+      ['null values', { nil: null, list: [null, 'v'] }],
+      ['Buffer values', { bin: Buffer.from([0, 1, 255]), list: [Buffer.alloc(0), Buffer.from('b')] }],
+      ['empty strings', { '': '', k: '' }],
+      ['multi-byte UTF-8', { ключ: 'значення 🚀' }],
+      ['integer-like keys', { b: '1', 2: 'x', a: '2', 1: 'y' }],
+      ['a value needing a two-byte length', { big: 'x'.repeat(200) }],
+      ['a count needing a two-byte varint', { many: Array.from({ length: 70 }, (_, index) => String(index)) }],
+    ];
+
+    it.each(headerShapes)('encodes %s byte-for-byte like the reference encoding', (_, headers) => {
+      const expected = encodeReferenceRecord(headers);
+
+      expect(encodeRecord({ key: 'k', value: 'v', headers }).buffer).toEqual(expected);
+      expect(encodeRecord({ key: 'k', value: 'v', headers }, new Encoder(1)).buffer).toEqual(expected);
+      expect(sizeOfRecordHeaders(headers)).toBe(encodeHeadersWithFlatten(headers).length);
+    });
+
+    it('skips the holes of a sparse array value', () => {
+      const sparse: HeaderValue[] = [];
+      sparse[0] = 'a';
+      sparse[2] = 'b';
+      const headers: RecordHeaders = { sparse };
+
+      expect(encodeRecord({ key: 'k', value: 'v', headers }).buffer).toEqual(encodeReferenceRecord(headers));
+      expect(sizeOfRecordHeaders(headers)).toBe(encodeHeadersWithFlatten(headers).length);
+    });
+
+    it('skips inherited enumerable properties, like Object.entries', () => {
+      const headers = Object.create({ inherited: 'x' }) as RecordHeaders;
+      headers.own = 'v';
+
+      expect(encodeRecord({ key: 'k', value: 'v', headers }).buffer).toEqual(encodeReferenceRecord({ own: 'v' }));
+      expect(sizeOfRecordHeaders(headers)).toBe(encodeHeadersWithFlatten({ own: 'v' }).length);
+    });
+
+    it('encodes headers on a null-prototype object', () => {
+      const headers = Object.assign(Object.create(null) as RecordHeaders, { a: '1', b: ['2', '3'] });
+
+      expect(encodeRecord({ key: 'k', value: 'v', headers }).buffer).toEqual(
+        encodeReferenceRecord({ a: '1', b: ['2', '3'] }),
+      );
+    });
+
+    it('still rejects an undefined header value from an untyped caller', () => {
+      const headers = { h: undefined } as unknown as RecordHeaders;
+
+      expect(() => encodeRecord({ key: 'k', value: 'v', headers })).toThrow(TypeError);
     });
   });
 });

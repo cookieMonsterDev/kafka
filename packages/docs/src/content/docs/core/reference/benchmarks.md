@@ -47,10 +47,10 @@ Each run sends or reads its warm-up records first and measures only the rest. Me
 
 | Scenario                  | 1 KiB measured records | 1 KiB warm-up | 1 KiB measured time | 100 B measured records | 100 B warm-up | 100 B measured time |
 | ------------------------- | ---------------------- | ------------- | ------------------- | ---------------------- | ------------- | ------------------- |
-| P1 `produce-single`       | 7,500                  | 500           | 0.6–0.8 s           | 30,000                 | 2,000         | 2.1–3.1 s           |
-| P2 `produce-batch`        | 1,200,000              | 60,000        | 2.2–11.0 s          | 500,000                | 20,000        | 0.6–2.6 s           |
-| P3 `produce-throughput`   | 250,000                | 12,500        | 0.7–12.5 s          | 1,000,000              | 50,000        | 1.9–46.8 s          |
-| C1 `consume-each-message` | 500,000                | 12,500        | 0.3–4.3 s           | 2,000,000              | 50,000        | 0.5–1.9 s           |
+| P1 `produce-single`       | 7,500                  | 500           | 0.5–0.8 s           | 30,000                 | 2,000         | 2.1–3.1 s           |
+| P2 `produce-batch`        | 1,200,000              | 60,000        | 2.0–10.4 s          | 500,000                | 20,000        | 0.6–2.6 s           |
+| P3 `produce-throughput`   | 250,000                | 12,500        | 0.6–12.1 s          | 1,000,000              | 50,000        | 1.9–46.8 s          |
+| C1 `consume-each-message` | 500,000                | 12,500        | 0.3–3.5 s           | 2,000,000              | 50,000        | 0.5–1.9 s           |
 | C2 `consume-each-batch`   | 500,000                | 12,500        | 0.3–3.4 s           | 2,000,000              | 50,000        | 0.4–1.1 s           |
 | E1 `e2e-latency`          | 5,000/s for 15 s       | 5,000         | —                   | 5,000/s for 15 s       | 5,000         | —                   |
 | L1 `startup`              | 1                      | 0             | —                   | 1                      | 0             | —                   |
@@ -80,10 +80,10 @@ Every container runs on one Docker VM, each pinned to its own CPUs. Scenarios, f
 
 | Setting          | 1 KiB                                                                                                   | 100 B                                                                                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Session          | `20261116123949-ba6f0ab417cf`, standard tier, count scale 1                                             | `20261113170453-7a9308c82c8d`, standard tier, count scale 1                                             |
+| Session          | `20261116193938-e9d9dad43d38`, standard tier, count scale 1                                             | `20261113170453-7a9308c82c8d`, standard tier, count scale 1                                             |
 | Date             | 2026-11-16                                                                                              | 2026-11-13                                                                                              |
 | Repetitions      | 5, interleaved                                                                                          | 5, interleaved                                                                                          |
-| Clients          | kafka-core 2.8.1 (`ba6f0ab417cf`), Platformatic 2.15.0, KafkaJS 2.2.4 and Confluent 1.11.0              | kafka-core 2.7.0 (`7a9308c82c8d`), Platformatic 2.15.0, KafkaJS 2.2.4 and Confluent 1.11.0              |
+| Clients          | kafka-core 2.8.1 (`e9d9dad43d38`), Platformatic 2.15.0, KafkaJS 2.2.4 and Confluent 1.11.0              | kafka-core 2.7.0 (`7a9308c82c8d`), Platformatic 2.15.0, KafkaJS 2.2.4 and Confluent 1.11.0              |
 | Runtimes         | Node.js 24.22.3, Node.js 26.13.1 and Bun 1.4.4                                                          | Node.js 24.22.3, Node.js 26.13.1 and Bun 1.4.4                                                          |
 | Host             | Apple M5, 10 CPUs, 32 GiB, darwin 27.2.0 arm64                                                          | Apple M5, 10 CPUs, 32 GiB, darwin 27.2.0 arm64                                                          |
 | Docker VM        | Docker 29.9.2, 6 vCPUs, 9.7 GiB                                                                         | Docker 29.9.2, 6 vCPUs, 9.7 GiB                                                                         |
@@ -98,7 +98,7 @@ Each call awaits `send()` of 100 records with acks 1. This is the fairest produc
 
 ```chart
 {
-  "description": "Bar chart of batched send (100 records) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: kafka-core (440.4k records/s), Bun: no clear highest. The table below lists every value.",
+  "description": "Bar chart of batched send (100 records) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (500.3k records/s), Node.js 26: kafka-core (516.4k records/s), Bun: kafka-core (590.0k records/s). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -118,19 +118,19 @@ Each call awaits `send()` of 100 records with acks 1. This is the fairest produc
   "series": [
     {
       "name": "kafka-core",
-      "data": [470233, 440380, 544341]
+      "data": [500318, 516371, 590022]
     },
     {
       "name": "Platformatic",
-      "data": [297797, 320472, 332564]
+      "data": [308775, 335248, 344696]
     },
     {
       "name": "KafkaJS",
-      "data": [113353, 108945, 134876]
+      "data": [118211, 114995, 150963]
     },
     {
       "name": "Confluent",
-      "data": [133061, null, null]
+      "data": [138936, null, null]
     }
   ],
   "xaxis": {
@@ -138,24 +138,24 @@ Each call awaits `send()` of 100 records with acks 1. This is the fairest produc
     "title": {
       "text": "records per second"
     },
-    "max": 750000
+    "max": 800000
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max   | 100 B median (records/s) | 100 B min–max   |
 | ---------- | ------------ | ------------------------ | --------------- | ------------------------ | --------------- |
-| Node.js 24 | kafka-core   | 470,233                  | 392,154–479,269 | 733,362                  | 681,607–765,436 |
-| Node.js 24 | Platformatic | 297,797                  | 290,507–306,681 | 481,179                  | 475,129–496,476 |
-| Node.js 24 | KafkaJS      | 113,353                  | 107,257–115,449 | 296,860                  | 295,266–306,519 |
-| Node.js 24 | Confluent    | 133,061                  | 131,704–139,721 | 195,811                  | 186,537–202,238 |
-| Node.js 26 | kafka-core   | 440,380                  | 421,664–475,946 | 739,793                  | 634,252–783,589 |
-| Node.js 26 | Platformatic | 320,472                  | 291,999–333,532 | 514,220                  | 493,928–549,394 |
-| Node.js 26 | KafkaJS      | 108,945                  | 105,501–113,074 | 296,467                  | 268,919–322,077 |
+| Node.js 24 | kafka-core   | 500,318                  | 479,559–517,470 | 733,362                  | 681,607–765,436 |
+| Node.js 24 | Platformatic | 308,775                  | 305,387–314,984 | 481,179                  | 475,129–496,476 |
+| Node.js 24 | KafkaJS      | 118,211                  | 112,882–119,021 | 296,860                  | 295,266–306,519 |
+| Node.js 24 | Confluent    | 138,936                  | 135,063–140,816 | 195,811                  | 186,537–202,238 |
+| Node.js 26 | kafka-core   | 516,371                  | 485,397–526,124 | 739,793                  | 634,252–783,589 |
+| Node.js 26 | Platformatic | 335,248                  | 330,443–341,872 | 514,220                  | 493,928–549,394 |
+| Node.js 26 | KafkaJS      | 114,995                  | 111,623–115,781 | 296,467                  | 268,919–322,077 |
 | Node.js 26 | Confluent    | not supported            | —               | not supported            | —               |
-| Bun        | kafka-core   | 544,341                  | 476,261–552,897 | 862,926                  | 704,688–881,261 |
-| Bun        | Platformatic | 332,564                  | 329,448–346,181 | 544,173                  | 485,790–565,946 |
-| Bun        | KafkaJS      | 134,876                  | 123,634–143,305 | 314,328                  | 305,222–330,950 |
+| Bun        | kafka-core   | 590,022                  | 578,675–593,585 | 862,926                  | 704,688–881,261 |
+| Bun        | Platformatic | 344,696                  | 318,690–356,387 | 544,173                  | 485,790–565,946 |
+| Bun        | KafkaJS      | 150,963                  | 145,208–152,124 | 314,328                  | 305,222–330,950 |
 | Bun        | Confluent    | not supported            | —               | not supported            | —               |
 
 ### Single-record send
@@ -164,7 +164,7 @@ Each call awaits `send()` of one record with acks 1 and no linger, so every reco
 
 ```chart
 {
-  "description": "Bar chart of single-record send with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: Platformatic (13.5k records/s), Bun: no clear highest. The table below lists every value.",
+  "description": "Bar chart of single-record send with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (13.1k records/s), Node.js 26: no clear highest, Bun: kafka-core (13.8k records/s). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -184,19 +184,19 @@ Each call awaits `send()` of one record with acks 1 and no linger, so every reco
   "series": [
     {
       "name": "kafka-core",
-      "data": [12152, 11968, 12365]
+      "data": [13079, 13538, 13799]
     },
     {
       "name": "Platformatic",
-      "data": [12739, 13534, 12938]
+      "data": [12849, 13121, 13349]
     },
     {
       "name": "KafkaJS",
-      "data": [10615, 11353, 9833]
+      "data": [11098, 11718, 11435]
     },
     {
       "name": "Confluent",
-      "data": [9153, null, null]
+      "data": [9418, null, null]
     }
   ],
   "xaxis": {
@@ -211,17 +211,17 @@ Each call awaits `send()` of one record with acks 1 and no linger, so every reco
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max | 100 B median (records/s) | 100 B min–max |
 | ---------- | ------------ | ------------------------ | ------------- | ------------------------ | ------------- |
-| Node.js 24 | kafka-core   | 12,152                   | 11,281–12,418 | 13,339                   | 12,248–13,501 |
-| Node.js 24 | Platformatic | 12,739                   | 11,683–13,037 | 13,660                   | 12,102–14,194 |
-| Node.js 24 | KafkaJS      | 10,615                   | 9,550–11,006  | 12,955                   | 12,401–13,038 |
-| Node.js 24 | Confluent    | 9,153                    | 7,386–9,373   | 9,693                    | 8,165–9,723   |
-| Node.js 26 | kafka-core   | 11,968                   | 11,644–12,316 | 13,529                   | 13,390–13,678 |
-| Node.js 26 | Platformatic | 13,534                   | 13,067–13,651 | 13,879                   | 11,785–14,239 |
-| Node.js 26 | KafkaJS      | 11,353                   | 10,940–11,511 | 13,252                   | 12,485–13,443 |
+| Node.js 24 | kafka-core   | 13,079                   | 12,959–13,160 | 13,339                   | 12,248–13,501 |
+| Node.js 24 | Platformatic | 12,849                   | 11,742–12,942 | 13,660                   | 12,102–14,194 |
+| Node.js 24 | KafkaJS      | 11,098                   | 10,848–11,237 | 12,955                   | 12,401–13,038 |
+| Node.js 24 | Confluent    | 9,418                    | 9,376–9,600   | 9,693                    | 8,165–9,723   |
+| Node.js 26 | kafka-core   | 13,538                   | 11,902–13,863 | 13,529                   | 13,390–13,678 |
+| Node.js 26 | Platformatic | 13,121                   | 12,361–13,333 | 13,879                   | 11,785–14,239 |
+| Node.js 26 | KafkaJS      | 11,718                   | 11,601–11,796 | 13,252                   | 12,485–13,443 |
 | Node.js 26 | Confluent    | not supported            | —             | not supported            | —             |
-| Bun        | kafka-core   | 12,365                   | 12,063–13,107 | 14,166                   | 13,804–14,258 |
-| Bun        | Platformatic | 12,938                   | 11,985–13,518 | 14,505                   | 12,652–14,669 |
-| Bun        | KafkaJS      | 9,833                    | 8,262–11,942  | 12,506                   | 11,396–13,422 |
+| Bun        | kafka-core   | 13,799                   | 13,645–13,881 | 14,166                   | 13,804–14,258 |
+| Bun        | Platformatic | 13,349                   | 12,535–13,383 | 14,505                   | 12,652–14,669 |
+| Bun        | KafkaJS      | 11,435                   | 11,274–11,689 | 12,506                   | 11,396–13,422 |
 | Bun        | Confluent    | not supported            | —             | not supported            | —             |
 
 ### Concurrent sends
@@ -230,7 +230,7 @@ Up to 256 concurrent single-record `send()` calls with linger 5 ms. This favours
 
 ```chart
 {
-  "description": "Bar chart of concurrent sends with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
+  "description": "Bar chart of concurrent sends with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: kafka-core (343.0k records/s), Node.js 26: kafka-core (363.7k records/s), Bun: kafka-core (426.7k records/s). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -250,19 +250,19 @@ Up to 256 concurrent single-record `send()` calls with linger 5 ms. This favours
   "series": [
     {
       "name": "kafka-core",
-      "data": [300378, 300615, 359289]
+      "data": [343000, 363729, 426673]
     },
     {
       "name": "Platformatic",
-      "data": [22879, 23148, 20959]
+      "data": [22707, 22523, 22202]
     },
     {
       "name": "KafkaJS",
-      "data": [19970, 21007, 21142]
+      "data": [20674, 20928, 21535]
     },
     {
       "name": "Confluent",
-      "data": [210154, null, null]
+      "data": [209578, null, null]
     }
   ],
   "xaxis": {
@@ -270,24 +270,24 @@ Up to 256 concurrent single-record `send()` calls with linger 5 ms. This favours
     "title": {
       "text": "records per second"
     },
-    "max": 500000
+    "max": 600000
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max   | 100 B median (records/s) | 100 B min–max   |
 | ---------- | ------------ | ------------------------ | --------------- | ------------------------ | --------------- |
-| Node.js 24 | kafka-core   | 300,378                  | 206,052–306,655 | 463,803                  | 446,837–480,548 |
-| Node.js 24 | Platformatic | 22,879                   | 22,172–23,094   | 23,411                   | 21,445–23,718   |
-| Node.js 24 | KafkaJS      | 19,970                   | 18,962–20,134   | 22,483                   | 21,968–22,637   |
-| Node.js 24 | Confluent    | 210,154                  | 191,648–215,614 | 38,837                   | 37,645–39,724   |
-| Node.js 26 | kafka-core   | 300,615                  | 270,116–314,575 | 473,203                  | 467,563–501,351 |
-| Node.js 26 | Platformatic | 23,148                   | 21,902–23,686   | 23,533                   | 23,093–23,853   |
-| Node.js 26 | KafkaJS      | 21,007                   | 20,446–21,478   | 22,266                   | 21,182–22,634   |
+| Node.js 24 | kafka-core   | 343,000                  | 332,094–351,983 | 463,803                  | 446,837–480,548 |
+| Node.js 24 | Platformatic | 22,707                   | 22,453–23,048   | 23,411                   | 21,445–23,718   |
+| Node.js 24 | KafkaJS      | 20,674                   | 20,236–20,950   | 22,483                   | 21,968–22,637   |
+| Node.js 24 | Confluent    | 209,578                  | 204,309–211,849 | 38,837                   | 37,645–39,724   |
+| Node.js 26 | kafka-core   | 363,729                  | 362,065–371,515 | 473,203                  | 467,563–501,351 |
+| Node.js 26 | Platformatic | 22,523                   | 22,402–22,915   | 23,533                   | 23,093–23,853   |
+| Node.js 26 | KafkaJS      | 20,928                   | 20,567–21,181   | 22,266                   | 21,182–22,634   |
 | Node.js 26 | Confluent    | not supported            | —               | not supported            | —               |
-| Bun        | kafka-core   | 359,289                  | 339,897–366,139 | 539,965                  | 519,937–598,291 |
-| Bun        | Platformatic | 20,959                   | 20,431–23,360   | 22,832                   | 22,257–23,625   |
-| Bun        | KafkaJS      | 21,142                   | 19,762–21,667   | 21,356                   | 20,006–21,757   |
+| Bun        | kafka-core   | 426,673                  | 415,886–430,839 | 539,965                  | 519,937–598,291 |
+| Bun        | Platformatic | 22,202                   | 21,986–22,425   | 22,832                   | 22,257–23,625   |
+| Bun        | KafkaJS      | 21,535                   | 21,131–21,709   | 21,356                   | 20,006–21,757   |
 | Bun        | Confluent    | not supported            | —               | not supported            | —               |
 
 ## Consume
@@ -318,19 +318,19 @@ Reads 2,000,000 preloaded records with a per-record handler and the same fetch s
   "series": [
     {
       "name": "kafka-core",
-      "data": [1240012, 1434242, 1608296]
+      "data": [1546497, 1620671, 1687369]
     },
     {
       "name": "Platformatic",
-      "data": [1304477, 1305050, 1251395]
+      "data": [1304071, 1332017, 1263056]
     },
     {
       "name": "KafkaJS",
-      "data": [663961, 941181, 767436]
+      "data": [656862, 914060, 794718]
     },
     {
       "name": "Confluent",
-      "data": [116532, null, null]
+      "data": [141687, null, null]
     }
   ],
   "xaxis": {
@@ -345,17 +345,17 @@ Reads 2,000,000 preloaded records with a per-record handler and the same fetch s
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max       | 100 B median (records/s) | 100 B min–max       |
 | ---------- | ------------ | ------------------------ | ------------------- | ------------------------ | ------------------- |
-| Node.js 24 | kafka-core   | 1,240,012                | 1,161,172–1,338,761 | 2,891,376                | 2,689,068–3,082,460 |
-| Node.js 24 | Platformatic | 1,304,477                | 1,235,251–1,375,741 | 2,403,499                | 2,113,860–2,435,408 |
-| Node.js 24 | KafkaJS      | 663,961                  | 564,989–725,533     | 1,041,250                | 955,093–1,067,087   |
-| Node.js 24 | Confluent    | 116,532                  | 92,367–158,819      | all 5 runs failed        | —                   |
-| Node.js 26 | kafka-core   | 1,434,242                | 1,386,828–1,508,924 | 2,869,724                | 2,677,893–3,262,341 |
-| Node.js 26 | Platformatic | 1,305,050                | 1,171,411–1,870,986 | 1,910,615                | 1,758,740–1,965,774 |
-| Node.js 26 | KafkaJS      | 941,181                  | 740,298–965,513     | 1,196,561                | 1,150,633–1,228,856 |
+| Node.js 24 | kafka-core   | 1,546,497                | 1,371,066–1,624,131 | 2,891,376                | 2,689,068–3,082,460 |
+| Node.js 24 | Platformatic | 1,304,071                | 1,215,168–1,871,724 | 2,403,499                | 2,113,860–2,435,408 |
+| Node.js 24 | KafkaJS      | 656,862                  | 647,332–690,401     | 1,041,250                | 955,093–1,067,087   |
+| Node.js 24 | Confluent    | 141,687                  | 91,972–165,921      | all 5 runs failed        | —                   |
+| Node.js 26 | kafka-core   | 1,620,671                | 1,471,845–1,675,648 | 2,869,724                | 2,677,893–3,262,341 |
+| Node.js 26 | Platformatic | 1,332,017                | 1,216,039–1,839,749 | 1,910,615                | 1,758,740–1,965,774 |
+| Node.js 26 | KafkaJS      | 914,060                  | 753,852–968,183     | 1,196,561                | 1,150,633–1,228,856 |
 | Node.js 26 | Confluent    | not supported            | —                   | not supported            | —                   |
-| Bun        | kafka-core   | 1,608,296                | 1,289,472–1,715,665 | 4,151,819                | 3,641,230–4,255,847 |
-| Bun        | Platformatic | 1,251,395                | 1,157,061–1,291,443 | 2,192,023                | 1,726,861–2,211,932 |
-| Bun        | KafkaJS      | 767,436                  | 722,943–802,729     | 1,249,990                | 1,061,110–1,283,452 |
+| Bun        | kafka-core   | 1,687,369                | 1,643,485–1,750,280 | 4,151,819                | 3,641,230–4,255,847 |
+| Bun        | Platformatic | 1,263,056                | 1,228,472–1,291,289 | 2,192,023                | 1,726,861–2,211,932 |
+| Bun        | KafkaJS      | 794,718                  | 661,420–802,581     | 1,249,990                | 1,061,110–1,283,452 |
 | Bun        | Confluent    | not supported            | —                   | not supported            | —                   |
 
 ### Per message, library defaults
@@ -384,19 +384,19 @@ The same read with each library's default settings, including its own auto-commi
   "series": [
     {
       "name": "kafka-core",
-      "data": [1100473, 1320922, 1555863]
+      "data": [1315700, 1420746, 1604841]
     },
     {
       "name": "Platformatic",
-      "data": [282586, 340669, 731323]
+      "data": [282117, 330790, 753610]
     },
     {
       "name": "KafkaJS",
-      "data": [551293, 710055, 717683]
+      "data": [571749, 640494, 740420]
     },
     {
       "name": "Confluent",
-      "data": [113344, null, null]
+      "data": [114124, null, null]
     }
   ],
   "xaxis": {
@@ -411,17 +411,17 @@ The same read with each library's default settings, including its own auto-commi
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max       | 100 B median (records/s) | 100 B min–max       |
 | ---------- | ------------ | ------------------------ | ------------------- | ------------------------ | ------------------- |
-| Node.js 24 | kafka-core   | 1,100,473                | 981,920–1,145,908   | 2,757,695                | 2,566,987–2,815,374 |
-| Node.js 24 | Platformatic | 282,586                  | 273,995–290,552     | 435,624                  | 410,393–454,747     |
-| Node.js 24 | KafkaJS      | 551,293                  | 479,917–569,789     | 875,126                  | 872,381–932,616     |
-| Node.js 24 | Confluent    | 113,344                  | 112,483–114,715     | 304,786                  | 274,330–317,100     |
-| Node.js 26 | kafka-core   | 1,320,922                | 1,174,134–1,340,030 | 2,706,047                | 2,355,671–3,322,178 |
-| Node.js 26 | Platformatic | 340,669                  | 322,140–342,039     | 521,112                  | 501,098–549,296     |
-| Node.js 26 | KafkaJS      | 710,055                  | 578,627–744,905     | 966,543                  | 900,850–1,001,401   |
+| Node.js 24 | kafka-core   | 1,315,700                | 1,313,028–1,342,494 | 2,757,695                | 2,566,987–2,815,374 |
+| Node.js 24 | Platformatic | 282,117                  | 280,469–286,713     | 435,624                  | 410,393–454,747     |
+| Node.js 24 | KafkaJS      | 571,749                  | 541,444–598,573     | 875,126                  | 872,381–932,616     |
+| Node.js 24 | Confluent    | 114,124                  | 110,450–143,770     | 304,786                  | 274,330–317,100     |
+| Node.js 26 | kafka-core   | 1,420,746                | 1,373,598–1,512,895 | 2,706,047                | 2,355,671–3,322,178 |
+| Node.js 26 | Platformatic | 330,790                  | 318,576–331,047     | 521,112                  | 501,098–549,296     |
+| Node.js 26 | KafkaJS      | 640,494                  | 588,608–865,150     | 966,543                  | 900,850–1,001,401   |
 | Node.js 26 | Confluent    | not supported            | —                   | not supported            | —                   |
-| Bun        | kafka-core   | 1,555,863                | 1,429,450–1,683,773 | 4,144,651                | 3,760,056–4,351,322 |
-| Bun        | Platformatic | 731,323                  | 658,904–737,657     | 1,386,776                | 1,270,601–1,481,535 |
-| Bun        | KafkaJS      | 717,683                  | 662,467–798,276     | 1,195,130                | 964,925–1,314,520   |
+| Bun        | kafka-core   | 1,604,841                | 1,564,988–1,647,654 | 4,144,651                | 3,760,056–4,351,322 |
+| Bun        | Platformatic | 753,610                  | 700,663–790,198     | 1,386,776                | 1,270,601–1,481,535 |
+| Bun        | KafkaJS      | 740,420                  | 707,186–767,742     | 1,195,130                | 964,925–1,314,520   |
 | Bun        | Confluent    | not supported            | —                   | not supported            | —                   |
 
 ### Batch
@@ -430,7 +430,7 @@ The same read through each client's batch API. Platformatic has none, so its ada
 
 ```chart
 {
-  "description": "Bar chart of consume (batch) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: no clear highest. The table below lists every value.",
+  "description": "Bar chart of consume (batch) with 1 KiB values by runtime and client, higher is better. Highest: Node.js 24: no clear highest, Node.js 26: no clear highest, Bun: kafka-core (1.79M records/s). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -450,19 +450,19 @@ The same read through each client's batch API. Platformatic has none, so its ada
   "series": [
     {
       "name": "kafka-core",
-      "data": [1455974, 1503987, 1754749]
+      "data": [1673172, 1735931, 1792575]
     },
     {
       "name": "Platformatic",
-      "data": [1349301, 1084200, 1237097]
+      "data": [1232587, 1284672, 1252699]
     },
     {
       "name": "KafkaJS",
-      "data": [1032181, 1100086, 1236179]
+      "data": [1100685, 1169050, 1194011]
     },
     {
       "name": "Confluent",
-      "data": [145052, null, null]
+      "data": [147782, null, null]
     }
   ],
   "xaxis": {
@@ -477,17 +477,17 @@ The same read through each client's batch API. Platformatic has none, so its ada
 
 | Runtime    | Client       | 1 KiB median (records/s) | 1 KiB min–max       | 100 B median (records/s) | 100 B min–max       |
 | ---------- | ------------ | ------------------------ | ------------------- | ------------------------ | ------------------- |
-| Node.js 24 | kafka-core   | 1,455,974                | 1,188,521–1,610,241 | 4,270,240                | 3,480,759–4,528,435 |
-| Node.js 24 | Platformatic | 1,349,301                | 1,318,488–1,778,131 | 1,777,589                | 1,533,532–1,808,051 |
-| Node.js 24 | KafkaJS      | 1,032,181                | 976,396–1,156,894   | 2,051,767                | 1,897,572–2,115,485 |
-| Node.js 24 | Confluent    | 145,052                  | 111,073–211,665     | all 5 runs failed        | —                   |
-| Node.js 26 | kafka-core   | 1,503,987                | 1,445,825–1,785,736 | 4,261,174                | 3,375,953–4,498,085 |
-| Node.js 26 | Platformatic | 1,084,200                | 714,258–1,199,455   | 1,721,777                | 1,467,793–1,778,319 |
-| Node.js 26 | KafkaJS      | 1,100,086                | 878,566–1,178,894   | 2,078,498                | 1,918,998–2,253,614 |
+| Node.js 24 | kafka-core   | 1,673,172                | 1,503,964–1,705,861 | 4,270,240                | 3,480,759–4,528,435 |
+| Node.js 24 | Platformatic | 1,232,587                | 1,110,619–1,975,200 | 1,777,589                | 1,533,532–1,808,051 |
+| Node.js 24 | KafkaJS      | 1,100,685                | 1,073,308–1,136,050 | 2,051,767                | 1,897,572–2,115,485 |
+| Node.js 24 | Confluent    | 147,782                  | 129,770–223,310     | all 5 runs failed        | —                   |
+| Node.js 26 | kafka-core   | 1,735,931                | 1,582,447–1,862,525 | 4,261,174                | 3,375,953–4,498,085 |
+| Node.js 26 | Platformatic | 1,284,672                | 1,264,772–1,293,509 | 1,721,777                | 1,467,793–1,778,319 |
+| Node.js 26 | KafkaJS      | 1,169,050                | 1,146,334–1,215,637 | 2,078,498                | 1,918,998–2,253,614 |
 | Node.js 26 | Confluent    | not supported            | —                   | not supported            | —                   |
-| Bun        | kafka-core   | 1,754,749                | 1,608,623–1,817,745 | 5,559,484                | 5,425,961–5,568,039 |
-| Bun        | Platformatic | 1,237,097                | 1,185,575–1,320,373 | 2,029,208                | 1,894,828–2,066,099 |
-| Bun        | KafkaJS      | 1,236,179                | 862,406–1,275,992   | 2,266,808                | 2,146,447–2,305,169 |
+| Bun        | kafka-core   | 1,792,575                | 1,726,949–1,805,928 | 5,559,484                | 5,425,961–5,568,039 |
+| Bun        | Platformatic | 1,252,699                | 1,230,758–1,280,767 | 2,029,208                | 1,894,828–2,066,099 |
+| Bun        | KafkaJS      | 1,194,011                | 1,143,132–1,206,078 | 2,266,808                | 2,146,447–2,305,169 |
 | Bun        | Confluent    | not supported            | —                   | not supported            | —                   |
 
 ## End-to-end latency
@@ -498,7 +498,7 @@ A producer sends 5,000 records per second for 15 seconds while a consumer reads 
 
 ```chart
 {
-  "description": "Bar chart of end-to-end latency, median with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
+  "description": "Bar chart of end-to-end latency, median with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: kafka-core (1.06 ms). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -518,19 +518,19 @@ A producer sends 5,000 records per second for 15 seconds while a consumer reads 
   "series": [
     {
       "name": "kafka-core",
-      "data": [1.425, 1.478, 1.029]
+      "data": [1.416, 1.448, 1.058]
     },
     {
       "name": "Platformatic",
-      "data": [1.379, 1.451, 1.157]
+      "data": [1.516, 1.5, 1.256]
     },
     {
       "name": "KafkaJS",
-      "data": [1.477, 1.5, 1.053]
+      "data": [1.538, 1.696, 1.111]
     },
     {
       "name": "Confluent",
-      "data": [3.415, null, null]
+      "data": [3.712, null, null]
     }
   ],
   "xaxis": {
@@ -538,24 +538,24 @@ A producer sends 5,000 records per second for 15 seconds while a consumer reads 
     "title": {
       "text": "milliseconds"
     },
-    "max": 4.5
+    "max": 5
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (ms) | 1 KiB min–max | 100 B median (ms) | 100 B min–max |
 | ---------- | ------------ | ----------------- | ------------- | ----------------- | ------------- |
-| Node.js 24 | kafka-core   | 1.43              | 1.38–1.66     | 1.42              | 1.39–1.67     |
-| Node.js 24 | Platformatic | 1.38              | 1.36–1.57     | 1.51              | 1.43–1.67     |
-| Node.js 24 | KafkaJS      | 1.48              | 1.34–1.59     | 1.47              | 1.40–1.51     |
-| Node.js 24 | Confluent    | 3.42              | 3.28–3.49     | 3.41              | 3.26–3.82     |
-| Node.js 26 | kafka-core   | 1.48              | 1.45–1.59     | 1.44              | 1.41–1.73     |
-| Node.js 26 | Platformatic | 1.45              | 1.35–1.63     | 1.53              | 1.43–1.68     |
-| Node.js 26 | KafkaJS      | 1.50              | 1.44–1.67     | 1.54              | 1.47–1.75     |
+| Node.js 24 | kafka-core   | 1.42              | 1.35–1.57     | 1.42              | 1.39–1.67     |
+| Node.js 24 | Platformatic | 1.52              | 1.38–1.56     | 1.51              | 1.43–1.67     |
+| Node.js 24 | KafkaJS      | 1.54              | 1.49–1.64     | 1.47              | 1.40–1.51     |
+| Node.js 24 | Confluent    | 3.71              | 3.67–3.82     | 3.41              | 3.26–3.82     |
+| Node.js 26 | kafka-core   | 1.45              | 1.42–1.54     | 1.44              | 1.41–1.73     |
+| Node.js 26 | Platformatic | 1.50              | 1.43–1.62     | 1.53              | 1.43–1.68     |
+| Node.js 26 | KafkaJS      | 1.70              | 1.54–1.87     | 1.54              | 1.47–1.75     |
 | Node.js 26 | Confluent    | not supported     | —             | not supported     | —             |
-| Bun        | kafka-core   | 1.03              | 1.03–1.10     | 1.03              | 1.02–1.09     |
-| Bun        | Platformatic | 1.16              | 1.15–1.18     | 1.16              | 1.14–1.29     |
-| Bun        | KafkaJS      | 1.05              | 1.04–1.07     | 1.03              | 1.02–1.10     |
+| Bun        | kafka-core   | 1.06              | 1.05–1.07     | 1.03              | 1.02–1.09     |
+| Bun        | Platformatic | 1.26              | 1.22–1.29     | 1.16              | 1.14–1.29     |
+| Bun        | KafkaJS      | 1.11              | 1.10–1.11     | 1.03              | 1.02–1.10     |
 | Bun        | Confluent    | not supported     | —             | not supported     | —             |
 
 ### 99th percentile
@@ -584,19 +584,19 @@ The same runs, 99th percentile.
   "series": [
     {
       "name": "kafka-core",
-      "data": [3.141, 4.061, 2.615]
+      "data": [3.304, 3.269, 2.149]
     },
     {
       "name": "Platformatic",
-      "data": [3.968, 4.804, 6.296]
+      "data": [3.675, 3.212, 3.882]
     },
     {
       "name": "KafkaJS",
-      "data": [4.486, 4.192, 5.372]
+      "data": [4.299, 3.602, 3.423]
     },
     {
       "name": "Confluent",
-      "data": [12.448, null, null]
+      "data": [11.428, null, null]
     }
   ],
   "xaxis": {
@@ -604,24 +604,24 @@ The same runs, 99th percentile.
     "title": {
       "text": "milliseconds"
     },
-    "max": 20
+    "max": 15
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (ms) | 1 KiB min–max | 100 B median (ms) | 100 B min–max |
 | ---------- | ------------ | ----------------- | ------------- | ----------------- | ------------- |
-| Node.js 24 | kafka-core   | 3.14              | 2.94–4.01     | 3.29              | 2.70–3.79     |
-| Node.js 24 | Platformatic | 3.97              | 2.97–20.71    | 4.01              | 3.36–6.02     |
-| Node.js 24 | KafkaJS      | 4.49              | 3.92–49.09    | 3.40              | 3.14–5.67     |
-| Node.js 24 | Confluent    | 12.45             | 11.57–14.66   | 7.96              | 7.73–8.84     |
-| Node.js 26 | kafka-core   | 4.06              | 2.87–51.95    | 3.31              | 2.71–26.06    |
-| Node.js 26 | Platformatic | 4.80              | 3.02–6.55     | 3.51              | 3.43–5.74     |
-| Node.js 26 | KafkaJS      | 4.19              | 3.21–144.16   | 3.34              | 3.06–4.40     |
+| Node.js 24 | kafka-core   | 3.30              | 3.04–3.33     | 3.29              | 2.70–3.79     |
+| Node.js 24 | Platformatic | 3.67              | 3.09–4.00     | 4.01              | 3.36–6.02     |
+| Node.js 24 | KafkaJS      | 4.30              | 3.97–4.72     | 3.40              | 3.14–5.67     |
+| Node.js 24 | Confluent    | 11.43             | 10.34–11.72   | 7.96              | 7.73–8.84     |
+| Node.js 26 | kafka-core   | 3.27              | 3.16–3.30     | 3.31              | 2.71–26.06    |
+| Node.js 26 | Platformatic | 3.21              | 3.11–3.50     | 3.51              | 3.43–5.74     |
+| Node.js 26 | KafkaJS      | 3.60              | 3.38–4.00     | 3.34              | 3.06–4.40     |
 | Node.js 26 | Confluent    | not supported     | —             | not supported     | —             |
-| Bun        | kafka-core   | 2.62              | 2.45–6.43     | 2.88              | 2.33–6.01     |
-| Bun        | Platformatic | 6.30              | 4.07–17.49    | 3.33              | 3.09–3.93     |
-| Bun        | KafkaJS      | 5.37              | 3.32–13.73    | 2.91              | 2.77–6.90     |
+| Bun        | kafka-core   | 2.15              | 2.06–2.36     | 2.88              | 2.33–6.01     |
+| Bun        | Platformatic | 3.88              | 3.24–4.53     | 3.33              | 3.09–3.93     |
+| Bun        | KafkaJS      | 3.42              | 3.12–3.49     | 2.91              | 2.77–6.90     |
 | Bun        | Confluent    | not supported     | —             | not supported     | —             |
 
 ## Startup
@@ -630,7 +630,7 @@ Time from process start to the first acknowledged produce.
 
 ```chart
 {
-  "description": "Bar chart of startup, first acknowledged produce with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
+  "description": "Bar chart of startup, first acknowledged produce with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: kafka-core (93 ms), Node.js 26: no clear lowest, Bun: KafkaJS (39 ms). The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -650,19 +650,19 @@ Time from process start to the first acknowledged produce.
   "series": [
     {
       "name": "kafka-core",
-      "data": [103.2, 93.4, 58.2]
+      "data": [92.6, 81.2, 50.1]
     },
     {
       "name": "Platformatic",
-      "data": [204.3, 190.1, 121.3]
+      "data": [200, 180.7, 122.5]
     },
     {
       "name": "KafkaJS",
-      "data": [106.3, 94.4, 41.9]
+      "data": [97.7, 90.6, 39.3]
     },
     {
       "name": "Confluent",
-      "data": [233.5, null, null]
+      "data": [232.9, null, null]
     }
   ],
   "xaxis": {
@@ -677,17 +677,17 @@ Time from process start to the first acknowledged produce.
 
 | Runtime    | Client       | 1 KiB median (ms) | 1 KiB min–max | 100 B median (ms) | 100 B min–max |
 | ---------- | ------------ | ----------------- | ------------- | ----------------- | ------------- |
-| Node.js 24 | kafka-core   | 103.2             | 96.2–107.6    | 85.6              | 77.4–89.6     |
-| Node.js 24 | Platformatic | 204.3             | 197.8–231.8   | 190.6             | 182.6–214.4   |
-| Node.js 24 | KafkaJS      | 106.3             | 94.8–121.7    | 85.7              | 80.6–99.3     |
-| Node.js 24 | Confluent    | 233.5             | 231.1–242.4   | 223.0             | 69.5–232.7    |
-| Node.js 26 | kafka-core   | 93.4              | 87.7–97.7     | 80.7              | 79.0–99.7     |
-| Node.js 26 | Platformatic | 190.1             | 183.7–221.8   | 179.5             | 166.9–184.8   |
-| Node.js 26 | KafkaJS      | 94.4              | 89.8–102.8    | 80.0              | 75.8–115.1    |
+| Node.js 24 | kafka-core   | 92.6              | 90.7–95.1     | 85.6              | 77.4–89.6     |
+| Node.js 24 | Platformatic | 200.0             | 195.6–207.8   | 190.6             | 182.6–214.4   |
+| Node.js 24 | KafkaJS      | 97.7              | 97.6–104.4    | 85.7              | 80.6–99.3     |
+| Node.js 24 | Confluent    | 232.9             | 229.0–235.3   | 223.0             | 69.5–232.7    |
+| Node.js 26 | kafka-core   | 81.2              | 77.7–87.7     | 80.7              | 79.0–99.7     |
+| Node.js 26 | Platformatic | 180.7             | 178.7–198.0   | 179.5             | 166.9–184.8   |
+| Node.js 26 | KafkaJS      | 90.6              | 82.8–93.8     | 80.0              | 75.8–115.1    |
 | Node.js 26 | Confluent    | not supported     | —             | not supported     | —             |
-| Bun        | kafka-core   | 58.2              | 55.7–72.0     | 50.9              | 50.3–60.8     |
-| Bun        | Platformatic | 121.3             | 111.7–171.1   | 116.8             | 105.8–122.0   |
-| Bun        | KafkaJS      | 41.9              | 39.0–45.8     | 33.6              | 31.7–38.7     |
+| Bun        | kafka-core   | 50.1              | 49.0–53.1     | 50.9              | 50.3–60.8     |
+| Bun        | Platformatic | 122.5             | 117.7–123.0   | 116.8             | 105.8–122.0   |
+| Bun        | KafkaJS      | 39.3              | 38.9–39.9     | 33.6              | 31.7–38.7     |
 | Bun        | Confluent    | not supported     | —             | not supported     | —             |
 
 ## Peak memory
@@ -698,7 +698,7 @@ Peak container memory during batched send, under a 2 GiB limit.
 
 ```chart
 {
-  "description": "Bar chart of peak memory, batched send with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: kafka-core (86 MiB), Node.js 26: kafka-core (84 MiB), Bun: kafka-core (67 MiB). The table below lists every value.",
+  "description": "Bar chart of peak memory, batched send with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: kafka-core (78 MiB), Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -718,19 +718,19 @@ Peak container memory during batched send, under a 2 GiB limit.
   "series": [
     {
       "name": "kafka-core",
-      "data": [86.43, 83.7, 66.77]
+      "data": [81.92, 78.08, 61.93]
     },
     {
       "name": "Platformatic",
-      "data": [153.61, 105.29, 109.45]
+      "data": [144.57, 104.63, 111.37]
     },
     {
       "name": "KafkaJS",
-      "data": [180.39, 123.85, 76.42]
+      "data": [177.8, 120.64, 77.49]
     },
     {
       "name": "Confluent",
-      "data": [111.12, null, null]
+      "data": [106.13, null, null]
     }
   ],
   "xaxis": {
@@ -745,17 +745,17 @@ Peak container memory during batched send, under a 2 GiB limit.
 
 | Runtime    | Client       | 1 KiB median (MiB) | 1 KiB min–max | 100 B median (MiB) | 100 B min–max |
 | ---------- | ------------ | ------------------ | ------------- | ------------------ | ------------- |
-| Node.js 24 | kafka-core   | 86                 | 81–89         | 84                 | 79–92         |
-| Node.js 24 | Platformatic | 154                | 148–159       | 108                | 99–112        |
-| Node.js 24 | KafkaJS      | 180                | 176–185       | 93                 | 87–94         |
-| Node.js 24 | Confluent    | 111                | 101–111       | 68                 | 58–70         |
-| Node.js 26 | kafka-core   | 84                 | 81–87         | 76                 | 72–80         |
-| Node.js 26 | Platformatic | 105                | 103–112       | 97                 | 95–99         |
-| Node.js 26 | KafkaJS      | 124                | 119–130       | 89                 | 86–93         |
+| Node.js 24 | kafka-core   | 82                 | 77–84         | 84                 | 79–92         |
+| Node.js 24 | Platformatic | 145                | 143–163       | 108                | 99–112        |
+| Node.js 24 | KafkaJS      | 178                | 169–179       | 93                 | 87–94         |
+| Node.js 24 | Confluent    | 106                | 96–111        | 68                 | 58–70         |
+| Node.js 26 | kafka-core   | 78                 | 71–80         | 76                 | 72–80         |
+| Node.js 26 | Platformatic | 105                | 100–110       | 97                 | 95–99         |
+| Node.js 26 | KafkaJS      | 121                | 117–127       | 89                 | 86–93         |
 | Node.js 26 | Confluent    | not supported      | —             | not supported      | —             |
-| Bun        | kafka-core   | 67                 | 64–68         | 65                 | 64–66         |
-| Bun        | Platformatic | 109                | 108–112       | 83                 | 83–86         |
-| Bun        | KafkaJS      | 76                 | 72–80         | 58                 | 56–66         |
+| Bun        | kafka-core   | 62                 | 60–64         | 65                 | 64–66         |
+| Bun        | Platformatic | 111                | 108–115       | 83                 | 83–86         |
+| Bun        | KafkaJS      | 77                 | 70–85         | 58                 | 56–66         |
 | Bun        | Confluent    | not supported      | —             | not supported      | —             |
 
 ### Consume (per message)
@@ -764,7 +764,7 @@ Peak container memory while consuming per message, under a 2 GiB limit.
 
 ```chart
 {
-  "description": "Bar chart of peak memory, consume (per message) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: KafkaJS (123 MiB), Bun: no clear lowest. The table below lists every value.",
+  "description": "Bar chart of peak memory, consume (per message) with 1 KiB values by runtime and client, lower is better. Lowest: Node.js 24: no clear lowest, Node.js 26: no clear lowest, Bun: no clear lowest. The table below lists every value.",
   "chart": {
     "type": "bar",
     "height": 420
@@ -784,19 +784,19 @@ Peak container memory while consuming per message, under a 2 GiB limit.
   "series": [
     {
       "name": "kafka-core",
-      "data": [194.86, 157.75, 119.07]
+      "data": [122.77, 102.88, 103.17]
     },
     {
       "name": "Platformatic",
-      "data": [184.16, 147.83, 167.87]
+      "data": [179.96, 137.69, 168.39]
     },
     {
       "name": "KafkaJS",
-      "data": [159.27, 123.37, 110.93]
+      "data": [151.93, 119.27, 115.1]
     },
     {
       "name": "Confluent",
-      "data": [596.39, null, null]
+      "data": [806.25, null, null]
     }
   ],
   "xaxis": {
@@ -804,24 +804,24 @@ Peak container memory while consuming per message, under a 2 GiB limit.
     "title": {
       "text": "MiB (peak container memory)"
     },
-    "max": 800
+    "max": 1500
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (MiB) | 1 KiB min–max | 100 B median (MiB) | 100 B min–max |
 | ---------- | ------------ | ------------------ | ------------- | ------------------ | ------------- |
-| Node.js 24 | kafka-core   | 195                | 161–199       | 213                | 197–445       |
-| Node.js 24 | Platformatic | 184                | 181–187       | 228                | 222–234       |
-| Node.js 24 | KafkaJS      | 159                | 154–164       | 215                | 211–225       |
-| Node.js 24 | Confluent    | 596                | 479–1,525     | all 5 runs failed  | —             |
-| Node.js 26 | kafka-core   | 158                | 156–159       | 165                | 162–273       |
-| Node.js 26 | Platformatic | 148                | 139–151       | 201                | 196–215       |
-| Node.js 26 | KafkaJS      | 123                | 116–130       | 161                | 157–163       |
+| Node.js 24 | kafka-core   | 123                | 106–149       | 213                | 197–445       |
+| Node.js 24 | Platformatic | 180                | 122–191       | 228                | 222–234       |
+| Node.js 24 | KafkaJS      | 152                | 150–163       | 215                | 211–225       |
+| Node.js 24 | Confluent    | 806                | 447–1,532     | all 5 runs failed  | —             |
+| Node.js 26 | kafka-core   | 103                | 93–119        | 165                | 162–273       |
+| Node.js 26 | Platformatic | 138                | 130–149       | 201                | 196–215       |
+| Node.js 26 | KafkaJS      | 119                | 114–132       | 161                | 157–163       |
 | Node.js 26 | Confluent    | not supported      | —             | not supported      | —             |
-| Bun        | kafka-core   | 119                | 106–137       | 129                | 124–141       |
-| Bun        | Platformatic | 168                | 163–175       | 172                | 162–174       |
-| Bun        | KafkaJS      | 111                | 105–128       | 150                | 144–158       |
+| Bun        | kafka-core   | 103                | 98–112        | 129                | 124–141       |
+| Bun        | Platformatic | 168                | 162–179       | 172                | 162–174       |
+| Bun        | KafkaJS      | 115                | 111–130       | 150                | 144–158       |
 | Bun        | Confluent    | not supported      | —             | not supported      | —             |
 
 ### Consume (batch)
@@ -850,19 +850,19 @@ Peak container memory while consuming in batches, under a 2 GiB limit.
   "series": [
     {
       "name": "kafka-core",
-      "data": [209.34, 150.45, 119.53]
+      "data": [150.12, 110.17, 97.88]
     },
     {
       "name": "Platformatic",
-      "data": [186.42, 149.9, 167.41]
+      "data": [164.46, 145.51, 167.95]
     },
     {
       "name": "KafkaJS",
-      "data": [139.97, 118.84, 120.77]
+      "data": [134.47, 114.55, 119.38]
     },
     {
       "name": "Confluent",
-      "data": [705.84, null, null]
+      "data": [758.46, null, null]
     }
   ],
   "xaxis": {
@@ -870,24 +870,24 @@ Peak container memory while consuming in batches, under a 2 GiB limit.
     "title": {
       "text": "MiB (peak container memory)"
     },
-    "max": 950
+    "max": 1000
   }
 }
 ```
 
 | Runtime    | Client       | 1 KiB median (MiB) | 1 KiB min–max | 100 B median (MiB) | 100 B min–max |
 | ---------- | ------------ | ------------------ | ------------- | ------------------ | ------------- |
-| Node.js 24 | kafka-core   | 209                | 157–235       | 208                | 204–215       |
-| Node.js 24 | Platformatic | 186                | 122–194       | 240                | 226–244       |
-| Node.js 24 | KafkaJS      | 140                | 135–166       | 211                | 206–214       |
-| Node.js 24 | Confluent    | 706                | 571–1,324     | all 5 runs failed  | —             |
-| Node.js 26 | kafka-core   | 150                | 142–162       | 161                | 149–166       |
-| Node.js 26 | Platformatic | 150                | 134–151       | 224                | 209–229       |
-| Node.js 26 | KafkaJS      | 119                | 116–128       | 164                | 156–168       |
+| Node.js 24 | kafka-core   | 150                | 113–176       | 208                | 204–215       |
+| Node.js 24 | Platformatic | 164                | 119–189       | 240                | 226–244       |
+| Node.js 24 | KafkaJS      | 134                | 126–160       | 211                | 206–214       |
+| Node.js 24 | Confluent    | 758                | 654–1,109     | all 5 runs failed  | —             |
+| Node.js 26 | kafka-core   | 110                | 98–115        | 161                | 149–166       |
+| Node.js 26 | Platformatic | 146                | 134–150       | 224                | 209–229       |
+| Node.js 26 | KafkaJS      | 115                | 107–120       | 164                | 156–168       |
 | Node.js 26 | Confluent    | not supported      | —             | not supported      | —             |
-| Bun        | kafka-core   | 120                | 111–128       | 134                | 131–141       |
-| Bun        | Platformatic | 167                | 156–173       | 181                | 177–192       |
-| Bun        | KafkaJS      | 121                | 118–124       | 141                | 136–149       |
+| Bun        | kafka-core   | 98                 | 96–119        | 134                | 131–141       |
+| Bun        | Platformatic | 168                | 158–173       | 181                | 177–192       |
+| Bun        | KafkaJS      | 119                | 107–122       | 141                | 136–149       |
 | Bun        | Confluent    | not supported      | —             | not supported      | —             |
 
 ## Install size
@@ -898,7 +898,7 @@ This is information, not a ranking, because size follows what each client implem
 
 | Client       | Version | Required (MB) | Required dependencies | Required files | Optional (MB) | Optional dependencies | Optional files | Native addon  |
 | ------------ | ------- | ------------- | --------------------- | -------------- | ------------- | --------------------- | -------------- | ------------- |
-| kafka-core   | 2.8.1   | 2.16          | 3                     | 891            | 0.54          | 2                     | 9              | optional only |
+| kafka-core   | 2.8.1   | 1.46          | 3                     | 210            | 0.54          | 2                     | 9              | optional only |
 | Platformatic | 2.15.0  | 4.62          | 16                    | 1,797          | 4.46          | 4                     | 129            | optional only |
 | KafkaJS      | 2.2.4   | 0.73          | 0                     | 391            | 0.00          | 0                     | 0              | no            |
 | Confluent    | 1.11.0  | 47.23         | 25                    | 1,316          | 0.00          | 0                     | 0              | yes           |
@@ -912,7 +912,7 @@ From the repository root, with Docker running, run one session per payload. Rege
 ### 1 KiB values
 
 ```sh
-pnpm benchmarks:run --tier standard --payload medium --seed 3167347498
+pnpm benchmarks:run --tier standard --payload medium --seed 2119662096
 pnpm docs:benchmarks --competitors benchmarks/results/raw/<session> --core benchmarks/results/raw/<session>
 ```
 

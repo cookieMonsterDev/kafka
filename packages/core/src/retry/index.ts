@@ -1,5 +1,6 @@
 import { KafkaNonRetriableError, KafkaNumberOfRetriesExceeded } from '../errors';
 import type { Deadline } from '../utils/deadline';
+import { randomFraction } from '../utils/random-fraction';
 import { RETRY_DEFAULTS } from './defaults';
 
 /**
@@ -28,7 +29,7 @@ export interface RetryRunOptions {
 export type Retrier = <T>(fn: Retryable<T>, options?: RetryRunOptions) => Promise<T>;
 
 function random(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+  return randomFraction() * (max - min) + min;
 }
 
 function randomFromRetryTime(factor: number, retryTime: number): number {

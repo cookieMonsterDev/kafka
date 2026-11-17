@@ -1,3 +1,5 @@
+import { randomFraction } from './random-fraction';
+
 /** Returns a shuffled copy of `array` (Fisher-Yates); `array` itself is left untouched. */
 export function shuffle<T>(array: readonly T[]): T[] {
   if (!Array.isArray(array)) {
@@ -11,7 +13,7 @@ export function shuffle<T>(array: readonly T[]): T[] {
   const copy = array.slice() as T[];
 
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(randomFraction() * (i + 1));
     const temp = copy[i] as T;
     copy[i] = copy[j] as T;
     copy[j] = temp;

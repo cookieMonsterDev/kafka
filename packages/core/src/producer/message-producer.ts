@@ -1,12 +1,6 @@
 import { supportsHeaders, supportsZstd } from '../broker/capabilities';
 import type { Cluster } from '../cluster/index';
-import {
-  KafkaDeliveryTimeoutError,
-  KafkaError,
-  KafkaMessageTooLargeError,
-  KafkaNonRetriableError,
-  KafkaTimeout,
-} from '../errors';
+import { KafkaError, KafkaMessageTooLargeError, KafkaNonRetriableError } from '../errors';
 import type { MetricsRecorder } from '../instrumentation/metrics';
 import type { Logger } from '../loggers/index';
 import { CONNECTION_STATUS, type ConnectionStatus } from '../network/connection-status';
@@ -14,9 +8,11 @@ import { COMPRESSION_TYPES, type CompressionType } from '../protocol/compression
 import type { Retrier } from '../retry/index';
 import { rejectOnAbort } from '../utils/abort';
 import { runHooks } from '../utils/run-hooks';
-import type { EosManager } from './eos-manager/index';
+import type { IdempotenceLedger } from './idempotence-ledger';
+import { mergeTopicMessages } from './merge-topic-messages';
 import { createNodeLatencyTracker, type NodeLatencyTracker } from './node-latency-tracker';
-import { createSendMessages, type SendMessagesRequest } from './send-messages';
+import { createRecordAccumulator } from './record-accumulator';
+import { createSendMessages, type OpenTransaction } from './send-messages';
 import type {
   CustomPartitioner,
   Message,
@@ -31,7 +27,9 @@ export interface MessageProducerOptions {
   logger: Logger;
   cluster: Cluster;
   partitioner: ReturnType<CustomPartitioner>;
-  eosManager: EosManager;
+  ledger: IdempotenceLedger;
+  /** The transaction every send produces into; absent for a non-transactional producer. */
+  transaction?: OpenTransaction;
   idempotent: boolean;
   retrier: Retrier;
   /** Shared across a producer's lifetime, including transactions. Defaults to a fresh tracker. */
@@ -44,8 +42,8 @@ export interface MessageProducerOptions {
   /** Used when send/sendBatch omit compressionLevel. @see ProducerRecord.compressionLevel */
   defaultCompressionLevel?: number;
   /**
-   * Delay in ms to wait for more records before sending a Produce request.
-   * Default 5. Pass `0` to send immediately (one Produce per `send()`).
+   * Delay in ms to wait for more records before sending a Produce request. Default 5. `0` adds no
+   * delay: calls made in the same event-loop turn still leave together, as one Produce per broker.
    * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
@@ -101,34 +99,6 @@ const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
 /** Java `max.request.size` default. @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size */
 const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 
-/**
- * Races `promise` against `deliveryTimeoutMs`, so the caller sees the rejection as soon as the
- * deadline is up even while an attempt is still in flight. `dispatch` stops the retries themselves.
- * Used for linger-buffered sends; an unbuffered send lets `dispatch` reject at the deadline instead.
- */
-function rejectOnDeliveryTimeout<T>(promise: Promise<T>, deliveryTimeoutMs: number): Promise<T> {
-  if (!(deliveryTimeoutMs > 0)) return promise;
-
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs)), deliveryTimeoutMs);
-    promise.then(resolve, reject).finally(() => clearTimeout(timer));
-  });
-}
-
-interface PendingSend {
-  topicMessages: TopicMessages[];
-  topics: Set<string>;
-  acks: number;
-  compression: CompressionType | undefined;
-  compressionLevel: number | undefined;
-  timeout: number;
-  /** Epoch ms at which the caller is rejected with `KafkaDeliveryTimeoutError`. */
-  deadline: number;
-  resolve: (metadata: RecordMetadata[]) => void;
-  reject: (error: unknown) => void;
-  bytes: number;
-}
-
 function fieldBytes(value: Buffer | string | null | undefined): number {
   if (value == null) return 0;
   return Buffer.byteLength(value);
@@ -138,39 +108,12 @@ function messageBytes(message: Message): number {
   return fieldBytes(message.key) + fieldBytes(message.value);
 }
 
-function mergeTopicMessages(entries: readonly PendingSend[]): TopicMessages[] {
-  const mergedByTopic = new Map<string, Message[]>();
-  for (const { topicMessages } of entries) {
-    for (const { topic, messages } of topicMessages) {
-      const current = mergedByTopic.get(topic);
-      if (current) {
-        current.push(...messages);
-      } else {
-        mergedByTopic.set(topic, [...messages]);
-      }
-    }
-  }
-
-  return [...mergedByTopic.entries()].map(([topic, messages]) => ({ topic, messages }));
-}
-
-function groupKey(entry: PendingSend): string {
-  const compression = entry.compression ?? COMPRESSION_TYPES.None;
-  const compressionLevel = entry.compressionLevel ?? '';
-  return `${entry.acks}\0${compression}\0${compressionLevel}\0${entry.timeout}`;
-}
-
-interface BufferWaiter {
-  bytes: number;
-  resolve: () => void;
-  reject: (error: Error) => void;
-}
-
 export function createMessageProducer({
   logger,
   cluster,
   partitioner,
-  eosManager,
+  ledger,
+  transaction,
   idempotent,
   retrier,
   nodeLatencyTracker = createNodeLatencyTracker(),
@@ -191,19 +134,19 @@ export function createMessageProducer({
     cluster,
     retrier,
     partitioner,
-    eosManager,
+    ledger,
+    transaction,
     nodeLatencyTracker,
     metrics,
   });
-  const pending: PendingSend[] = [];
-  let lingerTimer: ReturnType<typeof setTimeout> | null = null;
-  let flushInProgress: Promise<void> | null = null;
-  let bufferedBytes = 0;
-  // Bytes of the entries currently sitting in `pending`, i.e. what the *next* flush would group
-  // into one Produce request. Distinct from `bufferedBytes`, which also counts bytes still
-  // in-flight from a previous flush that hasn't released its bufferMemory reservation yet.
-  let pendingBytes = 0;
-  const bufferWaiters: BufferWaiter[] = [];
+  const accumulator = createRecordAccumulator({
+    dispatch: sendMessages,
+    lingerMs,
+    batchSize,
+    bufferMemory,
+    deliveryTimeoutMs,
+    maxRequestSize,
+  });
 
   function validateConnectionStatus(): void {
     const connectionStatus = getConnectionStatus();
@@ -248,7 +191,7 @@ export function createMessageProducer({
       }
 
       // Single record over the cap fails fast here, at call time - it never occupies a linger
-      // slot or reaches `dispatch`/the network layer.
+      // slot or reaches the network layer.
       for (const message of messages) {
         const size = messageBytes(message);
         if (size > maxRequestSize) {
@@ -285,295 +228,6 @@ export function createMessageProducer({
     return totalBytes;
   }
 
-  function mergeCallTopicMessages(topicMessages: readonly TopicMessages[]): TopicMessages[] {
-    const mergedByTopic = new Map<string, Message[]>();
-    for (const { topic, messages } of topicMessages) {
-      const current = mergedByTopic.get(topic);
-      if (current) {
-        current.push(...messages);
-      } else {
-        mergedByTopic.set(topic, [...messages]);
-      }
-    }
-
-    return [...mergedByTopic.entries()].map(([topic, messages]) => ({ topic, messages }));
-  }
-
-  /**
-   * Sends one Produce request under `deadline`: once it passes, retries stop and the partition
-   * gates are released instead of being held by a send nobody is waiting for. One timer covers it.
-   * With `rejectAtDeadline`, the returned promise also rejects then, even while an attempt is in
-   * flight. Only an unbuffered send may do that: a linger flush waits for its attempt to settle so
-   * the next flush can't overtake it.
-   */
-  function dispatch(
-    request: Omit<SendMessagesRequest, 'signal'>,
-    { deadline, rejectAtDeadline }: { deadline: number; rejectAtDeadline: boolean },
-  ): Promise<RecordMetadata[]> {
-    const remaining = deadline - Date.now();
-    if (!Number.isFinite(remaining)) return sendMessages(request);
-    // Expired while lingering behind an earlier flush: its caller was already rejected.
-    if (remaining <= 0) return Promise.reject(new KafkaDeliveryTimeoutError(deliveryTimeoutMs));
-
-    const controller = new AbortController();
-    return new Promise<RecordMetadata[]>((resolve, reject) => {
-      const sending = sendMessages({ ...request, signal: controller.signal });
-      const timer = setTimeout(() => {
-        const error = new KafkaDeliveryTimeoutError(deliveryTimeoutMs);
-        controller.abort(error);
-        if (rejectAtDeadline) reject(error);
-      }, remaining);
-
-      sending.then(
-        (metadata) => {
-          clearTimeout(timer);
-          resolve(metadata);
-        },
-        (error: unknown) => {
-          clearTimeout(timer);
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the send rejection as-is
-          reject(error);
-        },
-      );
-    });
-  }
-
-  function deliveryDeadline(): number {
-    return deliveryTimeoutMs > 0 ? Date.now() + deliveryTimeoutMs : Number.POSITIVE_INFINITY;
-  }
-
-  function hasBufferLimit(): boolean {
-    return lingerMs > 0 && bufferMemory != null && bufferMemory > 0;
-  }
-
-  function canAdmit(bytes: number): boolean {
-    return !hasBufferLimit() || bufferedBytes + bytes <= (bufferMemory ?? 0);
-  }
-
-  function notifyBufferWaiters(): void {
-    while (bufferWaiters[0] && canAdmit(bufferWaiters[0].bytes)) {
-      const waiter = bufferWaiters.shift();
-      if (!waiter) break;
-      bufferedBytes += waiter.bytes;
-      waiter.resolve();
-    }
-  }
-
-  function releaseBufferedBytes(bytes: number): void {
-    bufferedBytes -= bytes;
-    if (bufferedBytes < 0) bufferedBytes = 0;
-    notifyBufferWaiters();
-  }
-
-  async function reserveBuffer(bytes: number, timeout: number): Promise<void> {
-    if (hasBufferLimit() && bytes > (bufferMemory ?? 0)) {
-      throw new KafkaNonRetriableError(`Record batch of ${bytes} bytes exceeds bufferMemory (${bufferMemory} bytes)`);
-    }
-
-    if (!hasBufferLimit() || canAdmit(bytes)) {
-      bufferedBytes += bytes;
-      return;
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      const waiter: BufferWaiter = {
-        bytes,
-        resolve: () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        reject: (error: Error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      };
-      const timer = setTimeout(() => {
-        const index = bufferWaiters.indexOf(waiter);
-        if (index >= 0) bufferWaiters.splice(index, 1);
-        waiter.reject(new KafkaTimeout(`Timeout while waiting for producer bufferMemory (${bufferMemory} bytes)`));
-      }, timeout);
-      bufferWaiters.push(waiter);
-      void startFlush();
-    });
-  }
-
-  function clearLingerTimer(): void {
-    if (lingerTimer != null) {
-      clearTimeout(lingerTimer);
-      lingerTimer = null;
-    }
-  }
-
-  function scheduleLinger(): void {
-    if (lingerTimer != null || lingerMs <= 0) return;
-    lingerTimer = setTimeout(() => {
-      lingerTimer = null;
-      void startFlush();
-    }, lingerMs);
-  }
-
-  function shouldFlushBySize(): boolean {
-    if (lingerMs <= 0) return false;
-    if (batchSize > 0 && bufferedBytes >= batchSize) return true;
-    // Flush as soon as the linger buffer alone holds a full request's worth of bytes, rather
-    // than letting it grow well past maxRequestSize while waiting out the rest of lingerMs.
-    return pendingBytes >= maxRequestSize;
-  }
-
-  /**
-   * Packs `entries` into groups whose bytes stay within `maxRequestSize`, in order. Every entry
-   * fits alone (a call whose own total exceeds the cap is rejected up front in `validateBatch`),
-   * so this only has to cut a *combined* linger batch back down - "send what fits, keep the rest
-   * for the next request" - never split a single entry.
-   */
-  function chunkPendingEntries(entries: readonly PendingSend[]): PendingSend[][] {
-    const chunks: PendingSend[][] = [];
-    let current: PendingSend[] = [];
-    let currentBytes = 0;
-
-    for (const entry of entries) {
-      if (current.length > 0 && currentBytes + entry.bytes > maxRequestSize) {
-        chunks.push(current);
-        current = [];
-        currentBytes = 0;
-      }
-      current.push(entry);
-      currentBytes += entry.bytes;
-    }
-
-    if (current.length > 0) chunks.push(current);
-    return chunks;
-  }
-
-  async function sendGrouped(entries: readonly PendingSend[]): Promise<void> {
-    const groups = new Map<string, PendingSend[]>();
-    for (const entry of entries) {
-      const key = groupKey(entry);
-      const group = groups.get(key);
-      if (group) {
-        group.push(entry);
-      } else {
-        groups.set(key, [entry]);
-      }
-    }
-
-    await Promise.all(
-      [...groups.values()].map(async (group) => {
-        const first = group[0];
-        if (!first) return;
-
-        try {
-          const metadata = await dispatch(
-            {
-              topicMessages: mergeTopicMessages(group),
-              acks: first.acks,
-              timeout: first.timeout,
-              compression: first.compression,
-              compressionLevel: first.compressionLevel,
-            },
-            {
-              // A merged request shares one fate, so it stops at its earliest caller's deadline.
-              deadline: group.reduce((earliest, entry) => Math.min(earliest, entry.deadline), Number.POSITIVE_INFINITY),
-              // Each caller's own `rejectOnDeliveryTimeout` already rejects it on time.
-              rejectAtDeadline: false,
-            },
-          );
-          for (const entry of group) {
-            entry.resolve(metadata.filter((item) => entry.topics.has(item.topicName)));
-          }
-        } catch (error) {
-          for (const entry of group) {
-            entry.reject(error);
-          }
-        }
-      }),
-    );
-  }
-
-  async function doFlush(): Promise<void> {
-    clearLingerTimer();
-    const entries = pending.splice(0);
-    pendingBytes = 0;
-    if (entries.length === 0) return;
-    try {
-      // Sequential, not Promise.all: chunks can share a topic-partition (two send() calls routed
-      // to the same partition), and sending them concurrently would race their sequence-number
-      // assignment for idempotent/transactional producers and could reorder delivery generally.
-      for (const chunk of chunkPendingEntries(entries)) {
-        await sendGrouped(chunk);
-      }
-    } finally {
-      let flushedBytes = 0;
-      for (const entry of entries) {
-        flushedBytes += entry.bytes;
-      }
-      releaseBufferedBytes(flushedBytes);
-    }
-  }
-
-  function startFlush(): Promise<void> {
-    if (!flushInProgress) {
-      flushInProgress = doFlush().finally(() => {
-        flushInProgress = null;
-        if (pending.length === 0) return;
-        if (shouldFlushBySize()) {
-          void startFlush();
-        } else {
-          scheduleLinger();
-        }
-      });
-    }
-
-    return flushInProgress;
-  }
-
-  async function flush(): Promise<void> {
-    while (pending.length > 0 || flushInProgress) {
-      await startFlush();
-    }
-  }
-
-  async function enqueue(
-    topicMessages: TopicMessages[],
-    acks: number,
-    timeout: number,
-    compression: CompressionType | undefined,
-    compressionLevel: number | undefined,
-    bytes: number,
-    deadline: number,
-  ): Promise<RecordMetadata[]> {
-    await reserveBuffer(bytes, timeout);
-
-    let resolve!: (metadata: RecordMetadata[]) => void;
-    let reject!: (error: unknown) => void;
-    const result = new Promise<RecordMetadata[]>((res, rej) => {
-      resolve = res;
-      reject = rej;
-    });
-
-    pending.push({
-      topicMessages,
-      topics: new Set(topicMessages.map(({ topic }) => topic)),
-      acks,
-      compression,
-      compressionLevel,
-      timeout,
-      deadline,
-      resolve,
-      reject,
-      bytes,
-    });
-    pendingBytes += bytes;
-
-    if (shouldFlushBySize()) {
-      void startFlush();
-    } else {
-      scheduleLinger();
-    }
-
-    return result;
-  }
-
   async function sendBatch({
     acks,
     timeout,
@@ -588,7 +242,7 @@ export function createMessageProducer({
     const resolvedCompressionLevel = compressionLevel ?? defaultCompressionLevel;
 
     const totalBytes = validateBatch(topicMessages, resolvedAcks, resolvedCompression);
-    const mergedTopicMessages = mergeCallTopicMessages(topicMessages);
+    const mergedTopicMessages = mergeTopicMessages(topicMessages);
 
     // `runHooks` is async, so awaiting it always costs a microtask tick even when there is
     // nothing to run. Guard on hooks being configured so a hookless producer keeps the exact
@@ -603,30 +257,14 @@ export function createMessageProducer({
       await runHooks(hooks.onSend, hookEvent, 'onSend', logger);
     }
 
-    const produce =
-      lingerMs <= 0
-        ? dispatch(
-            {
-              topicMessages: mergedTopicMessages,
-              acks: resolvedAcks,
-              timeout: resolvedTimeout,
-              compression: resolvedCompression,
-              compressionLevel: resolvedCompressionLevel,
-            },
-            { deadline: deliveryDeadline(), rejectAtDeadline: true },
-          )
-        : rejectOnDeliveryTimeout(
-            enqueue(
-              mergedTopicMessages,
-              resolvedAcks,
-              resolvedTimeout,
-              resolvedCompression,
-              resolvedCompressionLevel,
-              totalBytes,
-              deliveryDeadline(),
-            ),
-            deliveryTimeoutMs,
-          );
+    const produce = accumulator.append({
+      topicMessages: mergedTopicMessages,
+      acks: resolvedAcks,
+      timeout: resolvedTimeout,
+      compression: resolvedCompression,
+      compressionLevel: resolvedCompressionLevel,
+      bytes: totalBytes,
+    });
 
     const settled = rejectOnAbort(produce, signal);
     if (!hooks?.onAck?.length) return settled;
@@ -653,5 +291,5 @@ export function createMessageProducer({
     return sendBatch({ acks, timeout, compression, compressionLevel, topicMessages: [{ topic, messages }], signal });
   }
 
-  return { send, sendBatch, flush };
+  return { send, sendBatch, flush: accumulator.flush };
 }

@@ -1,14 +1,20 @@
-import crypto from 'node:crypto';
 import { KafkaNonRetriableError } from '../errors';
 import { SCRAM_MECHANISMS } from '../protocol/enums/scram-mechanisms';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
 import type { DescribeUserScramCredentialsResponseV0Body } from '../protocol/requests/describe-user-scram-credentials/v0/response';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
+import { AlterUserScramCredentials, DescribeUserScramCredentials } from '../protocol/requests/lazy-families';
 
 const DEFAULT_ITERATIONS = 4096;
 const DEFAULT_SALT_BYTES = 16;
+
+/** Loaded on first SCRAM credential change, so importing the client does not load `node:crypto`. */
+function nodeCrypto() {
+  return process.getBuiltinModule('node:crypto');
+}
 
 export interface ScramCredentialDeletionInput {
   name: string;
@@ -54,7 +60,7 @@ function hi(
   digest: { length: number; type: string },
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    crypto.pbkdf2(password, salt, iterations, digest.length, digest.type, (err, derivedKey) =>
+    nodeCrypto().pbkdf2(password, salt, iterations, digest.length, digest.type, (err, derivedKey) =>
       err ? reject(err) : resolve(derivedKey),
     );
   });
@@ -75,7 +81,7 @@ async function toWireUpsertion(upsertion: ScramCredentialUpsertionInput) {
   if (iterations < DEFAULT_ITERATIONS) {
     throw new KafkaNonRetriableError(`SCRAM iterations must be at least ${DEFAULT_ITERATIONS}`);
   }
-  const salt = upsertion.salt ?? crypto.randomBytes(DEFAULT_SALT_BYTES);
+  const salt = upsertion.salt ?? nodeCrypto().randomBytes(DEFAULT_SALT_BYTES);
   const saltedPassword = await hi(upsertion.password, salt, iterations, digestFor(upsertion.mechanism));
   return {
     name: upsertion.name,
@@ -86,30 +92,20 @@ async function toWireUpsertion(upsertion: ScramCredentialUpsertionInput) {
   };
 }
 
-export function createScramApi({ cluster, logger, retry }: AdminContext): ScramApi {
+export function createScramApi({ cluster, retry }: AdminContext): ScramApi {
+  const retrier = createRetrier(retry);
+
   const describeUserScramCredentials = async (
     options: { users?: string[] | null } = {},
   ): Promise<{ results: DescribeUserScramCredentialsResponseV0Body['results'] }> => {
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { results } = await broker.describeUserScramCredentials({ users: options.users });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { results } = await broker.send(DescribeUserScramCredentials, { users: options.users });
         return { results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe SCRAM credentials', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe SCRAM credentials' },
+    );
   };
 
   const alterUserScramCredentials = async ({
@@ -137,26 +133,14 @@ export function createScramApi({ cluster, logger, retry }: AdminContext): ScramA
 
     const wireUpsertions = await Promise.all(upsertions.map(toWireUpsertion));
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { results } = await broker.alterUserScramCredentials({ deletions, upsertions: wireUpsertions });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { results } = await broker.send(AlterUserScramCredentials, { deletions, upsertions: wireUpsertions });
         return { results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not alter SCRAM credentials', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not alter SCRAM credentials' },
+    );
   };
 
   return { describeUserScramCredentials, alterUserScramCredentials };

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   isKafkaError,
-  isRebalancing,
   KafkaAggregateError,
   KafkaAlterPartitionReassignmentsError,
   KafkaConnectionClosedError,
@@ -217,19 +216,6 @@ describe('errors', () => {
       expect(error.path).toBe('/x/kafka.config.ts');
       expect(error.message).toContain('/x/kafka.config.ts');
       expect(error.message).toContain('Kafka.fromConfig()');
-    });
-  });
-
-  describe('isRebalancing', () => {
-    it('is true for the three group-rebalance protocol types', () => {
-      expect(isRebalancing({ type: 'REBALANCE_IN_PROGRESS' })).toBe(true);
-      expect(isRebalancing({ type: 'NOT_COORDINATOR_FOR_GROUP' })).toBe(true);
-      expect(isRebalancing({ type: 'ILLEGAL_GENERATION' })).toBe(true);
-    });
-
-    it('is false for any other type or a missing type', () => {
-      expect(isRebalancing({ type: 'UNKNOWN_MEMBER_ID' })).toBe(false);
-      expect(isRebalancing({})).toBe(false);
     });
   });
 

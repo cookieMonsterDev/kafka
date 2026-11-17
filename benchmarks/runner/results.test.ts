@@ -8,9 +8,9 @@ import { resultSchemaVersion, scenarios } from '../client/spec.ts';
 import type { ClientId, RunRecord, RunSpec, ScenarioId } from '../client/spec.ts';
 import { aggregateSession, summarize } from './aggregate.ts';
 import { findPublishBlockers, publishSession } from './publish.ts';
-import { writeReport } from './report.ts';
+import { footprintTotal, formatNativeAddon, writeReport } from './report.ts';
 import { validateSummary } from './schema.ts';
-import type { EnvironmentReport, SessionManifest } from './types.ts';
+import type { EnvironmentReport, Footprint, SessionManifest } from './types.ts';
 
 const sessionId = '20261112000000-abcdef123456';
 
@@ -216,6 +216,68 @@ describe('aggregateSession', () => {
   });
 });
 
+describe('E1 latency comparisons', () => {
+  function createE1Run(series: string, repetition: number, p50Ms: number, p99Ms: number): RunRecord {
+    const client: ClientId = series === 'kafkajs' ? 'kafkajs' : 'kafka-core';
+    const run = createRun(client, 'E1', repetition, 5000, series);
+    const { metrics } = run.result;
+    assert.ok(metrics);
+    metrics.latency = { samples: 1000, p50Ms, p95Ms: p99Ms, p99Ms, maxMs: p99Ms };
+    return run;
+  }
+
+  it('compares the median as well as p99 and names the metric of each comparison', async () => {
+    const directory = await createSessionDir();
+    await writeSession(
+      directory,
+      [
+        createE1Run('kafka-core', 1, 1.0, 3.0),
+        createE1Run('kafka-core', 2, 1.01, 3.02),
+        createE1Run('kafkajs', 1, 1.4, 3.01),
+        createE1Run('kafkajs', 2, 1.41, 3.03),
+      ],
+      [],
+    );
+
+    const summary = await aggregateSession(directory);
+
+    const verdicts = Object.fromEntries(summary.comparisons.map((comparison) => [comparison.metric, comparison]));
+    assert.deepEqual(Object.keys(verdicts).sort(), ['latencyP50Ms', 'latencyP99Ms']);
+    assert.equal(verdicts.latencyP50Ms?.verdict, 'worse');
+    assert.equal(verdicts.latencyP99Ms?.verdict, 'inconclusive');
+    assert.equal(verdicts.latencyP99Ms?.reason, 'min-max ranges overlap');
+    assert.deepEqual(await validateSummary(summary), []);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
+    assert.match(report, /\| p99 1\.00× \(inconclusive\); p50 1\.40× \(worse\) \|/);
+  });
+
+  it('applies the A/A floor of the median, not of p99, to the median', async () => {
+    const directory = await createSessionDir();
+    await writeSession(
+      directory,
+      [
+        createE1Run('kafka-core', 1, 1.0, 3.0),
+        createE1Run('kafka-core', 2, 1.0, 3.0),
+        createE1Run('kafka-core#2', 1, 1.02, 4.0),
+        createE1Run('kafka-core#2', 2, 1.02, 4.0),
+        createE1Run('kafkajs', 1, 1.1, 3.6),
+        createE1Run('kafkajs', 2, 1.1, 3.6),
+      ],
+      [],
+    );
+
+    const summary = await aggregateSession(directory);
+
+    assert.ok(Math.abs((summary.aaNoiseFloors.E1?.latencyP50Ms ?? 0) - 0.02) < 0.001);
+    assert.ok(Math.abs((summary.aaNoiseFloors.E1?.latencyP99Ms ?? 0) - 0.3333) < 0.001);
+    const verdicts = Object.fromEntries(summary.comparisons.map((comparison) => [comparison.metric, comparison]));
+    assert.equal(verdicts.latencyP50Ms?.verdict, 'worse');
+    assert.equal(verdicts.latencyP99Ms?.verdict, 'inconclusive');
+    assert.equal(verdicts.latencyP99Ms?.reason, 'difference is within the A/A noise floor');
+    assert.deepEqual(await validateSummary(summary), []);
+  });
+});
+
 describe('noise floors', () => {
   it('measures the A/A floor per scenario and does not compare the A/A series itself', async () => {
     const directory = await createSessionDir();
@@ -234,7 +296,7 @@ describe('noise floors', () => {
 
     const summary = await aggregateSession(directory);
 
-    assert.ok(Math.abs((summary.aaNoiseFloors.P3 ?? 0) - 0.08) < 0.001);
+    assert.ok(Math.abs((summary.aaNoiseFloors.P3?.recordsPerSecond ?? 0) - 0.08) < 0.001);
     assert.deepEqual(
       summary.comparisons.map((comparison) => comparison.series),
       ['kafkajs'],
@@ -283,6 +345,100 @@ describe('writeReport', () => {
     assert.match(report, /\| node24 \| normalized \| kafkajs\[\^1\] \| 50,000 \|/);
     assert.match(report, /\[\^1\]: lingerMs: no linger support/);
     assert.match(report, /Doctor warnings/);
+  });
+});
+
+describe('F1 footprints', () => {
+  const footprints: Footprint[] = [
+    {
+      client: 'kafka-core',
+      packageName: '@cookiemonsterdev/kafka-core',
+      version: '2.8.1',
+      required: { bytes: 2_155_686, fileCount: 891, dependencyCount: 3, hasNativeAddon: false },
+      optional: { bytes: 538_332, fileCount: 9, dependencyCount: 2, hasNativeAddon: true },
+    },
+    {
+      client: 'confluent',
+      packageName: '@confluentinc/kafka-javascript',
+      version: null,
+      required: null,
+      optional: null,
+    },
+  ];
+
+  it('keeps required and optional parts in the summary and renders them without a verdict', async () => {
+    const directory = await createSessionDir();
+    await writeSession(directory, [createRun('kafka-core', 'P3', 1, 100_000)], []);
+    await writeFile(join(directory, 'footprint.json'), JSON.stringify(footprints));
+
+    const summary = await aggregateSession(directory);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
+
+    assert.deepEqual(summary.footprints, footprints);
+    assert.deepEqual(await validateSummary(summary), []);
+    assert.match(
+      report,
+      /\| @cookiemonsterdev\/kafka-core \| 2\.8\.1 \| 2\.1 \| 3 \| 891 \| 0\.5 \| 2 \| 9 \| optional only \|/,
+    );
+    assert.match(
+      report,
+      /\| @confluentinc\/kafka-javascript \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \| n\/a \|/,
+    );
+  });
+
+  it('keeps only the total of footprints recorded before the required and optional split', async () => {
+    const directory = await createSessionDir();
+    await writeSession(directory, [createRun('kafka-core', 'P3', 1, 100_000)], []);
+    const unsplit = [
+      {
+        client: 'kafka-core',
+        packageName: '@cookiemonsterdev/kafka-core',
+        version: '2.8.1',
+        installBytes: 2_694_018,
+        dependencyCount: 5,
+        hasNativeAddon: true,
+      },
+      {
+        client: 'confluent',
+        packageName: '@confluentinc/kafka-javascript',
+        version: null,
+        installBytes: null,
+        dependencyCount: null,
+        hasNativeAddon: null,
+      },
+    ];
+    await writeFile(join(directory, 'footprint.json'), JSON.stringify(unsplit));
+
+    const summary = await aggregateSession(directory);
+    const report = await readFile(await writeReport(directory, summary), 'utf8');
+
+    assert.deepEqual(summary.footprints, [
+      {
+        client: 'kafka-core',
+        packageName: '@cookiemonsterdev/kafka-core',
+        version: '2.8.1',
+        required: null,
+        optional: null,
+        unsplitTotal: { bytes: 2_694_018, dependencyCount: 5, hasNativeAddon: true },
+      },
+      footprints[1],
+    ]);
+    assert.deepEqual(await validateSummary(summary), []);
+    assert.match(report, /\| Version \| Total MiB \| Total dependencies \| Required MiB \|/);
+    assert.match(
+      report,
+      /\| @cookiemonsterdev\/kafka-core \| 2\.8\.1 \| 2\.6 \| 5 \|( not split \|){6} yes, not split \|/,
+    );
+    assert.match(report, /\| @confluentinc\/kafka-javascript \| n\/a \|( n\/a \|){9}/);
+  });
+
+  it('totals a split footprint and places its native addon', () => {
+    const [split, notInstalled] = footprints;
+    assert.ok(split && notInstalled);
+
+    assert.deepEqual(footprintTotal(split), { bytes: 2_694_018, dependencyCount: 5 });
+    assert.equal(footprintTotal(notInstalled), null);
+    assert.equal(formatNativeAddon(split), 'optional only');
   });
 });
 

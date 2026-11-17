@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { addOffsetsToTxnRequestV0 } from './v0/request';
 import { addOffsetsToTxnResponseV0 } from './v0/response';
 import { addOffsetsToTxnRequestV1 } from './v1/request';
@@ -15,18 +16,11 @@ export interface AddOffsetsToTxnOptions {
   groupId: string;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AddOffsetsToTxnOptions>>> = {
+const VERSIONS = {
   0: (values) => ({ request: addOffsetsToTxnRequestV0(values), response: addOffsetsToTxnResponseV0 }),
   1: (values) => ({ request: addOffsetsToTxnRequestV1(values), response: addOffsetsToTxnResponseV1 }),
   2: (values) => ({ request: addOffsetsToTxnRequestV2(values), response: addOffsetsToTxnResponseV2 }),
   3: (values) => ({ request: addOffsetsToTxnRequestV3(values), response: addOffsetsToTxnResponseV3 }),
-};
+} satisfies VersionFactories<AddOffsetsToTxnOptions>;
 
-export const AddOffsetsToTxn: RequestFamily<AddOffsetsToTxnOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AddOffsetsToTxn protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AddOffsetsToTxn = defineRequestFamily(KAFKA_APIS.AddOffsetsToTxn, VERSIONS);

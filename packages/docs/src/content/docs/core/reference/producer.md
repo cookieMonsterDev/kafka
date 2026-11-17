@@ -37,6 +37,28 @@ Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-co
 for several topics. `compressionLevel` overrides the producer's own default
 for that one call; see [Throughput](../../guides/throughput/#compression-level).
 
+### Linger 0 and same-turn sends
+
+`lingerMs: 0` means no added delay, not one Produce request per `send()`.
+Calls made in the same event-loop turn, such as several `send()` calls before
+the first `await`, leave together once that turn's synchronous code has run.
+They go out as one Produce request per broker, split where the records would
+exceed `maxRequestSize`. A call with a different `acks`, `timeout`,
+`compression`, or `compressionLevel` from the call before it starts a new
+request. Every request of the turn starts at once, in call order. An awaited
+`send()` on its own, as in a sequential loop, is sent alone.
+
+Calls that share a request share its outcome, as calls batched by a positive
+`lingerMs` do:
+
+- A failed request rejects every call in it with the same error.
+- The request stops at the earliest call's `deliveryTimeoutMs` deadline.
+- Each call resolves with the request's `RecordMetadata` for the topics that
+  call sent to.
+
+The Java client and librdkafka also batch records that arrive close together
+with `linger.ms=0`.
+
 ### `Message`
 
 | Field       | Type                       | Notes                                 |
@@ -50,7 +72,8 @@ for that one call; see [Throughput](../../guides/throughput/#compression-level).
 ### `RecordMetadata`
 
 `baseOffset`, `logAppendTime`, and `logStartOffset` are `bigint`. `errorCode` is
-the per-partition Produce error.
+the per-partition Produce error. `logStartOffset` is `-1n`, as in the Java client, when the
+negotiated Produce version does not carry it (before v5, Kafka 1.0).
 
 ## `transaction`
 
@@ -67,8 +90,10 @@ interface Transaction {
 }
 ```
 
-A transaction whose `send` failed, or whose `commit()` the broker rejected,
-can only be aborted. If `commit()`/`abort()` fails without a broker answer
+A transaction whose `send` or `sendOffsets` failed, or whose `commit()` the
+broker rejected, can only be aborted: `commit()` and the next
+`producer.transaction()` reject with a `KafkaNonRetriableError` that says so
+until you call `abort()`. If `commit()`/`abort()` fails without a broker answer
 (for example, the connection dropped), call it again. A producer fenced by a
 newer instance with the same `transactionalId` (`PRODUCER_FENCED` or
 `INVALID_PRODUCER_EPOCH`) rejects every further transaction call; create a new

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { ACL_OPERATION_TYPES } from '../protocol/enums/acl-operation-types';
@@ -12,6 +14,7 @@ import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types
 import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
 import { createAclsApi } from './acls';
 import type { AclEntry, AclFilter } from './types';
+import { withSend } from '../broker/test-send';
 
 const INVALID_OPERATION = 999 as unknown as AclOperationType;
 const INVALID_PATTERN = 999 as unknown as ResourcePatternType;
@@ -38,11 +41,7 @@ const validFilter: AclFilter = {
 };
 
 function fakeCluster(broker: Record<string, ReturnType<typeof vi.fn>> = {}) {
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 function makeApi(cluster: ReturnType<typeof fakeCluster>, retry?: { retries?: number }) {
@@ -60,7 +59,7 @@ describe('admin/acls', () => {
       const cluster = fakeCluster();
       const api = makeApi(cluster);
       await expect(api.createAcls({ acl: undefined as unknown as AclEntry[] })).rejects.toThrow(KafkaNonRetriableError);
-      expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+      expect(cluster.run).not.toHaveBeenCalled();
     });
 
     it('rejects an empty acl array', async () => {
@@ -118,34 +117,40 @@ describe('admin/acls', () => {
     });
 
     it('creates ACLs through the active controller', async () => {
-      const cluster = fakeCluster({ createAcls: vi.fn().mockResolvedValue(undefined) });
+      const cluster = fakeCluster(withSend({ createAcls: vi.fn().mockResolvedValue(undefined) }));
       const api = makeApi(cluster);
 
       await expect(api.createAcls({ acl: [validAcl] })).resolves.toBe(true);
 
       expect(cluster.refreshMetadata).toHaveBeenCalled();
-      expect(cluster.findControllerBroker).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(cluster.broker.createAcls).toHaveBeenCalledWith({ creations: [validAcl] });
     });
 
     it('bails and resolves to false when the broker call fails for a non-retriable reason', async () => {
-      const cluster = fakeCluster({
-        createAcls: vi.fn().mockRejectedValue(new Error('boom')),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          createAcls: vi.fn().mockRejectedValue(new Error('boom')),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.createAcls({ acl: [validAcl] })).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries and eventually fails when the controller keeps returning NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = fakeCluster({
-        createAcls: vi.fn().mockRejectedValue(notController),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          createAcls: vi.fn().mockRejectedValue(notController),
+        }),
+      );
       const api = makeApi(cluster, { retries: 0 });
 
       await expect(api.createAcls({ acl: [validAcl] })).rejects.toThrow();
       expect(cluster.broker.createAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 
@@ -200,9 +205,11 @@ describe('admin/acls', () => {
     });
 
     it('describes ACLs, defaulting optional filter fields to null', async () => {
-      const cluster = fakeCluster({
-        describeAcls: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeAcls: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.describeAcls(validFilter)).resolves.toEqual({ resources: [{ resourceName: 'orders' }] });
@@ -219,9 +226,11 @@ describe('admin/acls', () => {
     });
 
     it('forwards provided optional filter fields as-is', async () => {
-      const cluster = fakeCluster({
-        describeAcls: vi.fn().mockResolvedValue({ resources: [] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeAcls: vi.fn().mockResolvedValue({ resources: [] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await api.describeAcls({ ...validFilter, principal: 'User:bob', host: '10.0.0.1', resourceName: 'orders' });
@@ -232,23 +241,29 @@ describe('admin/acls', () => {
     });
 
     it('bails and resolves to no resources when the broker call fails for a non-retriable reason', async () => {
-      const cluster = fakeCluster({
-        describeAcls: vi.fn().mockRejectedValue(new Error('boom')),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeAcls: vi.fn().mockRejectedValue(new Error('boom')),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.describeAcls(validFilter)).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = fakeCluster({
-        describeAcls: vi.fn().mockRejectedValue(notController),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          describeAcls: vi.fn().mockRejectedValue(notController),
+        }),
+      );
       const api = makeApi(cluster, { retries: 0 });
 
       await expect(api.describeAcls(validFilter)).rejects.toThrow();
       expect(cluster.broker.describeAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 
@@ -315,9 +330,11 @@ describe('admin/acls', () => {
     });
 
     it('deletes ACLs, defaulting optional filter fields to null', async () => {
-      const cluster = fakeCluster({
-        deleteAcls: vi.fn().mockResolvedValue({ filterResponses: [{ errorCode: 0 }] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          deleteAcls: vi.fn().mockResolvedValue({ filterResponses: [{ errorCode: 0 }] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.deleteAcls({ filters: [validFilter] })).resolves.toEqual({
@@ -340,9 +357,11 @@ describe('admin/acls', () => {
     });
 
     it('forwards provided optional filter fields as-is across multiple filters', async () => {
-      const cluster = fakeCluster({
-        deleteAcls: vi.fn().mockResolvedValue({ filterResponses: [] }),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          deleteAcls: vi.fn().mockResolvedValue({ filterResponses: [] }),
+        }),
+      );
       const api = makeApi(cluster);
 
       await api.deleteAcls({
@@ -358,23 +377,29 @@ describe('admin/acls', () => {
     });
 
     it('bails and resolves to no filter responses when the broker call fails for a non-retriable reason', async () => {
-      const cluster = fakeCluster({
-        deleteAcls: vi.fn().mockRejectedValue(new Error('boom')),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          deleteAcls: vi.fn().mockRejectedValue(new Error('boom')),
+        }),
+      );
       const api = makeApi(cluster);
 
       await expect(api.deleteAcls({ filters: [validFilter] })).rejects.toThrow('boom');
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
 
     it('retries when the controller returns NOT_CONTROLLER', async () => {
       const notController = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = fakeCluster({
-        deleteAcls: vi.fn().mockRejectedValue(notController),
-      });
+      const cluster = fakeCluster(
+        withSend({
+          deleteAcls: vi.fn().mockRejectedValue(notController),
+        }),
+      );
       const api = makeApi(cluster, { retries: 0 });
 
       await expect(api.deleteAcls({ filters: [validFilter] })).rejects.toThrow();
       expect(cluster.broker.deleteAcls).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).toHaveBeenCalledWith(notController);
     });
   });
 });

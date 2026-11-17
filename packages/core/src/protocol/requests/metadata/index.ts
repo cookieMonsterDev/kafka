@@ -1,4 +1,8 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { shuffle } from '../../../utils/shuffle';
+import { failure } from '../../error-codes';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
+import type { ClusterMetadata } from './shared';
 import { metadataRequestV0 } from './v0/request';
 import { metadataResponseV0 } from './v0/response';
 import { metadataRequestV1 } from './v1/request';
@@ -31,35 +35,40 @@ import { metadataResponseV13 } from './v13/response';
 export interface MetadataOptions {
   topics?: string[];
   topicIds?: Buffer[];
-  allowAutoTopicCreation?: boolean;
+  /**
+   * Whether the broker may auto-create requested topics (v4+). Required, with no family default:
+   * the wire default is `true`, so a call that left it out would auto-create topics regardless of
+   * the client's configuration. Pass the broker's configured `allowAutoTopicCreation`.
+   */
+  allowAutoTopicCreation: boolean;
   includeClusterAuthorizedOperations?: boolean;
   includeTopicAuthorizedOperations?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
+const VERSIONS = {
   0: ({ topics = [] }) => ({ request: metadataRequestV0({ topics }), response: metadataResponseV0 }),
   1: ({ topics = [] }) => ({ request: metadataRequestV1({ topics }), response: metadataResponseV1 }),
   2: ({ topics = [] }) => ({ request: metadataRequestV2({ topics }), response: metadataResponseV2 }),
   3: ({ topics = [] }) => ({ request: metadataRequestV3({ topics }), response: metadataResponseV3 }),
-  4: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  4: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV4({ topics, allowAutoTopicCreation }),
     response: metadataResponseV4,
   }),
-  5: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  5: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV5({ topics, allowAutoTopicCreation }),
     response: metadataResponseV5,
   }),
-  6: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  6: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV6({ topics, allowAutoTopicCreation }),
     response: metadataResponseV6,
   }),
-  7: ({ topics = [], allowAutoTopicCreation = true }) => ({
+  7: ({ topics = [], allowAutoTopicCreation }) => ({
     request: metadataRequestV7({ topics, allowAutoTopicCreation }),
     response: metadataResponseV7,
   }),
   8: ({
     topics = [],
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -73,7 +82,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
   }),
   9: ({
     topics = [],
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -88,7 +97,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
   10: ({
     topics = [],
     topicIds,
-    allowAutoTopicCreation = true,
+    allowAutoTopicCreation,
     includeClusterAuthorizedOperations = false,
     includeTopicAuthorizedOperations = false,
   }) => ({
@@ -101,7 +110,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
     }),
     response: metadataResponseV10,
   }),
-  11: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  11: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV11({
       topics,
       topicIds,
@@ -110,7 +119,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
     }),
     response: metadataResponseV11,
   }),
-  12: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  12: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV12({
       topics,
       topicIds,
@@ -119,7 +128,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
     }),
     response: metadataResponseV12,
   }),
-  13: ({ topics = [], topicIds, allowAutoTopicCreation = true, includeTopicAuthorizedOperations = false }) => ({
+  13: ({ topics = [], topicIds, allowAutoTopicCreation, includeTopicAuthorizedOperations = false }) => ({
     request: metadataRequestV13({
       topics,
       topicIds,
@@ -128,13 +137,26 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<MetadataOptions>>> = {
     }),
     response: metadataResponseV13,
   }),
-};
+} satisfies VersionFactories<MetadataOptions>;
 
-export const Metadata: RequestFamily<MetadataOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no Metadata protocol for version ${version}`);
-    return factory;
-  },
+/**
+ * Asked for every topic, topics deleted or still being created in the meantime can carry
+ * UNKNOWN_TOPIC_OR_PARTITION; leave those out rather than failing the whole response.
+ */
+function withoutFailedTopics(body: ClusterMetadata): ClusterMetadata {
+  const topicMetadata = body.topicMetadata.filter(
+    (topic) =>
+      !failure(topic.topicErrorCode) &&
+      !topic.partitionMetadata.some((partition) => failure(partition.partitionErrorCode)),
+  );
+  return { ...body, topicMetadata };
+}
+
+export const Metadata = defineRequestFamily(KAFKA_APIS.Metadata, VERSIONS, {
+  prepareOptions: (options) => ({ ...options, topics: shuffle(options.topics ?? []) }),
+  parseResponse: async (body, options, parse) =>
+    // No topic names and no topic ids asks for every topic.
+    options.topics?.length === 0 && (options.topicIds ?? []).length === 0
+      ? withoutFailedTopics(body as ClusterMetadata)
+      : ((await parse(body)) as ClusterMetadata),
 });

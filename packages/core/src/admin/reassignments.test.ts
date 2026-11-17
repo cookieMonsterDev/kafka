@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createReassignmentsApi } from './reassignments';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
-function makeApi(cluster: Record<string, unknown>, retry?: { retries?: number }) {
+function makeApi(cluster: object, retry?: { retries?: number }) {
   return createReassignmentsApi({
     cluster: cluster as unknown as Cluster,
     logger: silentLogger.namespace('Admin'),
@@ -59,26 +62,35 @@ describe('admin/reassignments', () => {
     });
 
     it('sends the assignment to the controller', async () => {
-      const broker = { alterPartitionReassignments: vi.fn().mockResolvedValue(undefined) };
-      const cluster = {
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue(broker),
-      };
+      const broker = withSend({ alterPartitionReassignments: vi.fn().mockResolvedValue(undefined) });
+      const cluster = fakeRunCluster({ controller: broker });
       await makeApi(cluster).alterPartitionReassignments({ topics: [validAssignment], timeout: 5000 });
+      expect(cluster.refreshMetadata).toHaveBeenCalled();
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(broker.alterPartitionReassignments).toHaveBeenCalledWith({ topics: [validAssignment], timeout: 5000 });
     });
 
     it('retries on NOT_CONTROLLER', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
-      const cluster = {
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue({
-          alterPartitionReassignments: vi.fn().mockRejectedValue(error),
-        }),
-      };
+      const broker = withSend({
+        alterPartitionReassignments: vi.fn().mockRejectedValueOnce(error).mockResolvedValue(undefined),
+      });
+      const cluster = fakeRunCluster({ controller: broker });
       await expect(
-        makeApi(cluster, { retries: 0 }).alterPartitionReassignments({ topics: [validAssignment] }),
-      ).rejects.toThrow();
+        makeApi(cluster, { retries: 1 }).alterPartitionReassignments({ topics: [validAssignment] }),
+      ).resolves.toBeUndefined();
+      expect(broker.alterPartitionReassignments).toHaveBeenCalledTimes(2);
+      expect(cluster.refreshMetadata).toHaveBeenCalledTimes(2);
+      expect(cluster.recover).toHaveBeenCalledWith(error);
+    });
+
+    it('rejects a non-retriable broker error as is', async () => {
+      const error = Object.assign(new Error('denied'), { type: 'CLUSTER_AUTHORIZATION_FAILED' });
+      const broker = withSend({ alterPartitionReassignments: vi.fn().mockRejectedValue(error) });
+      const cluster = fakeRunCluster({ controller: broker });
+      await expect(makeApi(cluster).alterPartitionReassignments({ topics: [validAssignment] })).rejects.toBe(error);
+      expect(broker.alterPartitionReassignments).toHaveBeenCalledTimes(1);
+      expect(cluster.recover).not.toHaveBeenCalled();
     });
   });
 
@@ -108,12 +120,10 @@ describe('admin/reassignments', () => {
     });
 
     it('lists reassignments for all topics when the filter is omitted', async () => {
-      const broker = { listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }) };
-      const cluster = {
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue(broker),
-      };
+      const broker = withSend({ listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [] }) });
+      const cluster = fakeRunCluster({ controller: broker });
       await expect(makeApi(cluster).listPartitionReassignments()).resolves.toEqual({ topics: [] });
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(broker.listPartitionReassignments).toHaveBeenCalledWith({ topics: null, timeout: undefined });
     });
   });
@@ -141,17 +151,15 @@ describe('admin/reassignments', () => {
     });
 
     it('elects leaders through the controller', async () => {
-      const broker = { electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) };
-      const cluster = {
-        refreshMetadata: vi.fn().mockResolvedValue(undefined),
-        findControllerBroker: vi.fn().mockResolvedValue(broker),
-      };
+      const broker = withSend({ electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders' }] }) });
+      const cluster = fakeRunCluster({ controller: broker });
       const topicPartitions = [{ topic: 'orders', partitions: [0] }];
       await expect(makeApi(cluster).electLeaders({ topicPartitions, electionType: 1, timeout: 1000 })).resolves.toEqual(
         {
           results: [{ topic: 'orders' }],
         },
       );
+      expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
       expect(broker.electLeaders).toHaveBeenCalledWith({ topicPartitions, electionType: 1, timeout: 1000 });
     });
   });

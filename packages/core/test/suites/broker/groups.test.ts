@@ -3,6 +3,12 @@ import { Broker } from '../../../src/broker/index';
 import { MemberMetadata } from '../../../src/consumer/assigner-protocol';
 import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
 import { advertisedAddress, createConnectionPool, newLogger, retryProtocol, secureRandom } from '../../helpers/index';
+import { DescribeGroups } from '../../../src/protocol/requests/describe-groups/index';
+import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
+import { Heartbeat } from '../../../src/protocol/requests/heartbeat/index';
+import { JoinGroup } from '../../../src/protocol/requests/join-group/index';
+import { LeaveGroup } from '../../../src/protocol/requests/leave-group/index';
+import { SyncGroup } from '../../../src/protocol/requests/sync-group/index';
 
 describe('broker.groups', () => {
   let groupId: string;
@@ -16,7 +22,7 @@ describe('broker.groups', () => {
     seedBroker = new Broker({ connectionPool: createConnectionPool(), logger: newLogger() });
     await seedBroker.connect();
     const { coordinator: dest } = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
-      seedBroker!.findGroupCoordinator({
+      seedBroker!.send(FindCoordinator, {
         coordinatorKey: groupId,
         coordinatorType: COORDINATOR_TYPES.GROUP,
       }),
@@ -35,7 +41,7 @@ describe('broker.groups', () => {
 
   it('joins, heartbeats, syncs, and leaves a group', async () => {
     const join = await retryProtocol(['NOT_COORDINATOR_FOR_GROUP', 'GROUP_LOAD_IN_PROGRESS'], () =>
-      coordinator!.joinGroup({
+      coordinator!.send(JoinGroup, {
         groupId,
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
@@ -51,7 +57,7 @@ describe('broker.groups', () => {
     expect(join.generationId).toEqual(expect.any(Number));
 
     // Heartbeat before SyncGroup is REBALANCE_IN_PROGRESS on Kafka 2.x (CompletingRebalance).
-    const sync = await coordinator!.syncGroup({
+    const sync = await coordinator!.send(SyncGroup, {
       groupId,
       generationId: join.generationId,
       memberId: join.memberId,
@@ -61,19 +67,19 @@ describe('broker.groups', () => {
     });
     expect(sync.errorCode).toBe(0);
 
-    const heartbeat = await coordinator!.heartbeat({
+    const heartbeat = await coordinator!.send(Heartbeat, {
       groupId,
       groupGenerationId: join.generationId,
       memberId: join.memberId,
     });
     expect(heartbeat.errorCode).toBe(0);
 
-    const leave = await coordinator!.leaveGroup({ groupId, memberId: join.memberId });
+    const leave = await coordinator!.send(LeaveGroup, { groupId, memberId: join.memberId });
     expect(leave.errorCode).toBe(0);
   });
 
   it('describes groups', async () => {
-    const described = await coordinator!.describeGroups({ groupIds: [groupId] });
+    const described = await coordinator!.send(DescribeGroups, { groupIds: [groupId] });
     expect(described.groups[0]?.groupId).toBe(groupId);
   });
 });

@@ -6,7 +6,7 @@ import type { ClientId, Profile, RunRecord, RuntimeId, ScenarioId, ScenarioKind 
 import { readJson, sessionPaths, writeJson } from './session.ts';
 import type { EnvironmentReport, Footprint, SessionManifest, SupportMatrix } from './types.ts';
 
-export const summarySchemaVersion = 1;
+export const summarySchemaVersion = 3;
 
 /** Coefficient of variation above which a cell is flagged `noisy`; replace it with the calibrated value. */
 export const defaultNoiseThresholdCv = 0.05;
@@ -61,17 +61,26 @@ export interface CellSummary {
 
 export type PrimaryMetric = 'recordsPerSecond' | 'latencyP99Ms' | 'firstAckedProduceMs';
 
-export interface Comparison {
+/** A metric the comparison rule runs on: each scenario's primary metric, plus the E1 median. */
+export type ComparedMetric = PrimaryMetric | 'latencyP50Ms';
+
+export type ComparisonVerdict = 'better' | 'worse' | 'inconclusive';
+
+export interface StatComparison {
+  /** Candidate median divided by the reference median; above 1 means a larger value. */
+  ratio: number;
+  /** `better`/`worse` from the candidate's point of view, accounting for the metric's direction. */
+  verdict: ComparisonVerdict;
+  /** Why the verdict is `inconclusive`; empty otherwise. */
+  reason: string;
+}
+
+export interface Comparison extends StatComparison {
   scenario: ScenarioId;
   runtime: RuntimeId;
   profile: Profile;
   series: string;
-  primaryMetric: PrimaryMetric;
-  /** Median of `series` divided by the baseline median; above 1 means a larger value. */
-  ratio: number;
-  /** `better`/`worse` from the series' point of view, accounting for the metric's direction. */
-  verdict: 'better' | 'worse' | 'inconclusive';
-  reason: string;
+  metric: ComparedMetric;
 }
 
 export interface RunFailure {
@@ -97,14 +106,16 @@ export interface SessionSummary {
   /** Noise floor measured by an earlier A/A session and passed in; null when none was given. */
   noiseFloor: number | null;
   /**
-   * Per scenario, the largest relative median difference between `kafka-core` and the A/A series
-   * `kafka-core#2` in this session. Empty without `--aa`.
+   * Per scenario and compared metric, the largest relative median difference between `kafka-core` and the
+   * A/A series `kafka-core#2` in this session. Empty without `--aa`.
    */
-  aaNoiseFloors: Partial<Record<ScenarioId, number>>;
+  aaNoiseFloors: AaNoiseFloors;
   cells: CellSummary[];
   comparisons: Comparison[];
   failures: RunFailure[];
 }
+
+export type AaNoiseFloors = Partial<Record<ScenarioId, Partial<Record<ComparedMetric, number>>>>;
 
 const primaryMetricByKind: Readonly<Record<ScenarioKind, PrimaryMetric>> = {
   produce: 'recordsPerSecond',
@@ -113,7 +124,31 @@ const primaryMetricByKind: Readonly<Record<ScenarioKind, PrimaryMetric>> = {
   startup: 'firstAckedProduceMs',
 };
 
-const lowerIsBetter: ReadonlySet<PrimaryMetric> = new Set(['latencyP99Ms', 'firstAckedProduceMs']);
+/**
+ * Metrics compared besides the primary one. E1 medians of different clients sit tens of microseconds apart,
+ * well inside their run-to-run spread, so a lowest median is named only when the same rule separates it.
+ */
+const secondaryMetricsByKind: Readonly<Partial<Record<ScenarioKind, readonly ComparedMetric[]>>> = {
+  e2e: ['latencyP50Ms'],
+};
+
+const lowerIsBetter: ReadonlySet<ComparedMetric> = new Set(['latencyP50Ms', 'latencyP99Ms', 'firstAckedProduceMs']);
+
+/**
+ * The noise floor a comparison of `metric` in `scenario` uses: the calibrated floor passed in or the A/A
+ * floor measured in the session, whichever is larger.
+ */
+export function effectiveNoiseFloor(
+  summary: Pick<SessionSummary, 'noiseFloor' | 'aaNoiseFloors'>,
+  scenario: ScenarioId,
+  metric: ComparedMetric,
+): number {
+  return Math.max(summary.noiseFloor ?? 0, summary.aaNoiseFloors[scenario]?.[metric] ?? 0);
+}
+
+function comparedMetrics(cell: CellSummary): ComparedMetric[] {
+  return [cell.primaryMetric, ...(secondaryMetricsByKind[cell.kind] ?? [])];
+}
 
 export function summarize(values: readonly number[]): StatSummary | null {
   if (values.length === 0) {
@@ -197,58 +232,112 @@ function summarizeCell(records: readonly RunRecord[], noiseThresholdCv: number):
   };
 }
 
-function rangesOverlap(left: StatSummary, right: StatSummary): boolean {
+/** The statistics the comparison rule reads from one cell's metric. */
+export type ComparedStat = Pick<StatSummary, 'median' | 'min' | 'max' | 'cv'>;
+
+function rangesOverlap(left: ComparedStat, right: ComparedStat): boolean {
   return left.min <= right.max && right.min <= left.max;
 }
 
-function compare(cell: CellSummary, baseline: CellSummary, noiseFloor: number): Comparison | null {
-  const metric = cell.primaryMetric;
-  const candidate = cell.metrics[metric];
-  const reference = baseline.metrics[metric];
-  if (!candidate || !reference || reference.median === 0) {
+export interface ComparisonRule {
+  /** Coefficient of variation above which either side makes the comparison inconclusive. */
+  noiseThresholdCv: number;
+  /** Relative median difference (0.03 = 3%) at or below which the medians count as equal. */
+  noiseFloor: number;
+  isLowerBetter: boolean;
+}
+
+/**
+ * Compares a candidate with a reference: inconclusive when either side is noisy, their min–max ranges
+ * overlap, or their medians differ by no more than the noise floor. Null when the reference median is 0.
+ */
+export function compareStats(
+  candidate: ComparedStat,
+  reference: ComparedStat,
+  rule: ComparisonRule,
+): StatComparison | null {
+  if (reference.median === 0) {
     return null;
   }
   const ratio = candidate.median / reference.median;
-  const base = { scenario: cell.scenario, runtime: cell.runtime, profile: cell.profile, series: cell.series };
-  const inconclusive = (reason: string): Comparison => ({
-    ...base,
-    primaryMetric: metric,
-    ratio,
-    verdict: 'inconclusive',
-    reason,
-  });
-  if (cell.noisy || baseline.noisy) {
+  const inconclusive = (reason: string): StatComparison => ({ ratio, verdict: 'inconclusive', reason });
+  if (candidate.cv > rule.noiseThresholdCv || reference.cv > rule.noiseThresholdCv) {
     return inconclusive('a cell exceeds the noise threshold');
   }
   if (rangesOverlap(candidate, reference)) {
     return inconclusive('min-max ranges overlap');
   }
-  if (Math.abs(ratio - 1) <= noiseFloor) {
+  if (Math.abs(ratio - 1) <= rule.noiseFloor) {
     return inconclusive('difference is within the A/A noise floor');
   }
   const isLarger = ratio > 1;
-  const isBetter = lowerIsBetter.has(metric) ? !isLarger : isLarger;
-  return { ...base, primaryMetric: metric, ratio, verdict: isBetter ? 'better' : 'worse', reason: '' };
+  const isBetter = rule.isLowerBetter ? !isLarger : isLarger;
+  return { ratio, verdict: isBetter ? 'better' : 'worse', reason: '' };
 }
 
 /**
- * Per scenario, the largest relative median difference between the baseline and the A/A series.
- * Kept per scenario because latency and startup cells are far noisier than throughput cells.
+ * The candidate that compares `better` than every other candidate, or null when no single one does: fewer
+ * than two candidates, or any comparison with the best median is inconclusive.
  */
-function measureAaNoiseFloors(cellsByKey: ReadonlyMap<string, CellSummary>): Partial<Record<ScenarioId, number>> {
-  const floors: Partial<Record<ScenarioId, number>> = {};
+export function findClearBest<T extends ComparedStat>(candidates: readonly T[], rule: ComparisonRule): T | null {
+  const [first, ...rest] = candidates;
+  if (first === undefined || rest.length === 0) {
+    return null;
+  }
+  const isBetterMedian = (left: T, right: T) =>
+    rule.isLowerBetter ? left.median < right.median : left.median > right.median;
+  const best = rest.reduce((leader, candidate) => (isBetterMedian(candidate, leader) ? candidate : leader), first);
+  const isClear = candidates.every((other) => other === best || compareStats(best, other, rule)?.verdict === 'better');
+  return isClear ? best : null;
+}
+
+function compare(
+  cell: CellSummary,
+  baseline: CellSummary,
+  metric: ComparedMetric,
+  rule: ComparisonRule,
+): Comparison | null {
+  const candidate = cell.metrics[metric];
+  const reference = baseline.metrics[metric];
+  if (!candidate || !reference) {
+    return null;
+  }
+  const comparison = compareStats(candidate, reference, rule);
+  if (!comparison) {
+    return null;
+  }
+  return {
+    scenario: cell.scenario,
+    runtime: cell.runtime,
+    profile: cell.profile,
+    series: cell.series,
+    metric,
+    ...comparison,
+  };
+}
+
+/**
+ * Per scenario and compared metric, the largest relative median difference between the baseline and the
+ * A/A series. Kept apart because latency and startup cells are far noisier than throughput cells, and an
+ * E1 p99 is far noisier than its median.
+ */
+function measureAaNoiseFloors(cellsByKey: ReadonlyMap<string, CellSummary>): AaNoiseFloors {
+  const floors: AaNoiseFloors = {};
   for (const cell of cellsByKey.values()) {
     if (cell.series !== aaSeries) {
       continue;
     }
     const baseline = cellsByKey.get(cellKey(cell.scenario, baselineSeries, cell.runtime, cell.profile));
-    const candidate = cell.metrics[cell.primaryMetric];
-    const reference = baseline?.metrics[cell.primaryMetric];
-    if (!candidate || !reference || reference.median === 0) {
-      continue;
+    for (const metric of comparedMetrics(cell)) {
+      const candidate = cell.metrics[metric];
+      const reference = baseline?.metrics[metric];
+      if (!candidate || !reference || reference.median === 0) {
+        continue;
+      }
+      const difference = Math.abs(candidate.median / reference.median - 1);
+      const scenarioFloors = (floors[cell.scenario] ??= {});
+      scenarioFloors[metric] = Math.max(scenarioFloors[metric] ?? 0, difference);
     }
-    const difference = Math.abs(candidate.median / reference.median - 1);
-    floors[cell.scenario] = Math.max(floors[cell.scenario] ?? 0, difference);
   }
   return floors;
 }
@@ -262,6 +351,33 @@ async function readJsonIfPresent<T>(path: string): Promise<T | null> {
     }
     throw error;
   }
+}
+
+/** A `footprint.json` entry written before F1 split required and optional dependencies. */
+interface UnsplitFootprintEntry {
+  client: Footprint['client'];
+  packageName: string;
+  version: string | null;
+  /** Null, like the two fields below, when the package is not installed. */
+  installBytes: number | null;
+  dependencyCount: number | null;
+  hasNativeAddon: boolean | null;
+}
+
+/** Keeps the total of an unsplit entry as it was measured; it cannot be divided into the two parts. */
+function fromUnsplitEntry(entry: UnsplitFootprintEntry): Footprint {
+  const { client, packageName, version, installBytes, dependencyCount, hasNativeAddon } = entry;
+  const footprint: Footprint = { client, packageName, version, required: null, optional: null };
+  if (installBytes !== null && dependencyCount !== null && hasNativeAddon !== null) {
+    footprint.unsplitTotal = { bytes: installBytes, dependencyCount, hasNativeAddon };
+  }
+  return footprint;
+}
+
+/** The session's F1 footprints; entries from a session recorded before the split keep only their total. */
+async function readFootprints(path: string): Promise<Footprint[] | null> {
+  const entries = await readJsonIfPresent<(Footprint | UnsplitFootprintEntry)[]>(path);
+  return entries?.map((entry) => ('required' in entry ? entry : fromUnsplitEntry(entry))) ?? null;
 }
 
 export async function readRunRecords(sessionDir: string): Promise<RunRecord[]> {
@@ -314,10 +430,19 @@ export async function aggregateSession(sessionDir: string, options: AggregateOpt
       continue;
     }
     const baseline = cellsByKey.get(cellKey(cell.scenario, baselineSeries, cell.runtime, cell.profile));
-    const floor = Math.max(noiseFloor ?? 0, aaNoiseFloors[cell.scenario] ?? 0);
-    const comparison = baseline ? compare(cell, baseline, floor) : null;
-    if (comparison) {
-      comparisons.push(comparison);
+    if (!baseline) {
+      continue;
+    }
+    for (const metric of comparedMetrics(cell)) {
+      const rule: ComparisonRule = {
+        noiseThresholdCv,
+        noiseFloor: effectiveNoiseFloor({ noiseFloor, aaNoiseFloors }, cell.scenario, metric),
+        isLowerBetter: lowerIsBetter.has(metric),
+      };
+      const comparison = compare(cell, baseline, metric, rule);
+      if (comparison) {
+        comparisons.push(comparison);
+      }
     }
   }
 
@@ -346,7 +471,7 @@ export async function aggregateSession(sessionDir: string, options: AggregateOpt
     manifest,
     environment: await readJsonIfPresent<EnvironmentReport>(paths.environment),
     supportMatrix: await readJsonIfPresent<SupportMatrix>(paths.supportMatrix),
-    footprints: await readJsonIfPresent<Footprint[]>(paths.footprint),
+    footprints: await readFootprints(paths.footprint),
     noiseThresholdCv,
     noiseFloor,
     aaNoiseFloors,

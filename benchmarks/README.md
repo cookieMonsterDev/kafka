@@ -40,7 +40,8 @@ From the repository root:
 ```sh
 pnpm benchmarks:doctor                         # host and Docker checks, resource budget
 pnpm benchmarks:run --tier smoke               # harness check in minutes; never publishable
-pnpm benchmarks:run --tier standard            # the headline comparison
+pnpm benchmarks:run --tier standard            # the headline comparison, 1 KiB values with headers
+pnpm benchmarks:run --tier standard --payload small   # the 100 B per-record overhead stress test
 pnpm benchmarks:run --tier full                # every scenario; expect hours
 pnpm benchmarks:report                         # re-aggregate the latest session
 pnpm benchmarks:publish                        # copy a session to results/published/ if it passes the guards
@@ -55,14 +56,22 @@ including uncommitted changes. Both are useful for before/after checks of perfor
 
 Tiers: `smoke` runs P1, P3 and C1 once with small counts and the `normalized` profile only, to check the
 harness. `standard` and `full` run 5 repetitions under both profiles; which scenarios belong to which tier is set
-in [`client/spec.ts`](client/spec.ts), and the message counts per tier in [`runner/schedule.ts`](runner/schedule.ts).
+in [`client/spec.ts`](client/spec.ts), and the message counts per tier and payload in
+[`runner/schedule.ts`](runner/schedule.ts).
 
 ### Calibrating before the first published run
 
-The `standard` and `full` counts are first estimates. Before publishing on a machine:
+Each payload has its own `standard` counts. P2 is calibrated for both, from P2-only sessions on 2026-11-16. With
+1,000,000 records of 1 KiB (40,000 warm-up), the slowest series, KafkaJS on Node.js 24, measured 9.3 s, so the
+default is 1,200,000 records with 60,000 warm-up. With 3,000,000 records of 100 B (120,000 warm-up), the slowest,
+Confluent, measured 15.2 s; the default keeps 3,000,000 records with 100,000 warm-up. The other scenarios are
+still first estimates, and 1 KiB runs a quarter of their 100 B counts. Before publishing on a machine:
 
 1. Scale the counts (`--count-scale`) until the measured window lasts 10–20 s for the slowest client, then
-   update `runner/schedule.ts`.
+   update `runner/schedule.ts`. Keep each run's topic, warm-up included, well inside the broker's 2 GiB tmpfs:
+   1,260,000 records of 1 KiB take about 1.4 GB. The runner deletes every run's topic and waits for
+   its files to go before the next run starts, so only one topic's data is on the tmpfs at a time;
+   `runner/schedule.test.ts` checks the default counts against that limit.
 2. Run an A/A session: `pnpm benchmarks:run --tier standard --clients kafka-core --aa`. It adds a second
    kafka-core series, `kafka-core#2`; the report lists the largest difference between the two per scenario.
    That is the noise floor of the machine. A/A sessions themselves cannot be published.
@@ -107,8 +116,10 @@ read-only root filesystem, all capabilities dropped, `no-new-privileges` and a p
 ## Scenarios and metrics
 
 The scenario catalog, including the wire settings of each scenario, is [`client/spec.ts`](client/spec.ts).
-Payloads come from a fixed seed: `small` is a 100 B value with a 16 B key, `medium` a 1 KiB value with a 16 B key
-and 2 headers. Topics have 3 partitions.
+Payloads come from a fixed seed. `medium`, the default and headline, is a 1 KiB value with a 16 B key and 2
+headers with 16 B values. `small` is a 100 B value with a 16 B key and no headers: a stress test of per-record
+client overhead, where differences between clients come mostly from the work each does per record. Topics have
+3 partitions.
 
 | ID  | Name                   | Measures                                                                          |
 | --- | ---------------------- | --------------------------------------------------------------------------------- |
@@ -123,7 +134,7 @@ and 2 headers. Topics have 3 partitions.
 | C4  | `consume-commit`       | C1 with an awaited offset commit every 1000 records                               |
 | E1  | `e2e-latency`          | Open-loop fixed-rate producer and a consumer; latency from the intended send time |
 | L1  | `startup`              | Process start to the first acknowledged produce and to the first consumed record  |
-| F1  | `footprint`            | Install size, dependency count, native addon (static, read from the image)        |
+| F1  | `footprint`            | Install size, dependencies and files, required and optional; information only²    |
 
 ¹ P3, and P4 and P5 built on it, are structurally biased. Each of the 256 workers awaits its own single-record
 `send()`, so the result shows whether and when a client merges records from separate calls, not protocol speed.
@@ -132,17 +143,37 @@ kafka-core flushes once its buffered bytes across all partitions reach `batchSiz
 ([option mapping](client/adapters/option-mapping.md#kafka-core)). Use P2 as the headline produce comparison; the
 report repeats this note under each of these scenarios.
 
+² F1 is read from the image, not run. For each client it reports bytes, files and dependencies twice: the required
+part is the package and everything it reaches through `dependencies`; the optional part is what installed
+`optionalDependencies` add on top. It names no smaller or larger client, because a client's size follows what it
+implements and bundles. A session recorded before this split measured only totals, without file counts; once
+re-aggregated, its rows show those totals and mark the required and optional cells as not split.
+
 Each run warms up in-process, then measures. Per run: records/s and MB/s (10^6 bytes, values only), latency
 percentiles from a preallocated sample buffer, process and cgroup CPU seconds, records per CPU second, cgroup peak
 memory, heap, GC count and time, and event-loop delay p99 (the last three are `null` where the runtime lacks the
 API).
 
-Statistics: repetitions run in fresh containers and are interleaved: each round runs every cell once, in an
-order shuffled with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a
-separate, fixed seed, so every session sends the same bytes. The report shows the median with min–max
-and the coefficient of variation. A cell above the noise threshold is marked noisy, and a comparison is called
-`inconclusive` when either cell is noisy, the min–max ranges overlap, or the difference is within the noise
-floor (the `--noise-floor` passed in, or the A/A floor measured in the same session, whichever is larger).
+### Comparison rule
+
+Repetitions run in fresh containers and are interleaved: each round runs every cell once, in an order shuffled
+with the session's recorded `--seed`, so drift spreads across clients. The record payloads use a separate, fixed
+seed, so every session sends the same bytes. The report shows the median with min–max and the coefficient of
+variation (CV). A cell whose CV is above the noise threshold (5%, or the `--noise-threshold` passed in) is marked
+noisy.
+
+A comparison of two cells is `inconclusive`, and names neither as better, when any of these holds:
+
+1. Either cell is noisy. This check comes first, so two noisy cells stay inconclusive even when their min–max
+   ranges do not overlap.
+2. Their min–max ranges overlap.
+3. Their medians differ by no more than the noise floor: the `--noise-floor` passed in, or the A/A floor measured
+   in the same session, whichever is larger.
+
+Otherwise the cell with the better median is better. Throughput scenarios compare records/s, L1 compares time to
+the first acknowledged produce, and E1 compares p99 and p50 latency, each with its own CV and A/A floor. Every
+chart on the docs page, peak memory included, names a highest or lowest client on a runtime only when this rule
+puts it ahead of every other client there, and otherwise says there is no clear one.
 
 ## Fairness rules
 
@@ -206,6 +237,22 @@ Recorded from session `20261112113347-fe9c38b14aa8` (tier `standard`, 2026-11-12
 on `origin/develop`, a `smoke` tier, an A/A series, an unfinished session, any failed or unverified run, or fewer
 repetitions than `--min-repetitions` (default 5). Publishing is always a deliberate command.
 
+### Docs page
+
+The [Benchmarks page](../packages/docs/src/content/docs/core/reference/benchmarks.md) is generated by
+[`scripts/generate-benchmark-docs.mjs`](../scripts/generate-benchmark-docs.mjs) from one session per payload:
+
+```sh
+pnpm docs:benchmarks --competitors benchmarks/results/raw/<session> --core benchmarks/results/raw/<session>
+pnpm docs:benchmarks           # re-render from the committed packages/docs/src/data/benchmarks/comparison.json
+pnpm docs:benchmarks --check   # fail if the page or the JSON is out of date
+```
+
+A session replaces only the results of its own payload, so the 1 KiB and 100 B sessions can be run separately.
+The page prints the setup each session ran: payload shape and an example record, record counts, warm-up and
+measured time, the pinned wire settings per scenario, the broker, the host and the resource limits. A chart
+whose headline payload has no published results shows the other payload, and its subtitle names the payload.
+
 ## Development
 
 ```text
@@ -229,11 +276,15 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
 - `node runner/cli.ts typecheck` type-checks `client/` and `runner/` inside the image against the installed
   clients. For editor support and a quick host check, run `pnpm install --ignore-scripts` in this directory and
   `pnpm typecheck` (the Confluent addon is not built on the host).
-- `pnpm test` (in this directory) runs results-pipeline and attempt-lifecycle tests with `node:test`; they need
-  no Docker and no installed dependencies. Shutdown waits for in-flight topic setup and client-container
+- `pnpm test` (in this directory) runs results-pipeline, attempt-lifecycle and F1 footprint tests with `node:test`;
+  they need no Docker and no installed dependencies (the footprint test runs the in-image script on a temporary
+  directory). Shutdown waits for in-flight topic setup and client-container
   cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
 - ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
-- Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one.
+- Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one, and re-check what the
+  docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`). The docs
+  generator, `--check` included, fails until `CLIENT_COVERAGE_CHECKED_VERSIONS` there matches the versions
+  pinned in `package.json`.
 - The security workflow scans only the repository's root lockfile. This lockfile is not scanned: these packages
   are never shipped, and at run time they execute only in containers without internet access. They are installed
   with network access during `docker build`, from the frozen lockfile with integrity hashes and pnpm's one-day

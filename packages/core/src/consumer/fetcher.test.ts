@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
-import { createFetcher, trackFetchBatch } from './fetcher';
+import { createFetcher } from './fetcher';
 import type { WorkerQueue } from './worker-queue';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
@@ -158,13 +158,16 @@ describe('consumer/fetcher', () => {
     const { fetch, release } = fetchResponses([[first], [second]]);
     let isPaused = false;
     const onSecondSettled = vi.fn();
-    trackFetchBatch(second, { isCurrent: () => !isPaused, onSettled: onSecondSettled });
     const { workerQueue, settle } = batchSettler();
     const fetcher = createFetcher({
       nodeId: '1',
       workerQueue,
       partitionAssignments: new Map(),
       fetch,
+      isBatchCurrent: (batch) => batch !== second || !isPaused,
+      settleBatch: (batch) => {
+        if (batch === second) onSecondSettled();
+      },
       logger: silentLogger,
     });
 
@@ -186,7 +189,6 @@ describe('consumer/fetcher', () => {
     const second = { topic: 'orders', partition: 0 };
     const { fetch, release } = fetchResponses([[first], [second]]);
     const onSecondSettled = vi.fn();
-    trackFetchBatch(second, { isCurrent: () => true, onSettled: onSecondSettled });
     const { workerQueue, settle } = batchSettler();
     const partitionAssignments = new Map<string, string>();
     const fetcher = createFetcher({
@@ -194,6 +196,9 @@ describe('consumer/fetcher', () => {
       workerQueue,
       partitionAssignments,
       fetch,
+      settleBatch: (batch) => {
+        if (batch === second) onSecondSettled();
+      },
       logger: silentLogger,
     });
 
@@ -214,7 +219,6 @@ describe('consumer/fetcher', () => {
     const batch = { topic: 'orders', partition: 0 };
     const { fetch, release } = fetchResponses([[batch]]);
     const onSettled = vi.fn();
-    trackFetchBatch(batch, { isCurrent: () => true, onSettled });
     const workerQueue = mockQueue((enqueued, options) => options?.onSettled?.(enqueued));
     const partitionAssignments = new Map<string, string>();
     const fetcher = createFetcher({
@@ -222,6 +226,7 @@ describe('consumer/fetcher', () => {
       workerQueue,
       partitionAssignments,
       fetch,
+      settleBatch: onSettled,
       logger: silentLogger,
     });
 

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { writeTxnMarkersRequestV1, type WriteTxnMarkersMarkerV1, type WriteTxnMarkersTopic } from './v1/request';
 import { writeTxnMarkersResponseV1, type WriteTxnMarkersResponseV1Body } from './v1/response';
 import { writeTxnMarkersRequestV2, type WriteTxnMarkersMarkerV2 } from './v2/request';
@@ -29,7 +30,7 @@ const toV2Marker = (marker: WriteTxnMarkersMarker): WriteTxnMarkersMarkerV2 => (
   transactionVersion: marker.transactionVersion ?? 0,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<WriteTxnMarkersOptions>>> = {
+const VERSIONS = {
   1: (options) => ({
     request: writeTxnMarkersRequestV1({ markers: options.markers.map(toV1Marker) }),
     response: writeTxnMarkersResponseV1,
@@ -38,13 +39,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<WriteTxnMarkersOptions>>
     request: writeTxnMarkersRequestV2({ markers: options.markers.map(toV2Marker) }),
     response: writeTxnMarkersResponseV2,
   }),
-};
+} satisfies VersionFactories<WriteTxnMarkersOptions>;
 
-export const WriteTxnMarkers: RequestFamily<WriteTxnMarkersOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no WriteTxnMarkers protocol for version ${version}`);
-    return factory;
-  },
-});
+export const WriteTxnMarkers = defineRequestFamily(KAFKA_APIS.WriteTxnMarkers, VERSIONS);

@@ -1,13 +1,14 @@
-import type { Socket } from 'node:net';
+import type { OnReadOpts, Socket } from 'node:net';
 import net from 'node:net';
 import type { ConnectionOptions as TlsConnectionOptions } from 'node:tls';
 import { INT_32_MAX_VALUE } from '../constants';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
-import type { Logger } from '../loggers/index';
+import { isLogLevelEnabled, LOG_LEVELS, type Logger } from '../loggers/index';
 import { createRequest } from '../protocol/request';
 import { Decoder } from '../protocol/decoder';
-import { usesFlexibleResponseHeader } from '../protocol/flexible';
+import type { Encoder } from '../protocol/encoder';
+import { usesFlexibleResponseHeader } from '../protocol/requests/kafka-apis';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { AnyRequestDefinition, BrokerVersions, ProtocolResult } from '../protocol/requests/index';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
@@ -41,6 +42,9 @@ const MIN_RESPONSE_SIZE_BYTES = Decoder.int32Size();
  * huge allocation that no received data backs. Sized above the consumer's 10 MiB default `maxBytes`.
  */
 const MAX_PREALLOCATED_FRAME_BYTES = 16 * 1024 * 1024;
+
+/** Size of the reused buffer for socket reads that don't continue a pending frame; Node's default read size. */
+const READ_BUFFER_BYTES = 64 * 1024;
 
 const NON_AUTHENTICATED_API_KEYS: readonly number[] = [
   API_KEYS.ApiVersions,
@@ -149,8 +153,8 @@ interface ThrottleableResponseData {
 }
 
 export interface ConnectionResponseDefinition<T> {
-  decode(rawData: Buffer): Promise<T>;
-  parse(data: T): Promise<T>;
+  decode(rawData: Buffer): T | Promise<T>;
+  parse(data: T): T | Promise<T>;
 }
 
 export interface SendOptions<T> {
@@ -214,10 +218,12 @@ export class Connection {
   #sessionLifetime = 0n;
 
   /**
-   * Receive state. Complete frames are parsed straight from the socket chunk, which the socket hands
-   * over and never writes again, so decoded responses may keep views into it. Only a frame split
-   * across chunks is copied, once, into its own buffer, which is likewise never written after it is
-   * handed on.
+   * Receive state. Complete frames are parsed straight from the chunk `#processData` gets, which is
+   * never written again, so decoded responses may keep views into it. A `'data'` chunk is handed over
+   * by the socket; with `onread` it is a copy of the reused read buffer. A frame split across chunks
+   * gets its own buffer, which is likewise never written after it is handed on. With `onread` the
+   * socket reads the rest of such a frame straight into that buffer; on the `'data'` path each chunk
+   * is copied into it once.
    */
   #pendingFrame: Buffer | null = null;
   #pendingFrameLength = 0;
@@ -228,6 +234,22 @@ export class Connection {
    */
   #deferredReceiveBytes: Buffer | null = null;
   #isReceiveStreamCorrupt = false;
+  /** `onread` target for reads that don't continue a pending frame. Copied out after each read, so reused. */
+  #readBuffer: Buffer | null = null;
+
+  /**
+   * Node's `onread` hook, passed to the socket factory. Node asks `buffer` for the next read's target
+   * after each `callback`. While a frame is pending, the target is the frame's unfilled remainder, so
+   * the kernel copies straight into the frame and a read never runs past the frame's end. Runtimes and
+   * factories that ignore `onread` emit `'data'` instead, which `#processData` handles.
+   */
+  readonly #readOptions: OnReadOpts = {
+    buffer: () => this.#nextReadTarget(),
+    callback: (bytesRead, target) => {
+      this.#handleRead(bytesRead, target);
+      return true;
+    },
+  };
 
   #authenticate = sharedPromiseTo(async (): Promise<void> => {
     if (this.sasl && !this.isAuthenticated()) {
@@ -301,6 +323,10 @@ export class Connection {
 
     this.#shouldLogBuffers = process.env.KAFKA_DEBUG_PROTOCOL_BUFFERS === '1';
     this.#shouldLogFetchBuffer = this.#shouldLogBuffers && process.env.KAFKA_DEBUG_EXTENDED_PROTOCOL_BUFFERS === '1';
+  }
+
+  #isDebugEnabled(): boolean {
+    return isLogLevelEnabled(this.logger, LOG_LEVELS.DEBUG);
   }
 
   #logDebug(message: string, extra: Record<string, unknown> = {}): void {
@@ -463,6 +489,7 @@ export class Connection {
               resolveAddress(socket);
             },
             onData,
+            onread: this.#readOptions,
             onEnd,
             // A setup error only fails this candidate (`onSocketError`), so Happy Eyeballs can try
             // the next address; once connected, `#onPostConnectSocketError` takes over.
@@ -621,98 +648,184 @@ export class Connection {
     });
   }
 
-  async send<T>({
-    request,
-    response,
-    requestTimeout = null,
-    logResponseError = true,
-  }: SendOptions<T>): Promise<T | undefined> {
-    if (!this.isAuthenticated() && isAuthenticatedRequest(request)) {
-      await this.#authenticate();
+  /**
+   * Frames and queues the request without a promise hop when its `encode` is synchronous, and
+   * decodes and parses the response in the response callback. Every failure, including a
+   * synchronous `encode` throw, rejects the returned promise.
+   */
+  send<T>(options: SendOptions<T>): Promise<T | undefined> {
+    try {
+      // Without SASL, `#authenticate` has nothing to do, so skip its promise hop.
+      if (this.sasl && !this.isAuthenticated() && isAuthenticatedRequest(options.request)) {
+        return this.#authenticate().then(() => this.#frameAndQueueRequest(options));
+      }
+      return this.#frameAndQueueRequest(options);
+    } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the framing failure as-is
+      return Promise.reject(e);
     }
+  }
 
+  #frameAndQueueRequest<T>(options: SendOptions<T>): Promise<T | undefined> {
     this.#failIfNotAcceptingRequests();
 
+    const correlationId = this.#nextCorrelationId();
+    const requestPayload = createRequest({ request: options.request, correlationId, clientId: this.clientId });
+    if (requestPayload instanceof Promise) {
+      return requestPayload.then((payload) => this.#queueRequest(options, correlationId, payload));
+    }
+    return this.#queueRequest(options, correlationId, requestPayload);
+  }
+
+  #queueRequest<T>(
+    { request, response, requestTimeout = null, logResponseError = true }: SendOptions<T>,
+    correlationId: number,
+    requestPayload: Encoder,
+  ): Promise<T | undefined> {
     const expectResponse = !request.expectResponse || request.expectResponse();
-
-    const sendRequest = async (): Promise<{
-      correlationId: number;
-      size: number;
-      entry: RequestEntry;
-      payload: Buffer | null;
-    }> => {
-      const { clientId } = this;
-      const correlationId = this.#nextCorrelationId();
-
-      const requestPayload = await createRequest({ request, correlationId, clientId });
-      const { apiKey, apiName, apiVersion } = request;
+    if (this.#isDebugEnabled()) {
       this.#logDebug(`Request ${requestInfo(request)}`, {
         correlationId,
         expectResponse,
         size: Buffer.byteLength(requestPayload.buffer),
       });
-
-      return new Promise((resolve, reject) => {
-        try {
-          this.#failIfNotAcceptingRequests();
-          const entry: RequestEntry = { apiKey, apiName, apiVersion, correlationId, resolve, reject };
-
-          this.requestQueue.push({
-            entry,
-            expectResponse,
-            requestTimeout,
-            sendRequest: () => {
-              this.#touchActivity();
-              this.#socket!.write(requestPayload.buffer, 'binary');
-            },
-          });
-        } catch (e) {
-          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the enqueue failure as-is
-          reject(e);
-        }
-      });
-    };
-
-    const { correlationId, size, entry, payload } = await sendRequest();
-
-    if (!expectResponse) {
-      return undefined;
     }
 
-    try {
-      const payloadDecoded = await response.decode(payload!);
-
-      // KIP-219: if the response says to throttle client-side, do that.
-      this.requestQueue.maybeThrottle((payloadDecoded as ThrottleableResponseData).clientSideThrottleTime);
-
-      const data = await response.parse(payloadDecoded);
-      const isFetchApi = entry.apiName === 'Fetch';
-      this.#logDebug(`Response ${requestInfo(entry)}`, {
+    return new Promise((resolve, reject) => {
+      const { apiKey, apiName, apiVersion } = request;
+      const entry: RequestEntry = {
+        apiKey,
+        apiName,
+        apiVersion,
         correlationId,
-        size,
-        data: isFetchApi && !this.#shouldLogFetchBuffer ? '[filtered]' : data,
-      });
+        resolve: ({ size, payload }) => {
+          if (!expectResponse) {
+            resolve(undefined);
+            return;
+          }
+          this.#settleResponse({ entry, response, size, payload: payload!, logResponseError, resolve, reject });
+        },
+        reject,
+      };
 
-      return data;
-    } catch (e) {
-      const error = e as Error;
-
-      if (logResponseError) {
-        this.#logError(`Response ${requestInfo(entry)}`, {
-          error: error.message,
-          correlationId,
-          size,
+      try {
+        // Encoding may have been asynchronous, so check again before queueing.
+        this.#failIfNotAcceptingRequests();
+        this.requestQueue.push({
+          entry,
+          expectResponse,
+          requestTimeout,
+          sendRequest: () => {
+            this.#touchActivity();
+            // A stream may keep reading a chunk until its write callback runs, so pool the
+            // framing buffer only then. A request that is never sent leaves it to the GC.
+            this.#socket!.write(requestPayload.buffer, 'binary', () => requestPayload.release());
+          },
         });
+      } catch (e) {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- forward the enqueue failure as-is
+        reject(e);
       }
+    });
+  }
 
-      const isBuffer = Buffer.isBuffer(payload);
+  /**
+   * Decodes and parses a response and settles the caller's promise, chaining only when a step
+   * returns a promise. It runs in the socket data callback, so it must never throw.
+   */
+  #settleResponse<T>({
+    entry,
+    response,
+    size,
+    payload,
+    logResponseError,
+    resolve,
+    reject,
+  }: {
+    entry: RequestEntry;
+    response: ConnectionResponseDefinition<T>;
+    size: number;
+    payload: Buffer;
+    logResponseError: boolean;
+    resolve: (data: T) => void;
+    reject: (error: unknown) => void;
+  }): void {
+    const fail = (e: unknown): void => {
+      try {
+        this.#logResponseFailure({ entry, error: e as Error, size, payload, logResponseError });
+        reject(e);
+      } catch (logFailure) {
+        reject(logFailure);
+      }
+    };
+
+    const succeed = (data: T): void => {
+      try {
+        if (this.#isDebugEnabled()) {
+          const isFetchApi = entry.apiName === 'Fetch';
+          this.#logDebug(`Response ${requestInfo(entry)}`, {
+            correlationId: entry.correlationId,
+            size,
+            data: isFetchApi && !this.#shouldLogFetchBuffer ? '[filtered]' : data,
+          });
+        }
+        resolve(data);
+      } catch (e) {
+        fail(e);
+      }
+    };
+
+    const parse = (decoded: T): void => {
+      try {
+        // KIP-219: if the response says to throttle client-side, do that.
+        this.requestQueue.maybeThrottle((decoded as ThrottleableResponseData).clientSideThrottleTime);
+
+        const data = response.parse(decoded);
+        if (data instanceof Promise) {
+          data.then(succeed, fail);
+          return;
+        }
+        succeed(data);
+      } catch (e) {
+        fail(e);
+      }
+    };
+
+    try {
+      const decoded = response.decode(payload);
+      if (decoded instanceof Promise) {
+        decoded.then(parse, fail);
+        return;
+      }
+      parse(decoded);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  #logResponseFailure({
+    entry,
+    error,
+    size,
+    payload,
+    logResponseError,
+  }: {
+    entry: RequestEntry;
+    error: Error;
+    size: number;
+    payload: Buffer;
+    logResponseError: boolean;
+  }): void {
+    const { correlationId } = entry;
+    if (logResponseError) {
+      this.#logError(`Response ${requestInfo(entry)}`, { error: error.message, correlationId, size });
+    }
+    if (this.#isDebugEnabled()) {
       this.#logDebug(`Response ${requestInfo(entry)}`, {
         error: error.message,
         correlationId,
-        payload: isBuffer && !this.#shouldLogBuffers ? { type: 'Buffer', data: '[filtered]' } : payload,
+        payload: this.#shouldLogBuffers ? payload : { type: 'Buffer', data: '[filtered]' },
       });
-
-      throw error;
     }
   }
 
@@ -791,6 +904,42 @@ export class Connection {
     this.#isReceiveStreamCorrupt = false;
   }
 
+  /**
+   * The rest of the pending frame, or the reused read buffer when no frame is pending. A SASL
+   * exchange or a corrupt stream also gets the read buffer, so `#processData` sees its raw bytes.
+   */
+  #nextReadTarget(): Buffer {
+    if (this.#pendingFrame === null || this.#authHandlers !== null || this.#isReceiveStreamCorrupt) {
+      this.#readBuffer ??= Buffer.allocUnsafe(READ_BUFFER_BYTES);
+      return this.#readBuffer;
+    }
+    // The pending frame is never longer than its size, so this remainder ends at the frame's end.
+    return this.#reservePendingFrame(this.#pendingFrameLength + 1).subarray(this.#pendingFrameLength);
+  }
+
+  #handleRead(bytesRead: number, target: Uint8Array): void {
+    if (target === this.#readBuffer) {
+      this.#processData(Buffer.copyBytesFrom(target, 0, bytesRead));
+      return;
+    }
+    // A read aimed at anything but the pending frame's remainder, such as a frame a reset dropped,
+    // belongs to a socket that is being torn down.
+    const frame = this.#pendingFrame;
+    if (
+      frame === null ||
+      target.buffer !== frame.buffer ||
+      target.byteOffset !== frame.byteOffset + this.#pendingFrameLength
+    ) {
+      return;
+    }
+
+    this.#touchActivity();
+    this.#pendingFrameLength += bytesRead;
+    if (this.#pendingFrameLength < this.#pendingFrameSize) return;
+    // A SASL exchange that started after this read's target was chosen still gets the frame.
+    this.#handOnFrame(this.#takePendingFrame());
+  }
+
   #processData(chunk: Buffer): void {
     this.#touchActivity();
     if (this.#authHandlers && !this.#authExpectResponse) {
@@ -828,15 +977,24 @@ export class Connection {
         offset += frameSize;
       }
 
-      if (this.#authHandlers) {
+      if (this.#authHandlers && offset < data.length) {
         // The SASL exchange sets its next handler asynchronously, so later bytes wait for the next chunk.
-        if (offset < data.length) this.#deferredReceiveBytes = data.subarray(offset);
-        this.#authHandlers.onSuccess(frame);
-        return;
+        this.#deferredReceiveBytes = data.subarray(offset);
       }
-
-      if (!this.#fulfillResponse(frame)) return;
+      if (!this.#handOnFrame(frame)) return;
     }
+  }
+
+  /**
+   * Hands a complete frame to the waiting SASL exchange, or else to its request. Returns `false` when
+   * no further frame should be processed from the current chunk.
+   */
+  #handOnFrame(frame: Buffer): boolean {
+    if (this.#authHandlers) {
+      this.#authHandlers.onSuccess(frame);
+      return false;
+    }
+    return this.#fulfillResponse(frame);
   }
 
   /** Returns the whole frame size (prefix included), or `null` after failing the connection on a corrupt prefix. */
@@ -856,17 +1014,19 @@ export class Connection {
 
   #appendToPendingFrame(data: Buffer, offset: number): number {
     const end = Math.min(data.length, offset + this.#pendingFrameSize - this.#pendingFrameLength);
-    let frame = this.#pendingFrame!;
-    const required = this.#pendingFrameLength + (end - offset);
-    if (required > frame.length) {
-      const capacity = Math.min(this.#pendingFrameSize, Math.max(frame.length * 2, required));
-      const grown = Buffer.allocUnsafe(capacity);
-      frame.copy(grown, 0, 0, this.#pendingFrameLength);
-      frame = grown;
-      this.#pendingFrame = grown;
-    }
+    const frame = this.#reservePendingFrame(this.#pendingFrameLength + (end - offset));
     this.#pendingFrameLength += data.copy(frame, this.#pendingFrameLength, offset, end);
     return end;
+  }
+
+  /** Grows the pending frame, never past its size, until it can hold `required` bytes. */
+  #reservePendingFrame(required: number): Buffer {
+    const frame = this.#pendingFrame!;
+    if (required <= frame.length) return frame;
+    const grown = Buffer.allocUnsafe(Math.min(this.#pendingFrameSize, Math.max(frame.length * 2, required)));
+    frame.copy(grown, 0, 0, this.#pendingFrameLength);
+    this.#pendingFrame = grown;
+    return grown;
   }
 
   #takePendingFrame(): Buffer {

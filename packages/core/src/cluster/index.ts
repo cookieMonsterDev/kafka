@@ -2,7 +2,6 @@ import { Broker } from '../broker/index';
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import {
   KafkaBrokerNotFound,
-  KafkaConnectionError,
   KafkaError,
   KafkaGroupCoordinatorNotFound,
   KafkaMetadataNotLoaded,
@@ -19,15 +18,28 @@ import type { SocketFactory } from '../network/socket-factory';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
-import { staleMetadata } from '../protocol/error-codes';
-import type { FindCoordinatorResponseV2Body } from '../protocol/requests/find-coordinator/v2/response';
 import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
+import {
+  closedConnectionAddress,
+  isConnectionError,
+  isConnectionRefused,
+  isStaleCoordinator,
+  isStaleMetadata,
+  isTopicAuthorizationFailed,
+  isUnknownTopic,
+  RECOVERY_ACTIONS,
+  recoveryAction,
+} from './error-classifier';
+import { runOnTargets, type BrokerTarget, type RunContext, type RunOptions, type Targets } from './run';
 import { Lock } from '../utils/lock';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { BrokerPool, type ApplyLeaderUpdateOptions, type MetadataRecovery } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
+import { FindCoordinator, type FindCoordinatorResponse } from '../protocol/requests/find-coordinator/index';
+import { ListOffsets } from '../protocol/requests/list-offsets/index';
+import { Metadata } from '../protocol/requests/metadata/index';
 
 type MetadataBroker = ClusterMetadata['brokers'][number];
 type MetadataTopic = ClusterMetadata['topicMetadata'][number];
@@ -54,7 +66,8 @@ export interface TopicOffsets {
   partitions: TopicOffsetPartition[];
 }
 
-export type CommittedOffsetsByGroup = Map<string, Record<string, Record<string, bigint>>>;
+/** Committed offsets by group id, then topic, then partition. */
+export type CommittedOffsetsByGroup = Map<string, Map<string, Map<number, bigint>>>;
 
 export interface ClusterOptions {
   logger: Logger;
@@ -105,15 +118,17 @@ export class Cluster {
   readonly retrier: ReturnType<typeof retrier>;
   readonly brokerPool: BrokerPool;
   readonly isolationLevel: IsolationLevel | undefined;
-  readonly committedOffsetsByGroup: CommittedOffsetsByGroup;
   readonly allowAutoTopicCreation: boolean;
 
   targetTopics = new Set<string>();
   readonly mutatingTargetTopics: Lock;
 
+  readonly #committedOffsetsByGroup: CommittedOffsetsByGroup;
   readonly #connect: () => Promise<void>;
   readonly #refreshMetadata: () => Promise<void>;
   readonly #refreshMetadataIfNecessary: () => Promise<void>;
+  readonly #refreshStaleMetadata: () => Promise<void>;
+  readonly #runContext: RunContext;
   readonly #findControllerBroker: () => Promise<Broker>;
   readonly #telemetry: ClientTelemetryReporter | null;
 
@@ -183,7 +198,7 @@ export class Cluster {
       metadataRecovery,
       usingBootstrapControllers,
     });
-    this.committedOffsetsByGroup = offsets;
+    this.#committedOffsetsByGroup = offsets;
 
     const snapshot = new TelemetrySnapshot();
     if (instrumentationEmitter) snapshot.bind(instrumentationEmitter);
@@ -202,30 +217,28 @@ export class Cluster {
       this.#telemetry?.start();
     });
 
-    this.#refreshMetadata = sharedPromiseTo(async () => {
-      while (true) {
-        try {
-          await this.brokerPool.refreshMetadata([...this.targetTopics]);
-          return;
-        } catch (e) {
-          const error = e as Error & { type?: string; topic?: string };
-          if (
-            error.topic &&
-            this.targetTopics.has(error.topic) &&
-            (error.type === 'UNKNOWN_TOPIC_OR_PARTITION' || error.type === 'INVALID_TOPIC_EXCEPTION') &&
-            !this.allowAutoTopicCreation
-          ) {
-            this.targetTopics.delete(error.topic);
-            continue;
-          }
-          throw e;
-        }
-      }
-    });
+    this.#refreshMetadata = sharedPromiseTo(() =>
+      this.#withoutUnknownTargetTopics(() => this.brokerPool.refreshMetadata([...this.targetTopics])),
+    );
 
     this.#refreshMetadataIfNecessary = sharedPromiseTo(() =>
       this.brokerPool.refreshMetadataIfNecessary([...this.targetTopics]),
     );
+
+    // Goes through the update queue's staleness re-check, so callers recovering from the same
+    // stale metadata share one Metadata request.
+    this.#refreshStaleMetadata = sharedPromiseTo(() => {
+      this.brokerPool.expireMetadata();
+      return this.#withoutUnknownTargetTopics(() => this.brokerPool.refreshMetadataIfNecessary([...this.targetTopics]));
+    });
+
+    this.#runContext = {
+      logger: this.logger,
+      retrier: this.retrier,
+      resolve: (target) => this.resolveTarget(target),
+      refreshMetadata: () => this.refreshMetadata(),
+      recover: (error) => this.recover(error),
+    };
 
     this.#findControllerBroker = sharedPromiseTo(async () => {
       const { metadata } = this.brokerPool;
@@ -250,6 +263,119 @@ export class Cluster {
     return this.brokerPool.hasConnectedBrokers();
   }
 
+  /**
+   * Runs `refresh`, dropping a target topic the broker reports unknown and trying again, unless
+   * this cluster creates topics on first use.
+   */
+  async #withoutUnknownTargetTopics(refresh: () => Promise<void>): Promise<void> {
+    while (true) {
+      try {
+        await refresh();
+        return;
+      } catch (e) {
+        const error = e as Error & { type?: string; topic?: string };
+        if (
+          error.topic &&
+          this.targetTopics.has(error.topic) &&
+          isUnknownTopic(error) &&
+          !this.allowAutoTopicCreation
+        ) {
+          this.targetTopics.delete(error.topic);
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Resolves `target`, runs `work` on its broker and retries. Admin requests and the other low-rate
+   * coordinator or controller requests use it. Each attempt resolves the target again.
+   * An error is retried when the target moved (`NOT_CONTROLLER` for the controller, a moved or
+   * unreachable coordinator, a stale partition leader) or its type is in `options.retryOn`, after
+   * {@link recover}; any other error rejects as is. With a function, `targets` is read on every
+   * attempt and `work` gets one broker per target.
+   *
+   * Produce and fetch keep their own retry loops: a retrier per request would cost a promise and
+   * several closures each time, and would nest inside the producer's flush retries.
+   */
+  run<T>(target: BrokerTarget, work: (broker: Broker) => Promise<T>, options?: RunOptions): Promise<T>;
+  run<T>(
+    targets: () => readonly BrokerTarget[],
+    work: (brokers: Broker[]) => Promise<T>,
+    options?: RunOptions,
+  ): Promise<T>;
+  run<T>(
+    targets: Targets,
+    work: ((broker: Broker) => Promise<T>) | ((brokers: Broker[]) => Promise<T>),
+    options?: RunOptions,
+  ): Promise<T> {
+    return runOnTargets(this.#runContext, targets, work, options);
+  }
+
+  /** The broker that currently holds `target`'s role, connected. */
+  async resolveTarget(target: BrokerTarget): Promise<Broker> {
+    switch (target.kind) {
+      case 'controller':
+        await this.refreshMetadataIfNecessary();
+        return this.findControllerBroker();
+      case 'coordinator':
+        return this.findGroupCoordinator({ groupId: target.key, coordinatorType: target.coordinatorType });
+      case 'leader': {
+        const { topic, partition } = target;
+        await this.addTargetTopic(topic);
+        await this.refreshMetadataIfNecessary();
+        const leader = this.findTopicPartitionMetadata(topic).find(
+          ({ partitionId }) => partitionId === partition,
+        )?.leader;
+        if (leader == null || leader < 0) {
+          throw new KafkaBrokerNotFound(`Could not find leader for ${topic} partition ${partition}`, {
+            retriable: true,
+          });
+        }
+        return this.findBroker({ nodeId: String(leader) });
+      }
+      case 'node':
+        return this.findBroker({ nodeId: String(target.nodeId) });
+      case 'any':
+        return this.brokerPool.findConnectedBroker();
+    }
+  }
+
+  /**
+   * Carries out the recovery the error classifier picks for `error`: refreshes stale metadata
+   * (also for a moved coordinator, which may be a broker the metadata does not list yet), drops
+   * the broker of a closed connection, or reconnects. Does nothing for any other error.
+   */
+  async recover(error: unknown): Promise<void> {
+    switch (recoveryAction(error)) {
+      case RECOVERY_ACTIONS.REFRESH_METADATA:
+      case RECOVERY_ACTIONS.FIND_COORDINATOR:
+        await this.#refreshStaleMetadata();
+        return;
+      case RECOVERY_ACTIONS.DROP_BROKER:
+        this.onConnectionClosed(error);
+        return;
+      case RECOVERY_ACTIONS.RECONNECT:
+        if (!this.isConnected()) await this.connect();
+        await this.#refreshStaleMetadata();
+        return;
+      case RECOVERY_ACTIONS.GIVE_UP:
+        return;
+    }
+  }
+
+  /**
+   * Drops the broker whose connection closed, when `error` is a closed connection naming its
+   * address, so the next lookup reconnects or rediscovers it. Returns whether it dropped one.
+   */
+  onConnectionClosed(error: unknown): boolean {
+    const address = closedConnectionAddress(error);
+    if (!address) return false;
+    this.brokerPool.removeBroker(address);
+    return true;
+  }
+
   async connect(): Promise<void> {
     await this.#connect();
   }
@@ -268,10 +394,6 @@ export class Cluster {
     this.#telemetry?.recordProduce(metrics);
   }
 
-  removeBroker({ host, port }: { host: string; port: number }): void {
-    this.brokerPool.removeBroker({ host, port });
-  }
-
   /**
    * KIP-951: patches the cached partition leader from a Produce/Fetch error response instead of
    * a full `refreshMetadata`. Returns whether the cached metadata was actually patched.
@@ -282,6 +404,14 @@ export class Cluster {
 
   async refreshMetadata(): Promise<void> {
     await this.#refreshMetadata();
+  }
+
+  /**
+   * Refreshes metadata after an error showed it stale: marks it expired, then refreshes through
+   * the update queue's staleness re-check, so callers recovering at once share one Metadata request.
+   */
+  refreshStaleMetadata(): Promise<void> {
+    return this.#refreshStaleMetadata();
   }
 
   /** Called before every produce attempt; returns the shared promise directly to keep that path short. */
@@ -300,10 +430,12 @@ export class Cluster {
         } else {
           await this.brokerPool.refreshMetadataIfNecessary([...topics]);
         }
-        return await this.brokerPool.withBroker(async ({ broker }) => broker.metadata([...topics]));
+        return await this.brokerPool.withBroker(async ({ broker }) =>
+          broker.send(Metadata, { topics: [...topics], allowAutoTopicCreation: broker.allowAutoTopicCreation }),
+        );
       } catch (e) {
-        const error = e as Error & { type?: string };
-        if (staleMetadata(error)) {
+        const error = e as Error;
+        if (isStaleMetadata(error)) {
           throw error;
         }
         bail(error);
@@ -316,8 +448,26 @@ export class Cluster {
     return this.addMultipleTargetTopics([topic]);
   }
 
+  /**
+   * Whether `topics` are all target topics and metadata is loaded, so `addMultipleTargetTopics`
+   * would return without work. Lets the produce path skip that await.
+   */
+  hasLoadedTargetTopics(topics: readonly string[]): boolean {
+    return this.brokerPool.metadata != null && topics.every((topic) => this.targetTopics.has(topic));
+  }
+
+  /** Whether `refreshMetadataIfNecessary` would fetch metadata for the target topics. */
+  needsMetadataRefresh(): boolean {
+    return this.brokerPool.needsMetadataRefresh(this.targetTopics);
+  }
+
+  /** The broker for `nodeId` when it is already connected; `findBroker` connects or rediscovers it otherwise. */
+  connectedBroker(nodeId: string): Broker | undefined {
+    return this.brokerPool.connectedBroker(nodeId);
+  }
+
   async addMultipleTargetTopics(topics: readonly string[]): Promise<void> {
-    if (this.#hasLoadedTargetTopics(topics)) {
+    if (this.hasLoadedTargetTopics(topics)) {
       return;
     }
 
@@ -325,7 +475,7 @@ export class Cluster {
 
     try {
       // Recheck under the lock so a concurrent first-seen add cannot drop a topic.
-      if (this.#hasLoadedTargetTopics(topics)) {
+      if (this.hasLoadedTargetTopics(topics)) {
         return;
       }
 
@@ -341,12 +491,8 @@ export class Cluster {
         try {
           await this.refreshMetadata();
         } catch (e) {
-          const error = e as Error & { type?: string; topic?: string };
-          if (
-            error.type === 'INVALID_TOPIC_EXCEPTION' ||
-            error.type === 'UNKNOWN_TOPIC_OR_PARTITION' ||
-            error.type === 'TOPIC_AUTHORIZATION_FAILED'
-          ) {
+          const error = e as Error & { topic?: string };
+          if (isUnknownTopic(error) || isTopicAuthorizationFailed(error)) {
             if (error.topic && previousTopics.has(error.topic) === false) {
               this.targetTopics.delete(error.topic);
             } else {
@@ -362,10 +508,6 @@ export class Cluster {
     }
   }
 
-  #hasLoadedTargetTopics(topics: readonly string[]): boolean {
-    return this.brokerPool.metadata != null && topics.every((topic) => this.targetTopics.has(topic));
-  }
-
   getNodeIds(): string[] {
     return this.brokerPool.getNodeIds();
   }
@@ -374,17 +516,13 @@ export class Cluster {
     try {
       return await this.brokerPool.findBroker({ nodeId });
     } catch (e) {
-      const error = e as Error & { name: string };
       // The client probably has stale metadata.
-      if (
-        error.name === 'KafkaBrokerNotFound' ||
-        error.name === 'KafkaLockTimeout' ||
-        e instanceof KafkaConnectionError
-      ) {
+      const { name } = e as Error;
+      if (name === 'KafkaBrokerNotFound' || name === 'KafkaLockTimeout' || isConnectionError(e)) {
         await this.refreshMetadata();
       }
 
-      throw error;
+      throw e;
     }
   }
 
@@ -419,17 +557,20 @@ export class Cluster {
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {
     const partitionMetadata = this.findTopicPartitionMetadata(topic);
 
-    return partitions.reduce<Record<number, number[]>>((result, partitionId) => {
+    const partitionsByLeader: Record<number, number[]> = {};
+    for (const partitionId of partitions) {
       const metadata = partitionMetadata.find((p) => p.partitionId === partitionId);
-      if (!metadata) return result;
+      if (!metadata) continue;
 
       if (metadata.leader == null) {
         throw new KafkaError('Invalid partition metadata', { cause: { topic, partitionId, metadata } });
       }
 
-      const current = result[metadata.leader] ?? [];
-      return { ...result, [metadata.leader]: [...current, partitionId] };
-    }, {});
+      const leaderPartitions = partitionsByLeader[metadata.leader];
+      if (leaderPartitions) leaderPartitions.push(partitionId);
+      else partitionsByLeader[metadata.leader] = [partitionId];
+    }
+    return partitionsByLeader;
   }
 
   async findGroupCoordinator({
@@ -442,25 +583,29 @@ export class Cluster {
     return this.retrier(async (bail, retryCount, retryTime) => {
       try {
         const { coordinator } = await this.findGroupCoordinatorMetadata({ groupId, coordinatorType });
-        return await this.findBroker({ nodeId: String(coordinator.nodeId) });
+        const nodeId = String(coordinator.nodeId);
+        // A coordinator can move to a new address under the same node id before the cached
+        // metadata knows it; the cached broker would keep reaching the old address.
+        if (this.brokerPool.hasBrokerMoved({ nodeId, host: coordinator.host, port: coordinator.port })) {
+          await this.#refreshStaleMetadata();
+        }
+        return await this.findBroker({ nodeId });
       } catch (e) {
-        const error = e as Error & { name: string; type?: string; code?: string };
+        const error = e as Error;
 
         // A new broker can join the cluster before we have the chance to refresh metadata.
-        if (error.name === 'KafkaBrokerNotFound' || error.type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
+        if (error.name === 'KafkaBrokerNotFound' || isStaleCoordinator(error)) {
           this.logger.debug(`${error.message}, refreshing metadata and trying again...`, {
             groupId,
             retryCount,
             retryTime,
           });
-          await this.refreshMetadata();
+          await this.#refreshStaleMetadata();
           throw error;
         }
 
-        if (error.code === 'ECONNREFUSED') {
-          // During maintenance the current coordinator can go down; findBroker will refresh
-          // metadata and re-throw the error. findGroupCoordinator has to re-throw the error to go
-          // through the retry cycle.
+        // A coordinator that went down during maintenance: findBroker already refreshed metadata.
+        if (isConnectionRefused(error)) {
           throw error;
         }
 
@@ -476,21 +621,21 @@ export class Cluster {
   }: {
     groupId: string;
     coordinatorType?: CoordinatorType;
-  }): Promise<FindCoordinatorResponseV2Body> {
+  }): Promise<FindCoordinatorResponse> {
     const brokerMetadata = await this.brokerPool.withBroker(async ({ nodeId, broker }) => {
       return this.retrier(async (bail, retryCount, retryTime) => {
         try {
-          const brokerMetadata = await broker.findGroupCoordinator({ groupId, coordinatorType });
+          const brokerMetadata = await broker.send(FindCoordinator, { groupId, coordinatorType });
           this.logger.debug('Found group coordinator', {
             broker: brokerMetadata.coordinator.host,
             nodeId: brokerMetadata.coordinator.nodeId,
           });
           return brokerMetadata;
         } catch (e) {
-          const error = e as Error & { type?: string };
+          const error = e as Error;
           this.logger.debug('Tried to find group coordinator', { nodeId, groupId, error });
 
-          if (error.type === 'GROUP_COORDINATOR_NOT_AVAILABLE') {
+          if (isStaleCoordinator(error)) {
             this.logger.debug('Group coordinator not available, retrying...', { nodeId, retryCount, retryTime });
             throw error;
           }
@@ -534,7 +679,7 @@ export class Cluster {
     const requests = [...partitionsPerBroker.entries()].map(async ([nodeId, perTopic]) => {
       const broker = await this.findBroker({ nodeId });
 
-      const { responses: topicOffsets } = await broker.listOffsets({
+      const { responses: topicOffsets } = await broker.send(ListOffsets, {
         isolationLevel: this.isolationLevel,
         topics: Object.entries(perTopic).map(([topic, partitions]) => ({
           topic,
@@ -557,12 +702,20 @@ export class Cluster {
     return [...partitionsPerTopic.entries()].map(([topic, partitions]) => ({ topic, partitions }));
   }
 
-  committedOffsets({ groupId }: { groupId: string }): Record<string, Record<string, bigint>> {
-    if (!this.committedOffsetsByGroup.has(groupId)) {
-      this.committedOffsetsByGroup.set(groupId, {});
-    }
-
-    return this.committedOffsetsByGroup.get(groupId)!;
+  /**
+   * The offset last committed for a partition through this client: by a consumer of `groupId`, or
+   * by a transactional producer sending offsets for it. `undefined` when none is known.
+   */
+  committedOffset({
+    groupId,
+    topic,
+    partition,
+  }: {
+    groupId: string;
+    topic: string;
+    partition: number;
+  }): bigint | undefined {
+    return this.#committedOffsetsByGroup.get(groupId)?.get(topic)?.get(partition);
   }
 
   markOffsetAsCommitted({
@@ -576,9 +729,22 @@ export class Cluster {
     partition: number;
     offset: bigint;
   }): void {
-    const committedOffsets = this.committedOffsets({ groupId });
-    committedOffsets[topic] = committedOffsets[topic] ?? {};
-    committedOffsets[topic][partition] = offset;
+    let committedTopics = this.#committedOffsetsByGroup.get(groupId);
+    if (!committedTopics) {
+      committedTopics = new Map();
+      this.#committedOffsetsByGroup.set(groupId, committedTopics);
+    }
+    let committedPartitions = committedTopics.get(topic);
+    if (!committedPartitions) {
+      committedPartitions = new Map();
+      committedTopics.set(topic, committedPartitions);
+    }
+    committedPartitions.set(partition, offset);
+  }
+
+  /** Drops the committed offset known for a partition, so the next lookup asks the coordinator again. */
+  forgetCommittedOffset({ groupId, topic, partition }: { groupId: string; topic: string; partition: number }): void {
+    this.#committedOffsetsByGroup.get(groupId)?.get(topic)?.delete(partition);
   }
 
   /**

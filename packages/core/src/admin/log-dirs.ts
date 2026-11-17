@@ -3,10 +3,13 @@ import type { AlterReplicaLogDir } from '../protocol/requests/alter-replica-log-
 import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
 import type { DescribeLogDirsTopic } from '../protocol/requests/describe-log-dirs/v0/request';
 import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
-import { retrier } from '../retry/index';
+import { NOT_CONTROLLER_ERRORS, STALE_METADATA_ERRORS, unionOf } from '../cluster/error-classifier';
+import { nodeTarget } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import type { DescribeReplicaLogDirsReplica, DescribeReplicaLogDirsResult } from './types';
+import { AlterReplicaLogDirs, DescribeLogDirs } from '../protocol/requests/lazy-families';
 
 export interface LogDirsApi {
   describeLogDirs: (options?: {
@@ -22,35 +25,38 @@ export interface LogDirsApi {
   }>;
 }
 
-export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogDirsApi {
+/** A replica that moved off the broker, or a request that reached a broker that is not the controller. */
+const DESCRIBE_LOG_DIRS_RETRY_ON = unionOf(NOT_CONTROLLER_ERRORS, STALE_METADATA_ERRORS);
+
+export function createLogDirsApi({ cluster, retry }: AdminContext): LogDirsApi {
+  const retrier = createRetrier(retry);
+
   const describeLogDirs = async (
     options: { topics?: DescribeLogDirsTopic[] | null; brokerIds?: Array<string | number> } = {},
   ): Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }> => {
-    return retrier(retry)(async (bail) => {
-      try {
-        await cluster.refreshMetadata();
-        const nodeIds = options.brokerIds?.map(String) ?? Object.keys(cluster.brokerPool.brokers);
-        if (nodeIds.length === 0) {
+    // Read after each attempt's metadata refresh, so the default covers the brokers known then.
+    let nodeIds: string[] = [];
+    return cluster.run(
+      () => {
+        nodeIds = options.brokerIds?.map(String) ?? Object.keys(cluster.brokerPool.brokers);
+        return nodeIds.map((nodeId) => nodeTarget(nodeId));
+      },
+      async (brokers) => {
+        if (brokers.length === 0) {
           throw new KafkaNonRetriableError('No brokers available to describe log dirs');
         }
 
-        const brokers = await Promise.all(
-          nodeIds.map(async (nodeId) => {
-            const broker = await cluster.findBroker({ nodeId });
-            const { logDirs } = await broker.describeLogDirs({ topics: options.topics });
-            return { brokerId: Number(nodeId), logDirs };
-          }),
-        );
-        return { brokers };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER' || protocolType(error) === 'NOT_LEADER_OR_FOLLOWER') {
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+        return {
+          brokers: await Promise.all(
+            brokers.map(async (broker, index) => {
+              const { logDirs } = await broker.send(DescribeLogDirs, { topics: options.topics });
+              return { brokerId: Number(nodeIds[index]), logDirs };
+            }),
+          ),
+        };
+      },
+      { retrier, refreshMetadata: true, retryOn: DESCRIBE_LOG_DIRS_RETRY_ON },
+    );
   };
 
   const alterReplicaLogDirs = async ({
@@ -64,27 +70,19 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
       throw new KafkaNonRetriableError(`Invalid replica log dir list ${formatUnknown(dirs)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findBroker({ nodeId: String(brokerId) });
-        const { results } = await broker.alterReplicaLogDirs({ dirs });
+    return cluster.run(
+      nodeTarget(brokerId),
+      async (broker) => {
+        const { results } = await broker.send(AlterReplicaLogDirs, { dirs });
         return { results };
-      } catch (error) {
-        logger.warn('Could not alter replica log dirs', {
-          error: error instanceof Error ? error.message : String(error),
-          brokerId,
-          retryCount,
-          retryTime,
-        });
-        if (protocolType(error) === 'NOT_LEADER_OR_FOLLOWER') {
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      {
+        retrier,
+        refreshMetadata: true,
+        retryOn: STALE_METADATA_ERRORS,
+        description: 'Could not alter replica log dirs',
+      },
+    );
   };
 
   const describeReplicaLogDirs = async (
@@ -108,10 +106,11 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
       }
     }
 
-    return retrier(retry)(async (bail) => {
-      try {
-        await cluster.refreshMetadata();
-
+    // Each broker is looked up inside, so that its failure becomes its replicas' error code
+    // instead of failing the other brokers' results; `run` resolves no target.
+    return cluster.run(
+      () => [],
+      async () => {
         const replicasByBroker = new Map<string, DescribeReplicaLogDirsReplica[]>();
         for (const replica of replicas) {
           const nodeId = String(replica.brokerId);
@@ -135,7 +134,7 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
 
             try {
               const broker = await cluster.findBroker({ nodeId });
-              const { logDirs } = await broker.describeLogDirs({ topics });
+              const { logDirs } = await broker.send(DescribeLogDirs, { topics });
               return { nodeId, brokerReplicas, logDirs, errorCode: 0 };
             } catch (error) {
               if (error instanceof KafkaNonRetriableError) throw error;
@@ -194,15 +193,9 @@ export function createLogDirsApi({ cluster, logger, retry }: AdminContext): LogD
         }
 
         return { replicas: results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_LEADER_OR_FOLLOWER') {
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_METADATA_ERRORS },
+    );
   };
 
   return { describeLogDirs, alterReplicaLogDirs, describeReplicaLogDirs };

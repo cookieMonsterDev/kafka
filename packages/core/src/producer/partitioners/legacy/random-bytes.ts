@@ -1,9 +1,11 @@
-import { randomBytes as nodeRandomBytes } from 'node:crypto';
 import { KafkaNonRetriableError } from '../../../errors';
 
 const MAX_BYTES = 65536;
 
-/** Cryptographically strong random bytes via `node:crypto`. */
+/**
+ * Cryptographically strong random bytes via Web Crypto, which Node.js and Bun expose globally, so
+ * importing the client does not load `node:crypto`.
+ */
 export function randomBytes(size: number): Buffer {
   if (size > MAX_BYTES) {
     throw new KafkaNonRetriableError(
@@ -11,5 +13,5 @@ export function randomBytes(size: number): Buffer {
     );
   }
 
-  return nodeRandomBytes(size);
+  return globalThis.crypto.getRandomValues(Buffer.allocUnsafe(size));
 }

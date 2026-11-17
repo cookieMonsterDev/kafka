@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { unregisterBrokerRequestV0 } from './v0/request';
 import { unregisterBrokerResponseV0 } from './v0/response';
 
@@ -9,18 +10,11 @@ export interface UnregisterBrokerOptions {
   brokerId: number;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<UnregisterBrokerOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: unregisterBrokerRequestV0({ brokerId: options.brokerId }),
     response: unregisterBrokerResponseV0,
   }),
-};
+} satisfies VersionFactories<UnregisterBrokerOptions>;
 
-export const UnregisterBroker: RequestFamily<UnregisterBrokerOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no UnregisterBroker protocol for version ${version}`);
-    return factory;
-  },
-});
+export const UnregisterBroker = defineRequestFamily(KAFKA_APIS.UnregisterBroker, VERSIONS);

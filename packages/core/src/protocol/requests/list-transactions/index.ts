@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { listTransactionsRequestV0 } from './v0/request';
 import { listTransactionsResponseV0 } from './v0/response';
 import { listTransactionsRequestV1 } from './v1/request';
@@ -23,7 +24,7 @@ const v1Fields = (options: ListTransactionsOptions) => ({
   durationFilter: options.durationFilter ?? -1n,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ListTransactionsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: listTransactionsRequestV0(v0Fields(options)),
     response: listTransactionsResponseV0,
@@ -39,13 +40,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ListTransactionsOptions>
     }),
     response: listTransactionsResponseV2,
   }),
-};
+} satisfies VersionFactories<ListTransactionsOptions>;
 
-export const ListTransactions: RequestFamily<ListTransactionsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ListTransactions protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ListTransactions = defineRequestFamily(KAFKA_APIS.ListTransactions, VERSIONS);

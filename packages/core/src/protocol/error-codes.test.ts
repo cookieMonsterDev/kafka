@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure, staleMetadata } from './error-codes';
+import { createErrorFromCode, ERROR_CODES, failIfVersionNotSupported, failure } from './error-codes';
 
 describe('protocol/error-codes', () => {
   it('has a unique code per entry', () => {
@@ -111,31 +111,6 @@ describe('protocol/error-codes', () => {
     it('does not throw for any other code', () => {
       expect(() => failIfVersionNotSupported(0)).not.toThrow();
       expect(() => failIfVersionNotSupported(1)).not.toThrow();
-    });
-  });
-
-  describe('staleMetadata', () => {
-    it('is true for the classic stale-metadata error types', () => {
-      expect(staleMetadata({ type: 'UNKNOWN_TOPIC_OR_PARTITION' })).toBe(true);
-      expect(staleMetadata({ type: 'LEADER_NOT_AVAILABLE' })).toBe(true);
-      expect(staleMetadata({ type: 'NOT_LEADER_OR_FOLLOWER' })).toBe(true);
-    });
-
-    it('is true for the pre-2.6 NOT_LEADER_FOR_PARTITION alias', () => {
-      expect(staleMetadata({ type: 'NOT_LEADER_FOR_PARTITION' })).toBe(true);
-    });
-
-    it('is true for topic-id, leader-epoch, and rebootstrap errors', () => {
-      expect(staleMetadata({ type: 'UNKNOWN_TOPIC_ID' })).toBe(true);
-      expect(staleMetadata({ type: 'INCONSISTENT_TOPIC_ID' })).toBe(true);
-      expect(staleMetadata({ type: 'FENCED_LEADER_EPOCH' })).toBe(true);
-      expect(staleMetadata({ type: 'UNKNOWN_LEADER_EPOCH' })).toBe(true);
-      expect(staleMetadata({ type: 'REBOOTSTRAP_REQUIRED' })).toBe(true);
-    });
-
-    it('is false for any other error type', () => {
-      expect(staleMetadata({ type: 'OFFSET_OUT_OF_RANGE' })).toBe(false);
-      expect(staleMetadata({})).toBe(false);
     });
   });
 });

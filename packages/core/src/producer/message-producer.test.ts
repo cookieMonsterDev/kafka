@@ -5,15 +5,15 @@ import {
   KafkaDeliveryTimeoutError,
   KafkaMessageTooLargeError,
   KafkaNonRetriableError,
-  KafkaTimeout,
 } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { CONNECTION_STATUS } from '../network/connection-status';
 import { COMPRESSION_TYPES } from '../protocol/compression/index';
 import { retrier } from '../retry/index';
-import type { EosManager } from './eos-manager/index';
+import { createIdempotenceLedger, type IdempotenceLedger, type ProducerIdentity } from './idempotence-ledger';
 import { createMessageProducer, type MessageProducerOptions } from './message-producer';
 import type { ProducerAckHookEvent, ProducerSendHookEvent } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const topic = 'topic-name';
@@ -34,7 +34,10 @@ function fakeProduceResponse(topicName: string, partition: number) {
 }
 
 function fakeBroker(nodeId: number) {
-  return { nodeId, produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))) };
+  return withSend({
+    nodeId,
+    produce: vi.fn().mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0))),
+  });
 }
 
 function fakePartitionMetadata(): PartitionMetadata {
@@ -48,33 +51,45 @@ function fakePartitionMetadata(): PartitionMetadata {
   };
 }
 
-function fakeEosManager() {
-  return {
-    getProducerId: vi.fn().mockReturnValue(-1n),
-    getProducerEpoch: vi.fn().mockReturnValue(-1),
-    getSequence: vi.fn().mockReturnValue(0),
-    getTransactionalId: vi.fn().mockReturnValue(undefined),
-    updateSequence: vi.fn(),
-    isTransactional: vi.fn().mockReturnValue(false),
-    isInitialized: vi.fn().mockReturnValue(true),
-    addPartitionsToTransaction: vi.fn().mockResolvedValue(undefined),
-    requestEpochBump: vi.fn(),
-    bumpEpochIfRequested: vi.fn().mockResolvedValue(undefined),
-    acquirePartitionGates: vi.fn().mockResolvedValue(undefined),
-    releasePartitionGates: vi.fn().mockResolvedValue(undefined),
-  } as unknown as EosManager;
+/** Sequences and gates run on a real ledger with an in-memory InitProducerId. */
+function inMemoryLedger(): IdempotenceLedger {
+  return createIdempotenceLedger(
+    withSend({
+      logger: silentLogger,
+      initProducerId: (current: ProducerIdentity) =>
+        Promise.resolve({ producerId: 1000n, producerEpoch: current.producerEpoch + 1 }),
+    }),
+  );
+}
+
+/** An idempotent producer's ledger, its producer id already initialized. */
+async function idempotentLedger(): Promise<IdempotenceLedger> {
+  const ledger = inMemoryLedger();
+  await ledger.initProducerId();
+  return ledger;
+}
+
+function sentFirstSequences(broker: ReturnType<typeof fakeBroker>): (number | undefined)[] {
+  return broker.produce.mock.calls.map((call) => {
+    const request = call[0] as { topicData: { partitions: { firstSequence?: number }[] }[] };
+    return request.topicData[0]?.partitions[0]?.firstSequence;
+  });
 }
 
 function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
   return {
     addMultipleTargetTopics: vi.fn().mockResolvedValue(undefined),
+    hasLoadedTargetTopics: vi.fn().mockReturnValue(false),
+    needsMetadataRefresh: vi.fn().mockReturnValue(true),
+    connectedBroker: vi.fn().mockReturnValue(undefined),
     refreshMetadata: vi.fn().mockResolvedValue(undefined),
+    refreshStaleMetadata: vi.fn().mockResolvedValue(undefined),
     refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
     findTopicPartitionMetadata: vi.fn().mockReturnValue([fakePartitionMetadata()]),
     findTopicId: vi.fn().mockReturnValue(undefined),
     findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
     findBroker: vi.fn().mockResolvedValue(broker),
-    removeBroker: vi.fn(),
+    onConnectionClosed: vi.fn(() => false),
     connect: vi.fn().mockResolvedValue(undefined),
     targetTopics: new Set<string>(),
     isConnected: vi.fn().mockReturnValue(true),
@@ -82,8 +97,8 @@ function fakeCluster(broker: ReturnType<typeof fakeBroker>) {
   };
 }
 
-function producedMessages(broker: ReturnType<typeof fakeBroker>) {
-  const arg = broker.produce.mock.calls[0]?.[0] as {
+function producedMessages(broker: ReturnType<typeof fakeBroker>, callIndex = 0) {
+  const arg = broker.produce.mock.calls[callIndex]?.[0] as {
     topicData: Array<{ partitions: Array<{ messages: Array<{ value: unknown }> }> }>;
   };
   return arg.topicData[0]?.partitions[0]?.messages.map((message) => message.value) ?? [];
@@ -94,7 +109,7 @@ function createTestProducer(broker: ReturnType<typeof fakeBroker>, overrides: Pa
     logger: silentLogger,
     cluster: fakeCluster(broker) as unknown as Cluster,
     partitioner: () => 0,
-    eosManager: fakeEosManager(),
+    ledger: inMemoryLedger(),
     idempotent: false,
     retrier: retrier({ retries: 0 }),
     getConnectionStatus: () => CONNECTION_STATUS.CONNECTED,
@@ -104,6 +119,8 @@ function createTestProducer(broker: ReturnType<typeof fakeBroker>, overrides: Pa
 
 describe('producer/messageProducer', () => {
   afterEach(() => {
+    // Restore spies before the fake timers, or restoring a spy would reinstall a fake setTimeout.
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -145,54 +162,6 @@ describe('producer/messageProducer', () => {
     await sendPromise;
 
     expect(broker.produce).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not send until the linger timer fires', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    const producer = createTestProducer(broker, { lingerMs: 50 });
-
-    const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
-    await Promise.resolve();
-    expect(broker.produce).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(49);
-    expect(broker.produce).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
-    await sendPromise;
-    expect(broker.produce).toHaveBeenCalledTimes(1);
-  });
-
-  it('coalesces two sends within linger into one Produce when acks and compression match', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    const producer = createTestProducer(broker, { lingerMs: 50 });
-
-    const first = producer.send({ topic, messages: [{ value: 'a' }] });
-    const second = producer.send({ topic, messages: [{ value: 'b' }] });
-    await Promise.resolve();
-    expect(broker.produce).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(50);
-    await Promise.all([first, second]);
-
-    expect(broker.produce).toHaveBeenCalledTimes(1);
-    expect(producedMessages(broker)).toEqual(['a', 'b']);
-  });
-
-  it('does not coalesce sends that differ in acks', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    const producer = createTestProducer(broker, { lingerMs: 50 });
-
-    const first = producer.send({ topic, messages: [{ value: 'a' }], acks: 1 });
-    const second = producer.send({ topic, messages: [{ value: 'b' }], acks: -1 });
-    await vi.advanceTimersByTimeAsync(50);
-    await Promise.all([first, second]);
-
-    expect(broker.produce).toHaveBeenCalledTimes(2);
-    expect(broker.produce.mock.calls.map((call) => call[0].acks).sort()).toEqual([-1, 1]);
   });
 
   it('uses producer default acks when send omits acks, and lets the call override', async () => {
@@ -241,17 +210,6 @@ describe('producer/messageProducer', () => {
     expect(broker.produce).not.toHaveBeenCalled();
   });
 
-  it('flushes when buffered bytes reach batchSize before linger expires', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    const producer = createTestProducer(broker, { lingerMs: 10_000, batchSize: 4 });
-
-    const sendPromise = producer.send({ topic, messages: [{ value: 'abcd' }] });
-    await sendPromise;
-
-    expect(broker.produce).toHaveBeenCalledTimes(1);
-  });
-
   it('flush sends linger-buffered records without waiting for the timer', async () => {
     vi.useFakeTimers();
     const broker = fakeBroker(1);
@@ -266,84 +224,98 @@ describe('producer/messageProducer', () => {
     expect(broker.produce).toHaveBeenCalledTimes(1);
   });
 
-  it('flushes independent acks groups in parallel', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    let inFlight = 0;
-    let maxInFlight = 0;
-    broker.produce.mockImplementation(async () => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      await Promise.resolve();
-      inFlight -= 1;
-      return fakeProduceResponse(topic, 0);
-    });
-    const producer = createTestProducer(broker, { lingerMs: 50 });
+  describe('same-turn sends with lingerMs 0', () => {
+    it('sends calls made in the same turn as one Produce request', async () => {
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 0 });
 
-    const first = producer.send({ topic, messages: [{ value: 'a' }], acks: 1 });
-    const second = producer.send({ topic, messages: [{ value: 'b' }], acks: -1 });
-    await vi.advanceTimersByTimeAsync(50);
-    await Promise.all([first, second]);
+      const first = producer.send({ topic, messages: [{ value: 'a' }] });
+      const second = producer.send({ topic, messages: [{ value: 'b' }] });
+      expect(broker.produce).not.toHaveBeenCalled();
+      await Promise.all([first, second]);
 
-    expect(broker.produce).toHaveBeenCalledTimes(2);
-    expect(maxInFlight).toBe(2);
-  });
-
-  it('rejects a linger send whose records exceed bufferMemory', async () => {
-    const broker = fakeBroker(1);
-    const producer = createTestProducer(broker, { lingerMs: 50, bufferMemory: 4 });
-
-    await expect(producer.send({ topic, messages: [{ value: 'abcde' }] })).rejects.toBeInstanceOf(
-      KafkaNonRetriableError,
-    );
-    expect(broker.produce).not.toHaveBeenCalled();
-  });
-
-  it('waits for in-flight produce to free bufferMemory before accepting more records', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    let releaseProduce!: (value: unknown) => void;
-    broker.produce
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            releaseProduce = resolve;
-          }),
-      )
-      .mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
-    const producer = createTestProducer(broker, { lingerMs: 50, bufferMemory: 4 });
-
-    const first = producer.send({ topic, messages: [{ value: 'abcd' }] });
-    await Promise.resolve();
-    expect(broker.produce).not.toHaveBeenCalled();
-
-    const second = producer.send({ topic, messages: [{ value: 'x' }] });
-    await vi.waitFor(() => {
       expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(producedMessages(broker, 0)).toEqual(['a', 'b']);
     });
 
-    releaseProduce(fakeProduceResponse(topic, 0));
-    await first;
+    it('sends awaited calls separately, sharing one deadline timer', async () => {
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+      const broker = fakeBroker(1);
+      const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
 
-    await vi.advanceTimersByTimeAsync(50);
-    await second;
-    expect(broker.produce).toHaveBeenCalledTimes(2);
-  });
+      for (const value of ['a', 'b']) {
+        const sendPromise = producer.send({ topic, messages: [{ value }] });
+        await Promise.resolve();
+        expect(vi.getTimerCount()).toBe(1);
+        await sendPromise;
+      }
 
-  it('rejects when waiting for bufferMemory exceeds the send timeout', async () => {
-    vi.useFakeTimers();
-    const broker = fakeBroker(1);
-    broker.produce.mockImplementation(() => new Promise(() => {}));
-    const producer = createTestProducer(broker, { lingerMs: 10_000, bufferMemory: 4 });
+      expect(setTimeoutSpy).toHaveBeenCalledOnce();
+      expect(broker.produce).toHaveBeenCalledTimes(2);
+      expect(producedMessages(broker, 0)).toEqual(['a']);
+      expect(producedMessages(broker, 1)).toEqual(['b']);
+    });
 
-    void producer.send({ topic, messages: [{ value: 'abcd' }], timeout: 30_000 });
-    await Promise.resolve();
+    it('shares one deadline timer for a shared request and rejects every caller in it at the deadline', async () => {
+      vi.useFakeTimers();
+      const broker = fakeBroker(1);
+      broker.produce.mockImplementation(() => new Promise(() => {}));
+      const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
 
-    const second = producer.send({ topic, messages: [{ value: 'x' }], timeout: 50 });
-    // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
-    const assertion = expect(second).rejects.toBeInstanceOf(KafkaTimeout);
-    await vi.advanceTimersByTimeAsync(50);
-    await assertion;
+      const sends = [
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }] }),
+      ];
+      // Attach the matchers before the fake timer fires.
+      const assertions = sends.map((sendPromise) =>
+        expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.all(assertions);
+    });
+
+    it('assigns one sequence range to same-turn calls of an idempotent producer', async () => {
+      const broker = fakeBroker(1);
+      const ledger = await idempotentLedger();
+      const producer = createTestProducer(broker, { lingerMs: 0, ledger, idempotent: true });
+
+      await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }, { value: 'c' }] }),
+      ]);
+      await producer.send({ topic, messages: [{ value: 'd' }] });
+
+      expect(sentFirstSequences(broker)).toEqual([0, 3]);
+    });
+
+    it('adds the partitions of same-turn transactional calls to the transaction once', async () => {
+      const broker = fakeBroker(1);
+      const transaction = {
+        transactionalId: 'transactional-id',
+        enrollPartitions: vi.fn((): Promise<void> | undefined => undefined),
+        sendFailed: vi.fn(),
+      };
+      const producer = createTestProducer(broker, {
+        lingerMs: 0,
+        ledger: await idempotentLedger(),
+        transaction,
+        idempotent: true,
+      });
+
+      await Promise.all([
+        producer.send({ topic, messages: [{ value: 'a' }] }),
+        producer.send({ topic, messages: [{ value: 'b' }] }),
+      ]);
+
+      expect(broker.produce).toHaveBeenCalledTimes(1);
+      expect(broker.produce).toHaveBeenCalledWith(expect.objectContaining({ transactionalId: 'transactional-id' }));
+      expect(transaction.enrollPartitions).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('deliveryTimeoutMs', () => {
@@ -381,20 +353,6 @@ describe('producer/messageProducer', () => {
       await expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
     });
 
-    it('counts time spent waiting in the linger buffer against the deadline', async () => {
-      vi.useFakeTimers();
-      const broker = fakeBroker(1);
-      const producer = createTestProducer(broker, { lingerMs: 10_000, deliveryTimeoutMs: 500 });
-
-      const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
-      // eslint-disable-next-line vitest/valid-expect -- attach the matcher before the fake timer fires
-      const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
-      await vi.advanceTimersByTimeAsync(500);
-      await assertion;
-      // The linger timer (10s) never got a chance to fire before the 500ms deadline won.
-      expect(broker.produce).not.toHaveBeenCalled();
-    });
-
     it('rejects while retries are still scheduled, ahead of the retrier giving up on its own', async () => {
       vi.useFakeTimers();
       const broker = fakeBroker(1);
@@ -417,9 +375,8 @@ describe('producer/messageProducer', () => {
       vi.useFakeTimers();
       const broker = fakeBroker(1);
       broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
-      const eosManager = fakeEosManager();
       const producer = createTestProducer(broker, {
-        eosManager,
+        ledger: await idempotentLedger(),
         retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
         deliveryTimeoutMs: 500,
       });
@@ -429,11 +386,16 @@ describe('producer/messageProducer', () => {
       const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
       await vi.advanceTimersByTimeAsync(500);
       await assertion;
-      expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
 
       // The caller was told the send failed, so it must not keep retrying in the background.
       await vi.advanceTimersByTimeAsync(20_000);
       expect(broker.produce).toHaveBeenCalledTimes(1);
+
+      // A gate still held would keep the next send on the partition waiting until its own deadline.
+      broker.produce.mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+      const nextSend = producer.send({ topic, messages: [{ value: 'b' }] });
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(nextSend).resolves.toHaveLength(1);
     });
 
     describe('without linger', () => {
@@ -456,30 +418,44 @@ describe('producer/messageProducer', () => {
         await expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
       });
 
-      it('arms a single deadline timer per send and clears it when the send settles', async () => {
+      it("keeps one deadline timer across sends, unref'd while no send is pending", async () => {
         vi.useFakeTimers();
+        const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
         const broker = fakeBroker(1);
         let respond: (value: unknown) => void = () => {};
         broker.produce.mockImplementation(() => new Promise((resolve) => (respond = resolve)));
         const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
 
-        const sendPromise = producer.send({ topic, messages: [{ value: 'a' }] });
-        await vi.advanceTimersByTimeAsync(0);
-        expect(broker.produce).toHaveBeenCalledTimes(1);
-        expect(vi.getTimerCount()).toBe(1);
+        for (const value of ['a', 'b']) {
+          const sendPromise = producer.send({ topic, messages: [{ value }] });
+          await vi.advanceTimersByTimeAsync(0);
+          const deadlineTimer = setTimeoutSpy.mock.results[0]?.value as NodeJS.Timeout;
+          expect(deadlineTimer.hasRef()).toBe(true);
 
-        respond(fakeProduceResponse(topic, 0));
-        await expect(sendPromise).resolves.toHaveLength(1);
-        expect(vi.getTimerCount()).toBe(0);
+          respond(fakeProduceResponse(topic, 0));
+          await expect(sendPromise).resolves.toHaveLength(1);
+          expect(deadlineTimer.hasRef()).toBe(false);
+        }
+
+        expect(broker.produce).toHaveBeenCalledTimes(2);
+        expect(setTimeoutSpy).toHaveBeenCalledOnce();
+      });
+
+      it('creates no AbortController for a send that never waits', async () => {
+        const abortController = vi.spyOn(globalThis, 'AbortController');
+        const broker = fakeBroker(1);
+        const producer = createTestProducer(broker, { lingerMs: 0, deliveryTimeoutMs: 500 });
+
+        await expect(producer.send({ topic, messages: [{ value: 'a' }] })).resolves.toHaveLength(1);
+        expect(abortController).not.toHaveBeenCalled();
       });
 
       it('stops retrying and releases the partition gates once the deadline elapses', async () => {
         vi.useFakeTimers();
         const broker = fakeBroker(1);
         broker.produce.mockImplementation(() => Promise.reject(new KafkaConnectionError('connection reset')));
-        const eosManager = fakeEosManager();
         const producer = createTestProducer(broker, {
-          eosManager,
+          ledger: await idempotentLedger(),
           lingerMs: 0,
           retrier: retrier({ retries: 10, initialRetryTime: 1000, maxRetryTime: 1000, factor: 0, multiplier: 1 }),
           deliveryTimeoutMs: 500,
@@ -490,11 +466,16 @@ describe('producer/messageProducer', () => {
         const assertion = expect(sendPromise).rejects.toBeInstanceOf(KafkaDeliveryTimeoutError);
         await vi.advanceTimersByTimeAsync(500);
         await assertion;
-        expect(eosManager.releasePartitionGates).toHaveBeenCalledTimes(1);
 
         await vi.advanceTimersByTimeAsync(20_000);
         expect(broker.produce).toHaveBeenCalledTimes(1);
         expect(vi.getTimerCount()).toBe(0);
+
+        // A gate still held would keep the next send on the partition waiting until its own deadline.
+        broker.produce.mockImplementation(() => Promise.resolve(fakeProduceResponse(topic, 0)));
+        const nextSend = producer.send({ topic, messages: [{ value: 'b' }] });
+        await vi.advanceTimersByTimeAsync(10);
+        await expect(nextSend).resolves.toHaveLength(1);
       });
 
       it('arms no deadline timer when deliveryTimeoutMs is not positive', async () => {
@@ -524,13 +505,6 @@ describe('producer/messageProducer', () => {
   });
 
   describe('maxRequestSize', () => {
-    function messagesFromCall(broker: ReturnType<typeof fakeBroker>, callIndex: number): unknown[] {
-      const arg = broker.produce.mock.calls[callIndex]?.[0] as {
-        topicData: Array<{ partitions: Array<{ messages: Array<{ value: unknown }> }> }>;
-      };
-      return arg.topicData[0]?.partitions[0]?.messages.map((message) => message.value) ?? [];
-    }
-
     it('rejects a single record over maxRequestSize immediately, without buffering or dispatching it', async () => {
       const broker = fakeBroker(1);
       const producer = createTestProducer(broker, { lingerMs: 50, maxRequestSize: 10 });
@@ -569,23 +543,6 @@ describe('producer/messageProducer', () => {
       await expect(producer.send({ topic, messages: [{ value: 'abcdef' }] })).rejects.toBeInstanceOf(
         KafkaMessageTooLargeError,
       );
-    });
-
-    it('splits a linger-buffered batch that would exceed maxRequestSize into multiple Produce requests, none over the cap', async () => {
-      const broker = fakeBroker(1);
-      const producer = createTestProducer(broker, { lingerMs: 10_000, maxRequestSize: 10 });
-
-      const first = producer.send({ topic, messages: [{ value: 'abcde' }] }); // 5 bytes
-      const second = producer.send({ topic, messages: [{ value: 'fghij' }] }); // combined 10, exactly fits
-      await Promise.resolve(); // let the two above settle into (and possibly flush from) the buffer
-      const third = producer.send({ topic, messages: [{ value: 'klmno' }] }); // starts a fresh batch
-
-      await producer.flush();
-      await Promise.all([first, second, third]);
-
-      expect(broker.produce).toHaveBeenCalledTimes(2);
-      expect(messagesFromCall(broker, 0)).toEqual(['abcde', 'fghij']);
-      expect(messagesFromCall(broker, 1)).toEqual(['klmno']);
     });
   });
 

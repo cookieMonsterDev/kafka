@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/cookieMonsterDev/kafka/security/advisories/new
+    about: Report security problems privately. See SECURITY.md; do not open a public issue.
   - name: Contributing guide
     url: https://github.com/cookieMonsterDev/kafka/blob/develop/CONTRIBUTING.md
     about: Branch names, commits, pull requests, tests, and code style.

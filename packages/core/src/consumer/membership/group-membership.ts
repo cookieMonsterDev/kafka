@@ -1,0 +1,89 @@
+import type { Broker } from '../../broker/index';
+import type { Cluster } from '../../cluster/index';
+import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
+import type { Logger } from '../../loggers/index';
+import type { TopicOffsetConfiguration } from '../offset-reset';
+import type { Assigner, MemberAssignment as MemberAssignmentMap, TopicPartitions } from '../types';
+
+/**
+ * How a consumer takes part in its group: the classic protocol, the consumer protocol (KIP-848),
+ * or assign mode, which has no group at all. A consumer has one for its lifetime.
+ */
+export interface GroupMembership {
+  /** `false` in assign mode, which consumes chosen partitions without joining a group. */
+  readonly isGroupMember: boolean;
+  readonly coordinator: Broker | null;
+  readonly memberId: string | null;
+  /** The generation (classic protocol) or member epoch (consumer protocol) commits are tagged with. */
+  readonly generationId: number | null;
+  readonly leaderId: string | null;
+  /** The assigner the classic protocol chose, or `'consumer'` for the consumer protocol. */
+  readonly groupProtocol: string | null;
+  /**
+   * When the next heartbeat is due, in epoch milliseconds, or `Infinity` when none is. A plain
+   * number so the runner can compare it per record without a call.
+   */
+  readonly nextHeartbeatAt: number;
+  /** Joins the group and returns once the member's assignment is installed and stable. */
+  join(): Promise<void>;
+  /** Sends a heartbeat when one is due, applying any assignment change it returns. */
+  heartbeat(): Promise<void>;
+  leave(): Promise<void>;
+  /**
+   * Forgets the member state the coordinator rejected with `UNKNOWN_MEMBER_ID` or
+   * `FENCED_MEMBER_EPOCH`, so the next {@link join} starts over. `forgetMemberId` also drops the
+   * member id, which the coordinator no longer knows after `UNKNOWN_MEMBER_ID`.
+   */
+  resetRejectedMember(options: { forgetMemberId: boolean }): void;
+}
+
+/** One change of the member's assignment, with the partitions it revokes and gains. */
+export interface AssignmentChange {
+  /** The member's whole assignment after the change. */
+  assignment: TopicPartitions[];
+  revoked: readonly TopicPartitions[];
+  gained: readonly TopicPartitions[];
+  /** Runs once the assignment is installed, before `onPartitionsAssigned` is called. */
+  onInstalled?: (partitionsByTopic: MemberAssignmentMap) => void;
+}
+
+/** The consumer group state and callbacks a {@link GroupMembership} works with. */
+export interface MembershipHost {
+  readonly cluster: Cluster;
+  readonly groupId: string | null;
+  readonly logger: Logger;
+  readonly instrumentationEmitter: InstrumentationEventEmitter;
+  readonly assigners: readonly Assigner[];
+  readonly topicsSubscribed: readonly string[];
+  readonly topicConfigurations: Record<string, TopicOffsetConfiguration>;
+  readonly shuttingDown: boolean;
+  assigned(): TopicPartitions[];
+  /**
+   * Calls `onPartitionsRevoked` with the revoked partitions, installs the new assignment, then
+   * calls `onPartitionsAssigned` with the gained ones.
+   */
+  changeAssignment(change: AssignmentChange): Promise<void>;
+  emitGroupJoin(durationMs: number): void;
+}
+
+/** `{ topic, partitions }[]` -> `{ [topic]: partitions }`, without a prototype so any topic name is a safe key. */
+export function toPartitionsByTopic(assignment: readonly TopicPartitions[]): MemberAssignmentMap {
+  const partitionsByTopic = Object.create(null) as MemberAssignmentMap;
+  for (const { topic, partitions } of assignment) partitionsByTopic[topic] = partitions;
+  return partitionsByTopic;
+}
+
+/** The partitions of `assignment` that `other` does not contain. */
+export function partitionsNotIn(
+  assignment: readonly TopicPartitions[],
+  other: readonly TopicPartitions[],
+): TopicPartitions[] {
+  const otherPartitionsByTopic = new Map(other.map(({ topic, partitions }) => [topic, new Set(partitions)]));
+
+  return assignment
+    .map(({ topic, partitions }) => ({
+      topic,
+      partitions: partitions.filter((partition) => !otherPartitionsByTopic.get(topic)?.has(partition)),
+    }))
+    .filter(({ partitions }) => partitions.length > 0);
+}

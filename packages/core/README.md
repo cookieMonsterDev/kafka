@@ -7,7 +7,7 @@
 </p>
 
 A TypeScript Apache Kafka client for Node.js that talks the wire protocol directly — no Java
-client, no native bindings. Protocol versions are negotiated from `ApiVersions` at connect time,
+client, no required native bindings. Protocol versions are negotiated from `ApiVersions` at connect time,
 so it works against **Kafka 0.10 and up**. Offsets are `bigint` (Kafka offsets can exceed what a
 JS `number` represents exactly), and its `.d.ts` types are generated from source rather than
 hand-maintained.
@@ -124,7 +124,7 @@ From the repo root (after `pnpm install`):
 
 ```sh
 pnpm --filter @cookiemonsterdev/kafka-core dev        # vite build --watch
-pnpm --filter @cookiemonsterdev/kafka-core build      # JS + .d.ts into dist/
+pnpm --filter @cookiemonsterdev/kafka-core build      # JS + the .d.ts files index.d.ts reaches, into dist/
 pnpm --filter @cookiemonsterdev/kafka-core typecheck  # src + tests, tsc --noEmit
 pnpm --filter @cookiemonsterdev/kafka-core bench      # local microbenches (no Docker; not in pnpm test)
 pnpm --filter @cookiemonsterdev/kafka-core clean      # remove dist/

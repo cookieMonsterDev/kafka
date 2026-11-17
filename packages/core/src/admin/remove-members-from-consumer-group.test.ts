@@ -2,27 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createGroupsApi } from './groups';
+import { withSend } from '../broker/test-send';
+import { coordinatorTarget } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 
 const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 describe('admin/removeMembersFromConsumerGroup', () => {
   it('sends LeaveGroup with member identities to the group coordinator', async () => {
-    const coordinator = {
+    const coordinator = withSend({
       leaveGroupMembers: vi.fn(async () => ({
         members: [{ memberId: 'm-1', groupInstanceId: null, errorCode: 0 }],
       })),
-    };
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findGroupCoordinator: vi.fn(async () => coordinator),
-    } as unknown as Cluster;
-    const api = createGroupsApi({ cluster, logger, rootLogger: logger });
+    });
+    const cluster = fakeRunCluster({ coordinator });
+    const api = createGroupsApi({ cluster: cluster as unknown as Cluster, logger, rootLogger: logger });
 
     const result = await api.removeMembersFromConsumerGroup({
       groupId: 'g-1',
       members: [{ memberId: 'm-1' }],
     });
 
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g-1'));
     expect(coordinator.leaveGroupMembers).toHaveBeenCalledWith({
       groupId: 'g-1',
       members: [{ memberId: 'm-1', groupInstanceId: null, reason: null }],

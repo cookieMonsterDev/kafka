@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import type { OffsetFetchTopicOptions } from './shared';
 import { offsetFetchRequestV1 } from './v1/request';
 import { offsetFetchResponseV1 } from './v1/response';
@@ -21,7 +22,7 @@ export interface OffsetFetchOptions {
   requireStable?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetFetchOptions>>> = {
+const VERSIONS = {
   1: ({ groupId, topics }) => ({ request: offsetFetchRequestV1({ groupId, topics }), response: offsetFetchResponseV1 }),
   2: ({ groupId, topics }) => ({ request: offsetFetchRequestV2({ groupId, topics }), response: offsetFetchResponseV2 }),
   3: ({ groupId, topics }) => ({ request: offsetFetchRequestV3({ groupId, topics }), response: offsetFetchResponseV3 }),
@@ -32,13 +33,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<OffsetFetchOptions>>> = 
     request: offsetFetchRequestV7({ groupId, topics, requireStable }),
     response: offsetFetchResponseV7,
   }),
-};
+} satisfies VersionFactories<OffsetFetchOptions>;
 
-export const OffsetFetch: RequestFamily<OffsetFetchOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no OffsetFetch protocol for version ${version}`);
-    return factory;
-  },
-});
+export const OffsetFetch = defineRequestFamily(KAFKA_APIS.OffsetFetch, VERSIONS);

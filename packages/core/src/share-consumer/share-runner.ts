@@ -1,55 +1,21 @@
 import { createFetchManager, type FetchManager } from '../consumer/fetch-manager';
 import type { EachMessageHandler } from '../consumer/types';
-import { KafkaError, KafkaNoBrokerAvailableError, type KafkaProtocolError } from '../errors';
+import { KafkaError, KafkaNoBrokerAvailableError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
-import { createErrorFromCode, failure, staleMetadata } from '../protocol/error-codes';
-import {
-  SHARE_ACQUIRE_MODE,
-  SHARE_SESSION_CLOSE_EPOCH,
-  SHARE_SESSION_INITIAL_EPOCH,
-  type ShareAcquireMode,
-  type ShareFetchAcknowledgementBatchInput,
-  type ShareFetchForgottenTopicInput,
-  type ShareFetchResponseV1Body,
-} from '../protocol/requests/share-fetch/index';
 import { retrier, type RetryOptions } from '../retry/index';
 import { sleep } from '../utils/wait';
 import { SHARE_ACKNOWLEDGE_TYPE, type ShareAcknowledgeType } from './acknowledge-types';
-import { ACKNOWLEDGE, FETCH, FETCH_START, type ShareAcknowledgeTopicPayload } from './instrumentation-events';
-import { ShareBatch } from './share-batch';
+import { FETCH, FETCH_START } from './instrumentation-events';
+import type { ShareBatch } from './share-batch';
 import type { ShareGroup } from './share-group';
 
-const DEFAULT_MAX_WAIT_MS = 5000;
-const DEFAULT_MIN_BYTES = 1;
-const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
-const DEFAULT_MAX_RECORDS = 500;
-const DEFAULT_BATCH_SIZE = 100;
 const FETCH_RETRY_BACKOFF_MS = 100;
 
 /** Retriable on its own, or a retriable error the fetch retrier gave up on (`KafkaNumberOfRetriesExceeded`). */
 function isRetriableFetchError(error: unknown): boolean {
   if (!(error instanceof KafkaError)) return false;
   return error.retriable || (error.cause instanceof KafkaError && error.cause.retriable);
-}
-
-interface PendingAck {
-  topic: string;
-  partition: number;
-  firstOffset: bigint;
-  lastOffset: bigint;
-  acknowledgeType: ShareAcknowledgeType;
-}
-
-/** Groups a flat list of acknowledged ranges into the `ACKNOWLEDGE` event's per-topic shape. */
-function groupAcksByTopic(acks: readonly PendingAck[]): ShareAcknowledgeTopicPayload[] {
-  const byTopic = new Map<string, ShareAcknowledgeTopicPayload['partitions']>();
-  for (const { topic, partition, firstOffset, lastOffset, acknowledgeType } of acks) {
-    const partitions = byTopic.get(topic) ?? [];
-    partitions.push({ partition, firstOffset, lastOffset, acknowledgeType });
-    byTopic.set(topic, partitions);
-  }
-  return [...byTopic.entries()].map(([topic, partitions]) => ({ topic, partitions }));
 }
 
 export interface EachShareBatchPayload {
@@ -69,12 +35,6 @@ export interface ShareRunnerOptions {
   eachBatch?: EachShareBatchHandler | null;
   eachBatchAutoAck?: boolean;
   heartbeatInterval: number;
-  maxWaitTimeInMs?: number;
-  minBytes?: number;
-  maxBytes?: number;
-  maxRecords?: number;
-  batchSize?: number;
-  shareAcquireMode?: ShareAcquireMode;
   concurrency?: number;
   prefetchMaxBatches?: number;
   prefetchMaxBytes?: number;
@@ -90,12 +50,6 @@ export class ShareRunner {
   readonly #eachBatch: EachShareBatchHandler | null;
   readonly #eachBatchAutoAck: boolean;
   readonly #heartbeatInterval: number;
-  readonly #maxWaitTimeInMs: number;
-  readonly #minBytes: number;
-  readonly #maxBytes: number;
-  readonly #maxRecords: number;
-  readonly #batchSize: number;
-  readonly #shareAcquireMode: ShareAcquireMode;
   readonly #onCrash: (reason: Error) => void | Promise<void>;
   readonly #retrier: ReturnType<typeof retrier>;
   readonly #fetchManager: FetchManager<ShareBatch>;
@@ -103,12 +57,6 @@ export class ShareRunner {
 
   running = false;
   shuttingDown = false;
-  #shareSessionEpochByNode = new Map<string, number>();
-  /** What each node's share session last had, so unassigned partitions can be forgotten (KIP-227-style). */
-  #shareSessionPartitionsByNode = new Map<string, Map<string, Set<number>>>();
-  #pendingAcks: PendingAck[] = [];
-  /** Set when a partition reported stale leadership; the next fetch forces a metadata refresh. */
-  #metadataRefreshNeeded = false;
 
   constructor({
     logger,
@@ -117,12 +65,6 @@ export class ShareRunner {
     eachBatch = null,
     eachBatchAutoAck = true,
     heartbeatInterval,
-    maxWaitTimeInMs = DEFAULT_MAX_WAIT_MS,
-    minBytes = DEFAULT_MIN_BYTES,
-    maxBytes = DEFAULT_MAX_BYTES,
-    maxRecords = DEFAULT_MAX_RECORDS,
-    batchSize = DEFAULT_BATCH_SIZE,
-    shareAcquireMode = SHARE_ACQUIRE_MODE.BATCH_OPTIMIZED,
     concurrency = 1,
     prefetchMaxBatches,
     prefetchMaxBytes,
@@ -137,12 +79,6 @@ export class ShareRunner {
     this.#eachBatch = eachBatch;
     this.#eachBatchAutoAck = eachBatchAutoAck;
     this.#heartbeatInterval = heartbeatInterval;
-    this.#maxWaitTimeInMs = maxWaitTimeInMs;
-    this.#minBytes = minBytes;
-    this.#maxBytes = maxBytes;
-    this.#maxRecords = maxRecords;
-    this.#batchSize = batchSize;
-    this.#shareAcquireMode = shareAcquireMode;
     this.#onCrash = onCrash;
     this.#retrier = retrier(retry);
     this.#fetchManager = createFetchManager<ShareBatch>({
@@ -198,7 +134,7 @@ export class ShareRunner {
     while (this.running) {
       await sleep(50);
     }
-    await this.#flushAndCloseSessions();
+    await this.#shareGroup.closeShareSessions();
     await this.#shareGroup.leave();
     await this.#shareGroup.disconnect();
   }
@@ -256,7 +192,7 @@ export class ShareRunner {
     const startFetch = Date.now();
     this.#instrumentationEmitter.emit(FETCH_START, { nodeId });
 
-    const batches = await this.#doFetchFromNode(nodeId);
+    const batches = (await this.#shareGroup.fetch(nodeId)).filter((batch) => !this.#isStale(batch));
 
     this.#instrumentationEmitter.emit(FETCH, {
       numberOfBatches: batches.length,
@@ -267,225 +203,9 @@ export class ShareRunner {
     return batches;
   }
 
-  async #doFetchFromNode(nodeId: string): Promise<ShareBatch[]> {
-    if (this.#metadataRefreshNeeded) {
-      await this.#shareGroup.cluster.refreshMetadata();
-      this.#metadataRefreshNeeded = false;
-    } else {
-      await this.#shareGroup.cluster.refreshMetadataIfNecessary();
-    }
-    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
-    if (topicPartitions.length === 0) return [];
-
-    const memberId = this.#shareGroup.memberId;
-    if (!memberId) return [];
-
-    const shareSessionEpoch = this.#shareSessionEpochByNode.get(nodeId) ?? SHARE_SESSION_INITIAL_EPOCH;
-    const previousPartitions = this.#shareSessionPartitionsByNode.get(nodeId);
-    const currentPartitions = new Map(topicPartitions.map(({ topic, partitions }) => [topic, new Set(partitions)]));
-    const forgottenTopics = this.#forgottenTopicsFor(previousPartitions, currentPartitions);
-
-    // An initial-epoch ShareFetch may not carry acknowledgements, and opening a new session
-    // releases whatever the previous one acquired, so acks still pending for it are dropped.
-    const isNewSession = shareSessionEpoch === SHARE_SESSION_INITIAL_EPOCH;
-    const takenAcks: PendingAck[] = [];
-    const topics = topicPartitions
-      .map(({ topic, partitions }) => {
-        const topicId = this.#shareGroup.cluster.findTopicId(topic);
-        if (!topicId) return null;
-        return {
-          topicId,
-          partitions: partitions.map((partitionIndex) => {
-            const acknowledgementBatches = this.#takeAcknowledgementBatchesFor(topic, partitionIndex, takenAcks);
-            return { partitionIndex, acknowledgementBatches: isNewSession ? [] : acknowledgementBatches };
-          }),
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry != null);
-    if (isNewSession) takenAcks.length = 0;
-
-    if (topics.length === 0) {
-      this.#pendingAcks.push(...takenAcks);
-      return [];
-    }
-
-    let attempts = 0;
-    let sentEpoch = shareSessionEpoch;
-    let response: ShareFetchResponseV1Body;
-    try {
-      const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-      response = await this.#retrier(() => {
-        // A failed attempt may already have been applied (epoch bumped, acknowledgements
-        // recorded), so replaying it is ambiguous; retries open a fresh session without acks.
-        const isRetry = attempts++ > 0;
-        sentEpoch = isRetry ? SHARE_SESSION_INITIAL_EPOCH : shareSessionEpoch;
-        return broker.shareFetch({
-          groupId: this.#shareGroup.groupId,
-          memberId,
-          shareSessionEpoch: sentEpoch,
-          maxWaitMs: this.#maxWaitTimeInMs,
-          minBytes: this.#minBytes,
-          maxBytes: this.#maxBytes,
-          maxRecords: this.#maxRecords,
-          batchSize: this.#batchSize,
-          shareAcquireMode: this.#shareAcquireMode,
-          isRenewAck: !isRetry && takenAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
-          topics: isRetry
-            ? topics.map(({ topicId, partitions }) => ({
-                topicId,
-                partitions: partitions.map(({ partitionIndex }) => ({ partitionIndex, acknowledgementBatches: [] })),
-              }))
-            : topics,
-          forgottenTopics: isRetry ? [] : forgottenTopics,
-        });
-      });
-    } catch (error) {
-      if (attempts === 0) {
-        this.#pendingAcks.push(...takenAcks);
-        throw error;
-      }
-      // Whether the broker applied any attempt is unknown, so the session state no longer matches
-      // what it has: start the next fetch for this node with a fresh (epoch 0) session. The
-      // acknowledgements taken for it cannot ride on that request and are dropped with the session.
-      this.#shareSessionEpochByNode.delete(nodeId);
-      this.#shareSessionPartitionsByNode.delete(nodeId);
-      throw error;
-    }
-
-    // The request succeeded, so the session advanced even if a partition below reports an error.
-    this.#shareSessionEpochByNode.set(nodeId, sentEpoch + 1);
-    this.#shareSessionPartitionsByNode.set(nodeId, currentPartitions);
-
-    if (takenAcks.length > 0 && attempts === 1) {
-      this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
-        groupId: this.#shareGroup.groupId,
-        memberId,
-        nodeId,
-        topics: groupAcksByTopic(takenAcks),
-      });
-    }
-
-    const batches: ShareBatch[] = [];
-    let fatalError: KafkaProtocolError | undefined;
-    for (const { topicId, partitions } of response.responses) {
-      const topic = await this.#resolveTopicName(topicId);
-      for (const partitionData of partitions) {
-        const { partitionIndex: partition, errorCode, acknowledgeErrorCode } = partitionData;
-        if (failure(acknowledgeErrorCode)) this.#warnAcknowledgeFailure(topic, partition, acknowledgeErrorCode);
-        if (failure(errorCode)) {
-          fatalError ??= this.#handlePartitionFetchError(topic, partition, errorCode);
-          continue;
-        }
-        batches.push(
-          new ShareBatch(topic, {
-            partition,
-            messages: partitionData.records,
-            acquiredRecords: partitionData.acquiredRecords,
-          }),
-        );
-      }
-    }
-    if (fatalError) {
-      // Release what the healthy partitions acquired rather than leave it locked until it times out.
-      for (const batch of batches) this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
-      throw fatalError;
-    }
-    return batches.filter((batch) => !this.#isStale(batch));
-  }
-
-  /** Like Java's AcknowledgementCommitCallback: a failed acknowledgement is reported, not fatal. */
-  #warnAcknowledgeFailure(topic: string, partition: number, errorCode: number): void {
-    this.#logger.warn('Share acknowledgement failed', {
-      groupId: this.#shareGroup.groupId,
-      topic,
-      partition,
-      error: createErrorFromCode(errorCode).message,
-    });
-  }
-
-  /**
-   * A retriable error skips only this partition this round; anything else is returned for the
-   * caller to crash the consumer with once the rest of the response is handled.
-   */
-  #handlePartitionFetchError(topic: string, partition: number, errorCode: number): KafkaProtocolError | undefined {
-    const error = createErrorFromCode(errorCode, { topic, partition });
-    if (!error.retriable) return error;
-    if (staleMetadata(error)) this.#metadataRefreshNeeded = true;
-    this.#logger.warn('Share fetch failed for partition, retrying', {
-      groupId: this.#shareGroup.groupId,
-      topic,
-      partition,
-      error: error.message,
-    });
-    return undefined;
-  }
-
-  /** Partitions the node's share session previously held but are no longer assigned must be forgotten. */
-  #forgottenTopicsFor(
-    previous: Map<string, Set<number>> | undefined,
-    current: Map<string, Set<number>>,
-  ): ShareFetchForgottenTopicInput[] {
-    if (!previous) return [];
-
-    const forgottenTopics: ShareFetchForgottenTopicInput[] = [];
-    for (const [topic, previousPartitions] of previous) {
-      const currentTopicPartitions = current.get(topic);
-      const removed = [...previousPartitions].filter((partition) => !currentTopicPartitions?.has(partition));
-      if (removed.length === 0) continue;
-
-      const topicId = this.#shareGroup.cluster.findTopicId(topic);
-      if (!topicId) continue;
-      forgottenTopics.push({ topicId, partitions: removed });
-    }
-    return forgottenTopics;
-  }
-
-  async #resolveTopicName(topicId: Buffer): Promise<string> {
-    for (const { topic } of this.#shareGroup.assigned()) {
-      const id = this.#shareGroup.cluster.findTopicId(topic);
-      if (id?.equals(topicId)) return topic;
-    }
-    throw new KafkaError('Unknown topic id in share fetch response');
-  }
-
-  #takeAcknowledgementBatchesFor(
-    topic: string,
-    partition: number,
-    taken: PendingAck[],
-  ): ShareFetchAcknowledgementBatchInput[] {
-    const remaining: PendingAck[] = [];
-    const batches: ShareFetchAcknowledgementBatchInput[] = [];
-    for (const ack of this.#pendingAcks) {
-      if (ack.topic === topic && ack.partition === partition) {
-        taken.push(ack);
-        batches.push({
-          firstOffset: ack.firstOffset,
-          lastOffset: ack.lastOffset,
-          acknowledgeTypes: [ack.acknowledgeType],
-        });
-      } else {
-        remaining.push(ack);
-      }
-    }
-    this.#pendingAcks = remaining;
-    return batches;
-  }
-
-  #queueAcks(batch: ShareBatch, acknowledgeType: ShareAcknowledgeType): void {
-    for (const acquired of batch.acquiredRecords) {
-      this.#pendingAcks.push({
-        topic: batch.topic,
-        partition: batch.partition,
-        firstOffset: acquired.firstOffset,
-        lastOffset: acquired.lastOffset,
-        acknowledgeType,
-      });
-    }
-  }
-
   async #handleBatch(batch: ShareBatch): Promise<void> {
     if (this.#isStale(batch)) {
-      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      this.#shareGroup.acknowledge(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
       return;
     }
 
@@ -501,13 +221,13 @@ export class ShareRunner {
           },
           acknowledge: (type = SHARE_ACKNOWLEDGE_TYPE.ACCEPT) => {
             acknowledged = true;
-            this.#queueAcks(batch, type);
+            this.#shareGroup.acknowledge(batch, type);
           },
           isRunning: () => this.running && !this.shuttingDown,
           isStale: () => this.#isStale(batch),
         });
         if (!acknowledged && this.#eachBatchAutoAck) {
-          this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
+          this.#shareGroup.acknowledge(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
         }
         return;
       }
@@ -530,110 +250,11 @@ export class ShareRunner {
           }),
         );
       }
-      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
+      this.#shareGroup.acknowledge(batch, SHARE_ACKNOWLEDGE_TYPE.ACCEPT);
     } catch (error) {
-      this.#queueAcks(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
+      this.#shareGroup.acknowledge(batch, SHARE_ACKNOWLEDGE_TYPE.RELEASE);
       this.running = false;
       await this.#onCrash(error as Error);
     }
-  }
-
-  async #flushAndCloseSessions(): Promise<void> {
-    const memberId = this.#shareGroup.memberId;
-    if (!memberId) {
-      this.#pendingAcks = [];
-      this.#shareSessionEpochByNode.clear();
-      this.#shareSessionPartitionsByNode.clear();
-      return;
-    }
-
-    const nodeIds = new Set([...this.#shareSessionEpochByNode.keys(), ...this.#shareGroup.getNodeIds()]);
-    for (const nodeId of nodeIds) {
-      try {
-        const acksForNode = this.#acksForNode(nodeId);
-        const broker = await this.#shareGroup.cluster.findBroker({ nodeId });
-        const response = await broker.shareAcknowledge({
-          groupId: this.#shareGroup.groupId,
-          memberId,
-          shareSessionEpoch: SHARE_SESSION_CLOSE_EPOCH,
-          isRenewAck: this.#pendingAcks.some((ack) => ack.acknowledgeType === SHARE_ACKNOWLEDGE_TYPE.RENEW),
-          topics: this.#acknowledgementTopicsForNode(nodeId),
-        });
-
-        if (acksForNode.length > 0) {
-          this.#instrumentationEmitter.emit(ACKNOWLEDGE, {
-            groupId: this.#shareGroup.groupId,
-            memberId,
-            nodeId,
-            topics: groupAcksByTopic(acksForNode),
-          });
-        }
-        for (const { topicId, partitions } of response.responses) {
-          const topic = await this.#resolveTopicName(topicId);
-          for (const { partitionIndex, errorCode } of partitions) {
-            if (failure(errorCode)) this.#warnAcknowledgeFailure(topic, partitionIndex, errorCode);
-          }
-        }
-      } catch {
-        // Closing is best-effort; leave() still runs after this.
-      }
-    }
-
-    this.#pendingAcks = [];
-    this.#shareSessionEpochByNode.clear();
-    this.#shareSessionPartitionsByNode.clear();
-  }
-
-  /** The pending acks that apply to `nodeId`'s currently assigned partitions. */
-  #acksForNode(nodeId: string): PendingAck[] {
-    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
-    const partitionSet = new Set(
-      topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => `${topic}:${partition}`)),
-    );
-    return this.#pendingAcks.filter((ack) => partitionSet.has(`${ack.topic}:${ack.partition}`));
-  }
-
-  #acknowledgementTopicsForNode(nodeId: string): {
-    topicId: Buffer;
-    partitions: {
-      partitionIndex: number;
-      acknowledgementBatches: ShareFetchAcknowledgementBatchInput[];
-    }[];
-  }[] {
-    const topicPartitions = this.#shareGroup.filterPartitionsByNode(nodeId, this.#shareGroup.assigned());
-    const partitionSet = new Set(
-      topicPartitions.flatMap(({ topic, partitions }) => partitions.map((partition) => `${topic}:${partition}`)),
-    );
-
-    const byTopic = new Map<
-      string,
-      { topicId: Buffer; partitions: Map<number, ShareFetchAcknowledgementBatchInput[]> }
-    >();
-
-    for (const ack of this.#pendingAcks) {
-      if (!partitionSet.has(`${ack.topic}:${ack.partition}`)) continue;
-      const topicId = this.#shareGroup.cluster.findTopicId(ack.topic);
-      if (!topicId) continue;
-      const existing = byTopic.get(ack.topic) ?? {
-        topicId,
-        partitions: new Map<number, ShareFetchAcknowledgementBatchInput[]>(),
-      };
-      const batches = existing.partitions.get(ack.partition) ?? [];
-      batches.push({
-        firstOffset: ack.firstOffset,
-        lastOffset: ack.lastOffset,
-        acknowledgeTypes: [ack.acknowledgeType],
-      });
-      existing.partitions.set(ack.partition, batches);
-      byTopic.set(ack.topic, existing);
-    }
-
-    return [...byTopic.values()].map(({ topicId, partitions }) => ({
-      topicId,
-      partitions: [...partitions.entries()].map(([partitionIndex, acknowledgementBatches]) => ({
-        partitionIndex,
-        acknowledgementBatches,
-      })),
-    }));
   }
 }

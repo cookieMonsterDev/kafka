@@ -1,14 +1,16 @@
 import type { Broker } from '../broker/index';
+import { COORDINATOR_LOADING_ERRORS, isStaleMetadata } from '../cluster/error-classifier';
 import type { Cluster } from '../cluster/index';
+import { coordinatorTarget } from '../cluster/run';
 import { KafkaDeleteGroupsError, KafkaMetadataNotLoaded } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
-import { staleMetadata } from '../protocol/error-codes';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { retrier, type RetryOptions } from '../retry/index';
 import { groupBy } from '../utils/group-by';
 import { waitFor, type WaitForOptions } from '../utils/wait';
+import { DeleteGroups } from '../protocol/requests/lazy-families';
 
 export interface AdminContext {
   cluster: Cluster;
@@ -21,20 +23,12 @@ export function formatUnknown(value: unknown): string {
   return String(value);
 }
 
-export function protocolType(error: unknown): string | undefined {
-  if (error != null && typeof error === 'object' && 'type' in error) {
-    const type = (error as { type?: unknown }).type;
-    return typeof type === 'string' ? type : undefined;
-  }
-  return undefined;
-}
-
 export async function retryOnLeaderNotAvailable<T>(fn: () => Promise<T>, options: WaitForOptions = {}): Promise<T> {
   return waitFor(async () => {
     try {
       return await fn();
     } catch (error) {
-      if (!staleMetadata({ type: protocolType(error) })) {
+      if (!isStaleMetadata(error)) {
         throw error;
       }
       return false;
@@ -67,27 +61,28 @@ export function isConsumerGroupIdle(state: string): boolean {
   return state === 'Empty' || state === 'Dead';
 }
 
-const RETRIABLE_DELETE_GROUPS_ERRORS = new Set([
-  'NOT_CONTROLLER',
-  'GROUP_COORDINATOR_NOT_AVAILABLE',
-  'NOT_COORDINATOR_FOR_GROUP',
-  'GROUP_LOAD_IN_PROGRESS',
-]);
-
-function isRetriableDeleteGroupsError(error: unknown): boolean {
-  if (error instanceof KafkaDeleteGroupsError) {
-    return error.groups.every((group) => RETRIABLE_DELETE_GROUPS_ERRORS.has(protocolType(group.error) ?? ''));
-  }
-  return RETRIABLE_DELETE_GROUPS_ERRORS.has(protocolType(error) ?? '');
-}
-
 export function isBrokerConfig(type: number): boolean {
   return type === CONFIG_RESOURCE_TYPES.BROKER || type === CONFIG_RESOURCE_TYPES.BROKER_LOGGER;
 }
 
+/** Groups `items` by the broker at the same index, keeping the first-seen order. */
+export function groupByBroker<T>(items: readonly T[], brokers: readonly Broker[]): Map<Broker, T[]> {
+  const itemsByBroker = new Map<Broker, T[]>();
+  items.forEach((item, index) => {
+    const broker = brokers[index]!;
+    const existing = itemsByBroker.get(broker);
+    if (existing) {
+      existing.push(item);
+    } else {
+      itemsByBroker.set(broker, [item]);
+    }
+  });
+  return itemsByBroker;
+}
+
 /**
- * Batches a per-coordinator describe request for each group id. Coordinators are resolved inside
- * the retrier so a retry after NOT_COORDINATOR_FOR_GROUP targets the group's current coordinator.
+ * Batches a per-coordinator describe request for each group id. Coordinators are resolved on every
+ * attempt, so a retry after NOT_COORDINATOR_FOR_GROUP targets the group's current coordinator.
  */
 export async function describeGroupsViaCoordinators<T>({
   cluster,
@@ -100,74 +95,45 @@ export async function describeGroupsViaCoordinators<T>({
   groupIds: readonly string[];
   describe: (coordinator: Broker, groupIds: string[]) => Promise<{ groups: T[] }>;
 }): Promise<T[]> {
-  const responses = await retrier(retry)(async () => {
-    const coordinatorsForGroup = await Promise.all(
-      groupIds.map(async (groupId) => ({ groupId, coordinator: await cluster.findGroupCoordinator({ groupId }) })),
-    );
-
-    const groupsByCoordinator = new Map<string, { coordinator: Broker; groupIds: string[] }>();
-    for (const { groupId, coordinator } of coordinatorsForGroup) {
-      const key = String(coordinator.nodeId);
-      const existing = groupsByCoordinator.get(key);
-      if (existing) {
-        existing.groupIds.push(groupId);
-      } else {
-        groupsByCoordinator.set(key, { coordinator, groupIds: [groupId] });
-      }
-    }
-
-    return Promise.all(
-      [...groupsByCoordinator.values()].map(({ coordinator, groupIds: ids }) => describe(coordinator, ids)),
-    );
-  });
+  const responses = await cluster.run(
+    () => groupIds.map((groupId) => coordinatorTarget(groupId)),
+    (coordinators) =>
+      Promise.all([...groupByBroker(groupIds, coordinators)].map(([coordinator, ids]) => describe(coordinator, ids))),
+    { retrier: retrier(retry), retryRetriable: true },
+  );
 
   return responses.flatMap(({ groups }) => groups);
 }
 
 /**
  * Shared coordinator-resolution retry loop backing `deleteGroups`/`deleteShareGroups`: resolves
- * each remaining group id's coordinator, batches `DeleteGroups` per coordinator node, and retries
- * only the groups that came back with an error, until the retrier gives up or bails.
+ * each remaining group id's coordinator, batches `DeleteGroups` per coordinator, and retries only
+ * the groups that came back with an error, while every such error is a moved or loading coordinator.
  */
 export function deleteGroupsViaCoordinators({
   cluster,
-  logger,
   retry,
   groupIds,
   errorLabel,
   logMessage,
 }: {
   cluster: Cluster;
-  logger: Logger;
   retry?: RetryOptions;
   groupIds: readonly string[];
   errorLabel: string;
   logMessage: string;
 }): Promise<DeleteGroupsResult[]> {
+  if (groupIds.length === 0) return Promise.resolve([]);
+
   let remaining = groupIds.slice();
   const deleted: DeleteGroupsResult[] = [];
 
-  return retrier(retry)(async (bail, retryCount, retryTime) => {
-    try {
-      if (remaining.length === 0) return [];
-
-      await cluster.refreshMetadata();
-
-      const groupsByNode = new Map<string, string[]>();
-      const brokerByNode = new Map<string, Awaited<ReturnType<typeof cluster.findGroupCoordinator>>>();
-
-      for (const groupId of remaining) {
-        const broker = await cluster.findGroupCoordinator({ groupId });
-        const nodeId = String(broker.nodeId);
-        const existing = groupsByNode.get(nodeId) ?? [];
-        existing.push(groupId);
-        groupsByNode.set(nodeId, existing);
-        brokerByNode.set(nodeId, broker);
-      }
-
+  return cluster.run(
+    () => remaining.map((groupId) => coordinatorTarget(groupId)),
+    async (coordinators) => {
       const responses = await Promise.all(
-        [...brokerByNode.entries()].map(async ([nodeId, broker]) =>
-          broker.deleteGroups({ groupIds: groupsByNode.get(nodeId) ?? [] }),
+        [...groupByBroker(remaining, coordinators)].map(([coordinator, ids]) =>
+          coordinator.send(DeleteGroups, { groupIds: ids }),
         ),
       );
 
@@ -184,20 +150,9 @@ export function deleteGroupsViaCoordinators({
       }
 
       return deleted;
-    } catch (error) {
-      if (isRetriableDeleteGroupsError(error)) {
-        logger.warn(logMessage, {
-          error: error instanceof Error ? error.message : String(error),
-          retryCount,
-          retryTime,
-        });
-        throw error;
-      }
-
-      bail(error as Error);
-      return [];
-    }
-  });
+    },
+    { retrier: retrier(retry), refreshMetadata: true, retryOn: COORDINATOR_LOADING_ERRORS, description: logMessage },
+  );
 }
 
 export async function groupResourcesByBroker<T extends { type: number; name: string }>({

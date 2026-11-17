@@ -4,13 +4,14 @@ import {
   KafkaDeleteTopicRecordsError,
   KafkaNonRetriableError,
 } from '../errors';
-import { createErrorFromCode, staleMetadata } from '../protocol/error-codes';
+import { isRequestTimedOut, isTopicAlreadyExists, STALE_METADATA_ERRORS } from '../cluster/error-classifier';
+import { CONTROLLER } from '../cluster/run';
+import { createErrorFromCode } from '../protocol/error-codes';
 import { API_KEYS } from '../protocol/requests/api-keys';
-import { DEFAULT_RESPONSE_PARTITION_LIMIT } from '../protocol/requests/describe-topic-partitions/index';
-import { retrier } from '../retry/index';
+import { retrier as createRetrier } from '../retry/index';
 import { parseOffset } from '../consumer/types';
 import type { AdminContext } from './helpers';
-import { protocolType, requireMetadata, retryOnLeaderNotAvailable, formatUnknown } from './helpers';
+import { requireMetadata, retryOnLeaderNotAvailable, formatUnknown } from './helpers';
 import type {
   DescribeTopicPartitionsOptions,
   DescribeTopicPartitionsResult,
@@ -21,6 +22,15 @@ import type {
   TopicOffset,
   TopicPartitionConfig,
 } from './types';
+import {
+  CreatePartitions,
+  CreateTopics,
+  DeleteRecords,
+  DeleteTopics,
+  DescribeCluster,
+  DescribeTopicPartitions,
+} from '../protocol/requests/lazy-families';
+import { Metadata } from '../protocol/requests/metadata/index';
 
 const NO_CONTROLLER_ID = -1;
 const LEADER_NOT_AVAILABLE_CODE = 5;
@@ -53,6 +63,8 @@ export function createTopicsApi(
   { cluster, logger, retry }: AdminContext,
   { fetchTopicOffsets }: { fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]> },
 ): TopicsApi {
+  const retrier = createRetrier(retry);
+
   const listTopics = async (): Promise<string[]> => {
     const { topicMetadata } = await requireMetadata(cluster);
     return topicMetadata.flatMap((topic) => (topic.topic == null ? [] : [topic.topic]));
@@ -109,44 +121,37 @@ export function createTopicsApi(
       });
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        await broker.createTopics({ topics, validateOnly, timeout });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        try {
+          await broker.send(CreateTopics, { topics, validateOnly, timeout });
+        } catch (error) {
+          if (error instanceof KafkaAggregateError && error.errors.every(isTopicAlreadyExists)) {
+            return false;
+          }
+          throw error;
+        }
 
         // `validateOnly` never actually creates the topic, so its partitions never get a leader —
         // waiting for one here would just run out the clock on every dry-run call.
         if (waitForLeaders && !validateOnly) {
           const topicNamesArray = [...topicNames];
-          await retryOnLeaderNotAvailable(async () => broker.metadata(topicNamesArray), {
-            delay: 100,
-            maxWait: timeout,
-            timeoutMessage: 'Timed out while waiting for topic leaders',
-          });
+          await retryOnLeaderNotAvailable(
+            async () =>
+              broker.send(Metadata, { topics: topicNamesArray, allowAutoTopicCreation: broker.allowAutoTopicCreation }),
+            {
+              delay: 100,
+              maxWait: timeout,
+              timeoutMessage: 'Timed out while waiting for topic leaders',
+            },
+          );
         }
 
         return true;
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not create topics', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        if (error instanceof KafkaAggregateError) {
-          if (error.errors.every((entry) => protocolType(entry) === 'TOPIC_ALREADY_EXISTS')) {
-            return false;
-          }
-        }
-
-        bail(error as Error);
-        return false;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not create topics' },
+    );
   };
 
   const createPartitions = async ({
@@ -176,28 +181,16 @@ export function createTopicsApi(
       );
     }
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        await broker.createPartitions({ topicPartitions, validateOnly, timeout });
-      } catch (error) {
-        const type = protocolType(error);
-        // A topic created moments earlier may not have reached this broker's metadata yet —
-        // staleMetadata() covers that whole class (UNKNOWN_TOPIC_OR_PARTITION and friends), the
-        // same set retryOnLeaderNotAvailable() retries on right after topic creation.
-        if (type === 'NOT_CONTROLLER' || staleMetadata({ type })) {
-          logger.warn('Could not create partitions', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-      }
-    });
+    // A topic created moments earlier may not have reached this broker's metadata yet: retry the
+    // whole stale-metadata class (UNKNOWN_TOPIC_OR_PARTITION and friends), the same set
+    // retryOnLeaderNotAvailable() retries on right after topic creation.
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        await broker.send(CreatePartitions, { topicPartitions, validateOnly, timeout });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_METADATA_ERRORS, description: 'Could not create partitions' },
+    );
   };
 
   const deleteTopics = async ({ topics, timeout }: { topics: string[]; timeout?: number }): Promise<void> => {
@@ -209,42 +202,29 @@ export function createTopicsApi(
       throw new KafkaNonRetriableError('Invalid topics array, the names must be a valid string');
     }
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        await broker.deleteTopics({ topics, timeout });
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        try {
+          await broker.send(DeleteTopics, { topics, timeout });
+        } catch (error) {
+          if (isRequestTimedOut(error)) {
+            logger.error(
+              'Could not delete topics, check if "delete.topic.enable" is set to "true" (the default value is "false") or increase the timeout',
+              { error: error instanceof Error ? error.message : String(error) },
+            );
+          }
+          throw error;
+        }
 
         for (const topic of topics) {
           cluster.targetTopics.delete(topic);
         }
 
         await cluster.refreshMetadata();
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'NOT_CONTROLLER' || type === 'UNKNOWN_TOPIC_OR_PARTITION') {
-          logger.warn('Could not delete topics', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        if (type === 'REQUEST_TIMED_OUT') {
-          logger.error(
-            'Could not delete topics, check if "delete.topic.enable" is set to "true" (the default value is "false") or increase the timeout',
-            {
-              error: error instanceof Error ? error.message : String(error),
-              retryCount,
-              retryTime,
-            },
-          );
-        }
-
-        bail(error as Error);
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_METADATA_ERRORS, description: 'Could not delete topics' },
+    );
   };
 
   const fetchTopicMetadata = async ({ topics = [] }: { topics?: string[] } = {}): Promise<{
@@ -279,7 +259,7 @@ export function createTopicsApi(
     const versions = cluster.brokerPool.versions;
     if (versions?.[API_KEYS.DescribeCluster]) {
       const broker = await cluster.findControllerBroker();
-      const body = await broker.describeCluster({});
+      const body = await broker.send(DescribeCluster, {});
       const controller = body.controllerId == null || body.controllerId === NO_CONTROLLER_ID ? null : body.controllerId;
       return {
         brokers: body.brokers.map(({ nodeId, host, port }) => ({ nodeId, host, port })),
@@ -297,7 +277,7 @@ export function createTopicsApi(
 
   const describeTopicPartitions = async ({
     topics,
-    responsePartitionLimit = DEFAULT_RESPONSE_PARTITION_LIMIT,
+    responsePartitionLimit,
     cursor,
   }: DescribeTopicPartitionsOptions): Promise<DescribeTopicPartitionsResult> => {
     if (!Array.isArray(topics)) {
@@ -333,11 +313,10 @@ export function createTopicsApi(
       }
     }
 
-    return retrier(retry)(async (bail) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const body = await broker.describeTopicPartitions({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const body = await broker.send(DescribeTopicPartitions, {
           topics: names.map((topic) => ({ topic })),
           responsePartitionLimit,
           cursor: cursor ?? null,
@@ -375,18 +354,9 @@ export function createTopicsApi(
           ),
           nextCursor: body.nextCursor,
         };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe topic partitions', {
-            error: error instanceof Error ? error.message : String(error),
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe topic partitions' },
+    );
   };
 
   const deleteTopicRecords = async ({
@@ -442,8 +412,12 @@ export function createTopicsApi(
 
     let pendingPartitions = parsedPartitions;
 
-    await retrier(retry)(async () => {
-      try {
+    // The leaders are looked up from metadata on every attempt, so `run` resolves no target. A
+    // retriable per-partition error retries the partitions still pending, after a metadata refresh
+    // when one of them names stale metadata.
+    await cluster.run(
+      () => [],
+      async () => {
         const partitionErrors: {
           partition: number;
           offset: unknown;
@@ -464,7 +438,7 @@ export function createTopicsApi(
         const requests = Object.entries(leadersByBroker).map(([nodeId, nodePartitionIds]) =>
           (async () => {
             const broker = await cluster.findBroker({ nodeId });
-            await broker.deleteRecords({
+            await broker.send(DeleteRecords, {
               topics: [
                 {
                   topic,
@@ -498,21 +472,9 @@ export function createTopicsApi(
         if (partitionErrors.length > 0) {
           throw new KafkaDeleteTopicRecordsError({ partitions: partitionErrors });
         }
-      } catch (error) {
-        if (
-          error instanceof KafkaDeleteTopicRecordsError &&
-          error.retriable &&
-          error.partitions.some(({ error: partitionError }) => {
-            if (partitionError == null) return false;
-            const descriptor = partitionError as { type?: string; name?: string };
-            return staleMetadata(descriptor) || descriptor.name === 'KafkaMetadataNotLoaded';
-          })
-        ) {
-          await cluster.refreshMetadata();
-        }
-        throw error;
-      }
-    });
+      },
+      { retrier, retryRetriable: true },
+    );
   };
 
   return {

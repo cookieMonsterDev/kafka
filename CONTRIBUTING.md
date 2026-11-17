@@ -4,6 +4,8 @@ Thanks for helping. This repo is a pnpm workspace: `@cookiemonsterdev/kafka-core
 
 Please search existing [issues](https://github.com/cookieMonsterDev/kafka/issues) and [pull requests](https://github.com/cookieMonsterDev/kafka/pulls) before opening a new one. For a large or breaking change, open an issue first and agree on the shape before you write a lot of code. Bug fixes can go straight to a PR.
 
+Report security vulnerabilities privately as described in [SECURITY.md](SECURITY.md), not in a public issue or PR.
+
 Coding agents use [AGENTS.md](AGENTS.md) as their operating contract. That file requires them to follow this document (tests, docs, commits, PRs).
 
 ## Prerequisites
@@ -202,7 +204,11 @@ Do not hand-format. Prettier and ESLint run on commit and in CI.
 
 **Filenames and folders:** kebab-case only (`fetch-request`, not `fetchRequest`).
 
-**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`. Each package's `build:types` then runs `scripts/add-declaration-extensions.mjs`, which adds the `.js` extensions that `node16`/`nodenext` consumers need to the extensionless relative imports copied from `src`.
+**Domain terms:** name Kafka concepts in code, docs, and errors with the words in [GLOSSARY.md](GLOSSARY.md), and avoid the synonyms it lists under _Avoid_. Existing public names keep their current spelling until a breaking release. If your change adds, renames, or redefines a domain concept, update the glossary in the same PR.
+
+**Public API:** export from `packages/core/src/index.ts`. Types are generated with `tsc --emitDeclarationOnly`; do not add a hand-written `index.d.ts`. Each package's `build:types` then runs `scripts/add-declaration-extensions.mjs`, which adds the `.js` extensions that `node16`/`nodenext` consumers need to the extensionless relative imports copied from `src`. In `@cookiemonsterdev/kafka-core`, `scripts/prune-unreachable-declarations.mjs` then deletes the `.d.ts` files that `dist/index.d.ts` does not reach.
+
+**Bundled JavaScript** (`@cookiemonsterdev/kafka-core`): the Vite build drops JSDoc from the JavaScript (the `.d.ts` files keep it), escapes non-ASCII characters in strings and regexes, and fails if any non-ASCII character is left, for example in a legal comment.
 
 ## Tests
 
@@ -230,7 +236,8 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 [`benchmarks/`](benchmarks/README.md) compares kafka-core from `develop` with other Kafka clients on
 Node.js and Bun, each run in its own Docker container against a single-node broker. It is a
 standalone project, not a workspace member, and never runs in `pnpm test` or CI. Run it with
-`pnpm benchmarks:run` (see its README for tiers and the publishing rules). The microbenches in
+`pnpm benchmarks:run` (see its README for tiers, payloads and the publishing rules), and regenerate the docs
+page from its sessions with `pnpm docs:benchmarks`. The microbenches in
 `packages/core/bench/` are separate and measure kafka-core internals without a broker.
 
 ### Bun
@@ -354,7 +361,7 @@ note how you verified it (keyboard pass, zoom, reduced-motion, or a screen reade
 2. The [Release](.github/workflows/release.yml) workflow runs on `master`. `dorny/paths-filter` skips packages that did not change. You can also run it from **Actions → Release** (`package`: `config` / `core` / `cli` / `studio` / `docs` / `all`, `dry_run`: true to print the next version without publishing).
 3. Publish order comes from one ordered manifest — `scripts/resolve-release-package.mjs`'s `RELEASE_PACKAGES` — walked by a single `release` job running `scripts/release-chain.mjs`: config, then core, then cli, then studio, then docs, so a package that comes later always builds against the freshly-released version of the ones before it. A package registered here before it has its own `release.config.js` (e.g. `studio`, mid-development) is skipped with a warning rather than crashing the chain.
 4. A bot PR **`master` → `develop`** updates `package.json` and changelogs. Merge that with a merge commit too.
-5. To delete a test release: **Actions → Unrelease** (type `DELETE`). You cannot republish the same npm version after unpublish.
+5. **Fixing a bad release:** release a new version with the fix instead of deleting or unpublishing the old one. Release tags are protected from deletion.
 6. **Recovering a half-failed release:** if one package fails mid-chain (say cli), `release-chain.mjs` stops there without running the packages after it — fix the problem, then re-run from **Actions → Release** with `package` set to the one that failed (or to `all` to re-verify everything). Packages that already released are unaffected: `dorny/paths-filter` on the next `master` push, or an explicit `package` choice, decides what runs.
 
 ## Adding a package
@@ -377,8 +384,9 @@ another workspace package must use a plain semver range, never `workspace:`:
 the published tarball uninstallable; `pnpm pack` alone would rewrite it, but that's not what
 release uses. `linkWorkspacePackages: true` still links the local package during development, so
 nothing about the day-to-day workflow changes. `scripts/check-publishable-deps.mjs` enforces this
-in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` to exactly
-`{lz4-lite, snappyjs, @cookiemonsterdev/kafka-config}` — a guardrail against
+in CI and pre-commit, and also pins `@cookiemonsterdev/kafka-core`'s own `dependencies` and
+`optionalDependencies` together to exactly
+`{lz4-lite, snappyjs, @node-rs/crc32, @cookiemonsterdev/kafka-config}` — a guardrail against
 `@cookiemonsterdev/kafka-core` quietly picking up a runtime dependency it can't drop later without
 a breaking release.
 

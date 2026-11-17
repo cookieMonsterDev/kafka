@@ -1,4 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { KafkaMemberIdRequired } from '../../../errors';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { type GroupProtocol, joinGroupRequestV0, withDefaultMetadata } from './v0/request';
 import { joinGroupResponseV0 } from './v0/response';
 import { joinGroupRequestV1 } from './v1/request';
@@ -53,7 +55,7 @@ function joinGroupLogResponseError(memberId: string | undefined): boolean {
   return memberId != null && memberId !== '';
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: joinGroupRequestV0({ ...options, groupProtocols: withDefaultMetadata(options.groupProtocols) }),
     response: joinGroupResponseV0,
@@ -153,13 +155,12 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<JoinGroupOptions>>> = {
     requestTimeout: joinGroupRequestTimeout(options),
     logResponseError: joinGroupLogResponseError(options.memberId),
   }),
-};
+} satisfies VersionFactories<JoinGroupOptions>;
 
-export const JoinGroup: RequestFamily<JoinGroupOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no JoinGroup protocol for version ${version}`);
-    return factory;
-  },
+export const JoinGroup = defineRequestFamily(KAFKA_APIS.JoinGroup, VERSIONS, {
+  // KIP-394: a new member's first JoinGroup returns MEMBER_ID_REQUIRED with the member id to rejoin with.
+  retryOptions: (error, options) =>
+    error instanceof KafkaMemberIdRequired && error.memberId != null
+      ? { ...options, memberId: error.memberId }
+      : undefined,
 });

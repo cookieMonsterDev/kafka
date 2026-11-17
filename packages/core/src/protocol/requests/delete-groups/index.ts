@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { deleteGroupsRequestV0 } from './v0/request';
 import { deleteGroupsResponseV0 } from './v0/response';
 import { deleteGroupsRequestV1 } from './v1/request';
@@ -10,17 +11,10 @@ export interface DeleteGroupsOptions {
   groupIds: string[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteGroupsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: deleteGroupsRequestV0(options), response: deleteGroupsResponseV0 }),
   1: (options) => ({ request: deleteGroupsRequestV1(options), response: deleteGroupsResponseV1 }),
   2: (options) => ({ request: deleteGroupsRequestV2(options), response: deleteGroupsResponseV2 }),
-};
+} satisfies VersionFactories<DeleteGroupsOptions>;
 
-export const DeleteGroups: RequestFamily<DeleteGroupsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DeleteGroups protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DeleteGroups = defineRequestFamily(KAFKA_APIS.DeleteGroups, VERSIONS);

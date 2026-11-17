@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLogger, LOG_LEVELS, type LogEntry } from './index';
+import { createLogger, isLogLevelEnabled, LOG_LEVELS, type LogEntry, type Logger } from './index';
 
 describe('loggers', () => {
   let entries: LogEntry[];
@@ -16,6 +16,34 @@ describe('loggers', () => {
   const logCreator = () => (entry: LogEntry) => {
     entries.push(entry);
   };
+
+  describe('isLogLevelEnabled', () => {
+    it('follows the current level of the logger and of each namespace', () => {
+      const logger = createLogger({ level: LOG_LEVELS.INFO, logCreator });
+      const debugNamespace = logger.namespace('Verbose', LOG_LEVELS.DEBUG);
+
+      expect(isLogLevelEnabled(logger, LOG_LEVELS.INFO)).toBe(true);
+      expect(isLogLevelEnabled(logger, LOG_LEVELS.DEBUG)).toBe(false);
+      expect(isLogLevelEnabled(debugNamespace, LOG_LEVELS.DEBUG)).toBe(true);
+
+      logger.setLogLevel(LOG_LEVELS.DEBUG);
+      expect(isLogLevelEnabled(logger, LOG_LEVELS.DEBUG)).toBe(true);
+      expect(isLogLevelEnabled(logger.namespace('Inherited'), LOG_LEVELS.DEBUG)).toBe(true);
+    });
+
+    it('treats a logger it did not create as enabled at every level', () => {
+      const customLogger: Logger = {
+        info: () => {},
+        error: () => {},
+        warn: () => {},
+        debug: () => {},
+        namespace: () => customLogger,
+        setLogLevel: () => {},
+      };
+
+      expect(isLogLevelEnabled(customLogger, LOG_LEVELS.DEBUG)).toBe(true);
+    });
+  });
 
   it('only logs messages at or below the configured level', () => {
     const logger = createLogger({ level: LOG_LEVELS.WARN, logCreator });

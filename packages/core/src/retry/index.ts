@@ -1,5 +1,6 @@
 import { KafkaNonRetriableError, KafkaNumberOfRetriesExceeded } from '../errors';
-import { abortError } from '../utils/abort';
+import type { Deadline } from '../utils/deadline';
+import { randomFraction } from '../utils/random-fraction';
 import { RETRY_DEFAULTS } from './defaults';
 
 /**
@@ -20,15 +21,15 @@ export type Bail = (error?: Error) => void;
 export type Retryable<T> = (bail: Bail, retryCount: number, retryTime: number) => Promise<T>;
 export interface RetryRunOptions {
   /**
-   * Stops the retry cycle once aborted: a pending backoff is cut short, an attempt already in
-   * flight is left to finish, and no further attempt starts. Rejects with the abort reason.
+   * Stops the retry cycle once expired: a pending backoff is cut short, an attempt already in
+   * flight is left to finish, and no further attempt starts. Rejects with the deadline's reason.
    */
-  signal?: AbortSignal;
+  deadline?: Deadline;
 }
 export type Retrier = <T>(fn: Retryable<T>, options?: RetryRunOptions) => Promise<T>;
 
 function random(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+  return randomFraction() * (max - min) + min;
 }
 
 function randomFromRetryTime(factor: number, retryTime: number): number {
@@ -42,7 +43,8 @@ function isErrorUnrecoverable(error: Error): boolean {
   return UNRECOVERABLE_ERROR_NAMES.has(error.name);
 }
 
-function isErrorRetriable(error: Error & { retriable?: boolean }): boolean {
+/** Whether the retrier tries again after `error`, instead of rejecting with a `KafkaNonRetriableError`. */
+export function isErrorRetriable(error: Error & { retriable?: boolean }): boolean {
   return error.retriable !== false && !isErrorUnrecoverable(error);
 }
 
@@ -51,15 +53,16 @@ function createRetriable<T>(
   resolve: (value: T) => void,
   reject: (reason: unknown) => void,
   fn: Retryable<T>,
-  signal: AbortSignal | undefined,
+  deadline: Deadline | undefined,
 ): (retryTime: number, retryCount?: number) => void {
   let aborted = false;
   const { factor, multiplier, maxRetryTime, retries } = configs;
 
-  const stopIfSignalAborted = (): boolean => {
-    if (!signal?.aborted) return false;
+  const stopIfDeadlineExpired = (): boolean => {
+    const reason = deadline?.reason;
+    if (!reason) return false;
     aborted = true;
-    reject(abortError(signal));
+    reject(reason);
     return true;
   };
 
@@ -78,23 +81,30 @@ function createRetriable<T>(
     const shouldRetry = retryCount < retries;
 
     const scheduleRetry = (): void => {
+      if (!deadline) {
+        setTimeout(() => retry(nextRetryTime, retryCount + 1), retryTime);
+        return;
+      }
+
+      // Only a backoff waits on the deadline, so a cycle that never backs off creates no signal.
+      const { signal } = deadline;
       const onAbort = (): void => {
         clearTimeout(timer);
-        stopIfSignalAborted();
+        stopIfDeadlineExpired();
       };
       const timer = setTimeout(() => {
-        signal?.removeEventListener('abort', onAbort);
+        signal.removeEventListener('abort', onAbort);
         retry(nextRetryTime, retryCount + 1);
       }, retryTime);
-      signal?.addEventListener('abort', onAbort, { once: true });
+      signal.addEventListener('abort', onAbort, { once: true });
     };
 
-    if (stopIfSignalAborted()) return;
+    if (stopIfDeadlineExpired()) return;
 
     fn(bail, retryCount, retryTime)
       .then(resolve)
       .catch((e: Error & { retriable?: boolean; cause?: unknown }) => {
-        if (stopIfSignalAborted()) return;
+        if (stopIfDeadlineExpired()) return;
         if (isErrorRetriable(e)) {
           if (shouldRetry) {
             scheduleRetry();
@@ -111,10 +121,10 @@ function createRetriable<T>(
 }
 
 export function retrier(opts: RetryOptions = {}): Retrier {
-  return <T>(fn: Retryable<T>, { signal }: RetryRunOptions = {}): Promise<T> =>
+  return <T>(fn: Retryable<T>, { deadline }: RetryRunOptions = {}): Promise<T> =>
     new Promise<T>((resolve, reject) => {
       const configs: RetryConfig = { ...RETRY_DEFAULTS, ...opts };
-      const start = createRetriable(configs, resolve, reject, fn, signal);
+      const start = createRetriable(configs, resolve, reject, fn, deadline);
       start(randomFromRetryTime(configs.factor, configs.initialRetryTime));
     });
 }

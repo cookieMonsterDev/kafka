@@ -72,8 +72,9 @@ await producer.sendBatch({
 
 Defaults: `acks: -1` (all in-sync replicas), `lingerMs: 5`, `batchSize: 16384`,
 `maxInFlightRequests: 5`, `idempotent: false`. Consecutive `send()` calls within `lingerMs` share
-one Produce request. Use `lingerMs: 0` for one request per `send()`. For high volume, spread the
-preset:
+one Produce request. `lingerMs: 0` adds no delay, but `send()` calls made in the same event-loop
+turn (before the first `await`) still share one request and its outcome; an awaited `send()` goes
+alone. For high volume, spread the preset:
 
 ```ts
 import { throughputPreset } from '@cookiemonsterdev/kafka-core';
@@ -143,8 +144,9 @@ For producer `hooks` (`onSend`, `onAck`), partitioner choices, and `AbortSignal`
 - **HIGH — Retrying a fenced transactional producer.** `PRODUCER_FENCED` or
   `INVALID_PRODUCER_EPOCH` means another instance took over the `transactionalId`. Every later
   call on this producer rejects; create a new producer. Source: core reference/producer.
-- **HIGH — Calling `commit()` after a failed `send()` in a transaction.** That transaction can
-  only be aborted. Abort, then start a new one. Source: core reference/producer.
+- **HIGH — Calling `commit()` after a failed `send()` or `sendOffsets()` in a transaction.** That
+  transaction can only be aborted, and the next `producer.transaction()` rejects until it is.
+  Abort, then start a new one. Source: core reference/producer.
 - **HIGH — One producer (and connection set) per request.** Create the producer once; it is safe
   to share across concurrent `send()` calls.
 - **MEDIUM — Expecting kafkajs's send-immediately behavior.** This client lingers 5 ms by default.

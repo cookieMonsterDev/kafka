@@ -30,9 +30,10 @@ function rated(rateMessagesPerSecond: number, durationMs: number, warmupCount: n
   return { messageCount, warmupCount, rateMessagesPerSecond, durationMs, timeoutMs };
 }
 
-// Smoke checks the harness in minutes. Standard counts are first estimates aiming at a 10 to 20 s
-// measured window for the slowest client; calibration tunes them (or use --count-scale).
-const smokeCounts: Readonly<Record<ScenarioId, RunCounts>> = {
+type CountTable = Readonly<Record<ScenarioId, RunCounts>>;
+
+// Smoke checks the harness in minutes, with the same counts for every payload.
+const smokeCounts: CountTable = {
   P1: sized(2_000, 200, 120_000),
   P2: sized(20_000, 2_000, 120_000),
   P3: sized(50_000, 5_000, 120_000),
@@ -46,9 +47,11 @@ const smokeCounts: Readonly<Record<ScenarioId, RunCounts>> = {
   L1: sized(1, 0, 60_000),
 };
 
-const standardCounts: Readonly<Record<ScenarioId, RunCounts>> = {
+// Standard counts aim at a 10 to 20 s measured window for the slowest client, and each run's topic must fit
+// the broker's tmpfs (README, "Calibrating"). P2 is calibrated for both payloads; the rest are first estimates.
+const smallStandardCounts: CountTable = {
   P1: sized(30_000, 2_000, 300_000),
-  P2: sized(500_000, 20_000, 300_000),
+  P2: sized(3_000_000, 100_000, 300_000),
   P3: sized(1_000_000, 50_000, 300_000),
   P4: sized(500_000, 25_000, 300_000),
   P5: sized(1_000_000, 50_000, 300_000),
@@ -60,18 +63,30 @@ const standardCounts: Readonly<Record<ScenarioId, RunCounts>> = {
   L1: sized(1, 0, 60_000),
 };
 
-export const tierCounts: Readonly<Record<Tier, Readonly<Record<ScenarioId, RunCounts>>>> = {
-  smoke: smokeCounts,
-  standard: standardCounts,
-  full: standardCounts,
+// 1 KiB records are about 10 times larger on disk, so the uncalibrated scenarios run a quarter of the
+// 100 B counts.
+const mediumStandardCounts: CountTable = {
+  P1: sized(7_500, 500, 300_000),
+  P2: sized(1_200_000, 60_000, 300_000),
+  P3: sized(250_000, 12_500, 300_000),
+  P4: sized(125_000, 6_250, 300_000),
+  P5: sized(250_000, 12_500, 300_000),
+  C1: sized(500_000, 12_500, 300_000),
+  C2: sized(500_000, 12_500, 300_000),
+  C3: sized(250_000, 12_500, 300_000),
+  C4: sized(250_000, 12_500, 300_000),
+  E1: rated(5_000, 15_000, 5_000, 120_000),
+  L1: sized(1, 0, 60_000),
 };
 
-// Medium records are about 10 times larger; fewer of them keep the broker's 2 GiB tmpfs safe.
-const payloadCountFactor: Readonly<Record<PayloadSize, number>> = { small: 1, medium: 0.25 };
+const standardCounts: Readonly<Record<PayloadSize, CountTable>> = {
+  small: smallStandardCounts,
+  medium: mediumStandardCounts,
+};
 
-/** Counts for one scenario after `countScale` and the payload factor; L1 is never scaled. */
+/** Counts for one scenario and payload after `countScale`; L1 is never scaled. */
 export function runCounts(tier: Tier, scenario: ScenarioId, countScale: number, payload: PayloadSize): RunCounts {
-  const base = tierCounts[tier][scenario];
+  const base = (tier === 'smoke' ? smokeCounts : standardCounts[payload])[scenario];
   const kind = scenarios[scenario].kind;
   if (kind === 'startup') {
     return base;
@@ -81,8 +96,11 @@ export function runCounts(tier: Tier, scenario: ScenarioId, countScale: number, 
     const durationMs = Math.max(1000, Math.round(base.durationMs * countScale));
     return rated(base.rateMessagesPerSecond, durationMs, base.warmupCount, timeoutMs);
   }
-  const factor = countScale * payloadCountFactor[payload];
-  return sized(Math.max(1, Math.round(base.messageCount * factor)), Math.round(base.warmupCount * factor), timeoutMs);
+  return sized(
+    Math.max(1, Math.round(base.messageCount * countScale)),
+    Math.round(base.warmupCount * countScale),
+    timeoutMs,
+  );
 }
 
 export function defaultScenarios(tier: Tier): ScenarioId[] {

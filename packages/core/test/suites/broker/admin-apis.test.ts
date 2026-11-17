@@ -10,6 +10,8 @@ import {
   testIfKafkaAtLeast_0_11,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
+import { CreateTopics, DeleteTopics, DescribeConfigs } from '../../../src/protocol/requests/lazy-families';
+import { Metadata } from '../../../src/protocol/requests/metadata/index';
 
 describe('broker.adminApis', () => {
   let topicName: string;
@@ -26,7 +28,9 @@ describe('broker.adminApis', () => {
   });
 
   async function connectToController(): Promise<Broker> {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => broker!.metadata([]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      broker!.send(Metadata, { topics: [], allowAutoTopicCreation: true }),
+    );
     const controller = metadata.brokers.find((b) => b.nodeId === metadata.controllerId);
     if (!controller) throw new Error('controller not found');
     const address = advertisedAddress(controller.host, controller.port);
@@ -45,26 +49,26 @@ describe('broker.adminApis', () => {
 
   it('creates and deletes topics through the controller', async () => {
     const controller = await connectToController();
-    const created = await controller.createTopics({
+    const created = await controller.send(CreateTopics, {
       topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }],
     });
     expect(created.topicErrors[0]?.errorCode).toBe(0);
 
-    const deleted = await controller.deleteTopics({ topics: [topicName] });
+    const deleted = await controller.send(DeleteTopics, { topics: [topicName] });
     expect(deleted.topicErrors[0]?.errorCode).toBe(0);
   });
 
   testIfKafkaAtLeast_0_11('describes topic configs', async () => {
     const controller = await connectToController();
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      controller.createTopics({ topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }] }),
+      controller.send(CreateTopics, { topics: [{ topic: topicName, numPartitions: 1, replicationFactor: 1 }] }),
     );
     const described = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      controller.describeConfigs({
+      controller.send(DescribeConfigs, {
         resources: [{ type: CONFIG_RESOURCE_TYPES.TOPIC, name: topicName, configNames: ['cleanup.policy'] }],
       }),
     );
     expect(described.resources[0]?.configEntries[0]?.configName).toBe('cleanup.policy');
-    await controller.deleteTopics({ topics: [topicName] });
+    await controller.send(DeleteTopics, { topics: [topicName] });
   });
 });

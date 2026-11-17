@@ -8,7 +8,9 @@ section: reference
 The public barrel is
 [`src/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/index.ts).
 Types are generated from the TypeScript source (`tsc --emitDeclarationOnly`);
-there is no hand-maintained `types/index.d.ts`.
+there is no hand-maintained `types/index.d.ts`. Import from the package root only:
+the published `.d.ts` files are the ones `dist/index.d.ts` reaches, so a deep import
+into `dist/` can have no types.
 
 ## Runtime exports
 
@@ -29,8 +31,9 @@ there is no hand-maintained `types/index.d.ts`.
 | `SHARE_ACKNOWLEDGE_TYPE`, `SHARE_ACQUIRE_MODE`                                        | Share-group ack types and acquire modes                                                         | [Consumer](../consumer/#shareconsumer)                     |
 | `Kafka*` error classes                                                                | See [Errors](../errors/)                                                                        |                                                            |
 | `METRIC_NAMES`                                                                        | OpenTelemetry / KIP-714 metric name constants                                                   | [Observability](../../guides/observability/)               |
+| `getCrc32cImplementation`                                                             | Active CRC32C implementation: `'native'` (`@node-rs/crc32`) or `'javascript'`                   | [Installation](../../start/installation/#native-crc32c)    |
 
-`isRebalancing` and `isKafkaError` are not part of the public barrel.
+`isKafkaError` is not part of the public barrel.
 Snappy uses xerial snappy-java framing; LZ4 uses the LZ4 Frame format (LZ4F).
 
 ## Types
@@ -42,7 +45,7 @@ Exported from the barrel: `KafkaConfig`, `ProducerConfig`, `ConsumerConfig`,
 `GroupProtocol`, `GroupRemoteAssignor`, `ShareAcknowledgeType`, `ShareAcquireMode`, `DescribeProducersOptions`, `PartitionProducerState`, `ActiveProducerState`,
 `ListTransactionsOptions`, `TransactionListing`, `TransactionDescription`,
 `KafkaPrincipal`, `CreateDelegationTokenResult`, `DelegationToken`,
-`KafkaMetrics`, `KafkaMeter`, `METRIC_NAMES`,
+`KafkaMetrics`, `KafkaMeter`, `METRIC_NAMES`, `Crc32cImplementation`,
 and SASL types including `GssTokenProvider` / `GssTokenChallenge` /
 `GssTokenStep`. Field-by-field:
 [Configuration](../configuration/),

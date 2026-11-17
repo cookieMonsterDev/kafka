@@ -12,6 +12,12 @@ agent-specific constraints on top.
 
 `@cookiemonsterdev/kafka-core` is a TypeScript Apache Kafka client for Node.js that speaks the Kafka wire protocol directly (no native/JVM dependency): it negotiates API versions with the broker via `ApiVersions`, uses `bigint` for offsets, and supports brokers from Kafka 0.10 onward. `@cookiemonsterdev/kafka-config` is a generic config-file loader, `@cookiemonsterdev/kafka-cli` is a command-line admin client built on core, `@cookiemonsterdev/kafka-studio` is a local web UI for browsing and driving a cluster built on core and config, and `@cookiemonsterdev/kafka-docs` is the Astro documentation site. This is a pnpm workspace (`packages/core`, `packages/config`, `packages/cli`, `packages/studio`, `packages/docs`); the workspace root itself is not published to npm.
 
+## Domain language
+
+[GLOSSARY.md](GLOSSARY.md) is the shared vocabulary for Kafka concepts in this repository. Read it before naming types, functions, options, docs headings, or errors. Use its terms in new names and prose, and avoid the words it lists under _Avoid_. Existing public names that use an _Avoid_ word (such as `RecordMetadata`) stay until a breaking release renames them.
+
+Update it in the same change when you add, rename, or redefine a domain concept. When the code or docs and the glossary disagree, ask which is right, then fix the wrong side. Match the existing entry format: one or two sentences stating what the term is, with optional `_Avoid_` synonyms. Add only domain terms; keep implementation details, defaults, option names, and design decisions out.
+
 ## Follow CONTRIBUTING.md
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing code. Do not invent a
@@ -45,6 +51,7 @@ or **N/A** with a one-line reason. Do not skip silently.
    - After `pnpm clean`, build core first (`pnpm --filter @cookiemonsterdev/kafka-docs... build`) because docs import `@cookiemonsterdev/kafka-core` from `dist/`.
    - UI change in `packages/docs` (layout, component, or CSS): follow **Documentation site → Accessibility** in [CONTRIBUTING.md](CONTRIBUTING.md). Keyboard, names, focus, contrast, and `prefers-reduced-motion` are in scope for the PR, not a follow-up.
    - Public API, defaults, CLI commands, or setup changes: update the agent skill whose `sources` list the changed doc page or file (`packages/<package>/skills/*/SKILL.md`), then run `pnpm skills:validate`. See **Agent skills** in [CONTRIBUTING.md](CONTRIBUTING.md).
+   - New or changed domain term: update [GLOSSARY.md](GLOSSARY.md) (see **Domain language**).
 5. **Exports** — New public surface is re-exported from `packages/core/src/index.ts` only. Types come from `tsc --emitDeclarationOnly`.
 6. **Verification** — Run what the change needs from the repo root:
    - `pnpm lint`, `pnpm format:check`, `pnpm typecheck`
@@ -99,11 +106,11 @@ Everything public is re-exported from `packages/core/src/index.ts`; `src/client.
 
 Layered roughly bottom-up:
 
-- **`protocol/`** — wire format. `protocol/requests/<api-name>/v<N>/{request,response}.ts` encode/decode one Kafka API at one version; `protocol/message`, `message-set`, `records` handle the record batch formats (legacy MessageSet v0/v1 and modern RecordBatch v2); `protocol/compression` holds codecs (GZIP/Snappy/LZ4/ZSTD built-in, overridable via `CompressionCodecs`); `protocol/sasl` handles SASL mechanism framing.
+- **`protocol/`** — wire format. `protocol/requests/<api-name>/v<N>/{request,response}.ts` encode/decode one Kafka API at one version, and `protocol/requests/<api-name>/index.ts` defines its request family (api key, name and first flexible version from `kafka-apis.ts`, the versions, and optional hooks); admin-only families are sent through the stubs in `lazy-families.ts`, which load their codecs on first use; `protocol/message`, `message-set`, `records` handle the record batch formats (legacy MessageSet v0/v1 and modern RecordBatch v2); `protocol/compression` holds codecs (GZIP/Snappy/LZ4/ZSTD built-in, overridable via `CompressionCodecs`); `protocol/sasl` handles SASL mechanism framing.
 - **`network/`** — `socket.ts`/`socket-factory.ts` wrap `net`/`tls` sockets; `connection.ts` frames one broker connection (correlation IDs, request/response matching); `connection-pool.ts` and `request-queue/` manage concurrent in-flight requests per broker.
-- **`broker/`** — one `Broker` per connection: version negotiation (`capabilities.ts` picks the highest mutually-supported API version), SASL handshake (`sasl-authenticator/`), and typed request/response methods built on `network/`.
-- **`cluster/`** — `Cluster` (`cluster/index.ts`) owns broker discovery/metadata and a `BrokerPool` (`broker-pool.ts`) of live `Broker` connections, keyed by node id; `connection-pool-builder.ts` and `parse-broker-address.ts` turn the `brokers` config into pooled connections.
-- **`producer/`**, **`consumer/`**, **`admin/`** — public-facing APIs built on `Cluster`. Producer: idempotence, transactions (`eos-manager/`), partitioners (`partitioners/`, default is murmur2, not the Java sticky partitioner — see compatibility notes). Consumer: group coordination, `assigners/` (range, round-robin default, sticky, cooperative-sticky), `offset-manager/` for commit/fetch tracking, classic group protocol by default, opt-in KIP-848 `groupProtocol: 'consumer'`.
+- **`broker/`** — one `Broker` per connection: version negotiation (`lookup()` in `protocol/requests/index.ts` picks the highest mutually-supported API version; `capabilities.ts` answers feature checks), SASL handshake (`sasl-authenticator/`), and one typed `send(family, options)` built on `network/`.
+- **`cluster/`** — `Cluster` (`cluster/index.ts`) owns broker discovery/metadata and a `BrokerPool` (`broker-pool.ts`) of live `Broker` connections, keyed by node id; `connection-pool-builder.ts` and `parse-broker-address.ts` turn the `brokers` config into pooled connections. `Cluster.run(target, work)` (`run.ts`) resolves a controller, coordinator, partition leader or node on every attempt and retries with the recovery the classifier picks; admin requests, InitProducerId and TxnOffsetCommit use it. Produce and fetch keep their own retry loops and use only the classifier and `Cluster.onConnectionClosed`. `error-classifier.ts` is the only place that maps protocol error types to retry and recovery decisions.
+- **`producer/`**, **`consumer/`**, **`admin/`** — public-facing APIs built on `Cluster`. Producer: idempotence, transactions (`transaction-session/`), partitioners (`partitioners/`, default is murmur2, not the Java sticky partitioner — see compatibility notes). Consumer: group coordination, `assigners/` (range, round-robin default, sticky, cooperative-sticky), `offset-manager/` for commit/fetch tracking, classic group protocol by default, opt-in KIP-848 `groupProtocol: 'consumer'`.
 - **`instrumentation/`** — event emitter for internal lifecycle events (connect, request, etc.).
 - **`retry/`, `utils/`, `types/`, `loggers/`** — cross-cutting helpers; `errors.ts` at `src/` root defines all public `Kafka*Error` classes.
 

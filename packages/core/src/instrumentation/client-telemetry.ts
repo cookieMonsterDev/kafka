@@ -1,5 +1,6 @@
 import type { Broker } from '../broker/index';
 import { supportsClientTelemetry } from '../broker/capabilities';
+import { isTelemetryTooLarge, isUnknownTelemetrySubscription } from '../cluster/error-classifier';
 import { KafkaBrokerNotFound, KafkaProtocolError, KafkaServerDoesNotSupportApiKey } from '../errors';
 import type { Logger } from '../loggers/index';
 import { COMPRESSION_TYPES, lookupCodec } from '../protocol/compression/index';
@@ -8,6 +9,8 @@ import { ZERO_CLIENT_INSTANCE_ID } from '../protocol/requests/get-telemetry-subs
 import type { GetTelemetrySubscriptionsResponseV0Body } from '../protocol/requests/get-telemetry-subscriptions/v0/response';
 import type { ProduceMetrics } from './metrics';
 import type { TelemetrySnapshot } from './telemetry-snapshot';
+import { GetTelemetrySubscriptions } from '../protocol/requests/get-telemetry-subscriptions/index';
+import { PushTelemetry } from '../protocol/requests/push-telemetry/index';
 
 const SOFTWARE_NAME = '@cookiemonsterdev/kafka-core';
 const SOFTWARE_VERSION = '1.2.0';
@@ -88,7 +91,7 @@ export class ClientTelemetryReporter {
         this.#stopped = true;
         return;
       }
-      if (error instanceof KafkaProtocolError && error.type === 'UNKNOWN_SUBSCRIPTION_ID') {
+      if (error instanceof KafkaProtocolError && isUnknownTelemetrySubscription(error)) {
         this.#subscription = null;
         this.#schedule(DEFAULT_PUSH_INTERVAL_MS);
         return;
@@ -120,7 +123,7 @@ export class ClientTelemetryReporter {
       return;
     }
 
-    const response = await broker.getTelemetrySubscriptions({
+    const response = await broker.send(GetTelemetrySubscriptions, {
       clientInstanceId: this.#clientInstanceId ?? ZERO_CLIENT_INSTANCE_ID,
     });
 
@@ -165,7 +168,7 @@ export class ClientTelemetryReporter {
 
     const broker = await this.#getBroker();
     try {
-      await broker.pushTelemetry({
+      await broker.send(PushTelemetry, {
         clientInstanceId,
         subscriptionId: subscription.subscriptionId,
         terminating,
@@ -173,7 +176,7 @@ export class ClientTelemetryReporter {
         metrics,
       });
     } catch (error) {
-      if (error instanceof KafkaProtocolError && error.type === 'TELEMETRY_TOO_LARGE') {
+      if (error instanceof KafkaProtocolError && isTelemetryTooLarge(error)) {
         this.#logger.debug('Broker rejected PushTelemetry as TELEMETRY_TOO_LARGE');
         return;
       }

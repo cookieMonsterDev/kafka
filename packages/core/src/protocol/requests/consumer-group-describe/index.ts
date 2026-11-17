@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { consumerGroupDescribeRequestV0 } from './v0/request';
 import { consumerGroupDescribeResponseV0 } from './v0/response';
 import { consumerGroupDescribeRequestV1 } from './v1/request';
@@ -17,7 +18,7 @@ const fields = (options: ConsumerGroupDescribeOptions) => ({
   includeAuthorizedOperations: options.includeAuthorizedOperations ?? false,
 });
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ConsumerGroupDescribeOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: consumerGroupDescribeRequestV0(fields(options)),
     response: consumerGroupDescribeResponseV0,
@@ -26,13 +27,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ConsumerGroupDescribeOpt
     request: consumerGroupDescribeRequestV1(fields(options)),
     response: consumerGroupDescribeResponseV1,
   }),
-};
+} satisfies VersionFactories<ConsumerGroupDescribeOptions>;
 
-export const ConsumerGroupDescribe: RequestFamily<ConsumerGroupDescribeOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no ConsumerGroupDescribe protocol for version ${version}`);
-    return factory;
-  },
-});
+export const ConsumerGroupDescribe = defineRequestFamily(KAFKA_APIS.ConsumerGroupDescribe, VERSIONS);

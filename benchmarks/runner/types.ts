@@ -105,13 +105,42 @@ export interface ClientContainerOutcome {
   stderrTail: string;
 }
 
+/** One part of a package's installed dependency closure. */
+export interface FootprintPart {
+  /** Apparent size of every file in the part. */
+  bytes: number;
+  fileCount: number;
+  /** Packages in the part, not counting the measured package itself. */
+  dependencyCount: number;
+  /** Whether the part holds a `.node` file or a `binding.gyp`. */
+  hasNativeAddon: boolean;
+}
+
+/**
+ * F1 as a session recorded before the required and optional split measured it: the whole dependency closure
+ * at once, without a file count.
+ */
+export interface UnsplitFootprintTotal {
+  bytes: number;
+  /** Packages in the closure, optional ones included, not counting the measured package itself. */
+  dependencyCount: number;
+  hasNativeAddon: boolean;
+}
+
+/** F1: what installing one client adds, split into what it requires and what is optional. */
 export interface Footprint {
   client: ClientId;
   packageName: string;
   version: string | null;
-  installBytes: number | null;
-  dependencyCount: number | null;
-  hasNativeAddon: boolean | null;
+  /**
+   * The package and everything it reaches through `dependencies` alone; null when it is not installed or
+   * the session predates the split.
+   */
+  required: FootprintPart | null;
+  /** What installed `optionalDependencies` add on top of `required`; null whenever `required` is. */
+  optional: FootprintPart | null;
+  /** Only in a session recorded before the split, for an installed package; `required` is then null. */
+  unsplitTotal?: UnsplitFootprintTotal;
 }
 
 /** Written to `<session>/session.json` by `run`; the session directory is `results/raw/<sessionId>/`. */

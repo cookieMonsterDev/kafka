@@ -1,11 +1,15 @@
-import { KafkaBrokerNotFound, KafkaNonRetriableError, KafkaProtocolError } from '../errors';
+import type { Broker } from '../broker/index';
+import { REPLICA_UNAVAILABLE_ERRORS, STALE_COORDINATOR_ERRORS } from '../cluster/error-classifier';
+import { sendInitProducerId } from '../cluster/init-producer-id';
+import { coordinatorTarget, leaderTarget, nodeTarget } from '../cluster/run';
+import { KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { DescribeTransactionsState } from '../protocol/requests/describe-transactions/v0/response';
 import type { ListTransactionsOptions } from '../protocol/requests/list-transactions/index';
 import type { ListTransactionsState } from '../protocol/requests/list-transactions/v0/response';
-import { retrier } from '../retry/index';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType, requireMetadata } from './helpers';
+import { formatUnknown, groupByBroker } from './helpers';
 import type {
   AbortTransactionOptions,
   FenceProducerResult,
@@ -13,6 +17,12 @@ import type {
   ForceTerminateTransactionOptions,
   ForceTerminateTransactionResult,
 } from './types';
+import {
+  DescribeProducers,
+  DescribeTransactions,
+  ListTransactions,
+  WriteTxnMarkers,
+} from '../protocol/requests/lazy-families';
 
 export interface TransactionsApi {
   describeTransactions: (transactionalIds: string[]) => Promise<{ transactionStates: DescribeTransactionsState[] }>;
@@ -23,22 +33,6 @@ export interface TransactionsApi {
 }
 
 const DEFAULT_FENCE_TRANSACTION_TIMEOUT = 60_000;
-
-const FENCE_PRODUCER_RETRIABLE_ERRORS = new Set([
-  'CONCURRENT_TRANSACTIONS',
-  'GROUP_LOAD_IN_PROGRESS',
-  'NOT_COORDINATOR_FOR_GROUP',
-  'GROUP_COORDINATOR_NOT_AVAILABLE',
-  'COORDINATOR_NOT_AVAILABLE',
-]);
-
-const ABORT_TRANSACTION_RETRIABLE_ERRORS = new Set([
-  'NOT_LEADER_OR_FOLLOWER',
-  'NOT_LEADER_FOR_PARTITION',
-  'REPLICA_NOT_AVAILABLE',
-  'BROKER_NOT_AVAILABLE',
-  'UNKNOWN_TOPIC_OR_PARTITION',
-]);
 
 function validateListTransactionsOptions(options: ListTransactionsOptions): void {
   const { stateFilters, producerIdFilters, durationFilter, transactionalIdPattern } = options;
@@ -74,8 +68,9 @@ function validateListTransactionsOptions(options: ListTransactionsOptions): void
   }
 }
 
+/** The coordinator epoch to abort with: the given one, or the one the partition leader reports for `producerId`. */
 async function resolveCoordinatorEpoch(
-  cluster: AdminContext['cluster'],
+  leader: Broker,
   topic: string,
   partition: number,
   producerId: bigint,
@@ -83,16 +78,7 @@ async function resolveCoordinatorEpoch(
 ): Promise<number> {
   if (coordinatorEpoch !== undefined) return coordinatorEpoch >= 0 ? coordinatorEpoch : 0;
 
-  await requireMetadata(cluster, { topics: [topic] });
-  const partitionsByLeader = cluster.findLeaderForPartitions(topic, [partition]);
-  const leaderEntry = Object.entries(partitionsByLeader).find(([, partitions]) => partitions.includes(partition));
-  if (!leaderEntry) {
-    throw new KafkaBrokerNotFound(`Could not find leader for ${topic} partition ${partition}`, { retriable: true });
-  }
-
-  const [nodeId] = leaderEntry;
-  const broker = await cluster.findBroker({ nodeId });
-  const { topics } = await broker.describeProducers({ topics: [{ topic, partitions: [partition] }] });
+  const { topics } = await leader.send(DescribeProducers, { topics: [{ topic, partitions: [partition] }] });
   const partitionState = topics.find(({ topic: topicName }) => topicName === topic)?.partitions[0];
   const producerState = partitionState?.activeProducers.find((producer) => producer.producerId === producerId);
   if (!producerState) {
@@ -108,7 +94,9 @@ async function resolveCoordinatorEpoch(
   return 0;
 }
 
-export function createTransactionsApi({ cluster, logger, retry }: AdminContext): TransactionsApi {
+export function createTransactionsApi({ cluster, retry }: AdminContext): TransactionsApi {
+  const retrier = createRetrier(retry);
+
   const describeTransactions = async (
     transactionalIds: string[],
   ): Promise<{ transactionStates: DescribeTransactionsState[] }> => {
@@ -120,53 +108,19 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
     }
     if (transactionalIds.length === 0) return { transactionStates: [] };
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        const coordinators = await Promise.all(
-          transactionalIds.map(async (transactionalId) => ({
-            transactionalId,
-            coordinator: await cluster.findGroupCoordinator({
-              groupId: transactionalId,
-              coordinatorType: COORDINATOR_TYPES.TRANSACTION,
-            }),
-          })),
-        );
-        const transactionsByCoordinator = new Map<
-          string,
-          { coordinator: (typeof coordinators)[number]['coordinator']; transactionalIds: string[] }
-        >();
-
-        for (const { transactionalId, coordinator } of coordinators) {
-          const nodeId = String(coordinator.nodeId);
-          const existing = transactionsByCoordinator.get(nodeId);
-          if (existing) {
-            existing.transactionalIds.push(transactionalId);
-          } else {
-            transactionsByCoordinator.set(nodeId, { coordinator, transactionalIds: [transactionalId] });
-          }
-        }
-
+    return cluster.run(
+      () =>
+        transactionalIds.map((transactionalId) => coordinatorTarget(transactionalId, COORDINATOR_TYPES.TRANSACTION)),
+      async (coordinators) => {
         const responses = await Promise.all(
-          [...transactionsByCoordinator.values()].map(({ coordinator, transactionalIds: ids }) =>
-            coordinator.describeTransactions({ transactionalIds: ids }),
+          [...groupByBroker(transactionalIds, coordinators)].map(([coordinator, ids]) =>
+            coordinator.send(DescribeTransactions, { transactionalIds: ids }),
           ),
         );
         return { transactionStates: responses.flatMap(({ transactionStates }) => transactionStates) };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not describe transactions', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { transactionStates: [] };
-      }
-    });
+      },
+      { retrier, description: 'Could not describe transactions' },
+    );
   };
 
   const listTransactions = async (
@@ -174,13 +128,13 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
   ): Promise<{ transactionStates: ListTransactionsState[] }> => {
     validateListTransactionsOptions(options);
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
+    // ListTransactions reports a loading or unavailable transaction coordinator on that broker.
+    return cluster.run(
+      () => cluster.getNodeIds().map((nodeId) => nodeTarget(nodeId)),
+      async (brokers) => {
         const listings = await Promise.all(
-          cluster.getNodeIds().map(async (nodeId) => {
-            const broker = await cluster.findBroker({ nodeId });
-            const { transactionStates } = await broker.listTransactions(options);
+          brokers.map(async (broker) => {
+            const { transactionStates } = await broker.send(ListTransactions, options);
             return transactionStates;
           }),
         );
@@ -192,21 +146,9 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
           }
         }
         return { transactionStates: [...byTransactionalId.values()] };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not list transactions', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { transactionStates: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, retryOn: STALE_COORDINATOR_ERRORS, description: 'Could not list transactions' },
+    );
   };
 
   const fenceProducers = async ({
@@ -224,74 +166,25 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
     }
     if (transactionalIds.length === 0) return { results: [] };
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        const results = await Promise.all(
-          transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> =>
-            retrier(retry)(async (bail, retryCount, retryTime) => {
-              try {
-                const coordinator = await cluster.findGroupCoordinator({
-                  groupId: transactionalId,
-                  coordinatorType: COORDINATOR_TYPES.TRANSACTION,
-                });
-                const response = await coordinator.initProducerId({
-                  transactionalId,
-                  transactionTimeout,
-                  producerId: -1n,
-                  producerEpoch: -1,
-                });
-                return {
-                  transactionalId,
-                  errorCode: 0,
-                  producerId: response.producerId,
-                  producerEpoch: response.producerEpoch,
-                };
-              } catch (error) {
-                if (error instanceof KafkaProtocolError) {
-                  const type = error.type;
-                  if (type && FENCE_PRODUCER_RETRIABLE_ERRORS.has(type)) {
-                    logger.debug('Retrying fenceProducers after retriable coordinator error', {
-                      transactionalId,
-                      type,
-                      retryCount,
-                      retryTime,
-                    });
-                    if (
-                      type === 'NOT_COORDINATOR_FOR_GROUP' ||
-                      type === 'GROUP_COORDINATOR_NOT_AVAILABLE' ||
-                      type === 'COORDINATOR_NOT_AVAILABLE'
-                    ) {
-                      await cluster.refreshMetadata();
-                    }
-                    throw error;
-                  }
-                  return {
-                    transactionalId,
-                    errorCode: error.code ?? -1,
-                  };
-                }
-                bail(error as Error);
-                throw error;
-              }
-            }),
-          ),
-        );
-        return { results };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not fence producers', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
+    const initProducerIdContext = { cluster, retry: retrier };
+    const results = await Promise.all(
+      transactionalIds.map(async (transactionalId): Promise<FenceProducerResult> => {
+        try {
+          // A fresh InitProducerId bumps the epoch, fencing the producer that holds the transactional id.
+          const { producerId, producerEpoch } = await sendInitProducerId(initProducerIdContext, {
+            transactionalId,
+            transactionTimeout,
+            producerId: -1n,
+            producerEpoch: -1,
           });
+          return { transactionalId, errorCode: 0, producerId, producerEpoch };
+        } catch (error) {
+          if (error instanceof KafkaProtocolError) return { transactionalId, errorCode: error.code ?? -1 };
           throw error;
         }
-
-        bail(error as Error);
-        return { results: [] };
-      }
-    });
+      }),
+    );
+    return { results };
   };
 
   const abortTransaction = async ({
@@ -324,27 +217,18 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
       throw new KafkaNonRetriableError(`Invalid transactionVersion ${formatUnknown(transactionVersion)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
+    // A moved leader (stale metadata) or an unavailable replica is retried after a metadata refresh.
+    return cluster.run(
+      leaderTarget(topic, partition),
+      async (leader) => {
         const resolvedCoordinatorEpoch = await resolveCoordinatorEpoch(
-          cluster,
+          leader,
           topic,
           partition,
           producerId,
           coordinatorEpoch,
         );
-        await requireMetadata(cluster, { topics: [topic] });
-        const partitionsByLeader = cluster.findLeaderForPartitions(topic, [partition]);
-        const leaderEntry = Object.entries(partitionsByLeader).find(([, partitions]) => partitions.includes(partition));
-        if (!leaderEntry) {
-          throw new KafkaBrokerNotFound(`Could not find leader for ${topic} partition ${partition}`, {
-            retriable: true,
-          });
-        }
-
-        const [nodeId] = leaderEntry;
-        const broker = await cluster.findBroker({ nodeId });
-        await broker.writeTxnMarkers({
+        await leader.send(WriteTxnMarkers, {
           markers: [
             {
               producerId,
@@ -356,23 +240,13 @@ export function createTransactionsApi({ cluster, logger, retry }: AdminContext):
             },
           ],
         });
-      } catch (error) {
-        const type = protocolType(error);
-        if (type && ABORT_TRANSACTION_RETRIABLE_ERRORS.has(type)) {
-          logger.warn('Could not abort transaction; refreshing metadata before retry', {
-            topic,
-            partition,
-            type,
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-
-        bail(error as Error);
-      }
-    });
+      },
+      {
+        retrier,
+        retryOn: REPLICA_UNAVAILABLE_ERRORS,
+        description: 'Could not abort transaction; refreshing metadata before retry',
+      },
+    );
   };
 
   const forceTerminateTransaction = async ({

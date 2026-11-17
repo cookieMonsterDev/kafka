@@ -3,10 +3,12 @@ import { createConsumer } from '../consumer/index';
 import { parseOffset } from '../consumer/types';
 import { KafkaNonRetriableError, KafkaTimeout } from '../errors';
 import { LOG_LEVELS } from '../loggers/index';
-import { retrier } from '../retry/index';
+import { STALE_METADATA_ERRORS } from '../cluster/error-classifier';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { findTopicPartitions, isConsumerGroupIdle, protocolType } from './helpers';
+import { findTopicPartitions, isConsumerGroupIdle } from './helpers';
 import type { FetchOffsetsPartition, SeekEntry, SeekInput, TopicOffset } from './types';
+import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
 
 export interface OffsetsApi {
   fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
@@ -27,13 +29,18 @@ function toTimestamp(timestamp: bigint | number | string | undefined): bigint | 
 }
 
 export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): OffsetsApi {
+  const retrier = createRetrier(retry);
+
   const fetchTopicOffsets = async (topic: string): Promise<TopicOffset[]> => {
     if (!topic || typeof topic !== 'string') {
       throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
-    return retrier(retry)(async (bail) => {
-      try {
+    // The partition leaders are looked up inside, so `run` resolves no target; a topic the
+    // metadata does not know yet is retried after a refresh.
+    return cluster.run(
+      () => [],
+      async () => {
         await cluster.addTargetTopic(topic);
         await cluster.refreshMetadataIfNecessary();
 
@@ -54,16 +61,9 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
           high: offset,
           low: lowPartitions.find((entry) => entry.partition === partition)!.offset,
         }));
-      } catch (error) {
-        if (protocolType(error) === 'UNKNOWN_TOPIC_OR_PARTITION') {
-          await cluster.refreshMetadata();
-          throw error;
-        }
-
-        bail(error as Error);
-        return [];
-      }
-    });
+      },
+      { retrier, retryOn: STALE_METADATA_ERRORS },
+    );
   };
 
   const fetchTopicOffsetsByTimestamp = async (
@@ -74,8 +74,9 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
       throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
     }
 
-    return retrier(retry)(async (bail) => {
-      try {
+    return cluster.run(
+      () => [],
+      async () => {
         await cluster.addTargetTopic(topic);
         await cluster.refreshMetadataIfNecessary();
 
@@ -92,16 +93,9 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
           partition,
           offset: offset >= 0n ? offset : highPartitions.find((entry) => entry.partition === partition)!.offset,
         }));
-      } catch (error) {
-        if (protocolType(error) === 'UNKNOWN_TOPIC_OR_PARTITION') {
-          await cluster.refreshMetadata();
-          throw error;
-        }
-
-        bail(error as Error);
-        return [];
-      }
-    });
+      },
+      { retrier, retryOn: STALE_METADATA_ERRORS },
+    );
   };
 
   const setOffsets = async ({
@@ -235,7 +229,7 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
       }),
     );
 
-    let { responses: consumerOffsets } = await coordinator.offsetFetch({
+    let { responses: consumerOffsets } = await coordinator.send(OffsetFetch, {
       groupId,
       topics: topicsToFetch,
     });

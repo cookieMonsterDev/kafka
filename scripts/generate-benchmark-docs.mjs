@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 // Generates the docs site's client benchmark page from saved benchmark sessions
-// (`benchmarks/results/raw/<session>/`) in three steps that always run together:
+// (`benchmarks/results/raw/<session>/`) in two steps that always run together:
 //
-//   1. With session directories: writes `packages/docs/src/data/benchmarks/comparison.json`, the numbers
-//      the page shows plus the provenance of each one (session, client and runtime version, kafka-core
-//      SHA). Without them, the committed JSON is reused, so a layout change needs no session data.
-//   2. Writes the whole page, `packages/docs/src/content/docs/core/reference/benchmarks.md`: one ```chart
-//      block (ApexCharts options as JSON, rendered by `packages/docs/src/lib/rehype-chart.ts`) and one
-//      table per entry in `CHARTS`. Change the page here, not in the Markdown file.
+//   1. With session directories: builds one dataset (the numbers the page shows, the provenance of each
+//      one, and the workload the session ran) and stores it in
+//      `packages/docs/src/data/benchmarks/comparison.json` under the session's payload. Datasets of the
+//      other payload are kept, so the 1 KiB and 100 B results can be re-measured separately. Without
+//      session directories, the committed JSON is reused, so a layout change needs no session data.
+//   2. Writes the whole page, `packages/docs/src/content/docs/core/reference/benchmarks.md`: the setup
+//      (payloads, record counts, wire settings, environment), then one ```chart block (ApexCharts options
+//      as JSON, rendered by `packages/docs/src/lib/rehype-chart.ts`) and one table per entry in `CHARTS`,
+//      with both payloads side by side, and last the install-size table, which compares nothing. Change
+//      the page here, not in the Markdown file.
 //
 // Usage:
 //   node scripts/generate-benchmark-docs.mjs --competitors <session dir> --core <session dir>
@@ -17,17 +21,47 @@
 //
 // Competitor cells come from `--competitors`. kafka-core cells come from `--core`, and cells that session
 // did not measure come from `--core-fallback` (default: the `--competitors` session, which also measures
-// kafka-core). Pass the same directory to both for a same-session run. Output is deterministic: no
-// timestamps beyond the sessions' own, fixed ordering and fixed decimals.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+// kafka-core). Pass the same directory to both for a same-session run. All sessions of one dataset must
+// use the same payload and record counts. Output is deterministic: no timestamps beyond the sessions'
+// own, fixed ordering and fixed decimals.
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
+// The benchmark suite's own definitions, so the page describes exactly the bytes and scenarios it runs.
+import { createRecordPool, headerValueBytes, payloadShapes } from '../benchmarks/client/payload.ts';
+import { payloadSeed, scenarioIds, scenarios as scenarioDefinitions } from '../benchmarks/client/spec.ts';
+import { effectiveNoiseFloor, findClearBest, summarize, summarySchemaVersion } from '../benchmarks/runner/aggregate.ts';
+import { footprintTotal, formatNativeAddon, hasUnsplitFootprint } from '../benchmarks/runner/report.ts';
+
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DATA_PATH = join(ROOT, 'packages/docs/src/data/benchmarks/comparison.json');
 const PAGE_PATH = join(ROOT, 'packages/docs/src/content/docs/core/reference/benchmarks.md');
+const BENCHMARKS_MANIFEST_PATH = join(ROOT, 'benchmarks/package.json');
 const BENCHMARKS_README_URL = 'https://github.com/cookieMonsterDev/kafka/blob/develop/benchmarks/README.md';
+const COMPATIBILITY_PAGE_URL = '../compatibility/';
+
+/**
+ * What each client implements, for the install-size section, checked against the installed packages of
+ * `CLIENT_COVERAGE_CHECKED_VERSIONS`. The script refuses to run when `benchmarks/package.json` pins another
+ * competitor version, so a bump cannot leave this sentence unchecked: re-check it, then update both.
+ */
+const CLIENT_COVERAGE_CHECKED_VERSIONS = {
+  '@platformatic/kafka': '2.15.0',
+  kafkajs: '2.2.4',
+  '@confluentinc/kafka-javascript': '1.11.0',
+};
+const CLIENT_COVERAGE = `kafka-core implements KIP-848 consumer groups, KIP-932 share groups and transactions (see [Compatibility](${COMPATIBILITY_PAGE_URL})), Platformatic and Confluent's client implement KIP-848 and transactions but not share groups, KafkaJS implements transactions but neither KIP-848 nor share groups, and Confluent's client bundles librdkafka as a native addon`;
+const NEW_ISSUE_URL = 'https://github.com/cookieMonsterDev/kafka/issues/new/choose';
+const SCHEMA_VERSION = 4;
+
+/** Payloads in page order: the headline first. `id` is the runner's `--payload` value. */
+const PAYLOADS = [
+  { id: 'medium', label: '1 KiB', role: 'Headline' },
+  { id: 'small', label: '100 B', role: 'Per-record overhead stress test' },
+];
+const [HEADLINE_PAYLOAD, STRESS_PAYLOAD] = PAYLOADS;
 
 const CLIENTS = [
   { id: 'kafka-core', label: 'kafka-core', packageName: '@cookiemonsterdev/kafka-core' },
@@ -49,8 +83,8 @@ const METRICS = {
   latencyP99Ms: { unit: 'ms', axisTitle: 'milliseconds', decimals: 3 },
   firstAckedProduceMs: { unit: 'ms', axisTitle: 'milliseconds from process start', decimals: 1 },
   peakMemoryBytes: { unit: 'MiB', axisTitle: 'MiB (peak container memory)', decimals: 0, divisor: MEBIBYTE },
-  installBytes: { unit: 'MB', axisTitle: 'megabytes (1 MB = 1,000,000 bytes)', decimals: 0, divisor: 1_000_000 },
 };
+const MEGABYTE = 1_000_000;
 
 /**
  * Every chart on the page, in page order. `id` is the SVG file name, `section` the page's `##` heading,
@@ -193,16 +227,6 @@ const CHARTS = [
     better: 'lower',
     description: 'Peak container memory while consuming in batches, under a 2 GiB limit.',
   },
-  {
-    id: 'install-size',
-    section: 'Install size',
-    name: 'Install size',
-    scenario: 'F1',
-    profile: null,
-    metric: 'installBytes',
-    better: 'lower',
-    description: 'Size of the package and its production dependencies as installed.',
-  },
 ];
 
 // ---------------------------------------------------------------------------------------------------
@@ -218,10 +242,20 @@ function loadSession(directory) {
   const summaryPath = join(sessionDir, 'summary.json');
   if (!existsSync(summaryPath)) throw new Error(`${sessionDir} has no summary.json; is it a session directory?`);
   const summary = readJson(summaryPath);
+  if (summary.schemaVersion !== summarySchemaVersion) {
+    throw new Error(
+      `${summaryPath} has schemaVersion ${summary.schemaVersion}; re-aggregate it with pnpm benchmarks:report --session ${sessionDir}, repeating any --noise-threshold or --noise-floor it was aggregated with`,
+    );
+  }
   const runtimeVersions = Object.fromEntries(
     summary.manifest.images.map((image) => [image.runtime, image.runtimeVersion]),
   );
-  return { summary, runtimeVersions };
+  const runsDir = join(sessionDir, 'runs');
+  const runs = readdirSync(runsDir)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => readJson(join(runsDir, name)));
+  return { summary, runtimeVersions, runs };
 }
 
 function describeSession({ summary, runtimeVersions }) {
@@ -348,6 +382,18 @@ function buildCell({ chart, runtime, client, sources }) {
   return { runtime, client, status: 'not-measured' };
 }
 
+/**
+ * The comparison rule's settings for one chart, the strictest across the sessions it draws from: the lowest
+ * noise threshold, and the largest noise floor (calibrated, or A/A for the chart's scenario and metric).
+ */
+function comparisonSettings(chart, sources) {
+  const summaries = Object.values(sources).map((session) => session.summary);
+  return {
+    noiseThresholdCv: Math.min(...summaries.map((summary) => summary.noiseThresholdCv)),
+    noiseFloor: Math.max(...summaries.map((summary) => effectiveNoiseFloor(summary, chart.scenario, chart.metric))),
+  };
+}
+
 /** Settings each adapter declared it could not express for this scenario, keyed by client. */
 function declaredGaps(chart, sources) {
   const gapsByClient = {};
@@ -365,19 +411,23 @@ function declaredGaps(chart, sources) {
   return gapsByClient;
 }
 
+/**
+ * One install-size entry per client. A session recorded before F1 split required and optional dependencies
+ * gives an entry with only `unsplitTotal`, and null parts.
+ */
 function buildFootprints(sources) {
   return CLIENTS.map(({ id }) => {
     for (const [source, session] of sessionCandidates(id, sources)) {
-      const footprint = session.summary.footprints.find((entry) => entry.client === id);
-      if (footprint === undefined || footprint.installBytes === null) continue;
+      const footprint = session.summary.footprints?.find((entry) => entry.client === id);
+      if (footprint === undefined || footprintTotal(footprint) === null) continue;
       return {
         client: id,
         status: 'ok',
         packageName: footprint.packageName,
         version: footprint.version,
-        installBytes: footprint.installBytes,
-        dependencyCount: footprint.dependencyCount,
-        hasNativeAddon: footprint.hasNativeAddon,
+        required: footprint.required,
+        optional: footprint.optional,
+        ...(footprint.unsplitTotal === undefined ? {} : { unsplitTotal: footprint.unsplitTotal }),
         source,
         sessionId: session.summary.sessionId,
         ...(id === CORE_CLIENT_ID ? { coreSha: session.summary.manifest.core.sha } : {}),
@@ -387,24 +437,93 @@ function buildFootprints(sources) {
   });
 }
 
-function buildComparison(sources) {
+/** Median elapsed seconds of each (client, runtime) under the normalized profile, from passed runs. */
+function medianElapsedSeconds(session, scenario, clientIds) {
+  const elapsedByCell = new Map();
+  for (const { spec, result, verification } of session.runs) {
+    if (spec.scenario !== scenario || spec.profile !== 'normalized' || !clientIds.includes(spec.series)) continue;
+    if (!verification.passed || result.metrics === null) continue;
+    const key = `${spec.series}/${spec.runtime}`;
+    if (!elapsedByCell.has(key)) elapsedByCell.set(key, []);
+    elapsedByCell.get(key).push(result.metrics.elapsedMs / 1000);
+  }
+  return [...elapsedByCell.values()].map((values) => summarize(values).median);
+}
+
+function countsOf(spec) {
+  const { messageCount, warmupCount, rateMessagesPerSecond, durationMs } = spec;
+  return { messageCount, warmupCount, rateMessagesPerSecond, durationMs };
+}
+
+/**
+ * What each scenario ran: record counts, warm-up and wire settings as the runner passed them, and the
+ * measured time of the fastest and slowest (client, runtime) whose cells the page shows.
+ */
+function buildWorkload(sources) {
+  const competitorIds = CLIENTS.map((client) => client.id).filter((id) => id !== CORE_CLIENT_ID);
+  return scenarioIds
+    .filter((scenario) => sources.competitors.summary.manifest.scenarios.includes(scenario))
+    .map((scenario) => {
+      const spec = sources.competitors.runs.find(
+        (run) => run.spec.scenario === scenario && run.spec.profile === 'normalized',
+      )?.spec;
+      if (spec === undefined) throw new Error(`The competitors session has no normalized ${scenario} run`);
+      const counts = countsOf(spec);
+      for (const [source, session] of Object.entries(sources)) {
+        const other = session.runs.find((run) => run.spec.scenario === scenario)?.spec;
+        if (other !== undefined && JSON.stringify(countsOf(other)) !== JSON.stringify(counts)) {
+          throw new Error(
+            `The ${source} session ran ${scenario} with other record counts than the competitors session`,
+          );
+        }
+      }
+      // E1 runs for a fixed duration and L1 times one record, so neither has a measured window to show.
+      const { kind } = scenarioDefinitions[scenario];
+      const elapsed =
+        kind === 'produce' || kind === 'consume'
+          ? [
+              ...medianElapsedSeconds(sources.competitors, scenario, competitorIds),
+              ...medianElapsedSeconds(sources.core, scenario, [CORE_CLIENT_ID]),
+            ]
+          : [];
+      return {
+        scenario,
+        ...counts,
+        partitions: spec.partitions,
+        wire: spec.wire,
+        measuredSeconds:
+          elapsed.length === 0
+            ? null
+            : { fastest: round(Math.min(...elapsed), 1), slowest: round(Math.max(...elapsed), 1) },
+      };
+    });
+}
+
+/** One payload's results: provenance, environment, workload, chart cells and footprints. */
+function buildDataset(sources) {
   const { environment, manifest } = sources.competitors.summary;
-  const charts = CHARTS.filter((chart) => chart.scenario !== 'F1').map((chart) => ({
+  for (const [source, session] of Object.entries(sources)) {
+    if (session.summary.manifest.payload !== manifest.payload) {
+      throw new Error(
+        `The ${source} session used the ${session.summary.manifest.payload} payload, the competitors session ${manifest.payload}`,
+      );
+    }
+  }
+  const charts = CHARTS.map((chart) => ({
     id: chart.id,
     scenario: chart.scenario,
     profile: chart.profile,
     metric: chart.metric,
     unit: METRICS[chart.metric].unit,
     better: chart.better,
+    ...comparisonSettings(chart, sources),
     declaredGaps: declaredGaps(chart, sources),
     cells: RUNTIMES.flatMap((runtime) =>
       CLIENTS.map((client) => buildCell({ chart, runtime: runtime.id, client: client.id, sources })),
     ),
   }));
   return {
-    schemaVersion: 1,
-    status: 'draft',
-    generator: 'scripts/generate-benchmark-docs.mjs',
+    payload: manifest.payload,
     sessions: {
       competitors: describeSession(sources.competitors),
       core: describeSession(sources.core),
@@ -423,10 +542,12 @@ function buildComparison(sources) {
       brokerCpuset: environment.budget.brokerCpuset,
       brokerMemoryBytes: environment.budget.brokerMemoryBytes,
       brokerHeapBytes: environment.budget.brokerHeapBytes,
+      brokerTmpfsBytes: environment.budget.brokerTmpfsBytes,
       clientCpuset: environment.budget.clientCpuset,
       clientMemoryBytes: environment.budget.clientMemoryBytes,
       brokerImage: manifest.broker.image,
     },
+    workload: buildWorkload(sources),
     charts,
     footprints: buildFootprints(sources),
   };
@@ -458,7 +579,6 @@ function formatChartValue(value, metric) {
     return scaled.toFixed(0);
   }
   if (metric === 'peakMemoryBytes' || metric === 'firstAckedProduceMs') return `${scaled.toFixed(0)} ${unit}`;
-  if (metric === 'installBytes') return `${scaled.toFixed(1)} ${unit}`;
   return `${scaled.toFixed(2)} ${unit}`;
 }
 
@@ -474,21 +594,42 @@ function runtimeLabel(runtimeId) {
   return RUNTIMES.find((runtime) => runtime.id === runtimeId).label;
 }
 
+function payloadLabel(payloadId) {
+  return PAYLOADS.find((payload) => payload.id === payloadId).label;
+}
+
 function formatBytesAsGiB(bytes) {
   return `${trimZeros((bytes / 1024 ** 3).toFixed(1))} GiB`;
+}
+
+function formatCount(count) {
+  return groupThousands(String(count));
+}
+
+/** 16 KiB, 50 MiB, 1 B: the wire settings are all whole powers of 1024 or tiny. */
+function formatSettingBytes(bytes) {
+  if (bytes >= MEBIBYTE && bytes % MEBIBYTE === 0) return `${bytes / MEBIBYTE} MiB`;
+  if (bytes >= 1024 && bytes % 1024 === 0) return `${bytes / 1024} KiB`;
+  return `${bytes} B`;
+}
+
+/** `0-2` → 3, `5` → 1. */
+function cpusetSize(cpuset) {
+  const [first, last = first] = cpuset.split('-').map(Number);
+  return last - first + 1;
 }
 
 function isMeasured(row) {
   return row.status === 'ok' || row.status === 'partial';
 }
 
-/** kafka-core cells taken from an older build than the main kafka-core session. */
-function isEarlierCoreBuild(row, comparison) {
+/** kafka-core cells taken from an older build than the dataset's main kafka-core session. */
+function isEarlierCoreBuild(row, dataset) {
   return (
     row.client === CORE_CLIENT_ID &&
     row.source === 'core-fallback' &&
     row.coreSha !== undefined &&
-    row.coreSha !== comparison.sessions.core.coreSha
+    row.coreSha !== dataset.sessions.core.coreSha
   );
 }
 
@@ -501,25 +642,25 @@ function chartTitle(chart) {
 // ---------------------------------------------------------------------------------------------------
 // Step 2: comparison.json → the Markdown page
 
-/** Rows of one chart, grouped by runtime (or one group for install size). */
-function chartGroups(chart, comparison) {
-  if (chart.scenario === 'F1') {
-    return [
-      {
-        label: 'Package and production dependencies',
-        rows: comparison.footprints.map((footprint) => ({
-          ...footprint,
-          median: footprint.installBytes,
-          min: footprint.installBytes,
-          max: footprint.installBytes,
-        })),
-      },
-    ];
-  }
-  const data = comparison.charts.find((entry) => entry.id === chart.id);
+/** The stored datasets in page order, headline payload first. */
+function orderedDatasets(comparison) {
+  return PAYLOADS.map((payload) => comparison.datasets[payload.id]).filter((dataset) => dataset !== undefined);
+}
+
+function chartData(chart, dataset) {
+  return dataset.charts.find((entry) => entry.id === chart.id);
+}
+
+/** Whether the dataset has anything to show for the chart: a value, or runs that failed. */
+function hasResults(chart, dataset) {
+  return chartData(chart, dataset).cells.some((cell) => isMeasured(cell) || cell.status === 'failed');
+}
+
+/** Rows of one chart, grouped by runtime. */
+function chartGroups(chart, dataset) {
   return RUNTIMES.map((runtime) => ({
     label: runtimeLabel(runtime.id),
-    rows: data.cells.filter((cell) => cell.runtime === runtime.id),
+    rows: chartData(chart, dataset).cells.filter((cell) => cell.runtime === runtime.id),
   }));
 }
 
@@ -529,30 +670,37 @@ function markdownTable(header, rows) {
   return [line(header), `| ${widths.map((width) => '-'.repeat(width)).join(' | ')} |`, ...rows.map(line)].join('\n');
 }
 
-function bestPerGroupText(chart, comparison) {
-  const isBetter = (a, b) => (chart.better === 'higher' ? a > b : a < b);
-  return chartGroups(chart, comparison)
+function comparisonRule(chart, dataset) {
+  const { noiseThresholdCv, noiseFloor } = chartData(chart, dataset);
+  return { noiseThresholdCv, noiseFloor, isLowerBetter: chart.better === 'lower' };
+}
+
+/** Per group, the client the comparison rule puts ahead of every other one, or "no clear highest/lowest". */
+function bestPerGroupText(chart, dataset) {
+  const rule = comparisonRule(chart, dataset);
+  const noClearBestText = `no clear ${chart.better === 'higher' ? 'highest' : 'lowest'}`;
+  const unitSuffix = chart.metric === 'recordsPerSecond' ? ' records/s' : '';
+  return chartGroups(chart, dataset)
+    .map((group) => ({ ...group, rows: group.rows.filter(isMeasured) }))
+    .filter((group) => group.rows.length > 0)
     .map((group) => {
-      const best = group.rows
-        .filter(isMeasured)
-        .reduce((winner, row) => (isBetter(row.median, winner.median) ? row : winner));
-      const unitSuffix = chart.metric === 'recordsPerSecond' ? ' records/s' : '';
-      const value = `${formatChartValue(best.median, chart.metric)}${unitSuffix}`;
-      if (chart.scenario === 'F1') return `${clientLabel(best.client)} (${value})`;
-      return `${group.label}: ${clientLabel(best.client)} (${value})`;
+      const best = findClearBest(group.rows, rule);
+      const text =
+        best === null
+          ? noClearBestText
+          : `${clientLabel(best.client)} (${formatChartValue(best.median, chart.metric)}${unitSuffix})`;
+      return `${group.label}: ${text}`;
     })
     .join(', ');
 }
 
 /** Kept under about 50 characters so it fits a 320 px wide chart; caveats live on the page. */
-function chartSubtitle(chart, comparison) {
-  const rows = chartGroups(chart, comparison).flatMap((group) => group.rows);
+function chartSubtitle(chart, dataset) {
+  const rows = chartGroups(chart, dataset).flatMap((group) => group.rows);
   const parts = [
-    chart.scenario === 'F1'
-      ? 'Draft. One measurement per client.'
-      : `Draft. Median of ${comparison.sessions.competitors.repetitions} runs.`,
+    `Draft. ${payloadLabel(dataset.payload)} values, median of ${dataset.sessions.competitors.repetitions} runs.`,
   ];
-  if (rows.some((row) => isEarlierCoreBuild(row, comparison))) parts.push('kafka-core: earlier build.');
+  if (rows.some((row) => isEarlierCoreBuild(row, dataset))) parts.push('kafka-core: earlier build.');
   return parts.join(' ');
 }
 
@@ -567,8 +715,8 @@ function axisMaxWithLabelRoom(largestValue) {
 }
 
 /** One ```chart block: a horizontal grouped bar chart, one series per client, one group per runtime. */
-function chartBlock(chart, comparison) {
-  const groups = chartGroups(chart, comparison);
+function chartBlock(chart, dataset) {
+  const groups = chartGroups(chart, dataset);
   const { divisor = 1, decimals } = METRICS[chart.metric];
   // Values in the chart's display unit; MiB and MB need fractions that bytes did not.
   const valueDecimals = divisor === 1 ? decimals : 2;
@@ -582,15 +730,16 @@ function chartBlock(chart, comparison) {
   }));
   const bestLabel = chart.better === 'higher' ? 'Highest' : 'Lowest';
   const largestValue = Math.max(...series.flatMap((entry) => entry.data).filter((value) => value !== null));
+  const subject = `${chart.name.toLowerCase()} with ${payloadLabel(dataset.payload)} values by runtime and client`;
   const options = {
-    description: `Bar chart of ${chart.name.toLowerCase()} by ${chart.scenario === 'F1' ? 'client' : 'runtime and client'}, ${chart.better} is better. ${bestLabel}: ${bestPerGroupText(chart, comparison)}. The table below lists every value.`,
-    chart: { type: 'bar', height: groups.length === 1 ? 240 : 420 },
+    description: `Bar chart of ${subject}, ${chart.better} is better. ${bestLabel}: ${bestPerGroupText(chart, dataset)}. The table below lists every value.`,
+    chart: { type: 'bar', height: 420 },
     plotOptions: { bar: { horizontal: true, barHeight: '85%' } },
     title: { text: chartTitle(chart) },
-    subtitle: { text: chartSubtitle(chart, comparison) },
+    subtitle: { text: chartSubtitle(chart, dataset) },
     series,
     xaxis: {
-      categories: groups.map((group) => (chart.scenario === 'F1' ? 'Install size' : group.label)),
+      categories: groups.map((group) => group.label),
       title: { text: METRICS[chart.metric].axisTitle },
       max: axisMaxWithLabelRoom(largestValue),
     },
@@ -598,26 +747,110 @@ function chartBlock(chart, comparison) {
   return ['```chart', formatJson(options), '```'].join('\n');
 }
 
-function chartTable(chart, comparison) {
+/** Median and min–max cells of one table row for one payload. */
+function resultCells(cell, metric) {
+  if (cell === undefined || cell.status === 'not-measured') return ['not measured', '—'];
+  if (cell.status === 'unsupported') return ['not supported', '—'];
+  if (cell.status === 'failed') return [`all ${cell.runs} runs failed`, '—'];
+  return [
+    formatTableValue(cell.median, metric),
+    `${formatTableValue(cell.min, metric)}–${formatTableValue(cell.max, metric)}`,
+  ];
+}
+
+/** Every value of the chart, with one median and range column pair per payload that has results. */
+function chartTable(chart, datasets) {
   const metric = METRICS[chart.metric];
-  if (chart.scenario === 'F1') {
-    const rows = comparison.footprints.map((footprint) => [
-      clientLabel(footprint.client),
-      footprint.status === 'ok' ? formatTableValue(footprint.installBytes, chart.metric) : 'not measured',
-    ]);
-    return markdownTable(['Client', `Install size (${metric.unit})`], rows);
+  const header = ['Runtime', 'Client'];
+  for (const dataset of datasets) {
+    const label = payloadLabel(dataset.payload);
+    header.push(`${label} median (${metric.unit})`, `${label} min–max`);
   }
-  const data = comparison.charts.find((entry) => entry.id === chart.id);
-  const rows = data.cells.map((cell) => {
-    const runtime = runtimeLabel(cell.runtime);
-    const client = clientLabel(cell.client);
-    if (cell.status === 'unsupported') return [runtime, client, 'not supported', '—'];
-    if (cell.status === 'not-measured') return [runtime, client, 'not measured', '—'];
-    if (cell.status === 'failed') return [runtime, client, `all ${cell.runs} runs failed`, '—'];
-    const range = `${formatTableValue(cell.min, chart.metric)}–${formatTableValue(cell.max, chart.metric)}`;
-    return [runtime, client, formatTableValue(cell.median, chart.metric), range];
+  const rows = RUNTIMES.flatMap((runtime) =>
+    CLIENTS.map((client) => [
+      runtimeLabel(runtime.id),
+      client.label,
+      ...datasets.flatMap((dataset) =>
+        resultCells(
+          chartData(chart, dataset).cells.find((cell) => cell.runtime === runtime.id && cell.client === client.id),
+          chart.metric,
+        ),
+      ),
+    ]),
+  );
+  return markdownTable(header, rows);
+}
+
+function chartSection(chart, comparison) {
+  const datasets = orderedDatasets(comparison).filter((dataset) => hasResults(chart, dataset));
+  if (datasets.length === 0) return ['Not measured in the published sessions yet.'];
+  return [chartBlock(chart, datasets[0]), '', chartTable(chart, datasets)];
+}
+
+function formatMegabytes(bytes) {
+  return (bytes / MEGABYTE).toFixed(2);
+}
+
+function footprintPartCells(part) {
+  if (part === null) return ['not split', 'not split', 'not split'];
+  return [formatMegabytes(part.bytes), String(part.dependencyCount), formatCount(part.fileCount)];
+}
+
+function footprintTotalCells(footprint) {
+  const { bytes, dependencyCount } = footprintTotal(footprint);
+  return [formatMegabytes(bytes), String(dependencyCount)];
+}
+
+/**
+ * Install size as information only: no chart, verdict or winner, because a client's size follows what it
+ * implements and bundles. It does not depend on the payload, so it shows the first dataset that measured it.
+ */
+function installSizeText(comparison) {
+  const lines = [
+    '## Install size',
+    '',
+    'What installing each client adds, measured in the benchmark image. Required is the package and everything it reaches through `dependencies`; optional is what its `optionalDependencies` add, which npm and pnpm skip when they cannot be installed.',
+    '',
+    `This is information, not a ranking, because size follows what each client implements and bundles: ${CLIENT_COVERAGE}.`,
+    '',
+  ];
+  const dataset = orderedDatasets(comparison).find((entry) =>
+    entry.footprints.some((footprint) => footprint.status === 'ok'),
+  );
+  if (dataset === undefined) return [...lines, 'Not measured in the published sessions yet.'];
+  // Split rows show their totals too, so the total columns have a value for every measured client.
+  const hasTotals = hasUnsplitFootprint(dataset.footprints);
+  const header = [
+    'Client',
+    'Version',
+    ...(hasTotals ? ['Total (MB)', 'Total dependencies'] : []),
+    'Required (MB)',
+    'Required dependencies',
+    'Required files',
+    'Optional (MB)',
+    'Optional dependencies',
+    'Optional files',
+    'Native addon',
+  ];
+  const rows = dataset.footprints.map((footprint) => {
+    const client = clientLabel(footprint.client);
+    if (footprint.status !== 'ok') return [client, 'not measured', ...Array(header.length - 2).fill('—')];
+    return [
+      client,
+      footprint.version ?? '—',
+      ...(hasTotals ? footprintTotalCells(footprint) : []),
+      ...footprintPartCells(footprint.required),
+      ...footprintPartCells(footprint.optional),
+      formatNativeAddon(footprint),
+    ];
   });
-  return markdownTable(['Runtime', 'Client', `Median (${metric.unit})`, 'Min–max'], rows);
+  const notes = ['MB is 1,000,000 bytes.'];
+  if (hasTotals) {
+    notes.push(
+      'Rows marked not split come from a session recorded before required and optional were measured apart, so they have only the total, without a file count.',
+    );
+  }
+  return [...lines, markdownTable(header, rows), '', notes.join(' ')];
 }
 
 function listText(items) {
@@ -626,37 +859,284 @@ function listText(items) {
 }
 
 function introText(comparison) {
-  const { competitors } = comparison.sessions;
   const competitorsText = listText(
-    CLIENTS.filter((client) => client.id !== CORE_CLIENT_ID).map(
-      (client) => `\`${client.packageName}\` ${competitors.clientVersions[client.id]}`,
-    ),
+    CLIENTS.filter((client) => client.id !== CORE_CLIENT_ID).map((client) => `\`${client.packageName}\``),
   );
-  const runtimesText = listText(
-    RUNTIMES.map((runtime) => `${runtime.label.split(' ')[0]} ${competitors.runtimeVersions[runtime.id]}`),
-  );
-  return `How \`@cookiemonsterdev/kafka-core\` compares with ${competitorsText} on ${runtimesText}.`;
-}
-
-function methodText(comparison) {
-  const { environment } = comparison;
-  const { repetitions } = comparison.sessions.competitors;
-  const clientCpus = environment.clientCpuset.split('-').map(Number);
-  const clientCpuCount = clientCpus.length === 2 ? clientCpus[1] - clientCpus[0] + 1 : 1;
-  return [
-    `Each client ran in a fresh Docker container with ${clientCpuCount} vCPUs and ${formatBytesAsGiB(environment.clientMemoryBytes)}, against a single \`${environment.brokerImage}\` broker in KRaft mode, on one ${environment.cpuModel} laptop through Docker Desktop.`,
-    `Every value is the median of ${repetitions} runs, with the min–max range. Scenarios, settings and fairness rules are in the [benchmarks README](${BENCHMARKS_README_URL}).`,
-  ].join(' ');
+  const runtimesText = listText(RUNTIMES.map((runtime) => runtime.label));
+  const isEveryPayloadPublished = orderedDatasets(comparison).length === PAYLOADS.length;
+  const lines = [
+    `How \`@cookiemonsterdev/kafka-core\` compares with ${competitorsText} on ${runtimesText}. The headline workload sends ${HEADLINE_PAYLOAD.label} values with a key and headers. A second workload with ${STRESS_PAYLOAD.label} values is a stress test of per-record client overhead.${isEveryPayloadPublished ? ' Each table shows both side by side.' : ''}`,
+  ];
+  if (!isEveryPayloadPublished) {
+    const missing = PAYLOADS.filter((payload) => comparison.datasets[payload.id] === undefined);
+    const shown = orderedDatasets(comparison).map((dataset) => payloadLabel(dataset.payload));
+    lines.push(
+      '',
+      `**${listText(missing.map((payload) => payload.label))} results are not published yet.** Until they are, the tables have only ${listText(shown)} columns, and every chart shows ${listText(shown)} values and says so in its subtitle.`,
+    );
+  }
+  return lines;
 }
 
 const CAVEATS = [
+  `The ${STRESS_PAYLOAD.label} results stress per-record client overhead: with little data per record, they rank clients mostly by the work each does per record. The ${HEADLINE_PAYLOAD.label} results are the headline.`,
   'Only kafka-core verifies record-batch CRCs while consuming, so it does extra work in the consume and latency results.',
   'Concurrent sends favour clients that merge separate `send()` calls into one batch, as kafka-core does. Batched send is the fairer produce comparison.',
   "Confluent's client runs on Node.js 24 only. Its consume runs can run out of memory under the 2 GiB limit: a median covers the runs that finished, and a cell where every run failed has no value.",
   'All results come from one machine. Treat small differences as inconclusive.',
+  `A chart names the highest or lowest client on a runtime only when that client's runs separate from each other client's beyond noise: neither client's runs are noisy, their min–max ranges do not overlap, and their medians differ by more than the noise floor. Otherwise it says there is no clear highest or lowest. The [comparison rule](${BENCHMARKS_README_URL}#comparison-rule) has the details.`,
 ];
 
+/** One column per stored dataset, headline payload first. */
+function payloadColumns(datasets) {
+  return datasets.map((dataset) => payloadLabel(dataset.payload));
+}
+
+function payloadText() {
+  const shapeRows = PAYLOADS.map((payload) => {
+    const shape = payloadShapes[payload.id];
+    const headers = shape.headerCount === 0 ? 'none' : `${shape.headerCount}, ${headerValueBytes} B values`;
+    return [payload.label, payload.role, `${shape.keyBytes} B`, `${formatCount(shape.valueBytes)} B`, headers];
+  });
+  const examples = PAYLOADS.flatMap((payload, index) => {
+    const [record] = createRecordPool(payload.id, payloadSeed, 1);
+    const value = record.value.toString('latin1');
+    const headers =
+      record.headers === undefined
+        ? 'none'
+        : Object.entries(record.headers)
+            .map(([name, headerValue]) => `${name}=${headerValue.toString('latin1')}`)
+            .join(', ');
+    return [
+      ...(index === 0 ? [] : ['']),
+      `${payload.label} payload`,
+      `  key:     ${record.key.toString('latin1')}`,
+      `  value:   ${value.slice(0, 32)}… (${formatCount(value.length)} bytes)`,
+      `  headers: ${headers}`,
+    ];
+  });
+  return [
+    '### Payloads',
+    '',
+    markdownTable(['Payload', 'Role', 'Key', 'Value', 'Headers'], shapeRows),
+    '',
+    `Records come from a fixed seed, so every client sends the same bytes in every session. Produce scenarios send the key, value and headers. Consume topics are seeded by Kafka's own \`kafka-producer-perf-test.sh\` with values only. The first record of each pool:`,
+    '',
+    '```text',
+    ...examples,
+    '```',
+  ];
+}
+
+function scenarioLabel(scenario) {
+  return `${scenario} \`${scenarioDefinitions[scenario].name}\``;
+}
+
+/** Scenario ids any dataset ran, in catalog order. */
+function workloadScenarios(datasets) {
+  return scenarioIds.filter((scenario) =>
+    datasets.some((dataset) => dataset.workload.some((entry) => entry.scenario === scenario)),
+  );
+}
+
+function countCells(entry) {
+  if (entry === undefined) return ['not run', '—', '—'];
+  const { kind } = scenarioDefinitions[entry.scenario];
+  const records =
+    kind === 'e2e'
+      ? `${formatCount(entry.rateMessagesPerSecond)}/s for ${trimZeros((entry.durationMs / 1000).toFixed(1))} s`
+      : formatCount(entry.messageCount);
+  const measured =
+    entry.measuredSeconds === null
+      ? '—'
+      : `${entry.measuredSeconds.fastest.toFixed(1)}–${entry.measuredSeconds.slowest.toFixed(1)} s`;
+  return [records, formatCount(entry.warmupCount), measured];
+}
+
+function recordCountsText(datasets) {
+  const header = ['Scenario'];
+  for (const label of payloadColumns(datasets)) {
+    header.push(`${label} measured records`, `${label} warm-up`, `${label} measured time`);
+  }
+  const rows = workloadScenarios(datasets).map((scenario) => [
+    scenarioLabel(scenario),
+    ...datasets.flatMap((dataset) => countCells(dataset.workload.find((entry) => entry.scenario === scenario))),
+  ]);
+  const partitions = [...new Set(datasets.flatMap((dataset) => dataset.workload.map((entry) => entry.partitions)))];
+  return [
+    '### Record counts',
+    '',
+    `Each run sends or reads its warm-up records first and measures only the rest. Measured time is the median time of the fastest and of the slowest client and runtime under the normalized profile; E1 instead runs for its fixed duration, and L1 times one record from process start. Every run gets a fresh topic with ${listText(partitions.map(String))} partitions, deleted before the next run starts.`,
+    '',
+    markdownTable(header, rows),
+  ];
+}
+
+/** The wire settings each scenario pinned; every dataset must agree, because the tables show them once. */
+function scenarioWire(datasets, scenario) {
+  const wires = datasets
+    .map((dataset) => dataset.workload.find((entry) => entry.scenario === scenario)?.wire)
+    .filter((wire) => wire !== undefined);
+  if (new Set(wires.map((wire) => JSON.stringify(wire))).size > 1) {
+    throw new Error(`The published datasets ran ${scenario} with different wire settings; re-measure them together`);
+  }
+  return wires[0];
+}
+
+function produceCalls(definition) {
+  if (definition.kind === 'e2e') return 'one record per `send()` at a fixed rate';
+  if (definition.kind === 'startup') return 'one record';
+  const records = `${definition.recordsPerSend} record${definition.recordsPerSend === 1 ? '' : 's'}`;
+  if (definition.concurrency === 1) return `sequential \`send()\` of ${records}`;
+  return `up to ${definition.concurrency} concurrent \`send()\` calls of ${records}`;
+}
+
+function consumeHandler(definition) {
+  const parts = [definition.consumeMode === 'each-batch' ? 'batch' : 'per record'];
+  if (definition.commitEvery > 0) parts.push(`commit every ${formatCount(definition.commitEvery)} records`);
+  if (definition.seedCompression !== 'none') parts.push(`${definition.seedCompression}-seeded topic`);
+  return parts.join(', ');
+}
+
+function wireSettingsText(datasets) {
+  const scenarioList = workloadScenarios(datasets);
+  const ofKinds = (kinds) => scenarioList.filter((scenario) => kinds.includes(scenarioDefinitions[scenario].kind));
+  const produceRows = ofKinds(['produce', 'e2e', 'startup']).map((scenario) => {
+    const wire = scenarioWire(datasets, scenario);
+    return [
+      scenarioLabel(scenario),
+      produceCalls(scenarioDefinitions[scenario]),
+      wire.acks === -1 ? 'all' : String(wire.acks),
+      `${wire.lingerMs} ms`,
+      formatSettingBytes(wire.batchBytes),
+      String(wire.maxInFlight),
+      wire.compression,
+      wire.idempotent ? 'yes' : 'no',
+    ];
+  });
+  const consumeRows = ofKinds(['consume', 'e2e', 'startup']).map((scenario) => {
+    const wire = scenarioWire(datasets, scenario);
+    return [
+      scenarioLabel(scenario),
+      consumeHandler(scenarioDefinitions[scenario]),
+      formatSettingBytes(wire.fetchMinBytes),
+      formatSettingBytes(wire.fetchMaxBytes),
+      formatSettingBytes(wire.partitionFetchMaxBytes),
+      `${wire.fetchMaxWaitMs} ms`,
+    ];
+  });
+  return [
+    '### Wire settings',
+    '',
+    'The normalized profile pins these settings for every client; each adapter maps them to its own options. The library-defaults chart sets only brokers, client id and group id.',
+    '',
+    markdownTable(
+      ['Scenario', 'Produce calls', 'Acks', 'Linger', 'Batch size', 'Max in-flight', 'Compression', 'Idempotent'],
+      produceRows,
+    ),
+    '',
+    markdownTable(
+      ['Scenario', 'Consume handler', 'Fetch min', 'Fetch max', 'Partition fetch max', 'Fetch max wait'],
+      consumeRows,
+    ),
+  ];
+}
+
+function sessionCellText(dataset) {
+  const { competitors, core } = dataset.sessions;
+  const text = `\`${competitors.sessionId}\`, ${competitors.tier} tier, count scale ${competitors.countScale}`;
+  if (core.sessionId === competitors.sessionId) return text;
+  return `${text}; kafka-core from \`${core.sessionId}\``;
+}
+
+function environmentText(datasets) {
+  const rows = [
+    ['Session', sessionCellText],
+    ['Date', (dataset) => dataset.sessions.competitors.startedAt.slice(0, 10)],
+    ['Repetitions', (dataset) => `${dataset.sessions.competitors.repetitions}, interleaved`],
+    [
+      'Clients',
+      ({ sessions }) =>
+        listText(
+          CLIENTS.map((client) => {
+            const session = client.id === CORE_CLIENT_ID ? sessions.core : sessions.competitors;
+            const build = client.id === CORE_CLIENT_ID ? ` (\`${session.coreSha.slice(0, 12)}\`)` : '';
+            return `${client.label} ${session.clientVersions[client.id]}${build}`;
+          }),
+        ),
+    ],
+    [
+      'Runtimes',
+      ({ sessions }) =>
+        listText(
+          RUNTIMES.map(
+            (runtime) => `${runtime.label.split(' ')[0]} ${sessions.competitors.runtimeVersions[runtime.id]}`,
+          ),
+        ),
+    ],
+    [
+      'Host',
+      ({ environment }) =>
+        `${environment.cpuModel}, ${environment.cpuCount} CPUs, ${formatBytesAsGiB(environment.memoryBytes)}, ${environment.platform} ${environment.osRelease} ${environment.arch}`,
+    ],
+    [
+      'Docker VM',
+      ({ environment }) =>
+        `Docker ${environment.dockerServerVersion}, ${environment.dockerVmCpus} vCPUs, ${formatBytesAsGiB(environment.dockerVmMemoryBytes)}`,
+    ],
+    [
+      'Broker',
+      ({ environment }) =>
+        `\`${environment.brokerImage}\`, one KRaft node; ${cpusetSize(environment.brokerCpuset)} vCPUs (cpuset \`${environment.brokerCpuset}\`), ${formatBytesAsGiB(environment.brokerMemoryBytes)} memory, ${formatBytesAsGiB(environment.brokerHeapBytes)} heap, ${formatBytesAsGiB(environment.brokerTmpfsBytes)} tmpfs log`,
+    ],
+    [
+      'Client container',
+      ({ environment }) =>
+        `${cpusetSize(environment.clientCpuset)} vCPUs (cpuset \`${environment.clientCpuset}\`), ${formatBytesAsGiB(environment.clientMemoryBytes)} memory, swap off; a fresh container per run`,
+    ],
+  ];
+  return [
+    '### Environment',
+    '',
+    `Every container runs on one Docker VM, each pinned to its own CPUs. Scenarios, fairness rules and the option mapping of each client are in the [benchmarks README](${BENCHMARKS_README_URL}).`,
+    '',
+    markdownTable(
+      ['Setting', ...payloadColumns(datasets)],
+      rows.map(([label, cellText]) => [label, ...datasets.map(cellText)]),
+    ),
+  ];
+}
+
+function reproduceText(comparison) {
+  const lines = [
+    '## How to reproduce',
+    '',
+    'From the repository root, with Docker running, run one session per payload. Regenerating the page from a session replaces only the results of its payload. A seed repeats the run order of the published session; record counts come from the current runner, so they can differ from the published ones listed under [Record counts](#record-counts).',
+  ];
+  for (const payload of PAYLOADS) {
+    const seed = comparison.datasets[payload.id]?.sessions.competitors.seed;
+    lines.push(
+      '',
+      `### ${payload.label} values`,
+      '',
+      '```sh',
+      `pnpm benchmarks:run --tier standard --payload ${payload.id}${seed === undefined ? '' : ` --seed ${seed}`}`,
+      'pnpm docs:benchmarks --competitors benchmarks/results/raw/<session> --core benchmarks/results/raw/<session>',
+      '```',
+    );
+  }
+  lines.push(
+    '',
+    '### Results from other hardware',
+    '',
+    `Results hold as ratios on the machine that produced them. To contribute results from another machine, run \`pnpm benchmarks:doctor\` and fix what it reports, run both sessions above, then [open an issue](${NEW_ISSUE_URL}) with each session's \`summary.json\` and \`report.md\` from \`benchmarks/results/raw/<session>/\`. Do not edit this page: it is generated.`,
+    '',
+  );
+  return lines;
+}
+
 function renderPage(comparison) {
+  const datasets = orderedDatasets(comparison);
   const lines = [
     '---',
     'title: Benchmarks',
@@ -667,15 +1147,21 @@ function renderPage(comparison) {
     '',
     '<!-- Generated by scripts/generate-benchmark-docs.mjs. Edit the script, not this file. -->',
     '',
-    introText(comparison),
-    '',
-    '## How it was measured',
-    '',
-    methodText(comparison),
+    ...introText(comparison),
     '',
     '## Read this first',
     '',
     ...CAVEATS.map((caveat) => `- ${caveat}`),
+    '',
+    '## Setup',
+    '',
+    ...payloadText(),
+    '',
+    ...recordCountsText(datasets),
+    '',
+    ...wireSettingsText(datasets),
+    '',
+    ...environmentText(datasets),
   ];
   let currentSection = null;
   for (const chart of CHARTS) {
@@ -684,22 +1170,9 @@ function renderPage(comparison) {
       lines.push('', `## ${chart.section}`);
     }
     if (chart.heading !== undefined) lines.push('', `### ${chart.heading}`);
-    lines.push('', chart.description, '', chartBlock(chart, comparison), '', chartTable(chart, comparison));
+    lines.push('', chart.description, '', ...chartSection(chart, comparison));
   }
-  lines.push(
-    '',
-    '## How to reproduce',
-    '',
-    'From the repository root, with Docker running:',
-    '',
-    '```sh',
-    `pnpm benchmarks:run --tier standard --seed ${comparison.sessions.competitors.seed}`,
-    'pnpm docs:benchmarks --competitors benchmarks/results/raw/<session> --core benchmarks/results/raw/<session>',
-    '```',
-    '',
-    'The first command measures every client and writes a session directory; the second regenerates this page and its charts from it.',
-    '',
-  );
+  lines.push('', ...installSizeText(comparison), '', ...reproduceText(comparison));
   return lines.join('\n');
 }
 
@@ -752,27 +1225,74 @@ function parseOptions() {
   return values;
 }
 
+/** The committed datasets, or none when the JSON does not exist yet. */
+function readCommittedDatasets() {
+  if (!existsSync(DATA_PATH)) return {};
+  const committed = readJson(DATA_PATH);
+  if (committed.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`${DATA_PATH} has schemaVersion ${committed.schemaVersion}; this script reads ${SCHEMA_VERSION}.`);
+  }
+  return committed.datasets;
+}
+
 /** Every output file and its expected content. */
 function expectedOutputs(options) {
-  const outputs = new Map();
-  let comparison;
+  const datasets = readCommittedDatasets();
   if (options.competitors !== undefined) {
-    const competitors = loadSession(options.competitors);
-    const sources = {
-      competitors,
-      core: loadSession(options.core),
-      coreFallback: options['core-fallback'] === undefined ? competitors : loadSession(options['core-fallback']),
+    // The same directory is often passed twice; each session reads hundreds of run files.
+    const sessionsByPath = new Map();
+    const load = (directory) => {
+      const path = resolve(directory);
+      if (!sessionsByPath.has(path)) sessionsByPath.set(path, loadSession(path));
+      return sessionsByPath.get(path);
     };
-    comparison = buildComparison(sources);
-    outputs.set(DATA_PATH, `${formatJson(comparison)}\n`);
-  } else {
-    comparison = readJson(DATA_PATH);
+    const dataset = buildDataset({
+      competitors: load(options.competitors),
+      core: load(options.core),
+      coreFallback: load(options['core-fallback'] ?? options.competitors),
+    });
+    datasets[dataset.payload] = dataset;
   }
-  outputs.set(PAGE_PATH, renderPage(comparison));
-  return outputs;
+  if (Object.keys(datasets).length === 0) {
+    throw new Error(`${DATA_PATH} holds no results; pass --competitors and --core session directories.`);
+  }
+  const comparison = {
+    schemaVersion: SCHEMA_VERSION,
+    status: 'draft',
+    generator: 'scripts/generate-benchmark-docs.mjs',
+    datasets: Object.fromEntries(
+      PAYLOADS.filter((payload) => datasets[payload.id] !== undefined).map((payload) => [
+        payload.id,
+        datasets[payload.id],
+      ]),
+    ),
+  };
+  return new Map([
+    [DATA_PATH, `${formatJson(comparison)}\n`],
+    [PAGE_PATH, renderPage(comparison)],
+  ]);
+}
+
+/** Throws when a competitor's pinned version differs from the one `CLIENT_COVERAGE` was checked against. */
+function assertClientCoverageIsCurrent() {
+  const manifest = readJson(BENCHMARKS_MANIFEST_PATH);
+  const pinnedVersions = { ...manifest.dependencies, ...manifest.optionalDependencies };
+  // Every competitor in CLIENTS, so a newly added one without a checked version fails too.
+  const details = CLIENTS.filter(
+    ({ id, packageName }) =>
+      id !== CORE_CLIENT_ID && pinnedVersions[packageName] !== CLIENT_COVERAGE_CHECKED_VERSIONS[packageName],
+  ).map(
+    ({ packageName }) =>
+      `${packageName} is pinned at ${pinnedVersions[packageName] ?? 'nothing'}, checked at ${CLIENT_COVERAGE_CHECKED_VERSIONS[packageName] ?? 'nothing'}`,
+  );
+  if (details.length === 0) return;
+  throw new Error(
+    `CLIENT_COVERAGE in scripts/generate-benchmark-docs.mjs is out of date: ${details.join('; ')}. Re-check what each client implements, then update CLIENT_COVERAGE and CLIENT_COVERAGE_CHECKED_VERSIONS.`,
+  );
 }
 
 function main() {
+  assertClientCoverageIsCurrent();
   const options = parseOptions();
   const outputs = expectedOutputs(options);
   if (options.check) {

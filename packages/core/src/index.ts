@@ -47,6 +47,7 @@ export type { StickyPartitionerOptions } from './producer/partitioners/index';
 
 export { LOG_LEVELS as logLevel } from './loggers/index';
 export { COMPRESSION_TYPES as CompressionTypes, CompressionCodecs } from './protocol/compression/index';
+export { getCrc32cImplementation } from './protocol/crc32c';
 
 export { CONFIG_RESOURCE_TYPES as ConfigResourceTypes } from './protocol/enums/config-resource-types';
 export { INCREMENTAL_ALTER_CONFIGS_OPERATIONS as ConfigOperations } from './protocol/enums/incremental-alter-configs-operations';
@@ -233,6 +234,7 @@ export type {
   UpdateFeaturesResult,
 } from './admin/types';
 export type { CompressionCodec, CompressionCodecFactory } from './protocol/compression/index';
+export type { Crc32cImplementation } from './protocol/crc32c';
 export type { MetadataRecovery } from './cluster/broker-pool';
 export type {
   KafkaCounter,

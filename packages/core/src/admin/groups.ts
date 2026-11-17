@@ -5,11 +5,15 @@ import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/r
 import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
 import type { LeaveGroupMember } from '../protocol/requests/leave-group/index';
-import { retrier } from '../retry/index';
+import { coordinatorTarget } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, protocolType, formatUnknown } from './helpers';
+import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown } from './helpers';
 import type { RemoveMembersFromConsumerGroupOptions, RemoveMembersFromConsumerGroupResult } from './types';
 import type { TopicPartitions } from './types';
+import { ConsumerGroupDescribe, ListGroups, OffsetDelete } from '../protocol/requests/lazy-families';
+import { DescribeGroups } from '../protocol/requests/describe-groups/index';
+import { LeaveGroupMembers } from '../protocol/requests/leave-group/index';
 
 export interface GroupsApi {
   listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
@@ -26,14 +30,16 @@ export interface GroupsApi {
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
 }
 
-export function createGroupsApi({ cluster, logger, retry }: AdminContext): GroupsApi {
+export function createGroupsApi({ cluster, retry }: AdminContext): GroupsApi {
+  const retrier = createRetrier(retry);
+
   const listGroups = async (): Promise<{ groups: ListGroupsResponseV2Body['groups'] }> => {
     await cluster.refreshMetadata();
 
     const responses = await Promise.all(
       Object.keys(cluster.brokerPool.brokers).map(async (nodeId) => {
         const broker = await cluster.findBroker({ nodeId });
-        return broker.listGroups();
+        return broker.send(ListGroups, {});
       }),
     );
 
@@ -46,7 +52,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         cluster,
         retry,
         groupIds,
-        describe: (coordinator, ids) => coordinator.describeGroups({ groupIds: ids }),
+        describe: (coordinator, ids) => coordinator.send(DescribeGroups, { groupIds: ids }),
       }),
     };
   };
@@ -69,7 +75,7 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
         cluster,
         retry,
         groupIds,
-        describe: (coordinator, ids) => coordinator.consumerGroupDescribe({ groupIds: ids }),
+        describe: (coordinator, ids) => coordinator.send(ConsumerGroupDescribe, { groupIds: ids }),
       }),
     };
   };
@@ -86,7 +92,6 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
 
     return deleteGroupsViaCoordinators({
       cluster,
-      logger,
       retry,
       groupIds,
       errorLabel: 'Error in DeleteGroups',
@@ -125,27 +130,14 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
       }
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const response = await coordinator.offsetDelete({ groupId, topics });
+    return cluster.run(
+      coordinatorTarget(groupId),
+      async (coordinator) => {
+        const response = await coordinator.send(OffsetDelete, { groupId, topics });
         return { topics: response.topics };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not delete group offsets', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { topics: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not delete group offsets' },
+    );
   };
 
   const removeMembersFromConsumerGroup = async ({
@@ -177,11 +169,13 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
       reason: reason ?? null,
     }));
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const coordinator = await cluster.findGroupCoordinator({ groupId });
-        const { members: responseMembers } = await coordinator.leaveGroupMembers({ groupId, members: leaveMembers });
+    return cluster.run(
+      coordinatorTarget(groupId),
+      async (coordinator) => {
+        const { members: responseMembers } = await coordinator.send(LeaveGroupMembers, {
+          groupId,
+          members: leaveMembers,
+        });
         return {
           members: responseMembers.map(({ memberId, groupInstanceId, errorCode }) => ({
             memberId,
@@ -189,22 +183,9 @@ export function createGroupsApi({ cluster, logger, retry }: AdminContext): Group
             errorCode,
           })),
         };
-      } catch (error) {
-        const type = protocolType(error);
-        if (type === 'GROUP_COORDINATOR_NOT_AVAILABLE' || type === 'NOT_COORDINATOR_FOR_GROUP') {
-          logger.warn('Could not remove members from consumer group', {
-            error: error instanceof Error ? error.message : String(error),
-            groupId,
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { members: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not remove members from consumer group' },
+    );
   };
 
   return {

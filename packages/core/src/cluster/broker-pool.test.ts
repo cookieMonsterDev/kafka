@@ -206,6 +206,93 @@ describe('cluster/BrokerPool', () => {
     });
   });
 
+  describe('needsMetadataRefresh', () => {
+    function newPool(options: { usingBootstrapControllers?: boolean } = {}) {
+      return new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+        ...options,
+      });
+    }
+
+    function poolWithMetadata(topics: string[], options: { usingBootstrapControllers?: boolean } = {}) {
+      const brokerPool = newPool(options);
+      brokerPool.metadata = {
+        brokers: [],
+        topicMetadata: topics.map((topic) => ({ topicErrorCode: 0, topic, isInternal: false, partitionMetadata: [] })),
+        throttleTime: 0,
+        clusterId: null,
+        controllerId: 0,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      };
+      brokerPool.metadataExpireAt = Date.now() + 60_000;
+      return brokerPool;
+    }
+
+    it('is true before metadata has been loaded', () => {
+      expect(newPool().needsMetadataRefresh([])).toBe(true);
+    });
+
+    it('is false while metadata is fresh and holds every topic', () => {
+      expect(poolWithMetadata(['orders', 'payments']).needsMetadataRefresh(new Set(['orders', 'payments']))).toBe(
+        false,
+      );
+    });
+
+    it('is true when a topic is missing from the cached metadata', () => {
+      expect(poolWithMetadata(['orders']).needsMetadataRefresh(['orders', 'payments'])).toBe(true);
+    });
+
+    it('is true once the cached metadata has expired', () => {
+      const brokerPool = poolWithMetadata(['orders']);
+      brokerPool.metadataExpireAt = Date.now() - 1;
+      expect(brokerPool.needsMetadataRefresh(['orders'])).toBe(true);
+    });
+
+    it('ignores missing topics for a KIP-919 controller pool', () => {
+      expect(poolWithMetadata([], { usingBootstrapControllers: true }).needsMetadataRefresh(['orders'])).toBe(false);
+    });
+  });
+
+  describe('connectedBroker', () => {
+    it('returns the broker only while it is connected', () => {
+      const isConnected = vi.fn().mockReturnValue(true);
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      const broker = new Broker({
+        connectionPool: fakeConnectionPool({ isConnected }),
+        logger: silentLogger,
+        nodeId: 1,
+      });
+      brokerPool.brokers = { '1': broker };
+
+      expect(brokerPool.connectedBroker('1')).toBe(broker);
+      isConnected.mockReturnValue(false);
+      expect(brokerPool.connectedBroker('1')).toBeUndefined();
+      expect(brokerPool.connectedBroker('2')).toBeUndefined();
+    });
+  });
+
+  describe('hasBrokerMoved', () => {
+    it('reports a cached broker whose address differs, not an unknown node id', () => {
+      const brokerPool = new BrokerPool({
+        connectionPoolBuilder: fakeBuilder(async () => fakeConnectionPool()),
+        logger: silentLogger,
+      });
+      brokerPool.brokers = {
+        '1': new Broker({ connectionPool: fakeConnectionPool(), logger: silentLogger, nodeId: 1 }),
+      };
+
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-1', port: 9092 })).toBe(false);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-1', port: 9093 })).toBe(true);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '1', host: 'broker-9', port: 9092 })).toBe(true);
+      expect(brokerPool.hasBrokerMoved({ nodeId: '2', host: 'broker-9', port: 9092 })).toBe(false);
+    });
+  });
+
   describe('refreshMetadata', () => {
     it('assigns the seed broker its nodeId/rack and creates a new broker for every other address', async () => {
       const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });

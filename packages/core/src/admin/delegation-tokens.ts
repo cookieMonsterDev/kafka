@@ -1,7 +1,8 @@
 import { KafkaNonRetriableError } from '../errors';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import type {
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
@@ -11,6 +12,12 @@ import type {
   KafkaPrincipal,
   RenewDelegationTokenOptions,
 } from './types';
+import {
+  CreateDelegationToken,
+  DescribeDelegationToken,
+  ExpireDelegationToken,
+  RenewDelegationToken,
+} from '../protocol/requests/lazy-families';
 
 export interface DelegationTokensApi {
   createDelegationToken: (options?: CreateDelegationTokenOptions) => Promise<CreateDelegationTokenResult>;
@@ -62,7 +69,9 @@ function toRequester(principalType: string | undefined, principalName: string | 
   return { principalType, name: principalName };
 }
 
-export function createDelegationTokensApi({ cluster, logger, retry }: AdminContext): DelegationTokensApi {
+export function createDelegationTokensApi({ cluster, retry }: AdminContext): DelegationTokensApi {
+  const retrier = createRetrier(retry);
+
   const createDelegationToken = async (
     options: CreateDelegationTokenOptions = {},
   ): Promise<CreateDelegationTokenResult> => {
@@ -73,38 +82,29 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
       throw new KafkaNonRetriableError(`Invalid owner principal ${formatUnknown(owner)}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const response = await broker.createDelegationToken({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const response = await broker.send(CreateDelegationToken, {
           renewers,
           maxLifetimeMs: maxLifeTimeMs,
           owner,
         });
         return {
           owner: toOwner(response.principalType, response.principalName),
-          tokenRequester: toRequester(response.tokenRequesterPrincipalType, response.tokenRequesterPrincipalName),
+          tokenRequester:
+            'tokenRequesterPrincipalType' in response
+              ? toRequester(response.tokenRequesterPrincipalType, response.tokenRequesterPrincipalName)
+              : undefined,
           issueTimestamp: response.issueTimestampMs,
           expiryTimestamp: response.expiryTimestampMs,
           maxTimestamp: response.maxTimestampMs,
           tokenId: response.tokenId,
           hmac: response.hmac,
         };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not create a delegation token', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not create a delegation token' },
+    );
   };
 
   const renewDelegationToken = async ({
@@ -114,29 +114,17 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
     assertHmac(hmac);
     assertOptionalBigint('renewTimePeriodMs', renewTimePeriodMs);
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { expiryTimestampMs } = await broker.renewDelegationToken({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { expiryTimestampMs } = await broker.send(RenewDelegationToken, {
           hmac,
           renewPeriodMs: renewTimePeriodMs,
         });
         return { expiryTimestamp: expiryTimestampMs };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not renew a delegation token', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not renew a delegation token' },
+    );
   };
 
   const expireDelegationToken = async ({
@@ -146,26 +134,14 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
     assertHmac(hmac);
     assertOptionalBigint('expiryTimePeriodMs', expiryTimePeriodMs);
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { expiryTimestampMs } = await broker.expireDelegationToken({ hmac, expiryTimePeriodMs });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { expiryTimestampMs } = await broker.send(ExpireDelegationToken, { hmac, expiryTimePeriodMs });
         return { expiryTimestamp: expiryTimestampMs };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not expire a delegation token', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not expire a delegation token' },
+    );
   };
 
   const describeDelegationToken = async (
@@ -173,15 +149,17 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
   ): Promise<{ tokens: DelegationToken[] }> => {
     assertPrincipals('owner', options.owners);
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { tokens } = await broker.describeDelegationToken({ owners: options.owners });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { tokens } = await broker.send(DescribeDelegationToken, { owners: options.owners });
         return {
           tokens: tokens.map((token) => ({
             owner: toOwner(token.principalType, token.principalName),
-            tokenRequester: toRequester(token.tokenRequesterPrincipalType, token.tokenRequesterPrincipalName),
+            tokenRequester:
+              'tokenRequesterPrincipalType' in token
+                ? toRequester(token.tokenRequesterPrincipalType, token.tokenRequesterPrincipalName)
+                : undefined,
             issueTimestamp: token.issueTimestamp,
             expiryTimestamp: token.expiryTimestamp,
             maxTimestamp: token.maxTimestamp,
@@ -190,20 +168,9 @@ export function createDelegationTokensApi({ cluster, logger, retry }: AdminConte
             renewers: token.renewers,
           })),
         };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe delegation tokens', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe delegation tokens' },
+    );
   };
 
   return { createDelegationToken, renewDelegationToken, expireDelegationToken, describeDelegationToken };

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { heartbeatRequestV0 } from './v0/request';
 import { heartbeatResponseV0 } from './v0/response';
 import { heartbeatRequestV1 } from './v1/request';
@@ -17,7 +18,7 @@ export interface HeartbeatOptions {
   groupInstanceId?: string | null;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<HeartbeatOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: heartbeatRequestV0(options), response: heartbeatResponseV0 }),
   1: (options) => ({ request: heartbeatRequestV1(options), response: heartbeatResponseV1 }),
   2: (options) => ({ request: heartbeatRequestV2(options), response: heartbeatResponseV2 }),
@@ -29,13 +30,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<HeartbeatOptions>>> = {
     request: heartbeatRequestV4({ ...options, groupInstanceId: options.groupInstanceId ?? null }),
     response: heartbeatResponseV4,
   }),
-};
+} satisfies VersionFactories<HeartbeatOptions>;
 
-export const Heartbeat: RequestFamily<HeartbeatOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no Heartbeat protocol for version ${version}`);
-    return factory;
-  },
-});
+export const Heartbeat = defineRequestFamily(KAFKA_APIS.Heartbeat, VERSIONS);

@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import {
   type AlterClientQuotasEntry,
   type AlterClientQuotasEntity,
@@ -16,7 +17,7 @@ export interface AlterClientQuotasOptions {
   validateOnly?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterClientQuotasOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: alterClientQuotasRequestV0({
       entries: options.entries,
@@ -31,13 +32,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<AlterClientQuotasOptions
     }),
     response: alterClientQuotasResponseV1,
   }),
-};
+} satisfies VersionFactories<AlterClientQuotasOptions>;
 
-export const AlterClientQuotas: RequestFamily<AlterClientQuotasOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no AlterClientQuotas protocol for version ${version}`);
-    return factory;
-  },
-});
+export const AlterClientQuotas = defineRequestFamily(KAFKA_APIS.AlterClientQuotas, VERSIONS);

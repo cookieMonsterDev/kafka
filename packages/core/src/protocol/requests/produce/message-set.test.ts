@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { bufferPoolStats, clearBufferPool, resetBufferPoolStats } from '../../buffer-pool';
 import { COMPRESSION_TYPES } from '../../compression/index';
 import { Decoder } from '../../decoder';
 import { Encoder } from '../../encoder';
@@ -112,5 +113,28 @@ describe('protocol/message-set compressed wrapper offsets', () => {
     buffer.writeBigInt64BE(100n, 0);
     const messages = await decodeMessageSet(prefixed(new Encoder().writeBuffer(buffer)));
     expect(messages.map((message) => message.offset)).toEqual([99n, 100n]);
+  });
+
+  it('returns its message set buffers to the pool once the request body is written', async () => {
+    const request = createMessageSetProduceRequest(2, {
+      acks: 1,
+      timeout: 1000,
+      topicData: [
+        {
+          topic: 't',
+          partitions: [0, 1, 2].map((partition) => ({
+            partition,
+            messages: Array.from({ length: 20 }, () => ({ value: Buffer.alloc(1024, 1) })),
+          })),
+        },
+      ],
+    });
+
+    clearBufferPool();
+    (await request.encode()).release();
+    resetBufferPoolStats();
+    (await request.encode()).release();
+
+    expect(bufferPoolStats().allocCount).toBe(0);
   });
 });

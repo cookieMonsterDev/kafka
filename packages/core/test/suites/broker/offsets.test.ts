@@ -12,6 +12,15 @@ import {
   secureRandom,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
+import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
+import { JoinGroup } from '../../../src/protocol/requests/join-group/index';
+import { LeaveGroup } from '../../../src/protocol/requests/leave-group/index';
+import { ListOffsets } from '../../../src/protocol/requests/list-offsets/index';
+import { Metadata } from '../../../src/protocol/requests/metadata/index';
+import { OffsetCommit } from '../../../src/protocol/requests/offset-commit/index';
+import { OffsetFetch } from '../../../src/protocol/requests/offset-fetch/index';
+import { Produce } from '../../../src/protocol/requests/produce/index';
+import { SyncGroup } from '../../../src/protocol/requests/sync-group/index';
 
 describe('broker.offsets', () => {
   let topicName: string;
@@ -35,7 +44,9 @@ describe('broker.offsets', () => {
   });
 
   it('lists, commits, and fetches offsets', async () => {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => seedBroker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      seedBroker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
+    );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
     leader = new Broker({
@@ -45,20 +56,20 @@ describe('broker.offsets', () => {
     await leader.connect();
 
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      leader!.produce({
+      leader!.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [{ topic: topicName, partitions: [{ partition: 0, messages: [{ key: 'k', value: 'v' }] }] }],
       }),
     );
 
-    const listed = await leader.listOffsets({
+    const listed = await leader.send(ListOffsets, {
       topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: -1n }] }],
     });
     expect(listed.responses[0]?.partitions[0]?.offset).toBeGreaterThanOrEqual(0n);
 
     const dest = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
-      seedBroker!.findGroupCoordinator({
+      seedBroker!.send(FindCoordinator, {
         coordinatorKey: groupId,
         coordinatorType: COORDINATOR_TYPES.GROUP,
       }),
@@ -70,7 +81,7 @@ describe('broker.offsets', () => {
     await coordinator.connect();
 
     const join = await retryProtocol(['NOT_COORDINATOR_FOR_GROUP', 'GROUP_LOAD_IN_PROGRESS'], () =>
-      coordinator!.joinGroup({
+      coordinator!.send(JoinGroup, {
         groupId,
         sessionTimeout: 30_000,
         rebalanceTimeout: 60_000,
@@ -80,7 +91,7 @@ describe('broker.offsets', () => {
       }),
     );
 
-    await coordinator.syncGroup({
+    await coordinator.send(SyncGroup, {
       groupId,
       generationId: join.generationId,
       memberId: join.memberId,
@@ -89,7 +100,7 @@ describe('broker.offsets', () => {
       groupAssignment: [{ memberId: join.memberId, memberAssignment: Buffer.alloc(0) }],
     });
 
-    const committed = await coordinator.offsetCommit({
+    const committed = await coordinator.send(OffsetCommit, {
       groupId,
       groupGenerationId: join.generationId,
       memberId: join.memberId,
@@ -97,17 +108,19 @@ describe('broker.offsets', () => {
     });
     expect(committed.responses[0]?.partitions[0]?.errorCode).toBe(0);
 
-    const fetched = await coordinator.offsetFetch({
+    const fetched = await coordinator.send(OffsetFetch, {
       groupId,
       topics: [{ topic: topicName, partitions: [{ partition: 0 }] }],
     });
     expect(fetched.responses[0]?.partitions[0]?.offset).toBe(1n);
 
-    await coordinator.leaveGroup({ groupId, memberId: join.memberId });
+    await coordinator.send(LeaveGroup, { groupId, memberId: join.memberId });
   });
 
   it('lists earliest and latest offsets after a produce', async () => {
-    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () => seedBroker!.metadata([topicName]));
+    const metadata = await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
+      seedBroker!.send(Metadata, { topics: [topicName], allowAutoTopicCreation: true }),
+    );
     const partition = metadata.topicMetadata[0]!.partitionMetadata[0]!;
     const brokerData = metadata.brokers.find((b) => b.nodeId === partition.leader)!;
     leader = new Broker({
@@ -117,7 +130,7 @@ describe('broker.offsets', () => {
     await leader.connect();
 
     await retryProtocol(TRANSIENT_METADATA_ERRORS, () =>
-      leader!.produce({
+      leader!.send(Produce, {
         acks: 1,
         timeout: 30_000,
         topicData: [
@@ -137,10 +150,10 @@ describe('broker.offsets', () => {
       }),
     );
 
-    const earliest = await leader.listOffsets({
+    const earliest = await leader.send(ListOffsets, {
       topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: BigInt(EARLIEST_OFFSET) }] }],
     });
-    const latest = await leader.listOffsets({
+    const latest = await leader.send(ListOffsets, {
       topics: [{ topic: topicName, partitions: [{ partition: 0, timestamp: BigInt(LATEST_OFFSET) }] }],
     });
     expect(earliest.responses[0]?.partitions[0]?.offset).toBe(0n);

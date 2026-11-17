@@ -15,7 +15,7 @@ describe('protocol/requests/produce/v2/response', () => {
       ],
       throttleTime: 0,
     });
-    await expect(produceResponseV2.parse(data)).resolves.toBeTruthy();
+    expect(produceResponseV2.parse(data)).toBeTruthy();
   });
 
   it('decodes a gzip produce response fixture', async () => {

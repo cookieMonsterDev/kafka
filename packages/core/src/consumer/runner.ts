@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { isKafkaError, isRebalancing } from '../errors';
+import { isRebalancing, isRejectedMember } from '../cluster/error-classifier';
+import { isKafkaError } from '../errors';
 import type { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import type { Logger } from '../loggers/index';
 import { retrier, type RetryOptions } from '../retry/index';
@@ -31,7 +32,6 @@ export interface RunnerOptions {
   prefetchMaxBytes?: number;
   eachBatch?: EachBatchHandler | null;
   eachMessage?: EachMessageHandler | null;
-  heartbeatInterval: number;
   onCrash: (reason: Error) => void | Promise<void>;
   retry?: RetryOptions;
   autoCommit?: boolean;
@@ -40,10 +40,6 @@ export interface RunnerOptions {
   /** Ordered async `onConsume` hook. See {@link ConsumerHooks}. */
   hooks?: ConsumerHooks;
   maxRecords?: number;
-}
-
-function processingKey(topic: string, partition: number): string {
-  return `${topic}\0${partition}`;
 }
 
 function sliceMessages<T>(items: readonly T[], size: number): T[][] {
@@ -81,7 +77,6 @@ export class Runner extends EventEmitter {
   eachBatchAutoResolve: boolean;
   eachBatch: EachBatchHandler | null | undefined;
   eachMessage: EachMessageHandler | null | undefined;
-  heartbeatInterval: number;
   retrier: ReturnType<typeof retrier>;
   onCrash: (reason: Error) => void | Promise<void>;
   autoCommit: boolean;
@@ -102,8 +97,6 @@ export class Runner extends EventEmitter {
   #consuming = false;
   #starting = false;
   #stopPromise: Promise<void> | null = null;
-  /** Partitions a worker is handling right now; a pending seek on one waits until it is released. */
-  readonly #processingPartitions = new Set<string>();
 
   constructor({
     logger,
@@ -115,7 +108,6 @@ export class Runner extends EventEmitter {
     prefetchMaxBytes = DEFAULT_PREFETCH_MAX_BYTES,
     eachBatch,
     eachMessage,
-    heartbeatInterval,
     onCrash,
     retry,
     autoCommit = true,
@@ -130,7 +122,6 @@ export class Runner extends EventEmitter {
     this.eachBatchAutoResolve = eachBatchAutoResolve;
     this.eachBatch = eachBatch;
     this.eachMessage = eachMessage;
-    this.heartbeatInterval = heartbeatInterval;
     this.retrier = retrier({ ...retry });
     this.onCrash = onCrash;
     this.autoCommit = autoCommit;
@@ -142,30 +133,21 @@ export class Runner extends EventEmitter {
       getNodeIds: () => this.consumerGroup.getNodeIds(),
       fetch: (nodeId) => this.fetch(nodeId),
       handler: async (batch) => {
-        const key = processingKey(batch.topic, batch.partition);
-        this.#processingPartitions.add(key);
+        const { partitionPipeline } = this.consumerGroup;
+        partitionPipeline.beginProcessing(batch);
         try {
           await this.handleBatch(batch);
         } finally {
-          this.#processingPartitions.delete(key);
+          partitionPipeline.endProcessing(batch);
         }
       },
       concurrency,
       prefetchMaxBatches,
       prefetchMaxBytes,
       getBatchBytes: (batch) => estimatePrefetchBytes(batch),
-      isStale: (batch) => this.isStaleBatch(batch),
+      isBatchCurrent: (batch) => this.consumerGroup.partitionPipeline.isBatchCurrent(batch),
+      settleBatch: (batch) => this.consumerGroup.partitionPipeline.settle(batch),
     });
-  }
-
-  /**
-   * A prefetch issued while the partition's previous batch was still in flight reads from the
-   * old position; once that batch has been processed, its records would be delivered twice.
-   */
-  isStaleBatch({ topic, partition, fetchedOffset }: Batch): boolean {
-    if (this.consumerGroup.hasSeekOffset({ topic, partition })) return true;
-    const position = this.consumerGroup.position(topic, partition);
-    return position != null && position !== fetchedOffset;
   }
 
   get consuming(): boolean {
@@ -240,7 +222,7 @@ export class Runner extends EventEmitter {
           return;
         }
 
-        if (error.type === 'UNKNOWN_MEMBER_ID' || error.type === 'FENCED_MEMBER_EPOCH') {
+        if (isRejectedMember(error)) {
           if (!this.running || this.shuttingDown) return;
 
           this.logger.error('The coordinator is not aware of this member, re-joining the group', {
@@ -249,11 +231,7 @@ export class Runner extends EventEmitter {
             error: error.message,
           });
 
-          // Discovered mid-fetch, not mid-join: the member was fenced out before it could leave
-          // and revoke cleanly, so its current assignment is lost, not revoked.
-          await this.consumerGroup.notifyPartitionsLost();
-
-          if (error.type === 'UNKNOWN_MEMBER_ID') this.consumerGroup.memberId = null;
+          await this.consumerGroup.recoverRejectedMember(error);
           await this.consumerGroup.joinAndSync();
           return;
         }
@@ -340,26 +318,28 @@ export class Runner extends EventEmitter {
 
   async heartbeat(): Promise<void> {
     try {
-      await this.consumerGroup.heartbeat({ interval: this.heartbeatInterval });
+      await this.consumerGroup.heartbeat();
     } catch (e) {
-      if (isRebalancing(e as { type?: string })) {
+      if (isRebalancing(e)) {
         await this.autoCommitOffsets();
       }
       throw e;
     }
   }
 
+  /** Runs per record, so it stays synchronous until a heartbeat is actually due. */
   heartbeatIfDue(): Promise<void> | undefined {
-    if (!this.consumerGroup.heartbeatDue(this.heartbeatInterval)) return undefined;
+    const { nextHeartbeatAt } = this.consumerGroup;
+    // Assign mode never heartbeats; skip the clock read.
+    if (nextHeartbeatAt === Infinity || Date.now() < nextHeartbeatAt) return undefined;
     return this.heartbeat();
   }
 
   async processEachMessage(batch: Batch): Promise<void> {
-    const { topic, partition } = batch;
+    const { topic, partition, partitionState } = batch;
     const eachMessage = this.eachMessage;
     if (!eachMessage) return;
 
-    const topicPartition = { topic, partition };
     const pause = (): (() => void) => {
       this.consumerGroup.pause([{ topic, partitions: [partition] }]);
       return () => this.consumerGroup.resume([{ topic, partitions: [partition] }]);
@@ -376,7 +356,7 @@ export class Runner extends EventEmitter {
 
     for (const message of batch.messages) {
       // Checked before every message: the handler, or anything else, may seek this partition.
-      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset(topicPartition)) {
+      if (!this.running || this.shuttingDown || partitionState?.pendingSeek != null) {
         return;
       }
 
@@ -411,7 +391,7 @@ export class Runner extends EventEmitter {
       if (heartbeatDue) await heartbeatDue;
 
       // Checked after every message: the handler may pause through `pause()` or `consumer.pause()`.
-      if (this.consumerGroup.isPaused(topic, partition)) {
+      if (partitionState?.isPaused === true) {
         return;
       }
 
@@ -429,14 +409,14 @@ export class Runner extends EventEmitter {
       handledMessages === batch.messages.length &&
       lastMessage &&
       lastOffset > lastMessage.offset &&
-      !this.consumerGroup.hasSeekOffset(topicPartition)
+      partitionState?.pendingSeek == null
     ) {
       this.consumerGroup.resolveOffset({ topic, partition, offset: lastOffset });
     }
   }
 
   async processEachBatch(batch: Batch): Promise<void> {
-    const { topic, partition } = batch;
+    const { topic, partition, partitionState } = batch;
     const eachBatch = this.eachBatch;
     if (!eachBatch) return;
 
@@ -459,7 +439,7 @@ export class Runner extends EventEmitter {
       const slice = slices[i]!;
       const isLastSlice = i === slices.length - 1;
 
-      if (!this.running || this.shuttingDown || this.consumerGroup.hasSeekOffset({ topic, partition })) {
+      if (!this.running || this.shuttingDown || partitionState?.pendingSeek != null) {
         break;
       }
 
@@ -491,7 +471,7 @@ export class Runner extends EventEmitter {
           },
           uncommittedOffsets: () => this.consumerGroup.uncommittedOffsets(),
           isRunning: () => this.running && !this.shuttingDown,
-          isStale: () => this.consumerGroup.hasSeekOffset({ topic, partition }),
+          isStale: () => partitionState?.pendingSeek != null,
         });
       } catch (e) {
         if (!isKafkaError(e)) {
@@ -539,11 +519,7 @@ export class Runner extends EventEmitter {
     const startFetch = Date.now();
     this.instrumentationEmitter.emit(FETCH_START, { nodeId });
 
-    // Applying a seek while its partition is mid-batch would hide it from the worker, which then
-    // keeps resolving offsets past it; leave it pending so the worker stops first.
-    const batches = await this.consumerGroup.fetch(nodeId, {
-      isProcessing: (topic, partition) => this.#processingPartitions.has(processingKey(topic, partition)),
-    });
+    const batches = await this.consumerGroup.fetch(nodeId);
 
     this.instrumentationEmitter.emit(FETCH, {
       // Always 0: fetchers deliver batches asynchronously, so a count isn't available here.

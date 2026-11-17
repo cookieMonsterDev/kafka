@@ -1,13 +1,40 @@
+import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 
+const NON_ASCII = /[\u0080-\uFFFF]/;
+
+/**
+ * Fails the build when an emitted chunk still contains a non-ASCII character after `charset: 'ascii'`
+ * escaped what it could, such as one in a legal comment. V8 keeps a module source with any character
+ * above Latin-1 as a two-byte string, which takes twice the heap; ASCII is the simpler rule to check.
+ */
+function asciiOnlyOutput(): Plugin {
+  return {
+    name: 'ascii-only-output',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      for (const output of Object.values(bundle)) {
+        if (output.type !== 'chunk') continue;
+
+        const index = output.code.search(NON_ASCII);
+        if (index === -1) continue;
+
+        const line = output.code.slice(0, index).split('\n').length;
+        this.error(`${output.fileName}:${line} contains the non-ASCII character "${output.code[index]}"`);
+      }
+    },
+  };
+}
+
 export default defineConfig({
+  plugins: [asciiOnlyOutput()],
   build: {
     target: 'node24',
     // Maps embedding the TS source were half the install size; unminified output stays debuggable without them.
     sourcemap: false,
     minify: false,
     lib: {
-      // One bundled module instead of one file per source module: Node's ESM loader pays per file,
+      // A few bundled chunks instead of one file per source module: Node's ESM loader pays per file,
       // and importing ~800 files took ~130 ms. The codec worker and its pool stay separate files at
       // fixed paths: `new Worker()` loads the worker by path, and the smoke and binary scripts load
       // both directly.
@@ -23,6 +50,26 @@ export default defineConfig({
       output: {
         entryFileNames: '[name].js',
         chunkFileNames: '[name].js',
+        // JSDoc ships in the `.d.ts` files, where editors read it, and is about a quarter of the
+        // unminified JavaScript. Legal and `@__PURE__` annotation comments stay.
+        comments: { jsdoc: false, legal: true, annotation: true },
+        // Escapes non-ASCII characters in strings and regexes; `asciiOnlyOutput` checks the rest.
+        charset: 'ascii',
+        codeSplitting: {
+          groups: [
+            // Code that both `index.js` and `lazy-requests.js` use (schema, encoder, errors). It
+            // cannot stay in `index.js`: library mode keeps entry exports strict, so the entry
+            // cannot export internals to another chunk. The codec entries keep their own files.
+            {
+              name: 'shared',
+              test: (id) => !/[\\/]protocol[\\/]compression[\\/](off-thread|codec-worker)\.ts$/.test(id),
+              minShareCount: 2,
+            },
+            // Request families that their stubs import on first use (see `src/protocol/requests/lazy-families.ts`),
+            // with their dependencies that `shared` did not take.
+            { name: 'lazy-requests', test: /[\\/]src[\\/]protocol[\\/]requests[\\/]lazy-requests\.ts$/ },
+          ],
+        },
       },
     },
   },

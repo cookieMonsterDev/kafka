@@ -31,6 +31,13 @@ export class Lock {
     return this.#description ? `${message}: "${this.#description}"` : message;
   }
 
+  /** Takes the lock if it is free, without waiting; returns whether it did. A free lock has no waiters. */
+  tryAcquire(): boolean {
+    if (this.#locked) return false;
+    this.#locked = true;
+    return true;
+  }
+
   async acquire({ signal }: AcquireOptions = {}): Promise<void> {
     if (!this.#locked) {
       this.#locked = true;

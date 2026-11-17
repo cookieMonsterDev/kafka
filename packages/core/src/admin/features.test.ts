@@ -1,19 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
+import { CONTROLLER } from '../cluster/run';
+import { fakeRunCluster } from '../cluster/test-run';
 import { KafkaNonRetriableError } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createFeaturesApi } from './features';
 import { FEATURE_UPDATE_UPGRADE_TYPES } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeCluster(updateFeatures = vi.fn().mockResolvedValue({ results: [] })) {
-  const broker = { updateFeatures };
-  return {
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    broker,
-  };
+  const broker = withSend({ updateFeatures });
+  return fakeRunCluster({ controller: broker }, { broker });
 }
 
 describe('admin/features', () => {
@@ -32,7 +31,7 @@ describe('admin/features', () => {
     ).resolves.toEqual({ results: [] });
 
     expect(cluster.refreshMetadata).toHaveBeenCalled();
-    expect(cluster.findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.broker.updateFeatures).toHaveBeenCalledWith({
       featureUpdates: [
         {
@@ -91,7 +90,7 @@ describe('admin/features', () => {
         featureUpdates: [{ feature: 'metadata.version', maxVersionLevel: 32_768 }],
       }),
     ).rejects.toThrow('Invalid maxVersionLevel');
-    expect(cluster.findControllerBroker).not.toHaveBeenCalled();
+    expect(cluster.run).not.toHaveBeenCalled();
   });
 
   it('queries the active controller for ApiVersions feature metadata', async () => {
@@ -103,20 +102,16 @@ describe('admin/features', () => {
         zkMigrationReady: false,
       })),
     };
-    const findControllerBroker = vi.fn(async () => broker);
-    const cluster = {
-      refreshMetadata: vi.fn().mockResolvedValue(undefined),
-      findControllerBroker,
-    } as unknown as Cluster;
+    const cluster = fakeRunCluster({ controller: broker });
     const api = createFeaturesApi({
-      cluster,
+      cluster: cluster as unknown as Cluster,
       logger: silentLogger.namespace('Admin'),
       rootLogger: silentLogger,
     });
 
     const result = await api.describeFeatures();
 
-    expect(findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(result.finalizedFeaturesEpoch).toBe(3n);
     expect(result.supportedFeatures[0]?.name).toBe('metadata.version');
   });

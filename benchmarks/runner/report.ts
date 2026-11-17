@@ -3,8 +3,9 @@ import { writeFile } from 'node:fs/promises';
 import { clientIds, scenarioIds } from '../client/spec.ts';
 import type { ScenarioId } from '../client/spec.ts';
 import { aggregateSession, baselineSeries } from './aggregate.ts';
-import type { CellSummary, Comparison, SessionSummary, StatSummary } from './aggregate.ts';
+import type { CellSummary, ComparedMetric, Comparison, SessionSummary, StatSummary } from './aggregate.ts';
 import { sessionPaths } from './session.ts';
+import type { Footprint, FootprintPart } from './types.ts';
 
 function formatNumber(value: number, fractionDigits = 0): string {
   return value.toLocaleString('en-US', {
@@ -31,26 +32,85 @@ function formatMebibytes(stat: StatSummary | null): string {
   return formatNumber(stat.median / 1_048_576, 0);
 }
 
-function formatOptionalFlag(flag: boolean | null): string {
-  if (flag === null) {
+/**
+ * Where a client's closure holds a native addon: `yes` when it is required, `optional only`, or `no`. A
+ * session recorded before the split knows only whether the whole closure holds one: `yes, not split`.
+ */
+export function formatNativeAddon(footprint: Footprint): string {
+  if (footprint.unsplitTotal !== undefined) {
+    return footprint.unsplitTotal.hasNativeAddon ? 'yes, not split' : 'no';
+  }
+  if (footprint.required === null || footprint.optional === null) {
     return 'n/a';
   }
-  return flag ? 'yes' : 'no';
+  if (footprint.required.hasNativeAddon) {
+    return 'yes';
+  }
+  return footprint.optional.hasNativeAddon ? 'optional only' : 'no';
+}
+
+/**
+ * Bytes and dependencies of the whole closure: required plus optional, or the total of a session recorded
+ * before the split. Null when the package is not installed.
+ */
+export function footprintTotal(footprint: Footprint): { bytes: number; dependencyCount: number } | null {
+  if (footprint.unsplitTotal !== undefined) {
+    return footprint.unsplitTotal;
+  }
+  const { required, optional } = footprint;
+  if (required === null || optional === null) {
+    return null;
+  }
+  return {
+    bytes: required.bytes + optional.bytes,
+    dependencyCount: required.dependencyCount + optional.dependencyCount,
+  };
+}
+
+/** Whether any footprint comes from a session recorded before the split, so its table needs total columns. */
+export function hasUnsplitFootprint(footprints: readonly Footprint[]): boolean {
+  return footprints.some((footprint) => footprint.unsplitTotal !== undefined);
+}
+
+/** `missingText` fills the cells of a part that is null. */
+function footprintPartCells(part: FootprintPart | null, missingText: string): string[] {
+  if (part === null) {
+    return [missingText, missingText, missingText];
+  }
+  return [formatNumber(part.bytes / 1_048_576, 1), String(part.dependencyCount), formatNumber(part.fileCount)];
+}
+
+function footprintTotalCells(footprint: Footprint): string[] {
+  const total = footprintTotal(footprint);
+  if (total === null) {
+    return ['n/a', 'n/a'];
+  }
+  return [formatNumber(total.bytes / 1_048_576, 1), String(total.dependencyCount)];
 }
 
 function formatPercent(fraction: number): string {
   return `${formatNumber(fraction * 100, 1)}%`;
 }
 
-function formatComparison(comparison: Comparison | undefined): string {
-  if (!comparison) {
-    return '';
+const metricLabels: Readonly<Record<ComparedMetric, string>> = {
+  recordsPerSecond: 'records/s',
+  latencyP50Ms: 'p50',
+  latencyP99Ms: 'p99',
+  firstAckedProduceMs: 'first ack',
+};
+
+function formatComparison(comparison: Comparison): string {
+  return `${formatNumber(comparison.ratio, 2)}× (${comparison.verdict})`;
+}
+
+/** `1.05× (better)` for one comparison; with several (E1's p99 and p50), each prefixed with its metric. */
+function formatComparisons(comparisons: readonly Comparison[]): string {
+  if (comparisons.length === 1) {
+    return formatComparison(comparisons[0]!);
   }
-  const ratio = `${formatNumber(comparison.ratio, 2)}×`;
-  if (comparison.verdict === 'inconclusive') {
-    return `${ratio} (inconclusive)`;
-  }
-  return `${ratio} (${comparison.verdict})`;
+  return comparisons
+    .map((comparison) => `${metricLabels[comparison.metric]} ${formatComparison(comparison)}`)
+    .join('; ');
 }
 
 function table(header: readonly string[], rows: readonly (readonly string[])[]): string {
@@ -68,8 +128,10 @@ function formatNoiseFloors(summary: SessionSummary): string {
   if (summary.noiseFloor !== null) {
     parts.push(`${formatPercent(summary.noiseFloor)} from calibration`);
   }
-  const sessionFloors = Object.entries(summary.aaNoiseFloors).map(
-    ([scenario, floor]) => `${scenario} ${formatPercent(floor)}`,
+  const sessionFloors = Object.entries(summary.aaNoiseFloors).flatMap(([scenario, floors]) =>
+    Object.entries(floors).map(
+      ([metric, floor]) => `${scenario} ${metricLabels[metric as ComparedMetric]} ${formatPercent(floor)}`,
+    ),
   );
   if (sessionFloors.length > 0) {
     parts.push(`A/A in this session: ${sessionFloors.join(', ')}`);
@@ -151,8 +213,8 @@ function renderScenario(summary: SessionSummary, scenario: ScenarioId, footnotes
   if (!first) {
     return '';
   }
-  const comparisonFor = (cell: CellSummary) =>
-    summary.comparisons.find(
+  const comparisonsFor = (cell: CellSummary) =>
+    summary.comparisons.filter(
       (comparison) =>
         comparison.scenario === cell.scenario &&
         comparison.runtime === cell.runtime &&
@@ -194,7 +256,7 @@ function renderScenario(summary: SessionSummary, scenario: ScenarioId, footnotes
   const rows = cells.map((cell) => {
     const series = `${cell.series}${cell.noisy ? ' (noisy)' : ''}${footnoteMarks(cell)}`;
     const runs = `${cell.passedRuns}/${cell.runs}`;
-    const versus = formatComparison(comparisonFor(cell));
+    const versus = formatComparisons(comparisonsFor(cell));
     const { metrics } = cell;
     if (isStartup) {
       return [
@@ -233,17 +295,40 @@ function renderFootprints(summary: SessionSummary): string {
   if (!summary.footprints || summary.footprints.length === 0) {
     return '';
   }
-  const rows = summary.footprints.map((footprint) => [
-    footprint.packageName,
-    footprint.version ?? 'n/a',
-    footprint.installBytes === null ? 'n/a' : formatNumber(footprint.installBytes / 1_048_576, 1),
-    footprint.dependencyCount === null ? 'n/a' : String(footprint.dependencyCount),
-    formatOptionalFlag(footprint.hasNativeAddon),
-  ]);
+  const hasTotals = hasUnsplitFootprint(summary.footprints);
+  const rows = summary.footprints.map((footprint) => {
+    const missingPartText = footprint.unsplitTotal === undefined ? 'n/a' : 'not split';
+    return [
+      footprint.packageName,
+      footprint.version ?? 'n/a',
+      ...(hasTotals ? footprintTotalCells(footprint) : []),
+      ...footprintPartCells(footprint.required, missingPartText),
+      ...footprintPartCells(footprint.optional, missingPartText),
+      formatNativeAddon(footprint),
+    ];
+  });
+  const header = [
+    'Package',
+    'Version',
+    ...(hasTotals ? ['Total MiB', 'Total dependencies'] : []),
+    'Required MiB',
+    'Required dependencies',
+    'Required files',
+    'Optional MiB',
+    'Optional dependencies',
+    'Optional files',
+    'Native addon',
+  ];
   return [
     '## F1 `footprint`',
     '',
-    table(['Package', 'Version', 'Install MiB', 'Dependencies', 'Native addon'], rows),
+    'Information, not a comparison: what installing each client adds. Required is the package and what it reaches',
+    'through `dependencies`; optional is what installed `optionalDependencies` add on top.',
+    ...(hasTotals
+      ? ['This session was recorded before F1 split the two, so it has only totals, and no file counts.']
+      : []),
+    '',
+    table(header, rows),
   ].join('\n');
 }
 
@@ -274,7 +359,8 @@ export function renderReport(summary: SessionSummary): string {
       '## Results',
       '',
       'Medians with min–max over passed runs. MB is 10^6 bytes, MiB is 2^20 bytes. Throughput rows compare',
-      'records/s, E1 compares p99 latency, L1 compares time to the first acknowledged produce.',
+      'records/s, E1 compares p99 and p50 latency, L1 compares time to the first acknowledged produce. The CV',
+      'column and the noisy mark use the first of these (p99 for E1).',
       '',
       scenarioSections.join('\n\n'),
     ].join('\n'),

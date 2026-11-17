@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Broker } from '../broker/index';
-import { KafkaConnectionClosedError, KafkaTopicMetadataNotLoaded } from '../errors';
+import { KafkaBrokerNotFound, KafkaConnectionClosedError, KafkaTopicMetadataNotLoaded } from '../errors';
 import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createDefaultSocketFactory } from '../network/socket-factory';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
+import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
+import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
 import { Cluster } from './index';
+import { ANY_BROKER, CONTROLLER, coordinatorTarget, leaderTarget, nodeTarget } from './run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -136,13 +139,24 @@ describe('cluster/Cluster', () => {
     });
   });
 
-  describe('committedOffsets / markOffsetAsCommitted', () => {
-    it('initializes an empty record for a new group and remembers committed offsets', () => {
+  describe('committedOffset / markOffsetAsCommitted / forgetCommittedOffset', () => {
+    it('remembers committed offsets per group until they are forgotten', () => {
       const cluster = createCluster();
-      expect(cluster.committedOffsets({ groupId: 'g' })).toEqual({});
+      const partition = { topic: 't', partition: 0 };
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBeUndefined();
 
-      cluster.markOffsetAsCommitted({ groupId: 'g', topic: 't', partition: 0, offset: 42n });
-      expect(cluster.committedOffsets({ groupId: 'g' })).toEqual({ t: { 0: 42n } });
+      cluster.markOffsetAsCommitted({ groupId: 'g', ...partition, offset: 42n });
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBe(42n);
+      expect(cluster.committedOffset({ groupId: 'other', ...partition })).toBeUndefined();
+
+      cluster.forgetCommittedOffset({ groupId: 'g', ...partition });
+      expect(cluster.committedOffset({ groupId: 'g', ...partition })).toBeUndefined();
+    });
+
+    it('keeps a topic named __proto__ as an ordinary key', () => {
+      const cluster = createCluster();
+      cluster.markOffsetAsCommitted({ groupId: 'g', topic: '__proto__', partition: 1, offset: 7n });
+      expect(cluster.committedOffset({ groupId: 'g', topic: '__proto__', partition: 1 })).toBe(7n);
     });
   });
 
@@ -280,6 +294,224 @@ describe('cluster/Cluster', () => {
 
       expect(cluster.targetTopics).toEqual(new Set(['keep']));
       expect(refreshMetadata).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('produce fast-path checks', () => {
+    it('hasLoadedTargetTopics needs loaded metadata and every topic targeted', () => {
+      const cluster = createCluster();
+      cluster.targetTopics = new Set(['topic-a']);
+      expect(cluster.hasLoadedTargetTopics(['topic-a'])).toBe(false);
+
+      cluster.brokerPool.metadata = fakeMetadata();
+      expect(cluster.hasLoadedTargetTopics(['topic-a'])).toBe(true);
+      expect(cluster.hasLoadedTargetTopics(['topic-a', 'topic-b'])).toBe(false);
+    });
+
+    it('needsMetadataRefresh checks the target topics against the cached metadata', () => {
+      const cluster = createCluster();
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [{ topicErrorCode: 0, topic: 'topic-a', isInternal: false, partitionMetadata: [] }],
+      });
+      cluster.brokerPool.metadataExpireAt = Date.now() + 60_000;
+      cluster.targetTopics = new Set(['topic-a']);
+      expect(cluster.needsMetadataRefresh()).toBe(false);
+
+      cluster.targetTopics.add('topic-b');
+      expect(cluster.needsMetadataRefresh()).toBe(true);
+    });
+  });
+
+  describe('resolveTarget', () => {
+    const broker = { nodeId: 2 } as unknown as Broker;
+
+    it('resolves the controller from metadata refreshed when needed', async () => {
+      const cluster = createCluster();
+      const refresh = vi.spyOn(cluster, 'refreshMetadataIfNecessary').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'findControllerBroker').mockResolvedValue(broker);
+
+      await expect(cluster.resolveTarget(CONTROLLER)).resolves.toBe(broker);
+      expect(refresh).toHaveBeenCalledOnce();
+    });
+
+    it('looks the coordinator up by key and type', async () => {
+      const cluster = createCluster();
+      const find = vi.spyOn(cluster, 'findGroupCoordinator').mockResolvedValue(broker);
+
+      await expect(cluster.resolveTarget(coordinatorTarget('tx', COORDINATOR_TYPES.TRANSACTION))).resolves.toBe(broker);
+      expect(find).toHaveBeenCalledWith({ groupId: 'tx', coordinatorType: COORDINATOR_TYPES.TRANSACTION });
+    });
+
+    it("resolves a partition leader from the topic's metadata", async () => {
+      const cluster = createCluster();
+      const addTopic = vi.spyOn(cluster, 'addTargetTopic').mockResolvedValue(undefined);
+      vi.spyOn(cluster, 'refreshMetadataIfNecessary').mockResolvedValue(undefined);
+      const findBroker = vi.spyOn(cluster, 'findBroker').mockResolvedValue(broker);
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [
+          {
+            topicErrorCode: 0,
+            topic: 'orders',
+            isInternal: false,
+            partitionMetadata: [
+              { partitionErrorCode: 0, partitionId: 0, leader: 2, replicas: [2], isr: [2], offlineReplicas: [] },
+              { partitionErrorCode: 0, partitionId: 1, leader: -1, replicas: [2], isr: [], offlineReplicas: [] },
+            ],
+          },
+        ],
+      });
+
+      await expect(cluster.resolveTarget(leaderTarget('orders', 0))).resolves.toBe(broker);
+      expect(addTopic).toHaveBeenCalledWith('orders');
+      expect(findBroker).toHaveBeenCalledWith({ nodeId: '2' });
+
+      await expect(cluster.resolveTarget(leaderTarget('orders', 1))).rejects.toBeInstanceOf(KafkaBrokerNotFound);
+      await expect(cluster.resolveTarget(leaderTarget('orders', 7))).rejects.toThrow(
+        'Could not find leader for orders partition 7',
+      );
+    });
+
+    it('resolves a node by id and any broker from the pool', async () => {
+      const cluster = createCluster();
+      const findBroker = vi.spyOn(cluster, 'findBroker').mockResolvedValue(broker);
+      vi.spyOn(cluster.brokerPool, 'findConnectedBroker').mockResolvedValue(broker);
+
+      await expect(cluster.resolveTarget(nodeTarget(2))).resolves.toBe(broker);
+      expect(findBroker).toHaveBeenCalledWith({ nodeId: '2' });
+      await expect(cluster.resolveTarget(ANY_BROKER)).resolves.toBe(broker);
+    });
+  });
+
+  describe('recover', () => {
+    function errorOfType(type: string) {
+      return createErrorFromCode(ERROR_CODES.find((entry) => entry.type === type)!.code);
+    }
+
+    it('refreshes stale metadata through the update queue, sharing one refresh between callers', async () => {
+      const cluster = createCluster();
+      const expire = vi.spyOn(cluster.brokerPool, 'expireMetadata');
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary').mockResolvedValue(undefined);
+      const forcedRefresh = vi.spyOn(cluster.brokerPool, 'refreshMetadata');
+
+      await Promise.all([
+        cluster.recover(errorOfType('NOT_LEADER_OR_FOLLOWER')),
+        cluster.recover(errorOfType('NOT_CONTROLLER')),
+      ]);
+
+      expect(expire).toHaveBeenCalledOnce();
+      expect(refresh).toHaveBeenCalledOnce();
+      expect(forcedRefresh).not.toHaveBeenCalled();
+    });
+
+    it('refreshes metadata for a moved coordinator', async () => {
+      const cluster = createCluster();
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary').mockResolvedValue(undefined);
+
+      await cluster.recover(errorOfType('NOT_COORDINATOR_FOR_GROUP'));
+      expect(refresh).toHaveBeenCalledOnce();
+    });
+
+    it('drops the broker of a closed connection', async () => {
+      const cluster = createCluster();
+      const remove = vi.spyOn(cluster.brokerPool, 'removeBroker');
+
+      await cluster.recover(new KafkaConnectionClosedError('closed', { host: 'broker-1', port: 9092 }));
+      expect(remove).toHaveBeenCalledWith({ host: 'broker-1', port: 9092 });
+    });
+
+    it('reconnects a disconnected cluster before refreshing metadata', async () => {
+      const cluster = createCluster();
+      vi.spyOn(cluster, 'isConnected').mockReturnValue(false);
+      const connect = vi.spyOn(cluster, 'connect').mockResolvedValue(undefined);
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary').mockResolvedValue(undefined);
+
+      await cluster.recover(new KafkaConnectionClosedError('closed'));
+      expect(connect).toHaveBeenCalledOnce();
+      expect(refresh).toHaveBeenCalledOnce();
+    });
+
+    it('does nothing for an error it cannot recover from', async () => {
+      const cluster = createCluster();
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary');
+
+      await cluster.recover(new Error('boom'));
+      expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onConnectionClosed', () => {
+    it('drops the broker a closed connection names and reports it', () => {
+      const cluster = createCluster();
+      const remove = vi.spyOn(cluster.brokerPool, 'removeBroker');
+
+      expect(cluster.onConnectionClosed(new KafkaConnectionClosedError('closed', { host: 'h', port: 1 }))).toBe(true);
+      expect(remove).toHaveBeenCalledWith({ host: 'h', port: 1 });
+    });
+
+    it('ignores a closed connection without an address and any other error', () => {
+      const cluster = createCluster();
+      const remove = vi.spyOn(cluster.brokerPool, 'removeBroker');
+
+      expect(cluster.onConnectionClosed(new KafkaConnectionClosedError('closed'))).toBe(false);
+      expect(cluster.onConnectionClosed(new Error('boom'))).toBe(false);
+      expect(remove).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('run', () => {
+    it('recovers through the cluster and retries a request that reached a former controller', async () => {
+      const cluster = createCluster({ retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 } });
+      const broker = { nodeId: 1 } as unknown as Broker;
+      const resolve = vi.spyOn(cluster, 'resolveTarget').mockResolvedValue(broker);
+      const recover = vi.spyOn(cluster, 'recover').mockResolvedValue(undefined);
+      const notController = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'NOT_CONTROLLER')!.code);
+      const work = vi.fn().mockRejectedValueOnce(notController).mockResolvedValue('done');
+
+      await expect(cluster.run(CONTROLLER, work)).resolves.toBe('done');
+      expect(resolve).toHaveBeenCalledTimes(2);
+      expect(recover).toHaveBeenCalledExactlyOnceWith(notController);
+      expect(work).toHaveBeenCalledWith(broker);
+    });
+  });
+
+  describe('findGroupCoordinator', () => {
+    function brokerAt(host: string, port: number): Broker {
+      return { connectionPool: { host, port } } as unknown as Broker;
+    }
+
+    /** A cluster whose cached broker 1 is at `cached`, while FindCoordinator names node 1 at `found`. */
+    function clusterWithCoordinator(cached: Broker, found: { host: string; port: number }) {
+      const cluster = createCluster();
+      cluster.brokerPool.brokers = { '1': cached };
+      vi.spyOn(cluster, 'findGroupCoordinatorMetadata').mockResolvedValue({
+        coordinator: { nodeId: 1, ...found },
+      } as Awaited<ReturnType<Cluster['findGroupCoordinatorMetadata']>>);
+      vi.spyOn(cluster.brokerPool, 'findBroker').mockImplementation(async ({ nodeId }) => {
+        const broker = cluster.brokerPool.brokers[nodeId];
+        if (!broker) throw new KafkaBrokerNotFound(`Broker ${nodeId} not found`);
+        return broker;
+      });
+      return cluster;
+    }
+
+    it('refreshes metadata before returning a coordinator that moved to a new address under the same node id', async () => {
+      const moved = brokerAt('new-host', 9093);
+      const cluster = clusterWithCoordinator(brokerAt('old-host', 9092), { host: 'new-host', port: 9093 });
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary').mockImplementation(async () => {
+        cluster.brokerPool.brokers = { '1': moved };
+      });
+
+      await expect(cluster.findGroupCoordinator({ groupId: 'group' })).resolves.toBe(moved);
+      expect(refresh).toHaveBeenCalledOnce();
+    });
+
+    it('returns the cached broker without a refresh when the coordinator address matches it', async () => {
+      const cached = brokerAt('broker-1', 9092);
+      const cluster = clusterWithCoordinator(cached, { host: 'broker-1', port: 9092 });
+      const refresh = vi.spyOn(cluster.brokerPool, 'refreshMetadataIfNecessary');
+
+      await expect(cluster.findGroupCoordinator({ groupId: 'group' })).resolves.toBe(cached);
+      expect(refresh).not.toHaveBeenCalled();
     });
   });
 

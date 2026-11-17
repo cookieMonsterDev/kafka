@@ -1,5 +1,6 @@
 import { COMPRESSION_TYPES } from '../../compression/index';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { pushTelemetryRequestV0 } from './v0/request';
 import { pushTelemetryResponseV0 } from './v0/response';
 
@@ -14,7 +15,7 @@ export interface PushTelemetryOptions {
   metrics: Buffer;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<PushTelemetryOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: pushTelemetryRequestV0({
       clientInstanceId: options.clientInstanceId,
@@ -25,13 +26,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<PushTelemetryOptions>>> 
     }),
     response: pushTelemetryResponseV0,
   }),
-};
+} satisfies VersionFactories<PushTelemetryOptions>;
 
-export const PushTelemetry: RequestFamily<PushTelemetryOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no PushTelemetry protocol for version ${version}`);
-    return factory;
-  },
-});
+export const PushTelemetry = defineRequestFamily(KAFKA_APIS.PushTelemetry, VERSIONS);

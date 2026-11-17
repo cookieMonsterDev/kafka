@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import type { DeleteRecordsTopic } from './v0/request';
 import { deleteRecordsRequestV0 } from './v0/request';
 import { deleteRecordsResponseV0 } from './v0/response';
@@ -12,7 +13,7 @@ export interface DeleteRecordsOptions {
   timeout?: number;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteRecordsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: deleteRecordsRequestV0({ topics: options.topics, timeout: options.timeout ?? 5000 }),
     response: deleteRecordsResponseV0({ topics: options.topics }),
@@ -25,13 +26,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteRecordsOptions>>> 
     request: deleteRecordsRequestV2({ topics: options.topics, timeout: options.timeout ?? 5000 }),
     response: deleteRecordsResponseV2({ topics: options.topics }),
   }),
-};
+} satisfies VersionFactories<DeleteRecordsOptions>;
 
-export const DeleteRecords: RequestFamily<DeleteRecordsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DeleteRecords protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DeleteRecords = defineRequestFamily(KAFKA_APIS.DeleteRecords, VERSIONS);

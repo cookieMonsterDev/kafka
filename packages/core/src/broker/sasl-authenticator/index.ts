@@ -7,7 +7,6 @@ import type {
   SaslAuthenticationProvider,
 } from '../../network/connection';
 import { asTypedSend } from '../../network/connection';
-import { API_KEYS } from '../../protocol/requests/api-keys';
 import type { BrokerVersions, ProtocolFactory } from '../../protocol/requests/index';
 import { lookup } from '../../protocol/requests/index';
 import { SaslAuthenticate } from '../../protocol/requests/sasl-authenticate/index';
@@ -69,10 +68,8 @@ export class SASLAuthenticator {
     this.#logger = logger;
 
     const lookupRequest = lookup(versions ?? {});
-    this.#saslHandshake = lookupRequest(API_KEYS.SaslHandshake, SaslHandshake);
-    this.#protocolAuthentication = supportAuthenticationProtocol
-      ? lookupRequest(API_KEYS.SaslAuthenticate, SaslAuthenticate)
-      : null;
+    this.#saslHandshake = lookupRequest(SaslHandshake);
+    this.#protocolAuthentication = supportAuthenticationProtocol ? lookupRequest(SaslAuthenticate) : null;
   }
 
   async authenticate(): Promise<void> {

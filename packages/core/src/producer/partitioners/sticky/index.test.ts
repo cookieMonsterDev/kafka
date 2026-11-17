@@ -62,6 +62,16 @@ describe('StickyPartitioner', () => {
     expect(partitioner(args)).toBe(1);
   });
 
+  it('draws again instead of folding an out-of-range value onto a low partition', () => {
+    // 0xffffffff masks to 3, past the last of 3 partitions; `% 3` would have picked partition 0.
+    useRandomValues(0xffffffff, 2);
+    const partitioner = StickyPartitioner({ adaptive: false });
+    const partitionMetadata = [metadata(0), metadata(1), metadata(2)];
+
+    expect(partitioner({ topic: 'events', partitionMetadata, message: { value: 'value' } })).toBe(2);
+    expect(randomBytes).toHaveBeenCalledTimes(2);
+  });
+
   it('preserves explicit partitions and murmur2 routing for keyed records', () => {
     const partitioner = StickyPartitioner();
     const partitionMetadata = [metadata(0), metadata(1), metadata(2)];
@@ -157,7 +167,7 @@ describe('StickyPartitioner', () => {
 
       const args = { topic: 'events', partitionMetadata, message: { value: 'value' }, nodeLatency };
       partitioner.onNewBatch?.({ topic: 'events', partitionMetadata, nodeLatency });
-      expect(partitioner(args)).toBe(1); // plain uniform: randomIndex(2) = 1 % 2 = 1
+      expect(partitioner(args)).toBe(1); // plain uniform: randomIndex(2) = 1
     });
   });
 });

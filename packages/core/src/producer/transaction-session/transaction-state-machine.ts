@@ -31,22 +31,18 @@ const VALID_STATE_TRANSITIONS: Record<TransactionState, readonly TransactionStat
 export const FENCED_PRODUCER_MESSAGE =
   'The producer was fenced by a newer instance with the same transactionalId; create a new producer';
 
+/** `commit()` rejects with this once the transaction can only be aborted. */
+export const ABORT_ONLY_MESSAGE = 'The transaction failed and can only be aborted; call abort()';
+
+/** Beginning a transaction rejects with this while the open one can only be aborted. */
+export const ABORT_BEFORE_BEGIN_MESSAGE = `${ABORT_ONLY_MESSAGE} before beginning another`;
+
 export interface TransitionEvent {
   from: TransactionState;
   to: TransactionState;
 }
 
-export interface TransactionStateGuard {
-  legalStates: readonly TransactionState[];
-  /** Defaults to `true` (an illegal call rejects). Set `false` for a synchronous method, which throws instead. */
-  async?: boolean;
-}
-
-/**
- * Guards a plain object's methods so each only runs while the machine is in one of its declared
- * `legalStates` - otherwise it rejects (or, for `async: false`, throws synchronously) with a
- * `KafkaNonRetriableError` instead of running at all.
- */
+/** The transaction states and the legal transitions between them. */
 export class TransactionStateMachine extends EventEmitter {
   readonly #logger: Logger;
   #currentState: TransactionState;
@@ -79,39 +75,19 @@ export class TransactionStateMachine extends EventEmitter {
     this.emit('transition', { to: state, from } satisfies TransitionEvent);
   }
 
+  /**
+   * The error for `call` made in the current state: the fenced error from `FATAL_ERROR`, the
+   * abort-only error from `ABORTABLE`, a state error otherwise.
+   */
+  illegalCallError(call: string): KafkaNonRetriableError {
+    if (this.#currentState === TRANSACTION_STATES.ABORTABLE) return new KafkaNonRetriableError(ABORT_ONLY_MESSAGE);
+    return this.#stateError(`Cannot call "${call}" in state "${this.#currentState}"`);
+  }
+
   #stateError(detail: string): KafkaNonRetriableError {
     if (this.#currentState === TRANSACTION_STATES.FATAL_ERROR) {
       return new KafkaNonRetriableError(FENCED_PRODUCER_MESSAGE);
     }
     return new KafkaNonRetriableError(`Transaction state exception: ${detail}`);
-  }
-
-  createGuarded<T extends object>(object: T, methodStateGuards: Partial<Record<keyof T, TransactionStateGuard>>): T {
-    const rawObject = object as Record<string, unknown>;
-    const guarded: Record<string, unknown> = { ...rawObject };
-
-    for (const key of Object.keys(methodStateGuards)) {
-      const guard = methodStateGuards[key as keyof T];
-      if (!guard) continue;
-
-      const fn = rawObject[key];
-      if (typeof fn !== 'function') {
-        throw new KafkaNonRetriableError(`Cannot add guard on missing method "${key}"`);
-      }
-
-      const { legalStates, async: isAsync = true } = guard;
-
-      guarded[key] = (...args: unknown[]): unknown => {
-        if (!legalStates.includes(this.#currentState)) {
-          const error = this.#stateError(`Cannot call "${key}" in state "${this.#currentState}"`);
-          if (isAsync) return Promise.reject(error);
-          throw error;
-        }
-
-        return (fn as (...fnArgs: unknown[]) => unknown).apply(rawObject, args);
-      };
-    }
-
-    return guarded as T;
   }
 }

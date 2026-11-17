@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { deleteShareGroupOffsetsRequestV0 } from './v0/request';
 import { deleteShareGroupOffsetsResponseV0 } from './v0/response';
 
@@ -9,7 +10,7 @@ export interface DeleteShareGroupOffsetsOptions {
   topics: string[];
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteShareGroupOffsetsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: deleteShareGroupOffsetsRequestV0({
       groupId: options.groupId,
@@ -17,13 +18,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DeleteShareGroupOffsetsO
     }),
     response: deleteShareGroupOffsetsResponseV0,
   }),
-};
+} satisfies VersionFactories<DeleteShareGroupOffsetsOptions>;
 
-export const DeleteShareGroupOffsets: RequestFamily<DeleteShareGroupOffsetsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DeleteShareGroupOffsets protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DeleteShareGroupOffsets = defineRequestFamily(KAFKA_APIS.DeleteShareGroupOffsets, VERSIONS);

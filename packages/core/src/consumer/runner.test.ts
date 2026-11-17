@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Cluster } from '../cluster/index';
 import { KafkaNotImplemented, KafkaNumberOfRetriesExceeded, KafkaProtocolError } from '../errors';
 import { InstrumentationEventEmitter } from '../instrumentation/emitter';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
+import { ISOLATION_LEVEL } from '../protocol/enums/isolation-level';
 import { TIMESTAMP_TYPES } from '../protocol/enums/timestamp-types';
-import { waitFor } from '../utils/wait';
+import { sleep, waitFor } from '../utils/wait';
 import { Batch } from './batch';
-import type { ConsumerGroupHandle } from './consumer-group';
+import { ConsumerGroup, type ConsumerGroupHandle } from './consumer-group';
 import { REBALANCING } from './instrumentation-events';
+import { PartitionPipeline, type PartitionState } from './partition-pipeline';
 import { Runner } from './runner';
 import type { EachBatchHandler, EachMessageHandler, EachMessagePayload, KafkaMessage, OnConsumeEvent } from './types';
+import { withSend } from '../broker/test-send';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 const REBALANCE_IN_PROGRESS = 27;
@@ -54,8 +58,21 @@ describe('consumer/runner', () => {
   const topicName = 'topic-test';
   const partition = 0;
 
+  /** A pipeline with the test partition assigned, reading its position from `readPosition`. */
+  function assignedPipeline(readPosition: () => bigint = () => 0n): PartitionPipeline {
+    const pipeline = new PartitionPipeline({ readPosition });
+    pipeline.assign([{ topic: topicName, partitions: [partition] }]);
+    return pipeline;
+  }
+
+  function partitionState(pipeline: PartitionPipeline): PartitionState {
+    const state = pipeline.state(topicName, partition);
+    if (!state) throw new Error('expected the test partition to be assigned');
+    return state;
+  }
+
   function fakeConsumerGroup(overrides: Partial<Record<string, unknown>> = {}): ConsumerGroupHandle {
-    return {
+    return withSend({
       groupId: 'group',
       memberId: 'member',
       getNodeIds: vi.fn(() => ['1', '2', '3']),
@@ -68,17 +85,16 @@ describe('consumer/runner', () => {
       commitOffsetsIfNecessary: vi.fn(async () => undefined),
       uncommittedOffsets: vi.fn(() => ({ topics: [] })),
       heartbeat: vi.fn(async () => undefined),
-      heartbeatDue: vi.fn(() => false),
+      nextHeartbeatAt: Infinity,
       assigned: vi.fn(() => []),
       isLeader: vi.fn(() => true),
-      isPaused: vi.fn().mockReturnValue(false),
+      partitionPipeline: new PartitionPipeline({ readPosition: () => 0n }),
       pause: vi.fn(),
       resume: vi.fn(),
-      hasSeekOffset: vi.fn().mockReturnValue(false),
-      notifyPartitionsLost: vi.fn(async () => undefined),
+      recoverRejectedMember: vi.fn(async () => undefined),
       position: vi.fn(() => null),
       ...overrides,
-    } as unknown as ConsumerGroupHandle;
+    }) as unknown as ConsumerGroupHandle;
   }
 
   afterEach(async () => {
@@ -95,7 +111,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -105,9 +120,11 @@ describe('consumer/runner', () => {
 
   it('still emits REBALANCING and rejoins (not lost) when a fetch reports the group is rebalancing', async () => {
     const error = rebalancingError();
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
-    });
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+      }),
+    );
     const instrumentationEmitter = new InstrumentationEventEmitter();
     const rebalancingEvents: unknown[] = [];
     instrumentationEmitter.addListener(REBALANCING, (event) => rebalancingEvents.push(event));
@@ -118,7 +135,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
 
@@ -128,14 +144,16 @@ describe('consumer/runner', () => {
     expect(rebalancingEvents).toHaveLength(1);
     // REBALANCE_IN_PROGRESS is a normal mid-membership signal to rejoin, not a fenced/kicked
     // member - the current assignment must not be reported lost for it.
-    expect(consumerGroup.notifyPartitionsLost).not.toHaveBeenCalled();
+    expect(consumerGroup.recoverRejectedMember).not.toHaveBeenCalled();
   });
 
-  it('reports the current assignment lost (not revoked) before rejoining after UNKNOWN_MEMBER_ID', async () => {
+  it('asks the group to recover the rejected member before rejoining after UNKNOWN_MEMBER_ID', async () => {
     const error = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'UNKNOWN_MEMBER_ID')!.code);
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
-    });
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn().mockRejectedValueOnce(error).mockResolvedValue([]),
+      }),
+    );
     runner = new Runner({
       consumerGroup,
       onCrash: vi.fn(),
@@ -143,16 +161,94 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
 
     await runner.start();
-    await waitFor(() => vi.mocked(consumerGroup.notifyPartitionsLost).mock.calls.length > 0 || false);
+    await waitFor(() => vi.mocked(consumerGroup.joinAndSync).mock.calls.length > 1 || false);
 
-    expect(consumerGroup.notifyPartitionsLost).toHaveBeenCalledTimes(1);
-    expect(consumerGroup.memberId).toBeNull();
-    expect(consumerGroup.joinAndSync).toHaveBeenCalledTimes(2);
+    expect(consumerGroup.recoverRejectedMember).toHaveBeenCalledExactlyOnceWith(error);
+    expect(vi.mocked(consumerGroup.recoverRejectedMember).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(consumerGroup.joinAndSync).mock.invocationCallOrder[1]!,
+    );
+  });
+
+  it('rejoins with the consumer protocol and installs the new assignment after a fence found mid-fetch', async () => {
+    const topicId = Buffer.from('0123456789abcdef');
+    const heartbeatResponse = (memberEpoch: number, partitions?: number[]) => ({
+      memberId: 'member',
+      memberEpoch,
+      heartbeatIntervalMs: 60_000,
+      assignment: partitions ? { topicPartitions: [{ topicId, partitions }] } : null,
+    });
+    const consumerGroupHeartbeat = vi
+      .fn()
+      .mockResolvedValueOnce(heartbeatResponse(1, [0, 1]))
+      .mockResolvedValueOnce(heartbeatResponse(1))
+      // The rejoin is not accepted on the first heartbeat, so the join has to keep heartbeating.
+      .mockResolvedValueOnce(heartbeatResponse(0))
+      .mockResolvedValueOnce(heartbeatResponse(3, [1]))
+      .mockResolvedValue(heartbeatResponse(3));
+    const consumerGroup = new ConsumerGroup({
+      logger: silentLogger,
+      topics: [topicName],
+      topicConfigurations: {},
+      cluster: withSend({
+        connect: vi.fn(async () => undefined),
+        refreshMetadataIfNecessary: vi.fn(async () => undefined),
+        refreshMetadata: vi.fn(async () => undefined),
+        getNodeIds: vi.fn(() => ['1']),
+        findGroupCoordinator: vi.fn(async () => withSend({ consumerGroupHeartbeat })),
+        findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
+        committedOffset: vi.fn(() => undefined),
+        markOffsetAsCommitted: vi.fn(),
+        forgetCommittedOffset: vi.fn(),
+      }) as unknown as Cluster,
+      groupId: 'group',
+      assigners: [],
+      sessionTimeout: 30_000,
+      rebalanceTimeout: 60_000,
+      heartbeatInterval: 60_000,
+      maxBytesPerPartition: 1024,
+      minBytes: 1,
+      maxBytes: 1024,
+      maxWaitTimeInMs: 100,
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      isolationLevel: ISOLATION_LEVEL.READ_COMMITTED,
+      rackId: '',
+      metadataMaxAge: 300_000,
+      autoCommit: false,
+      autoCommitInterval: null,
+      autoCommitThreshold: null,
+      groupProtocol: 'consumer',
+      retry: { retries: 0 },
+    });
+    const fenced = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'FENCED_MEMBER_EPOCH')!.code);
+    vi.spyOn(consumerGroup, 'fetch')
+      .mockRejectedValueOnce(fenced)
+      .mockImplementation(async () => {
+        await sleep(10);
+        return [];
+      });
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      retry: { retries: 0 },
+    });
+
+    const joinAndSync = vi.spyOn(consumerGroup, 'joinAndSync');
+
+    await runner.start();
+    await waitFor(() => joinAndSync.mock.results.length > 1);
+    await joinAndSync.mock.results[1]?.value;
+
+    expect(consumerGroupHeartbeat.mock.calls[2]?.[0]).toMatchObject({ memberId: 'member', memberEpoch: 0 });
+    expect(consumerGroup.assigned()).toEqual([{ topic: topicName, partitions: [1] }]);
+    expect(consumerGroup.generationId).toBe(3);
   });
 
   it('commits offsets during handleBatch', async () => {
@@ -166,7 +262,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -189,26 +284,37 @@ describe('consumer/runner', () => {
     const prefetched = new Promise<void>((resolve) => {
       releasePrefetch = resolve;
     });
-    const batchFromZero = () =>
-      new Batch(topicName, 0n, { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] });
-    const consumerGroup = fakeConsumerGroup({
-      getNodeIds: vi.fn(() => ['1']),
-      // The second fetch is issued while the first batch is in flight, so it still reads from 0
-      // and only returns once that batch has been processed.
-      fetch: vi
-        .fn()
-        .mockResolvedValueOnce([batchFromZero()])
-        .mockImplementationOnce(async () => {
-          await prefetched;
-          return [batchFromZero()];
-        })
-        .mockResolvedValue([]),
-      resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
-        position = offset + 1n;
-        if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+    const pipeline = assignedPipeline(() => position);
+    const batchFromZero = (): Batch => {
+      const batch = new Batch(
+        topicName,
+        0n,
+        { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n)] },
+        partitionState(pipeline),
+      );
+      pipeline.track(batch);
+      return batch;
+    };
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        partitionPipeline: pipeline,
+        getNodeIds: vi.fn(() => ['1']),
+        // The second fetch is issued while the first batch is in flight, so it still reads from 0
+        // and only returns once that batch has been processed.
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce([batchFromZero()])
+          .mockImplementationOnce(async () => {
+            await prefetched;
+            return [batchFromZero()];
+          })
+          .mockResolvedValue([]),
+        resolveOffset: vi.fn(({ offset }: { offset: bigint }) => {
+          position = offset + 1n;
+          if (position === 2n) setTimeout(() => releasePrefetch?.(), 10);
+        }),
       }),
-      position: vi.fn(() => position),
-    });
+    );
     const seenOffsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -219,7 +325,6 @@ describe('consumer/runner', () => {
         seenOffsets.push(message.offset);
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
 
     await runner.start();
@@ -229,31 +334,29 @@ describe('consumer/runner', () => {
   });
 
   it('keeps a seek pending for a partition still being processed so the worker stops at it', async () => {
-    const pendingSeeks = new Set<string>();
-    const consumerGroup = fakeConsumerGroup({
-      getNodeIds: vi.fn(() => ['1']),
-      // Mirrors ConsumerGroup.fetch: applying (popping) every pending seek it is allowed to.
-      fetch: vi
-        .fn()
-        .mockResolvedValueOnce([
-          new Batch(topicName, 0n, {
-            partition,
-            highWatermark: 3n,
-            messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)],
-          }),
-        ])
-        .mockImplementation(
-          async (
-            _nodeId: string,
-            options?: { isProcessing?: (topic: string, partition: number) => boolean },
-          ): Promise<Batch[]> => {
-            if (!options?.isProcessing?.(topicName, partition)) pendingSeeks.clear();
+    const pipeline = assignedPipeline();
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        partitionPipeline: pipeline,
+        getNodeIds: vi.fn(() => ['1']),
+        // Mirrors ConsumerGroup.fetch: applying every pending seek it is allowed to.
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce([
+            new Batch(
+              topicName,
+              0n,
+              { partition, highWatermark: 3n, messages: [kafkaMessage(0n), kafkaMessage(1n), kafkaMessage(2n)] },
+              partitionState(pipeline),
+            ),
+          ])
+          .mockImplementation(async (): Promise<Batch[]> => {
+            await pipeline.applyPendingSeeks([{ topic: topicName, partitions: [partition] }], async () => undefined);
             await new Promise((resolve) => setTimeout(resolve, 1));
             return [];
-          },
-        ),
-      hasSeekOffset: vi.fn(() => pendingSeeks.size > 0),
-    });
+          }),
+      }),
+    );
     const seenOffsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -263,13 +366,12 @@ describe('consumer/runner', () => {
       eachMessage: async ({ message }) => {
         seenOffsets.push(message.offset);
         if (message.offset === 0n) {
-          pendingSeeks.add('seek');
+          pipeline.seek({ topic: topicName, partition, offset: 0n });
           const fetchCalls = vi.mocked(consumerGroup.fetch).mock.calls.length;
           await waitFor(() => vi.mocked(consumerGroup.fetch).mock.calls.length > fetchCalls + 1);
         }
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
 
     await runner.start();
@@ -289,7 +391,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -327,7 +428,6 @@ describe('consumer/runner', () => {
       eachBatch: vi.fn(async () => undefined),
       eachBatchAutoResolve: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -350,7 +450,6 @@ describe('consumer/runner', () => {
       eachBatch,
       autoCommit: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -378,7 +477,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -389,11 +487,13 @@ describe('consumer/runner', () => {
   it('crashes on KafkaNotImplemented errors from fetch', async () => {
     const notImplementedError = new KafkaNotImplemented('not implemented');
     const onCrash = vi.fn();
-    const consumerGroup = fakeConsumerGroup({
-      fetch: vi.fn(async () => {
-        throw notImplementedError;
+    const consumerGroup = fakeConsumerGroup(
+      withSend({
+        fetch: vi.fn(async () => {
+          throw notImplementedError;
+        }),
       }),
-    });
+    );
     runner = new Runner({
       consumerGroup,
       onCrash,
@@ -401,7 +501,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     await runner.start();
     await waitFor(() => onCrash.mock.calls.length > 0);
@@ -417,7 +516,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     await runner.start();
     const offsets = { topics: [{ topic: topicName, partitions: [{ offset: 1n, partition }] }] };
@@ -439,7 +537,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
       retry: { retries: 0 },
     });
     runner.scheduleFetchManager = vi.fn();
@@ -467,7 +564,6 @@ describe('consumer/runner', () => {
       },
       concurrency: 10,
       retry: { retries: 0 },
-      heartbeatInterval: 3000,
     });
     await runner.start();
     await waitFor(() => onCrash.mock.calls.length > 0);
@@ -490,7 +586,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
 
@@ -519,7 +614,6 @@ describe('consumer/runner', () => {
         void runner!.stop();
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -533,7 +627,6 @@ describe('consumer/runner', () => {
 
   it('does not heartbeat or OffsetCommit after every eachMessage record', async () => {
     const consumerGroup = fakeConsumerGroup();
-    vi.mocked(consumerGroup.heartbeatDue).mockReturnValue(false);
     const offsets: bigint[] = [];
     runner = new Runner({
       consumerGroup,
@@ -544,7 +637,6 @@ describe('consumer/runner', () => {
         offsets.push(message.offset);
       },
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -564,7 +656,11 @@ describe('consumer/runner', () => {
 
   it('heartbeats from the runner only when the interval has elapsed', async () => {
     const consumerGroup = fakeConsumerGroup();
-    vi.mocked(consumerGroup.heartbeatDue).mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+    const nextHeartbeatAt = vi
+      .fn(() => 0)
+      .mockReturnValueOnce(Date.now() + 60_000)
+      .mockReturnValueOnce(Date.now() + 60_000);
+    Object.defineProperty(consumerGroup, 'nextHeartbeatAt', { get: nextHeartbeatAt });
     runner = new Runner({
       consumerGroup,
       onCrash: vi.fn(),
@@ -572,7 +668,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachMessage: async () => undefined,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -584,7 +679,7 @@ describe('consumer/runner', () => {
     });
     await runner.handleBatch(batch);
 
-    expect(consumerGroup.heartbeatDue).toHaveBeenCalled();
+    expect(nextHeartbeatAt).toHaveBeenCalledTimes(4);
     expect(consumerGroup.heartbeat).toHaveBeenCalledTimes(2);
     expect(consumerGroup.commitOffsetsIfNecessary).toHaveBeenCalledTimes(1);
     expect(consumerGroup.commitOffsets).not.toHaveBeenCalled();
@@ -599,7 +694,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachBatch: vi.fn(async () => undefined),
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -621,7 +715,6 @@ describe('consumer/runner', () => {
       logger: silentLogger,
       eachMessage: async () => undefined,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -651,7 +744,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [first, second] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -688,7 +780,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachBatch,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [onConsume] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -721,7 +812,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hooks: { onConsume: [throwingHook] },
       });
       runner.scheduleFetchManager = vi.fn();
@@ -746,7 +836,6 @@ describe('consumer/runner', () => {
       eachMessage: async () => undefined,
       autoCommit: false,
       concurrency: 1,
-      heartbeatInterval: 3000,
     });
     runner.scheduleFetchManager = vi.fn();
     await runner.start();
@@ -757,12 +846,13 @@ describe('consumer/runner', () => {
   });
 
   describe('eachMessage loop', () => {
-    const threeMessages = (): Batch =>
-      new Batch(topicName, 0n, {
-        partition,
-        highWatermark: 5n,
-        messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)],
-      });
+    const threeMessages = (state: PartitionState | null = null): Batch =>
+      new Batch(
+        topicName,
+        0n,
+        { partition, highWatermark: 5n, messages: [kafkaMessage(1n), kafkaMessage(2n), kafkaMessage(3n)] },
+        state,
+      );
 
     async function startRunner(consumerGroup: ConsumerGroupHandle, eachMessage: EachMessageHandler): Promise<Runner> {
       const started = new Runner({
@@ -772,7 +862,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       started.scheduleFetchManager = vi.fn();
       await started.start();
@@ -784,12 +873,10 @@ describe('consumer/runner', () => {
     }
 
     it('stops after the message whose handler pauses the partition', async () => {
-      let paused = false;
+      const pipeline = assignedPipeline();
       const consumerGroup = fakeConsumerGroup({
-        pause: vi.fn(() => {
-          paused = true;
-        }),
-        isPaused: vi.fn(() => paused),
+        partitionPipeline: pipeline,
+        pause: vi.fn((topicPartitions: { topic: string; partitions?: number[] }[]) => pipeline.pause(topicPartitions)),
       });
       const seen: bigint[] = [];
       runner = await startRunner(consumerGroup, async ({ message, pause }) => {
@@ -797,7 +884,7 @@ describe('consumer/runner', () => {
         if (message.offset === 2n) pause();
       });
 
-      await runner.handleBatch(threeMessages());
+      await runner.handleBatch(threeMessages(partitionState(pipeline)));
 
       expect(seen).toEqual([1n, 2n]);
       expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
@@ -805,19 +892,18 @@ describe('consumer/runner', () => {
     });
 
     it('stops before the next message once the handler seeks the partition', async () => {
-      let hasSeek = false;
-      const consumerGroup = fakeConsumerGroup({ hasSeekOffset: vi.fn(() => hasSeek) });
+      const pipeline = assignedPipeline();
+      const consumerGroup = fakeConsumerGroup({ partitionPipeline: pipeline });
       const seen: bigint[] = [];
       runner = await startRunner(consumerGroup, async ({ message }) => {
         seen.push(message.offset);
-        hasSeek = true;
+        pipeline.seek({ topic: topicName, partition, offset: 0n });
       });
 
-      await runner.handleBatch(threeMessages());
+      await runner.handleBatch(threeMessages(partitionState(pipeline)));
 
       expect(seen).toEqual([1n]);
       expect(resolvedOffsets(consumerGroup)).toEqual([1n]);
-      expect(consumerGroup.hasSeekOffset).toHaveBeenCalledWith({ topic: topicName, partition });
     });
 
     it('hands every message the same heartbeat callback, which heartbeats the group', async () => {
@@ -832,7 +918,7 @@ describe('consumer/runner', () => {
       expect(consumerGroup.heartbeat).not.toHaveBeenCalled();
 
       await heartbeats[0]!();
-      expect(consumerGroup.heartbeat).toHaveBeenCalledWith({ interval: 3000 });
+      expect(consumerGroup.heartbeat).toHaveBeenCalledTimes(1);
     });
 
     it('resolves an async handler message only after its promise settles', async () => {
@@ -909,12 +995,10 @@ describe('consumer/runner', () => {
     });
 
     it('does not resolve past trailing control records when the handler pauses the partition', async () => {
-      let paused = false;
+      const pipeline = assignedPipeline();
       const consumerGroup = fakeConsumerGroup({
-        pause: vi.fn(() => {
-          paused = true;
-        }),
-        isPaused: vi.fn(() => paused),
+        partitionPipeline: pipeline,
+        pause: vi.fn((topicPartitions: { topic: string; partitions?: number[] }[]) => pipeline.pause(topicPartitions)),
       });
       runner = await startRunner(consumerGroup, async ({ message, pause }) => {
         if (message.offset === 2n) pause();
@@ -922,11 +1006,12 @@ describe('consumer/runner', () => {
 
       const controlRecord = { ...kafkaMessage(4n), isControlRecord: true };
       await runner.handleBatch(
-        new Batch(topicName, 0n, {
-          partition,
-          highWatermark: 5n,
-          messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord],
-        }),
+        new Batch(
+          topicName,
+          0n,
+          { partition, highWatermark: 5n, messages: [kafkaMessage(1n), kafkaMessage(2n), controlRecord] },
+          partitionState(pipeline),
+        ),
       );
 
       expect(resolvedOffsets(consumerGroup)).toEqual([1n, 2n]);
@@ -950,7 +1035,6 @@ describe('consumer/runner', () => {
           seenOffsets.push(message.offset);
         },
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -979,7 +1063,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachMessage: async () => undefined,
         concurrency: 1,
-        heartbeatInterval: 3000,
         hasAutoCommitCadence: true,
       });
       runner.scheduleFetchManager = vi.fn();
@@ -1006,7 +1089,6 @@ describe('consumer/runner', () => {
         },
         maxRecords: 5,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1029,7 +1111,6 @@ describe('consumer/runner', () => {
         logger: silentLogger,
         eachBatch,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1061,7 +1142,6 @@ describe('consumer/runner', () => {
         eachBatch,
         maxRecords: 5,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1087,7 +1167,6 @@ describe('consumer/runner', () => {
         maxRecords: 5,
         hasAutoCommitCadence: true,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
@@ -1109,18 +1188,16 @@ describe('consumer/runner', () => {
         eachMessage: async () => undefined,
         maxRecords: 1,
         concurrency: 1,
-        heartbeatInterval: 3000,
       });
       runner.scheduleFetchManager = vi.fn();
       await runner.start();
 
       await runner.fetch('1');
 
-      // `Runner#fetch` only forwards the node id (plus the in-flight partition check for seeks):
-      // `maxRecords` never reaches the Fetch request, so the wire-level `maxBytes`/
-      // `maxBytesPerPartition` configured on the consumer group (owned by `ConsumerGroup`, not
-      // `Runner`) are never altered by it.
-      expect(consumerGroup.fetch).toHaveBeenCalledWith('1', { isProcessing: expect.any(Function) });
+      // `Runner#fetch` only forwards the node id: `maxRecords` never reaches the Fetch request,
+      // so the wire-level `maxBytes`/`maxBytesPerPartition` configured on the consumer group
+      // (owned by `ConsumerGroup`, not `Runner`) are never altered by it.
+      expect(consumerGroup.fetch).toHaveBeenCalledWith('1');
       expect(consumerGroup.fetch).toHaveBeenCalledTimes(1);
     });
   });

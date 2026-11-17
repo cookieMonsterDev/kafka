@@ -5,7 +5,7 @@ import { describeShareGroupOffsetsResponseV0, responseSchema } from './response'
 const topicId = Buffer.from('0123456789abcdef');
 
 describe('protocol/requests/describe-share-group-offsets/v0/response', () => {
-  it('decodes offsets without lag', async () => {
+  it('decodes offsets, filling the v1+ lag with -1 (unknown)', async () => {
     const value = {
       throttleTime: 5,
       groups: [
@@ -35,7 +35,26 @@ describe('protocol/requests/describe-share-group-offsets/v0/response', () => {
     const encoder = new Encoder();
     responseSchema.write(encoder, value);
     const data = await describeShareGroupOffsetsResponseV0.decode(encoder.buffer);
-    expect(data).toEqual({ ...value, throttleTime: 0, clientSideThrottleTime: 5 });
+    expect(data).toEqual({
+      throttleTime: 0,
+      clientSideThrottleTime: 5,
+      groups: [
+        {
+          groupId: 'g',
+          topics: [
+            {
+              topicName: 'events',
+              topicId,
+              partitions: [
+                { partitionIndex: 0, startOffset: 42n, leaderEpoch: 3, lag: -1n, errorCode: 0, errorMessage: null },
+              ],
+            },
+          ],
+          errorCode: 0,
+          errorMessage: null,
+        },
+      ],
+    });
     await expect(describeShareGroupOffsetsResponseV0.parse(data)).resolves.toEqual(data);
   });
 

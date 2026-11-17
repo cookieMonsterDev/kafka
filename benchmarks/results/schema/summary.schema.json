@@ -21,7 +21,7 @@
   ],
   "properties": {
     "schemaVersion": {
-      "const": 1
+      "const": 3
     },
     "sessionId": {
       "type": "string"
@@ -205,7 +205,7 @@
       "type": ["array", "null"],
       "items": {
         "type": "object",
-        "required": ["client", "packageName", "version", "installBytes", "dependencyCount", "hasNativeAddon"],
+        "required": ["client", "packageName", "version", "required", "optional"],
         "properties": {
           "client": {
             "enum": ["kafka-core", "platformatic", "kafkajs", "confluent"]
@@ -216,14 +216,14 @@
           "version": {
             "type": ["string", "null"]
           },
-          "installBytes": {
-            "type": ["integer", "null"]
+          "required": {
+            "$ref": "#/$defs/footprintPart"
           },
-          "dependencyCount": {
-            "type": ["integer", "null"]
+          "optional": {
+            "$ref": "#/$defs/footprintPart"
           },
-          "hasNativeAddon": {
-            "type": ["boolean", "null"]
+          "unsplitTotal": {
+            "$ref": "#/$defs/unsplitFootprintTotal"
           }
         }
       }
@@ -359,7 +359,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["scenario", "runtime", "profile", "series", "primaryMetric", "ratio", "verdict", "reason"],
+        "required": ["scenario", "runtime", "profile", "series", "metric", "ratio", "verdict", "reason"],
         "properties": {
           "scenario": {
             "enum": ["P1", "P2", "P3", "P4", "P5", "C1", "C2", "C3", "C4", "E1", "L1"]
@@ -373,8 +373,8 @@
           "series": {
             "type": "string"
           },
-          "primaryMetric": {
-            "enum": ["recordsPerSecond", "latencyP99Ms", "firstAckedProduceMs"]
+          "metric": {
+            "enum": ["recordsPerSecond", "latencyP50Ms", "latencyP99Ms", "firstAckedProduceMs"]
           },
           "ratio": {
             "type": "number",
@@ -429,54 +429,105 @@
       "additionalProperties": false,
       "properties": {
         "P1": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "P2": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "P3": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "P4": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "P5": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "C1": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "C2": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "C3": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "C4": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "E1": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         },
         "L1": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/metricFloors"
         }
       }
     }
   },
   "additionalProperties": false,
   "$defs": {
+    "footprintPart": {
+      "type": ["object", "null"],
+      "required": ["bytes", "fileCount", "dependencyCount", "hasNativeAddon"],
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dependencyCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasNativeAddon": {
+          "type": "boolean"
+        }
+      }
+    },
+    "unsplitFootprintTotal": {
+      "type": "object",
+      "required": ["bytes", "dependencyCount", "hasNativeAddon"],
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dependencyCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "hasNativeAddon": {
+          "type": "boolean"
+        }
+      }
+    },
+    "metricFloors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recordsPerSecond": {
+          "type": "number",
+          "minimum": 0
+        },
+        "latencyP50Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "latencyP99Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "firstAckedProduceMs": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
     "stat": {
       "type": ["object", "null"],
       "required": ["samples", "median", "min", "max", "cv"],

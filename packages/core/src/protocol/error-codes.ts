@@ -870,19 +870,3 @@ export function failIfVersionNotSupported(code: number): void {
     throw createErrorFromCode(UNSUPPORTED_VERSION_CODE);
   }
 }
-
-const STALE_METADATA_TYPES = new Set([
-  'UNKNOWN_TOPIC_OR_PARTITION',
-  'LEADER_NOT_AVAILABLE',
-  'NOT_LEADER_FOR_PARTITION',
-  'NOT_LEADER_OR_FOLLOWER',
-  'UNKNOWN_TOPIC_ID',
-  'INCONSISTENT_TOPIC_ID',
-  'FENCED_LEADER_EPOCH',
-  'UNKNOWN_LEADER_EPOCH',
-  'REBOOTSTRAP_REQUIRED',
-]);
-
-export function staleMetadata(e: { type?: string }): boolean {
-  return e.type != null && STALE_METADATA_TYPES.has(e.type);
-}

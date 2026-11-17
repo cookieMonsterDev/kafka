@@ -66,6 +66,8 @@ export type {
   TopicPartitionOffsetAndMetadata,
   TopicPartitions,
 } from './types';
+import { DescribeGroups } from '../protocol/requests/describe-groups/index';
+import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
 
 export { events };
 export { MemberAssignment, MemberMetadata } from './assigner-protocol';
@@ -596,6 +598,7 @@ export function createConsumer({
               assigners,
               sessionTimeout,
               rebalanceTimeout,
+              heartbeatInterval,
               maxBytesPerPartition,
               minBytes,
               maxBytes,
@@ -628,6 +631,7 @@ export function createConsumer({
               assigners,
               sessionTimeout,
               rebalanceTimeout,
+              heartbeatInterval,
               maxBytesPerPartition,
               minBytes,
               maxBytes,
@@ -655,7 +659,6 @@ export function createConsumer({
         logger: rootLogger,
         consumerGroup,
         instrumentationEmitter,
-        heartbeatInterval,
         retry,
         autoCommit: runnerAutoCommit,
         hasAutoCommitCadence: autoCommitInterval != null || autoCommitThreshold != null,
@@ -674,16 +677,14 @@ export function createConsumer({
     };
 
     const onCrash = async (e: Error): Promise<void> => {
-      const error = e as Error & { retryCount?: number; retryTime?: number; host?: string; port?: number };
+      const error = e as Error & { retryCount?: number; retryTime?: number };
       logger.error(`Crash: ${error.name}: ${error.message}`, {
         groupId,
         retryCount: error.retryCount,
         stack: error.stack,
       });
 
-      if (error.name === 'KafkaConnectionClosedError' && error.host != null && error.port != null) {
-        cluster.removeBroker({ host: error.host, port: error.port });
-      }
+      cluster.onConnectionClosed(error);
 
       await disconnect();
 
@@ -931,7 +932,7 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const describeRetrier = retrier(retry);
     return describeRetrier(async () => {
-      const { groups } = await coordinator.describeGroups({ groupIds: [groupId] });
+      const { groups } = await coordinator.send(DescribeGroups, { groupIds: [groupId] });
       const group = groups.find((entry) => entry.groupId === groupId);
       if (!group) {
         throw new KafkaNonRetriableError(`Consumer group ${groupId} not found`);
@@ -982,7 +983,7 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const committedRetrier = retrier(retry);
     return committedRetrier(async () => {
-      const { responses } = await coordinator.offsetFetch({
+      const { responses } = await coordinator.send(OffsetFetch, {
         groupId,
         topics: [...partitionsByTopic.entries()].map(([topic, partitions]) => ({
           topic,

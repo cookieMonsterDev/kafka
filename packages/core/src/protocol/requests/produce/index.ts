@@ -1,4 +1,11 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import {
+  defineRequestFamily,
+  highestVersionBelow,
+  type RequestFamily,
+  type VersionFactories,
+  type VersionResponse,
+} from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { produceRequestV0 } from './v0/request';
 import { produceResponseV0 } from './v0/response';
 import { produceRequestV1 } from './v1/request';
@@ -27,9 +34,9 @@ import { produceRequestV12 } from './v12/request';
 import { produceResponseV12 } from './v12/response';
 import { produceRequestV13 } from './v13/request';
 import { produceResponseV13 } from './v13/response';
-import type { ProduceRequestOptions } from './shared';
+import { isUsableTopicId, PRODUCE_TOPIC_ID_MIN_VERSION, type ProduceRequestOptions } from './shared';
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>> = {
+const VERSIONS = {
   0: (options) => ({ request: produceRequestV0(options), response: produceResponseV0 }),
   1: (options) => ({ request: produceRequestV1(options), response: produceResponseV1 }),
   2: (options) => ({ request: produceRequestV2(options), response: produceResponseV2 }),
@@ -44,7 +51,12 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>>
   11: (options) => ({ request: produceRequestV11(options), response: produceResponseV11 }),
   12: (options) => ({ request: produceRequestV12(options), response: produceResponseV12 }),
   13: (options) => ({ request: produceRequestV13(options), response: produceResponseV13(options) }),
-};
+} satisfies VersionFactories<ProduceRequestOptions>;
+
+const PRODUCE_VERSIONS: readonly number[] = Object.keys(VERSIONS).map(Number);
+
+/** A Produce response; `undefined` with `acks: 0`, where the broker never writes one. */
+export type ProduceResponse = VersionResponse<typeof VERSIONS> | undefined;
 
 /**
  * v0–v2 send MessageSet (magic 0/1, Kafka 0.10). v3+ send RecordBatch v2 (KIP-98).
@@ -57,11 +69,15 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<ProduceRequestOptions>>>
  * @see https://kafka.apache.org/43/design/protocol/
  * @see https://kafka.apache.org/43/implementation/messages/
  */
-export const Produce: RequestFamily<ProduceRequestOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no Produce protocol for version ${version}`);
-    return factory;
+export const Produce: RequestFamily<ProduceRequestOptions, ProduceResponse> = defineRequestFamily(
+  KAFKA_APIS.Produce,
+  VERSIONS,
+  {
+    // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on the
+    // highest mutually supported name-based version (v12 on Kafka 4.0).
+    preferVersion: (options, version, advertised) =>
+      version < PRODUCE_TOPIC_ID_MIN_VERSION || options.topicData.every((topic) => isUsableTopicId(topic.topicId))
+        ? version
+        : highestVersionBelow(KAFKA_APIS.Produce, PRODUCE_VERSIONS, PRODUCE_TOPIC_ID_MIN_VERSION, advertised),
   },
-});
+);

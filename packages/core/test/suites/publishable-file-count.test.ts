@@ -1,29 +1,46 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../');
+const REPO_SCRIPTS_DIR = resolve(PACKAGE_ROOT, '../../scripts');
 
 /**
- * Headroom above the 818 files this suite packs (dist, README, package.json). It catches a
- * regression such as re-enabled maps, test files back in the declaration build or a return to one
- * JavaScript file per source module, not ordinary growth. Lower it when a build change shrinks the
- * file count.
+ * Headroom above the 290 files this suite packs (dist, README, package.json). It catches a
+ * regression such as re-enabled maps, test files back in the declaration build, unreachable
+ * declarations no longer pruned or a return to one JavaScript file per source module, not ordinary
+ * growth. Lower it when a build change shrinks the file count.
  */
-const FILE_COUNT_CEILING = 900;
+const FILE_COUNT_CEILING = 350;
 
 /** The bundled build emits only these JavaScript files; a per-module build would emit ~800. */
 const JS_FILES = [
   'dist/index.js',
+  'dist/lazy-requests.js',
   'dist/protocol/compression/codec-worker.js',
   'dist/protocol/compression/off-thread.js',
+  'dist/shared.js',
 ];
 
 /** `new Worker(...)` loads this file by path at runtime, so it must survive any build change. */
 const CODEC_WORKER_PATH = 'dist/protocol/compression/codec-worker.js';
+
+/** Request family directories the `lazy-requests` chunk holds, as `src/protocol/requests/lazy-requests.ts` lists them. */
+const LAZY_FAMILY_DIRECTORIES = [
+  ...readFileSync(join(PACKAGE_ROOT, 'src/protocol/requests/lazy-requests.ts'), 'utf8').matchAll(
+    /from '\.\/([a-z-]+)\/index'/g,
+  ),
+].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
+
+interface OutputChunk {
+  type: 'chunk';
+  fileName: string;
+  imports: string[];
+  modules: Record<string, { renderedLength: number }>;
+}
 
 interface PackedFile {
   path: string;
@@ -36,6 +53,7 @@ interface PackResult {
 describe('published file count', () => {
   let packSource: string;
   let packed: PackResult;
+  let chunks: Map<string, OutputChunk>;
 
   beforeAll(async () => {
     // Self-contained, into an isolated temp dir — never the package's own `dist/` — so this
@@ -47,14 +65,25 @@ describe('published file count', () => {
     const distDir = join(packSource, 'dist');
 
     const { build } = await import('vite');
-    await build({
+    const buildResult = await build({
       configFile: join(PACKAGE_ROOT, 'vite.config.ts'),
       logLevel: 'silent',
       build: { outDir: distDir, emptyOutDir: true },
     });
+    const outputs = (Array.isArray(buildResult) ? buildResult : [buildResult]) as { output?: { type: string }[] }[];
+    chunks = new Map(
+      outputs
+        .flatMap((result) => result.output ?? [])
+        .filter((file): file is OutputChunk => file.type === 'chunk')
+        .map((chunk) => [chunk.fileName, chunk]),
+    );
     execFileSync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.build.json', '--emitDeclarationOnly', '--outDir', distDir], {
       cwd: PACKAGE_ROOT,
     });
+    // The rest of `build:types`, so the declarations packed here are the ones that get published.
+    for (const script of ['add-declaration-extensions.mjs', 'prune-unreachable-declarations.mjs']) {
+      execFileSync(process.execPath, [join(REPO_SCRIPTS_DIR, script), distDir]);
+    }
     cpSync(join(PACKAGE_ROOT, 'package.json'), join(packSource, 'package.json'));
     cpSync(join(PACKAGE_ROOT, 'README.md'), join(packSource, 'README.md'));
 
@@ -113,9 +142,69 @@ describe('published file count', () => {
     expect(packed.files.length).toBeLessThan(FILE_COUNT_CEILING);
   });
 
-  it('ships the bundled entry, codec pool and codec worker as the only JavaScript files', () => {
+  it('ships the bundled entry, its chunks, codec pool and codec worker as the only JavaScript files', () => {
     const jsFiles = packed.files.map((file) => file.path).filter((path) => path.endsWith('.js'));
     expect(jsFiles.sort()).toEqual(JS_FILES);
+  });
+
+  // A static import would load the lazily loaded request codecs at startup and undo the split.
+  it('loads the lazy request chunk only through a dynamic import', () => {
+    const entry = readFileSync(join(packSource, 'dist', 'index.js'), 'utf8');
+    expect(entry).not.toMatch(/(?:from|import)\s*["']\.\/lazy-requests\.js["']/);
+    expect(entry).toMatch(/import\(\s*["']\.\/lazy-requests\.js["']\s*\)/);
+  });
+
+  // Admin-only codecs load through the lazy family stubs. A static import of one of those families
+  // from code the entry reaches would pull its codecs into the startup graph, with no error.
+  it('keeps the lazily loaded request families out of the startup chunk graph', () => {
+    expect(LAZY_FAMILY_DIRECTORIES).toEqual(expect.arrayContaining(['create-topics', 'describe-configs']));
+
+    const startupChunks = new Set<string>();
+    const pending = ['index.js'];
+    for (let fileName = pending.pop(); fileName !== undefined; fileName = pending.pop()) {
+      const chunk = chunks.get(fileName);
+      if (chunk === undefined || startupChunks.has(fileName)) continue;
+      startupChunks.add(fileName);
+      pending.push(...chunk.imports);
+    }
+    expect([...startupChunks].sort()).toEqual(['index.js', 'shared.js']);
+
+    const lazyFamilyModule = new RegExp(
+      `[\\\\/]src[\\\\/]protocol[\\\\/]requests[\\\\/](${LAZY_FAMILY_DIRECTORIES.join('|')})[\\\\/]`,
+    );
+    const startupModules = [...startupChunks].flatMap((fileName) =>
+      Object.entries(chunks.get(fileName)?.modules ?? {})
+        .filter(([, module]) => module.renderedLength > 0)
+        .map(([id]) => id),
+    );
+    expect(startupModules.length).toBeGreaterThan(0);
+    expect(startupModules.filter((id) => lazyFamilyModule.test(id))).toEqual([]);
+
+    const lazyModules = Object.keys(chunks.get('lazy-requests.js')?.modules ?? {});
+    expect(lazyModules.some((id) => lazyFamilyModule.test(id))).toBe(true);
+  });
+
+  // Only TLS, compression or SCRAM need these, so the entry loads them on first use. `node:util`
+  // is listed because it loads `node:worker_threads` on Node.js 26.
+  it('statically imports no builtin or codec pool that only some applications need', () => {
+    const lazySpecifiers = [
+      'node:crypto',
+      'node:tls',
+      'node:util',
+      'node:worker_threads',
+      'node:zlib',
+      './protocol/compression/off-thread.js',
+    ];
+    // `shared.js` is the only chunk `index.js` imports statically; the JS_FILES test above lists every chunk.
+    const staticImports = ['index.js', 'shared.js'].flatMap((file) => {
+      const source = readFileSync(join(packSource, 'dist', file), 'utf8');
+      return [...source.matchAll(/^(?:import|export)\s(?:[^'";]*?\sfrom\s*)?["']([^"']+)["']/gm)].map(
+        (match) => match[1] ?? '',
+      );
+    });
+    // Guards the pattern itself: an empty match list would pass the check below vacuously.
+    expect(staticImports).toEqual(expect.arrayContaining(['./shared.js', 'node:net']));
+    expect(staticImports.filter((specifier) => lazySpecifiers.includes(specifier))).toEqual([]);
   });
 
   it('exports from the built entry what src/index.ts exports', async () => {

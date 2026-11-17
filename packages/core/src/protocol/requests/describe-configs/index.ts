@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { describeConfigsRequestV0 } from './v0/request';
 import { describeConfigsResponseV0 } from './v0/response';
 import { type DescribeConfigsResource, describeConfigsRequestV1, withDefaultConfigNames } from './v1/request';
@@ -25,7 +26,7 @@ export interface DescribeConfigsOptions {
   includeDocumentation?: boolean;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeConfigsOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeConfigsRequestV0({
       resources: withDefaultConfigNames(options.resources),
@@ -62,7 +63,7 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeConfigsOptions>>
     }),
     response: describeConfigsResponseV4,
   }),
-};
+} satisfies VersionFactories<DescribeConfigsOptions>;
 
 /**
  * Kafka 0.11 advertises DescribeConfigs v0 (no synonyms). Kafka 1.1+ adds v1
@@ -71,11 +72,4 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeConfigsOptions>>
  *
  * @see https://kafka.apache.org/43/configuration/topic-configs/
  */
-export const DescribeConfigs: RequestFamily<DescribeConfigsOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeConfigs protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeConfigs = defineRequestFamily(KAFKA_APIS.DescribeConfigs, VERSIONS);

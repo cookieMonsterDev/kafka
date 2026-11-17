@@ -1,8 +1,10 @@
 import { KafkaNonRetriableError } from '../errors';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import type { AssignReplicasToDirsOptions, AssignReplicasToDirsReplica } from './types';
+import { AssignReplicasToDirs } from '../protocol/requests/lazy-families';
 
 export interface AssignReplicasToDirsApi {
   assignReplicasToDirs: (options: AssignReplicasToDirsOptions) => Promise<void>;
@@ -91,7 +93,9 @@ function groupReplicasByDirectory(
   }));
 }
 
-export function createAssignReplicasToDirsApi({ cluster, logger, retry }: AdminContext): AssignReplicasToDirsApi {
+export function createAssignReplicasToDirsApi({ cluster, retry }: AdminContext): AssignReplicasToDirsApi {
+  const retrier = createRetrier(retry);
+
   const assignReplicasToDirs = async ({
     brokerId,
     brokerEpoch,
@@ -102,10 +106,10 @@ export function createAssignReplicasToDirsApi({ cluster, logger, retry }: AdminC
     const normalizedReplicas = validateReplicas(replicas);
     const topics = [...new Set(normalizedReplicas.map((replica) => replica.topic))];
 
-    await retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
+    await cluster.run(
+      CONTROLLER,
+      async (broker) => {
         await cluster.addMultipleTargetTopics(topics);
-        await cluster.refreshMetadata();
         const directories = groupReplicasByDirectory(
           normalizedReplicas.map((replica) => {
             const topicId = cluster.findTopicId(replica.topic);
@@ -115,30 +119,14 @@ export function createAssignReplicasToDirsApi({ cluster, logger, retry }: AdminC
             return { ...replica, topicId };
           }),
         );
-        const broker = await cluster.findControllerBroker();
-        await broker.assignReplicasToDirs({
+        await broker.send(AssignReplicasToDirs, {
           brokerId: normalizedBrokerId,
           brokerEpoch: normalizedBrokerEpoch,
           directories,
         });
-      } catch (error) {
-        if (error instanceof KafkaNonRetriableError) {
-          bail(error);
-          throw error;
-        }
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not assign replicas to directories', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not assign replicas to directories' },
+    );
   };
 
   return { assignReplicasToDirs };

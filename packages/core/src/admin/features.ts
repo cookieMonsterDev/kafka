@@ -1,7 +1,8 @@
 import { KafkaNonRetriableError } from '../errors';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { formatUnknown, protocolType } from './helpers';
+import { formatUnknown } from './helpers';
 import {
   FEATURE_UPDATE_UPGRADE_TYPES,
   type DescribeFeaturesResult,
@@ -9,6 +10,7 @@ import {
   type UpdateFeaturesOptions,
   type UpdateFeaturesResult,
 } from './types';
+import { UpdateFeatures } from '../protocol/requests/lazy-families';
 
 export interface FeaturesApi {
   updateFeatures: (options: UpdateFeaturesOptions) => Promise<{ results: UpdateFeaturesResult[] }>;
@@ -17,7 +19,9 @@ export interface FeaturesApi {
 
 const VALID_UPGRADE_TYPES: readonly FeatureUpdateUpgradeType[] = Object.values(FEATURE_UPDATE_UPGRADE_TYPES);
 
-export function createFeaturesApi({ cluster, logger, retry }: AdminContext): FeaturesApi {
+export function createFeaturesApi({ cluster, retry }: AdminContext): FeaturesApi {
+  const retrier = createRetrier(retry);
+
   const updateFeatures = async ({
     featureUpdates,
     timeout,
@@ -61,54 +65,30 @@ export function createFeaturesApi({ cluster, logger, retry }: AdminContext): Fea
       return { ...update, upgradeType };
     });
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { results } = await broker.updateFeatures({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { results } = await broker.send(UpdateFeatures, {
           featureUpdates: normalized,
           timeout,
           validateOnly,
         });
         return { results };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not update finalized features', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not update finalized features' },
+    );
   };
 
   const describeFeatures = async (): Promise<DescribeFeaturesResult> => {
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
         const { supportedFeatures, finalizedFeatures, finalizedFeaturesEpoch, zkMigrationReady } =
           await broker.describeFeatures();
         return { supportedFeatures, finalizedFeatures, finalizedFeaturesEpoch, zkMigrationReady };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe features', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          await cluster.refreshMetadata();
-          throw error;
-        }
-        bail(error as Error);
-        throw error;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe features' },
+    );
   };
 
   return { updateFeatures, describeFeatures };

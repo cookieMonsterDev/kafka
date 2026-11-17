@@ -1,4 +1,6 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { COORDINATOR_TYPES } from '../../enums/coordinator-types';
+import { defineRequestFamily, type VersionFactories, type VersionResponse } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { findCoordinatorRequestV0 } from './v0/request';
 import { findCoordinatorResponseV0 } from './v0/response';
 import { findCoordinatorRequestV1 } from './v1/request';
@@ -14,7 +16,7 @@ export interface FindCoordinatorOptions {
   coordinatorType?: number;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<FindCoordinatorOptions>>> = {
+const VERSIONS = {
   0: (options) => {
     const groupId = options.groupId ?? options.coordinatorKey;
     if (groupId == null) throw new Error('Invariant violated: FindCoordinator v0 requires groupId');
@@ -56,13 +58,16 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<FindCoordinatorOptions>>
       response: findCoordinatorResponseV3,
     };
   },
-};
+} satisfies VersionFactories<FindCoordinatorOptions>;
 
-export const FindCoordinator: RequestFamily<FindCoordinatorOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no FindCoordinator protocol for version ${version}`);
-    return factory;
-  },
+/** A FindCoordinator response, for every version. */
+export type FindCoordinatorResponse = VersionResponse<typeof VERSIONS>;
+
+export const FindCoordinator = defineRequestFamily(KAFKA_APIS.GroupCoordinator, VERSIONS, {
+  // A group coordinator by default, keyed by the group id.
+  prepareOptions: (options) => ({
+    ...options,
+    coordinatorKey: options.coordinatorKey ?? options.groupId,
+    coordinatorType: options.coordinatorType ?? COORDINATOR_TYPES.GROUP,
+  }),
 });

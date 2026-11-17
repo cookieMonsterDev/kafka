@@ -1,5 +1,6 @@
 import { KafkaNonRetriableError } from '../../../errors';
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { createDelegationTokenRequestV0 } from './v0/request';
 import { createDelegationTokenResponseV0 } from './v0/response';
 import { createDelegationTokenRequestV1 } from './v1/request';
@@ -32,7 +33,7 @@ function v0to2Fields(options: CreateDelegationTokenOptions) {
   };
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateDelegationTokenOptions>>> = {
+const VERSIONS = {
   0: (options) => {
     assertNoOwner(options);
     return { request: createDelegationTokenRequestV0(v0to2Fields(options)), response: createDelegationTokenResponseV0 };
@@ -53,13 +54,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<CreateDelegationTokenOpt
     }),
     response: createDelegationTokenResponseV3,
   }),
-};
+} satisfies VersionFactories<CreateDelegationTokenOptions>;
 
-export const CreateDelegationToken: RequestFamily<CreateDelegationTokenOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no CreateDelegationToken protocol for version ${version}`);
-    return factory;
-  },
-});
+export const CreateDelegationToken = defineRequestFamily(KAFKA_APIS.CreateDelegationToken, VERSIONS);

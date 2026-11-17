@@ -1,4 +1,5 @@
-import type { ProtocolFactory, RequestFamily } from '../index';
+import { defineRequestFamily, type VersionFactories } from '../index';
+import { KAFKA_APIS } from '../kafka-apis';
 import { describeDelegationTokenRequestV0 } from './v0/request';
 import { describeDelegationTokenResponseV0 } from './v0/response';
 import { describeDelegationTokenRequestV1 } from './v1/request';
@@ -16,7 +17,7 @@ function compactOwners(options: DescribeDelegationTokenOptions) {
   return options.owners == null || options.owners.length === 0 ? null : options.owners;
 }
 
-const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeDelegationTokenOptions>>> = {
+const VERSIONS = {
   0: (options) => ({
     request: describeDelegationTokenRequestV0({ owners: options.owners ?? [] }),
     response: describeDelegationTokenResponseV0,
@@ -33,13 +34,6 @@ const VERSIONS: Readonly<Record<number, ProtocolFactory<DescribeDelegationTokenO
     request: describeDelegationTokenRequestV3({ owners: compactOwners(options) }),
     response: describeDelegationTokenResponseV3,
   }),
-};
+} satisfies VersionFactories<DescribeDelegationTokenOptions>;
 
-export const DescribeDelegationToken: RequestFamily<DescribeDelegationTokenOptions> = Object.freeze({
-  versions: Object.freeze(Object.keys(VERSIONS).map(Number)),
-  protocol({ version }: { version: number }) {
-    const factory = VERSIONS[version];
-    if (!factory) throw new Error(`Invariant violated: no DescribeDelegationToken protocol for version ${version}`);
-    return factory;
-  },
-});
+export const DescribeDelegationToken = defineRequestFamily(KAFKA_APIS.DescribeDelegationToken, VERSIONS);

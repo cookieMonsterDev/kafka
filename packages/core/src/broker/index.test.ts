@@ -1,9 +1,24 @@
-import { describe, expect, it, vi } from 'vitest';
-import { KafkaConnectionClosedError, KafkaMemberIdRequired, KafkaProtocolError } from '../errors';
+import { describe, expect, it, vi, type Mock } from 'vitest';
+import {
+  KafkaConnectionClosedError,
+  KafkaInvariantViolation,
+  KafkaMemberIdRequired,
+  KafkaProtocolError,
+  KafkaServerDoesNotSupportApiKey,
+} from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import { Broker } from './index';
+import { CreateTopics, DescribeAcls, ListGroups } from '../protocol/requests/lazy-families';
+import { ConsumerGroupHeartbeat } from '../protocol/requests/consumer-group-heartbeat/index';
+import { Fetch } from '../protocol/requests/fetch/index';
+import { Heartbeat } from '../protocol/requests/heartbeat/index';
+import { JoinGroup } from '../protocol/requests/join-group/index';
+import { LeaveGroupMembers } from '../protocol/requests/leave-group/index';
+import { ListOffsets } from '../protocol/requests/list-offsets/index';
+import { Metadata } from '../protocol/requests/metadata/index';
+import { Produce } from '../protocol/requests/produce/index';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
@@ -17,8 +32,14 @@ interface FakeConnectionPool {
   getConnection: ReturnType<typeof vi.fn>;
   setVersions: ReturnType<typeof vi.fn>;
   setSupportAuthenticationProtocol: ReturnType<typeof vi.fn>;
-  send: ReturnType<typeof vi.fn>;
+  send: Mock<(options: SentRequest) => Promise<unknown>>;
   destroy: ReturnType<typeof vi.fn>;
+}
+
+/** What `Broker` hands `ConnectionPool#send`, as far as these tests look at it. */
+interface SentRequest {
+  request: { apiKey: number; apiVersion: number };
+  response: { parse(data: unknown): unknown };
 }
 
 function createFakeConnectionPool(overrides: Partial<FakeConnectionPool> = {}): FakeConnectionPool {
@@ -35,13 +56,18 @@ function createFakeConnectionPool(overrides: Partial<FakeConnectionPool> = {}): 
     }),
     setVersions: vi.fn(),
     setSupportAuthenticationProtocol: vi.fn(),
-    send: vi.fn(),
+    send: vi.fn<(options: SentRequest) => Promise<unknown>>(),
     destroy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
 
 const asConnectionPool = (fake: FakeConnectionPool): ConnectionPool => fake as unknown as ConnectionPool;
+
+/** A fake `ConnectionPool#send` that parses `body` with the sent response definition, as `Connection` does. */
+function parsedBy(body: unknown): (options: SentRequest) => Promise<unknown> {
+  return ({ response }) => Promise.resolve(response.parse(body));
+}
 
 describe('broker/Broker', () => {
   describe('constructor', () => {
@@ -54,7 +80,7 @@ describe('broker/Broker', () => {
     it('throws "Broker not connected" if a request is attempted before connect()', () => {
       const pool = createFakeConnectionPool();
       const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
-      expect(() => broker.lookupRequest(API_KEYS.Metadata, {} as never)).toThrow('Broker not connected');
+      expect(() => broker.lookupRequest({} as never)).toThrow('Broker not connected');
     });
   });
 
@@ -196,7 +222,7 @@ describe('broker/Broker', () => {
       const broker = await connectedBroker(pool);
       pool.send.mockResolvedValueOnce({ throttleTime: 0 });
 
-      const result = await broker.heartbeat({ groupId: 'g', groupGenerationId: 1, memberId: 'm' });
+      const result = await broker.send(Heartbeat, { groupId: 'g', groupGenerationId: 1, memberId: 'm' });
 
       expect(result).toEqual({ throttleTime: 0 });
       expect(pool.send).toHaveBeenCalledOnce();
@@ -215,7 +241,7 @@ describe('broker/Broker', () => {
         assignment: null,
       });
 
-      const result = await broker.consumerGroupHeartbeat({
+      const result = await broker.send(ConsumerGroupHeartbeat, {
         groupId: 'g',
         memberId: 'm',
         memberEpoch: 0,
@@ -236,7 +262,7 @@ describe('broker/Broker', () => {
         .mockRejectedValueOnce(new KafkaMemberIdRequired({ message: 'need a member id' }, { memberId: 'assigned-1' }))
         .mockResolvedValueOnce({ memberId: 'assigned-1', leader: 'assigned-1', members: [] });
 
-      const result = await broker.joinGroup({
+      const result = await broker.send(JoinGroup, {
         groupId: 'g',
         sessionTimeout: 10_000,
         memberId: '',
@@ -253,10 +279,27 @@ describe('broker/Broker', () => {
       const broker = await connectedBroker(pool);
       pool.send.mockRejectedValueOnce(new KafkaConnectionClosedError('closed'));
 
-      await expect(broker.heartbeat({ groupId: 'g', groupGenerationId: 1, memberId: 'm' })).rejects.toThrow(
+      await expect(broker.send(Heartbeat, { groupId: 'g', groupGenerationId: 1, memberId: 'm' })).rejects.toThrow(
         KafkaConnectionClosedError,
       );
       expect(pool.destroy).toHaveBeenCalledOnce();
+    });
+
+    it('rejects instead of throwing when the broker does not support Produce', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = new Broker({
+        connectionPool: asConnectionPool(pool),
+        logger: silentLogger,
+        versions: { [API_KEYS.Metadata]: { minVersion: 0, maxVersion: 12 } },
+      });
+      await broker.connect();
+
+      let producing: Promise<unknown> | undefined;
+      expect(() => {
+        producing = broker.send(Produce, { acks: 1, timeout: 1000, topicData: [] });
+      }).not.toThrow();
+      await expect(producing).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
+      expect(pool.send).not.toHaveBeenCalled();
     });
 
     it('selects Produce v2 when the broker only advertises MessageSet versions', async () => {
@@ -270,7 +313,7 @@ describe('broker/Broker', () => {
       await broker.connect();
       pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
 
-      await broker.produce({
+      await broker.send(Produce, {
         acks: 1,
         timeout: 1000,
         topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
@@ -289,7 +332,7 @@ describe('broker/Broker', () => {
       await broker.connect();
       pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
 
-      await broker.produce({
+      await broker.send(Produce, {
         acks: 1,
         timeout: 1000,
         topicData: [{ topic: 't', partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
@@ -309,7 +352,7 @@ describe('broker/Broker', () => {
       await broker.connect();
       pool.send.mockResolvedValueOnce({ topics: [], throttleTime: 0 });
 
-      await broker.produce({
+      await broker.send(Produce, {
         acks: 1,
         timeout: 1000,
         topicData: [{ topic: 't', topicId, partitions: [{ partition: 0, messages: [{ value: 'v' }] }] }],
@@ -317,12 +360,55 @@ describe('broker/Broker', () => {
       expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(13);
     });
 
+    it('negotiates a lazily loaded family against the broker-advertised versions', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [{ apiKey: API_KEYS.CreateTopics, minVersion: 0, maxVersion: 2 }],
+      });
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+      pool.send.mockClear();
+      pool.send.mockResolvedValue({ throttleTime: 0, topicErrors: [] });
+
+      await broker.send(CreateTopics, { topics: [{ topic: 'orders' }] });
+      await broker.send(CreateTopics, { topics: [{ topic: 'payments' }] });
+
+      const sent = pool.send.mock.calls.map((call) => call[0]?.request);
+      expect(sent.map((request) => [request?.apiKey, request?.apiVersion])).toEqual([
+        [API_KEYS.CreateTopics, 2],
+        [API_KEYS.CreateTopics, 2],
+      ]);
+    });
+
+    it('rejects a lazily loaded family the broker does not advertise', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({ errorCode: 0, throttleTime: 0, apiVersions: [] });
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+      pool.send.mockClear();
+
+      await expect(
+        broker.send(DescribeAcls, {
+          resourceType: 1,
+          resourceName: null,
+          resourcePatternType: 1,
+          principal: null,
+          host: null,
+          operation: 1,
+          permissionType: 1,
+        }),
+      ).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
+      expect(pool.send).not.toHaveBeenCalled();
+    });
+
     it('listGroups sends an empty options object', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);
       pool.send.mockResolvedValueOnce({ throttleTime: 0, groups: [] });
 
-      const result = await broker.listGroups();
+      const result = await broker.send(ListGroups, {});
       expect(result).toEqual({ throttleTime: 0, groups: [] });
     });
 
@@ -334,11 +420,11 @@ describe('broker/Broker', () => {
         versions: { [API_KEYS.ListOffsets]: { minVersion: 0, maxVersion: 0 } },
       });
       await broker.connect();
-      pool.send.mockResolvedValueOnce({
-        responses: [{ topic: 't', partitions: [{ partition: 0, errorCode: 0, offsets: [1n, 2n, 3n] }] }],
-      });
+      pool.send.mockImplementationOnce(
+        parsedBy({ responses: [{ topic: 't', partitions: [{ partition: 0, errorCode: 0, offsets: [1n, 2n, 3n] }] }] }),
+      );
 
-      const result = await broker.listOffsets({ topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
+      const result = await broker.send(ListOffsets, { topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
 
       expect(result.responses[0]?.partitions[0]).toEqual({
         partition: 0,
@@ -352,15 +438,17 @@ describe('broker/Broker', () => {
     it('passes through leaderEpoch from ListOffsets v5+ responses', async () => {
       const pool = createFakeConnectionPool();
       const broker = await connectedBroker(pool);
-      pool.send.mockResolvedValueOnce({
-        throttleTime: 0,
-        clientSideThrottleTime: 0,
-        responses: [
-          { topic: 't', partitions: [{ partition: 0, errorCode: 0, timestamp: 1n, offset: 9n, leaderEpoch: 4 }] },
-        ],
-      });
+      pool.send.mockImplementationOnce(
+        parsedBy({
+          throttleTime: 0,
+          clientSideThrottleTime: 0,
+          responses: [
+            { topic: 't', partitions: [{ partition: 0, errorCode: 0, timestamp: 1n, offset: 9n, leaderEpoch: 4 }] },
+          ],
+        }),
+      );
 
-      const result = await broker.listOffsets({ topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
+      const result = await broker.send(ListOffsets, { topics: [{ topic: 't', partitions: [{ partition: 0 }] }] });
       expect(result.responses[0]?.partitions[0]).toEqual({
         partition: 0,
         errorCode: 0,
@@ -387,7 +475,7 @@ describe('broker/Broker', () => {
         responses: [],
       });
 
-      await broker.fetch({
+      await broker.send(Fetch, {
         replicaId: -1,
         maxWaitTime: 100,
         minBytes: 1,
@@ -415,7 +503,7 @@ describe('broker/Broker', () => {
         responses: [],
       });
 
-      await broker.fetch({
+      await broker.send(Fetch, {
         replicaId: -1,
         maxWaitTime: 100,
         minBytes: 1,
@@ -423,6 +511,100 @@ describe('broker/Broker', () => {
         topics: [{ topic: 't', topicId, partitions: [{ partition: 0, fetchOffset: 0n, maxBytes: 1024 }] }],
       });
       expect(pool.send.mock.calls[0]?.[0]?.request.apiVersion).toBe(18);
+    });
+    it('hands a Produce request to the pool before returning, without a promise hop', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce(undefined);
+
+      const producing = broker.send(Produce, { acks: 0, timeout: 1000, topicData: [] });
+
+      expect(pool.send).toHaveBeenCalledOnce();
+      await producing;
+    });
+
+    it('resolves a Produce with acks: 0 to undefined', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce(undefined);
+
+      await expect(broker.send(Produce, { acks: 0, timeout: 1000, topicData: [] })).resolves.toBeUndefined();
+    });
+
+    it('rejects when a request that expects a response gets none', async () => {
+      const pool = createFakeConnectionPool();
+      const broker = await connectedBroker(pool);
+      pool.send.mockResolvedValueOnce(undefined);
+
+      await expect(broker.send(Heartbeat, { groupId: 'g', groupGenerationId: 1, memberId: 'm' })).rejects.toThrow(
+        KafkaInvariantViolation,
+      );
+    });
+
+    describe('Metadata', () => {
+      const failedTopic = {
+        topicErrorCode: 3,
+        topic: 'deleted',
+        isInternal: false,
+        partitionMetadata: [],
+      };
+      const healthyTopic = {
+        topicErrorCode: 0,
+        topic: 'orders',
+        isInternal: false,
+        partitionMetadata: [{ partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1] }],
+      };
+      const body = {
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        brokers: [],
+        clusterId: null,
+        controllerId: 1,
+        topicMetadata: [failedTopic, healthyTopic],
+      };
+
+      it('leaves out failed topics when asked for every topic', async () => {
+        const pool = createFakeConnectionPool();
+        const broker = await connectedBroker(pool);
+        pool.send.mockImplementationOnce(parsedBy(body));
+
+        const result = await broker.send(Metadata, { topics: [], allowAutoTopicCreation: true });
+
+        expect(result.topicMetadata).toEqual([healthyTopic]);
+      });
+
+      it('fails on a failed topic it was asked for by name', async () => {
+        const pool = createFakeConnectionPool();
+        const broker = await connectedBroker(pool);
+        pool.send.mockImplementationOnce(parsedBy(body));
+
+        await expect(
+          broker.send(Metadata, { topics: ['deleted', 'orders'], allowAutoTopicCreation: true }),
+        ).rejects.toThrow(KafkaProtocolError);
+      });
+    });
+
+    describe('LeaveGroupMembers', () => {
+      it("returns each member's error code instead of throwing", async () => {
+        const pool = createFakeConnectionPool();
+        const broker = await connectedBroker(pool);
+        const members = [{ memberId: 'm-1', groupInstanceId: null, errorCode: 25 }];
+        pool.send.mockImplementationOnce(parsedBy({ throttleTime: 0, errorCode: 0, members }));
+
+        const result = await broker.send(LeaveGroupMembers, { groupId: 'g', members: [{ memberId: 'm-1' }] });
+
+        expect(result).toMatchObject({ members });
+      });
+
+      it('throws a group-level error', async () => {
+        const pool = createFakeConnectionPool();
+        const broker = await connectedBroker(pool);
+        pool.send.mockImplementationOnce(parsedBy({ throttleTime: 0, errorCode: 16, members: [] }));
+
+        await expect(broker.send(LeaveGroupMembers, { groupId: 'g', members: [{ memberId: 'm-1' }] })).rejects.toThrow(
+          KafkaProtocolError,
+        );
+      });
     });
   });
 });

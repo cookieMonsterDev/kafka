@@ -11,11 +11,14 @@ import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import { INCREMENTAL_ALTER_CONFIGS_OPERATIONS } from '../protocol/enums/incremental-alter-configs-operations';
 import { createAdmin } from './index';
+import { withSend } from '../broker/test-send';
+import { CONTROLLER, coordinatorTarget, nodeTarget } from '../cluster/run';
+import { fakeRunCluster, type FakeTargets } from '../cluster/test-run';
 
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 function fakeBroker(overrides: Record<string, unknown> = {}) {
-  return {
+  return withSend({
     nodeId: 1,
     createTopics: vi.fn().mockResolvedValue({}),
     deleteTopics: vi.fn().mockResolvedValue({}),
@@ -45,35 +48,40 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     describeCluster: vi.fn().mockResolvedValue({ brokers: [], clusterId: 'c', controllerId: 1 }),
     listConfigResources: vi.fn().mockResolvedValue({ configResources: [] }),
     ...overrides,
-  };
+  });
 }
 
-function fakeCluster(overrides: Record<string, unknown> = {}) {
+/**
+ * A cluster whose `run` resolves every target to one default broker unless `targets` names another.
+ * `overrides` replaces the other members the admin reads directly.
+ */
+function fakeCluster(overrides: Record<string, unknown> = {}, targets: FakeTargets = {}) {
   const broker = fakeBroker();
-  return {
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    refreshMetadata: vi.fn().mockResolvedValue(undefined),
-    refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
-    findControllerBroker: vi.fn().mockResolvedValue(broker),
-    findBroker: vi.fn().mockResolvedValue(broker),
-    findGroupCoordinator: vi.fn().mockResolvedValue(broker),
-    metadata: vi.fn().mockResolvedValue({
-      topicMetadata: [],
-      brokers: [],
-      clusterId: 'cluster',
-      controllerId: 1,
-    }),
-    addTargetTopic: vi.fn().mockResolvedValue(undefined),
-    findTopicPartitionMetadata: vi.fn().mockReturnValue([]),
-    fetchTopicsOffset: vi.fn().mockResolvedValue([]),
-    defaultOffset: vi.fn(({ fromBeginning }: { fromBeginning?: boolean }) => (fromBeginning ? -2n : -1n)),
-    findLeaderForPartitions: vi.fn().mockReturnValue({}),
-    targetTopics: new Set<string>(),
-    brokerPool: { brokers: {} },
-    _broker: broker,
-    ...overrides,
-  };
+  return fakeRunCluster(
+    { controller: broker, coordinator: broker, leader: broker, node: broker, any: broker, ...targets },
+    {
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+      refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+      findControllerBroker: vi.fn().mockResolvedValue(broker),
+      findBroker: vi.fn().mockResolvedValue(broker),
+      metadata: vi.fn().mockResolvedValue({
+        topicMetadata: [],
+        brokers: [],
+        clusterId: 'cluster',
+        controllerId: 1,
+      }),
+      addTargetTopic: vi.fn().mockResolvedValue(undefined),
+      findTopicPartitionMetadata: vi.fn().mockReturnValue([]),
+      fetchTopicsOffset: vi.fn().mockResolvedValue([]),
+      defaultOffset: vi.fn(({ fromBeginning }: { fromBeginning?: boolean }) => (fromBeginning ? -2n : -1n)),
+      findLeaderForPartitions: vi.fn().mockReturnValue({}),
+      targetTopics: new Set<string>(),
+      brokerPool: { brokers: {} },
+      _broker: broker,
+      ...overrides,
+    },
+  );
 }
 
 describe('admin', () => {
@@ -138,11 +146,13 @@ describe('admin', () => {
   });
 
   it('lists topics from cluster metadata', async () => {
-    const cluster = fakeCluster({
-      metadata: vi.fn().mockResolvedValue({
-        topicMetadata: [{ topic: 'a' }, { topic: 'b' }],
+    const cluster = fakeCluster(
+      withSend({
+        metadata: vi.fn().mockResolvedValue({
+          topicMetadata: [{ topic: 'a' }, { topic: 'b' }],
+        }),
       }),
-    });
+    );
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.listTopics()).resolves.toEqual(['a', 'b']);
   });
@@ -172,7 +182,7 @@ describe('admin', () => {
     const cluster = fakeCluster();
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.createTopics({ topics: [{ topic: 'orders' }], waitForLeaders: false })).resolves.toBe(true);
-    expect(cluster.findControllerBroker).toHaveBeenCalled();
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster._broker.createTopics).toHaveBeenCalledWith({
       topics: [{ topic: 'orders' }],
       validateOnly: undefined,
@@ -187,26 +197,31 @@ describe('admin', () => {
       code: 36,
       retriable: false,
     });
-    const cluster = fakeCluster({
-      findControllerBroker: vi.fn().mockResolvedValue(
-        fakeBroker({
-          createTopics: vi.fn().mockRejectedValue(new KafkaAggregateError('Failed', [alreadyExists])),
-        }),
-      ),
-    });
+    const cluster = fakeCluster(
+      {},
+      {
+        controller: fakeBroker(
+          withSend({
+            createTopics: vi.fn().mockRejectedValue(new KafkaAggregateError('Failed', [alreadyExists])),
+          }),
+        ),
+      },
+    );
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.createTopics({ topics: [{ topic: 'orders' }], waitForLeaders: false })).resolves.toBe(false);
   });
 
   it('describes the cluster, treating controller id -1 as unknown', async () => {
-    const cluster = fakeCluster({
-      metadata: vi.fn().mockResolvedValue({
-        brokers: [{ nodeId: 1, host: 'localhost', port: 9092, rack: null }],
-        clusterId: 'cid',
-        controllerId: -1,
-        topicMetadata: [],
+    const cluster = fakeCluster(
+      withSend({
+        metadata: vi.fn().mockResolvedValue({
+          brokers: [{ nodeId: 1, host: 'localhost', port: 9092, rack: null }],
+          clusterId: 'cid',
+          controllerId: -1,
+          topicMetadata: [],
+        }),
       }),
-    });
+    );
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.describeCluster()).resolves.toEqual({
       brokers: [{ nodeId: 1, host: 'localhost', port: 9092 }],
@@ -216,13 +231,15 @@ describe('admin', () => {
   });
 
   it('describes the cluster via DescribeCluster when advertised', async () => {
-    const broker = fakeBroker({
-      describeCluster: vi.fn().mockResolvedValue({
-        brokers: [{ nodeId: 1, host: 'localhost', port: 9092, rack: null }],
-        clusterId: 'cid',
-        controllerId: -1,
+    const broker = fakeBroker(
+      withSend({
+        describeCluster: vi.fn().mockResolvedValue({
+          brokers: [{ nodeId: 1, host: 'localhost', port: 9092, rack: null }],
+          clusterId: 'cid',
+          controllerId: -1,
+        }),
       }),
-    });
+    );
     const cluster = fakeCluster({
       findControllerBroker: vi.fn().mockResolvedValue(broker),
       brokerPool: { brokers: { '1': broker }, versions: { 60: { minVersion: 0, maxVersion: 2 } } },
@@ -266,10 +283,12 @@ describe('admin', () => {
   });
 
   it('describes configs through the controller for topic resources', async () => {
-    const broker = fakeBroker({
-      describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(
       admin.describeConfigs({
@@ -282,18 +301,18 @@ describe('admin', () => {
 
   it('routes broker config queries to the named broker', async () => {
     const controller = fakeBroker({ nodeId: 1 });
-    const target = fakeBroker({
-      nodeId: 2,
-      describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: '2' }] }),
-    });
-    const cluster = fakeCluster({
-      findControllerBroker: vi.fn().mockResolvedValue(controller),
-      findBroker: vi.fn().mockResolvedValue(target),
-    });
+    const target = fakeBroker(
+      withSend({
+        nodeId: 2,
+        describeConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: '2' }] }),
+      }),
+    );
+    const cluster = fakeCluster({ findBroker: vi.fn().mockResolvedValue(target) }, { controller });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await admin.describeConfigs({
       resources: [{ type: CONFIG_RESOURCE_TYPES.BROKER, name: '2', configNames: ['log.retention.hours'] }],
     });
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(CONTROLLER);
     expect(cluster.findBroker).toHaveBeenCalledWith({ nodeId: '2' });
     expect(target.describeConfigs).toHaveBeenCalled();
     expect(controller.describeConfigs).not.toHaveBeenCalled();
@@ -305,10 +324,12 @@ describe('admin', () => {
   });
 
   it('incrementally alters configs through the controller', async () => {
-    const broker = fakeBroker({
-      incrementalAlterConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        incrementalAlterConfigs: vi.fn().mockResolvedValue({ resources: [{ resourceName: 'orders' }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(
       admin.incrementalAlterConfigs({
@@ -332,14 +353,18 @@ describe('admin', () => {
   });
 
   it('lists groups from every broker in the pool', async () => {
-    const brokerA = fakeBroker({
-      nodeId: 1,
-      listGroups: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g1', protocolType: 'consumer' }] }),
-    });
-    const brokerB = fakeBroker({
-      nodeId: 2,
-      listGroups: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g2', protocolType: 'consumer' }] }),
-    });
+    const brokerA = fakeBroker(
+      withSend({
+        nodeId: 1,
+        listGroups: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g1', protocolType: 'consumer' }] }),
+      }),
+    );
+    const brokerB = fakeBroker(
+      withSend({
+        nodeId: 2,
+        listGroups: vi.fn().mockResolvedValue({ groups: [{ groupId: 'g2', protocolType: 'consumer' }] }),
+      }),
+    );
     const cluster = fakeCluster({
       brokerPool: { brokers: { '1': brokerA, '2': brokerB } },
       findBroker: vi.fn(async ({ nodeId }: { nodeId: string }) => (nodeId === '1' ? brokerA : brokerB)),
@@ -360,15 +385,17 @@ describe('admin', () => {
   });
 
   it('deletes group offsets through the group coordinator', async () => {
-    const broker = fakeBroker({
-      offsetDelete: vi.fn().mockResolvedValue({ topics: [{ name: 'orders', partitions: [] }] }),
-    });
-    const cluster = fakeCluster({ findGroupCoordinator: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        offsetDelete: vi.fn().mockResolvedValue({ topics: [{ name: 'orders', partitions: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { coordinator: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(
       admin.deleteGroupOffsets({ groupId: 'g', topics: [{ topic: 'orders', partitions: [0] }] }),
     ).resolves.toEqual({ topics: [{ name: 'orders', partitions: [] }] });
-    expect(cluster.findGroupCoordinator).toHaveBeenCalledWith({ groupId: 'g' });
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(coordinatorTarget('g'));
     expect(broker.offsetDelete).toHaveBeenCalledWith({ groupId: 'g', topics: [{ topic: 'orders', partitions: [0] }] });
   });
 
@@ -379,7 +406,7 @@ describe('admin', () => {
 
   it('creates ACLs through the controller, remapping acl to creations', async () => {
     const broker = fakeBroker();
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     const acl = [
       {
@@ -411,19 +438,23 @@ describe('admin', () => {
   });
 
   it('lists partition reassignments through the controller', async () => {
-    const broker = fakeBroker({
-      listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [{ name: 't', partitions: [] }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        listPartitionReassignments: vi.fn().mockResolvedValue({ topics: [{ name: 't', partitions: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.listPartitionReassignments()).resolves.toEqual({ topics: [{ name: 't', partitions: [] }] });
   });
 
   it('elects leaders through the controller', async () => {
-    const broker = fakeBroker({
-      electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders', partitions: [] }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        electLeaders: vi.fn().mockResolvedValue({ results: [{ topic: 'orders', partitions: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.electLeaders({ topicPartitions: [{ topic: 'orders', partitions: [0] }] })).resolves.toEqual({
       results: [{ topic: 'orders', partitions: [] }],
@@ -436,10 +467,12 @@ describe('admin', () => {
   });
 
   it('describes SCRAM credentials through the controller', async () => {
-    const broker = fakeBroker({
-      describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', credentialInfos: [] }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        describeUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', credentialInfos: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.describeUserScramCredentials({ users: ['alice'] })).resolves.toEqual({
       results: [{ user: 'alice', credentialInfos: [] }],
@@ -448,10 +481,12 @@ describe('admin', () => {
   });
 
   it('alters SCRAM credentials with a precomputed salted password', async () => {
-    const broker = fakeBroker({
-      alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', errorCode: 0 }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        alterUserScramCredentials: vi.fn().mockResolvedValue({ results: [{ user: 'alice', errorCode: 0 }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     const salt = Buffer.from([1, 2, 3, 4]);
     const saltedPassword = Buffer.from([5, 6, 7, 8]);
@@ -472,10 +507,12 @@ describe('admin', () => {
   });
 
   it('describes client quotas through the controller', async () => {
-    const broker = fakeBroker({
-      describeClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], values: [] }] }),
-    });
-    const cluster = fakeCluster({ findControllerBroker: vi.fn().mockResolvedValue(broker) });
+    const broker = fakeBroker(
+      withSend({
+        describeClientQuotas: vi.fn().mockResolvedValue({ entries: [{ entity: [], values: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster({}, { controller: broker });
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.describeClientQuotas({ components: [], strict: true })).resolves.toEqual({
       entries: [{ entity: [], values: [] }],
@@ -489,17 +526,21 @@ describe('admin', () => {
   });
 
   it('describes log dirs on every broker in the pool', async () => {
-    const brokerA = fakeBroker({
-      describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/a', topics: [] }] }),
-    });
-    const brokerB = fakeBroker({
-      nodeId: 2,
-      describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/b', topics: [] }] }),
-    });
-    const cluster = fakeCluster({
-      brokerPool: { brokers: { '1': brokerA, '2': brokerB } },
-      findBroker: vi.fn(async ({ nodeId }: { nodeId: string }) => (nodeId === '1' ? brokerA : brokerB)),
-    });
+    const brokerA = fakeBroker(
+      withSend({
+        describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/a', topics: [] }] }),
+      }),
+    );
+    const brokerB = fakeBroker(
+      withSend({
+        nodeId: 2,
+        describeLogDirs: vi.fn().mockResolvedValue({ logDirs: [{ errorCode: 0, logDir: '/tmp/b', topics: [] }] }),
+      }),
+    );
+    const cluster = fakeCluster(
+      { brokerPool: { brokers: { '1': brokerA, '2': brokerB } } },
+      { node: (nodeId) => (nodeId === '1' ? brokerA : brokerB) },
+    );
     const admin = createAdmin({ cluster: cluster as unknown as Cluster, logger: silentLogger });
     await expect(admin.describeLogDirs()).resolves.toEqual({
       brokers: [
@@ -507,6 +548,8 @@ describe('admin', () => {
         { brokerId: 2, logDirs: [{ errorCode: 0, logDir: '/tmp/b', topics: [] }] },
       ],
     });
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('1'));
+    expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('2'));
   });
 
   it('throws KafkaNonRetriableError for a missing setOffsets groupId', async () => {
@@ -517,11 +560,12 @@ describe('admin', () => {
   });
 
   it('deletes topic records after loading partition leaders', async () => {
-    const broker = fakeBroker({
-      deleteRecords: vi.fn().mockResolvedValue({}),
-    });
+    const broker = fakeBroker(
+      withSend({
+        deleteRecords: vi.fn().mockResolvedValue({}),
+      }),
+    );
     const cluster = fakeCluster({
-      findControllerBroker: vi.fn().mockResolvedValue(broker),
       findBroker: vi.fn().mockResolvedValue(broker),
       findLeaderForPartitions: vi.fn().mockReturnValue({ 1: [0] }),
       findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),

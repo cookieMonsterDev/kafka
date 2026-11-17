@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { KafkaCorruptRecordError } from '../../errors';
 import { COMPRESSION_TYPES } from '../compression/index';
 import { Decoder } from '../decoder';
+import { Encoder } from '../encoder';
 import { TIMESTAMP_TYPES } from '../enums/timestamp-types';
 import { decodeRecordBatch, encodeRecordBatch, RECORD_BATCH_OVERHEAD_BYTES } from './batch';
 import { encodeRecord } from './record';
@@ -71,6 +72,15 @@ describe('protocol/records/batch', () => {
     corrupted[recordLengthIndex] = 0x7e; // zigzag 63, longer than the record bytes that follow
 
     await expect(decodeRecordBatch(new Decoder(corrupted), { checkCrcs: false })).rejects.toThrow(RangeError);
+  });
+
+  it('encodes an uncompressed batch synchronously and returns a promise only when compressing', async () => {
+    const records = [encodeRecord({ key: 'k', value: 'v' })];
+
+    expect(encodeRecordBatch({ records })).toBeInstanceOf(Encoder);
+    const compressed = encodeRecordBatch({ compression: COMPRESSION_TYPES.GZIP, records });
+    expect(compressed).toBeInstanceOf(Promise);
+    await expect(compressed).resolves.toBeInstanceOf(Encoder);
   });
 
   it('round-trips a gzip-compressed batch', async () => {

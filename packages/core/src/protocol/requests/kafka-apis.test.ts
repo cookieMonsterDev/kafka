@@ -1,92 +1,97 @@
 import { describe, expect, it } from 'vitest';
-import {
-  firstFlexibleVersion,
-  isFlexibleVersion,
-  usesFlexibleRequestHeader,
-  usesFlexibleResponseHeader,
-} from './flexible';
-import { API_KEYS } from './requests/api-keys';
+import { API_KEYS } from './api-keys';
+import { KAFKA_APIS, usesFlexibleRequestHeader, usesFlexibleResponseHeader } from './kafka-apis';
 
-describe('protocol/flexible', () => {
-  it('returns the first flexible version for known APIs and undefined otherwise', () => {
-    expect(firstFlexibleVersion(API_KEYS.Produce)).toBe(9);
-    expect(firstFlexibleVersion(API_KEYS.Fetch)).toBe(12);
-    expect(firstFlexibleVersion(API_KEYS.ListOffsets)).toBe(6);
-    expect(firstFlexibleVersion(API_KEYS.Metadata)).toBe(9);
-    expect(firstFlexibleVersion(API_KEYS.OffsetCommit)).toBe(8);
-    expect(firstFlexibleVersion(API_KEYS.OffsetFetch)).toBe(6);
-    expect(firstFlexibleVersion(API_KEYS.GroupCoordinator)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.JoinGroup)).toBe(6);
-    expect(firstFlexibleVersion(API_KEYS.Heartbeat)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.LeaveGroup)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.SyncGroup)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.DescribeGroups)).toBe(5);
-    expect(firstFlexibleVersion(API_KEYS.ListGroups)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.ApiVersions)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.CreateTopics)).toBe(5);
-    expect(firstFlexibleVersion(API_KEYS.DeleteTopics)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.DeleteRecords)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.InitProducerId)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.OffsetForLeaderEpoch)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.AddPartitionsToTxn)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.AddOffsetsToTxn)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.EndTxn)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.WriteTxnMarkers)).toBe(1);
-    expect(firstFlexibleVersion(API_KEYS.TxnOffsetCommit)).toBe(3);
-    expect(firstFlexibleVersion(API_KEYS.DescribeAcls)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.CreateAcls)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.DeleteAcls)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.DescribeConfigs)).toBe(4);
-    expect(firstFlexibleVersion(API_KEYS.AlterConfigs)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.AlterReplicaLogDirs)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.DescribeLogDirs)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.SaslAuthenticate)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.CreatePartitions)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.CreateDelegationToken)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.RenewDelegationToken)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.ExpireDelegationToken)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.DescribeDelegationToken)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.DeleteGroups)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.ElectLeaders)).toBe(2);
-    expect(firstFlexibleVersion(API_KEYS.IncrementalAlterConfigs)).toBe(1);
-    expect(firstFlexibleVersion(API_KEYS.AlterPartitionReassignments)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ListPartitionReassignments)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.OffsetDelete)).toBe(1);
-    expect(firstFlexibleVersion(API_KEYS.DescribeUserScramCredentials)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.AlterUserScramCredentials)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.AssignReplicasToDirs)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeQuorum)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.UpdateFeatures)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeCluster)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.UnregisterBroker)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeProducers)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeTransactions)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ListTransactions)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ConsumerGroupHeartbeat)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ConsumerGroupDescribe)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.GetTelemetrySubscriptions)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.PushTelemetry)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ShareGroupHeartbeat)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ShareGroupDescribe)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ShareFetch)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ShareAcknowledge)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeShareGroupOffsets)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.AlterShareGroupOffsets)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DeleteShareGroupOffsets)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.ListConfigResources)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.DescribeTopicPartitions)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.AddRaftVoter)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.RemoveRaftVoter)).toBe(0);
-    expect(firstFlexibleVersion(API_KEYS.SaslHandshake)).toBeUndefined();
-    expect(firstFlexibleVersion(999)).toBeUndefined();
+describe('protocol/requests/kafka-apis', () => {
+  it('names each API by its api key', () => {
+    for (const [name, api] of Object.entries(KAFKA_APIS)) {
+      expect(api).toEqual({
+        apiKey: API_KEYS[name as keyof typeof API_KEYS],
+        apiName: name,
+        firstFlexibleVersion: api.firstFlexibleVersion,
+      });
+    }
+  });
+
+  it('states the first flexible version of each API, or null when it never becomes flexible', () => {
+    expect(KAFKA_APIS.Produce.firstFlexibleVersion).toBe(9);
+    expect(KAFKA_APIS.Fetch.firstFlexibleVersion).toBe(12);
+    expect(KAFKA_APIS.ListOffsets.firstFlexibleVersion).toBe(6);
+    expect(KAFKA_APIS.Metadata.firstFlexibleVersion).toBe(9);
+    expect(KAFKA_APIS.OffsetCommit.firstFlexibleVersion).toBe(8);
+    expect(KAFKA_APIS.OffsetFetch.firstFlexibleVersion).toBe(6);
+    expect(KAFKA_APIS.GroupCoordinator.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.JoinGroup.firstFlexibleVersion).toBe(6);
+    expect(KAFKA_APIS.Heartbeat.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.LeaveGroup.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.SyncGroup.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.DescribeGroups.firstFlexibleVersion).toBe(5);
+    expect(KAFKA_APIS.ListGroups.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.ApiVersions.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.CreateTopics.firstFlexibleVersion).toBe(5);
+    expect(KAFKA_APIS.DeleteTopics.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.DeleteRecords.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.InitProducerId.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.OffsetForLeaderEpoch.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.AddPartitionsToTxn.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.AddOffsetsToTxn.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.EndTxn.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.WriteTxnMarkers.firstFlexibleVersion).toBe(1);
+    expect(KAFKA_APIS.TxnOffsetCommit.firstFlexibleVersion).toBe(3);
+    expect(KAFKA_APIS.DescribeAcls.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.CreateAcls.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.DeleteAcls.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.DescribeConfigs.firstFlexibleVersion).toBe(4);
+    expect(KAFKA_APIS.AlterConfigs.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.AlterReplicaLogDirs.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.DescribeLogDirs.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.SaslAuthenticate.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.CreatePartitions.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.CreateDelegationToken.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.RenewDelegationToken.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.ExpireDelegationToken.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.DescribeDelegationToken.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.DeleteGroups.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.ElectLeaders.firstFlexibleVersion).toBe(2);
+    expect(KAFKA_APIS.IncrementalAlterConfigs.firstFlexibleVersion).toBe(1);
+    expect(KAFKA_APIS.AlterPartitionReassignments.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ListPartitionReassignments.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.OffsetDelete.firstFlexibleVersion).toBe(1);
+    expect(KAFKA_APIS.DescribeUserScramCredentials.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.AlterUserScramCredentials.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.AssignReplicasToDirs.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeQuorum.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.UpdateFeatures.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeCluster.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.UnregisterBroker.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeProducers.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeTransactions.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ListTransactions.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ConsumerGroupHeartbeat.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ConsumerGroupDescribe.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.GetTelemetrySubscriptions.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.PushTelemetry.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ShareGroupHeartbeat.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ShareGroupDescribe.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ShareFetch.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ShareAcknowledge.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeShareGroupOffsets.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.AlterShareGroupOffsets.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DeleteShareGroupOffsets.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.ListConfigResources.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.DescribeTopicPartitions.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.AddRaftVoter.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.RemoveRaftVoter.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.SaslHandshake.firstFlexibleVersion).toBeNull();
   });
 
   it('treats versions at or above the first flexible version as flexible', () => {
-    expect(isFlexibleVersion(API_KEYS.Produce, 8)).toBe(false);
-    expect(isFlexibleVersion(API_KEYS.Produce, 9)).toBe(true);
-    expect(isFlexibleVersion(API_KEYS.Metadata, 6)).toBe(false);
-    expect(isFlexibleVersion(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
-    expect(isFlexibleVersion(API_KEYS.SaslHandshake, 1)).toBe(false);
+    expect(usesFlexibleRequestHeader(999, 0)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.Produce, 8)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.Produce, 9)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.Metadata, 6)).toBe(false);
+    expect(usesFlexibleRequestHeader(API_KEYS.AlterPartitionReassignments, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.SaslHandshake, 1)).toBe(false);
   });
 
   it('uses request header v2 for flexible APIs including ApiVersions v3+', () => {

@@ -5,10 +5,12 @@ import { ACL_RESOURCE_TYPES } from '../protocol/enums/acl-resource-types';
 import { RESOURCE_PATTERN_TYPES } from '../protocol/enums/resource-pattern-types';
 import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
 import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/v1/response';
-import { retrier } from '../retry/index';
+import { CONTROLLER } from '../cluster/run';
+import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { protocolType, formatUnknown } from './helpers';
+import { formatUnknown } from './helpers';
 import type { AclEntry, AclFilter } from './types';
+import { CreateAcls, DeleteAcls, DescribeAcls } from '../protocol/requests/lazy-families';
 
 export interface AclsApi {
   createAcls: (options: { acl: AclEntry[] }) => Promise<boolean>;
@@ -27,7 +29,9 @@ function optionalStringOrUndefined(value: unknown): boolean {
   return typeof value === 'string' || typeof value === 'undefined';
 }
 
-export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi {
+export function createAclsApi({ cluster, retry }: AdminContext): AclsApi {
+  const retrier = createRetrier(retry);
+
   const createAcls = async ({ acl }: { acl: AclEntry[] }): Promise<boolean> => {
     if (!acl || !Array.isArray(acl)) {
       throw new KafkaNonRetriableError(`Invalid ACL array ${formatUnknown(acl)}`);
@@ -76,26 +80,14 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       );
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        await broker.createAcls({ creations: acl });
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        await broker.send(CreateAcls, { creations: acl });
         return true;
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not create ACL', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return false;
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not create ACL' },
+    );
   };
 
   const describeAcls = async ({
@@ -135,11 +127,10 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       throw new KafkaNonRetriableError(`Invalid resource type ${resourceType}`);
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { resources } = await broker.describeAcls({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { resources } = await broker.send(DescribeAcls, {
           resourceType,
           resourceName: resourceName ?? null,
           resourcePatternType,
@@ -149,20 +140,9 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
           permissionType,
         });
         return { resources };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not describe ACL', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { resources: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not describe ACL' },
+    );
   };
 
   const deleteAcls = async ({
@@ -218,11 +198,10 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
       );
     }
 
-    return retrier(retry)(async (bail, retryCount, retryTime) => {
-      try {
-        await cluster.refreshMetadata();
-        const broker = await cluster.findControllerBroker();
-        const { filterResponses } = await broker.deleteAcls({
+    return cluster.run(
+      CONTROLLER,
+      async (broker) => {
+        const { filterResponses } = await broker.send(DeleteAcls, {
           filters: filters.map((filter) => ({
             resourceType: filter.resourceType,
             resourceName: filter.resourceName ?? null,
@@ -234,20 +213,9 @@ export function createAclsApi({ cluster, logger, retry }: AdminContext): AclsApi
           })),
         });
         return { filterResponses };
-      } catch (error) {
-        if (protocolType(error) === 'NOT_CONTROLLER') {
-          logger.warn('Could not delete ACL', {
-            error: error instanceof Error ? error.message : String(error),
-            retryCount,
-            retryTime,
-          });
-          throw error;
-        }
-
-        bail(error as Error);
-        return { filterResponses: [] };
-      }
-    });
+      },
+      { retrier, refreshMetadata: true, description: 'Could not delete ACL' },
+    );
   };
 
   return { createAcls, describeAcls, deleteAcls };

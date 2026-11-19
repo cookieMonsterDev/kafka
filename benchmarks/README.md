@@ -64,19 +64,28 @@ in [`client/spec.ts`](client/spec.ts), and the message counts per tier and paylo
 Each payload has its own `standard` counts. P2 is calibrated for both, from P2-only sessions on 2026-11-16. With
 1,000,000 records of 1 KiB (40,000 warm-up), the slowest series, KafkaJS on Node.js 24, measured 9.3 s, so the
 default is 1,200,000 records with 60,000 warm-up. With 3,000,000 records of 100 B (120,000 warm-up), the slowest,
-Confluent, measured 15.2 s; the default keeps 3,000,000 records with 100,000 warm-up. The other scenarios are
-still first estimates, and 1 KiB runs a quarter of their 100 B counts. Before publishing on a machine:
+Confluent, measured 15.2 s; the default keeps 3,000,000 records with 100,000 warm-up.
 
-1. Scale the counts (`--count-scale`) until the measured window lasts 10–20 s for the slowest client, then
-   update `runner/schedule.ts`. Keep each run's topic, warm-up included, well inside the broker's 2 GiB tmpfs:
-   1,260,000 records of 1 KiB take about 1.4 GB. The runner deletes every run's topic and waits for
-   its files to go before the next run starts, so only one topic's data is on the tmpfs at a time;
-   `runner/schedule.test.ts` checks the default counts against that limit.
-2. Run an A/A session: `pnpm benchmarks:run --tier standard --clients kafka-core --aa`. It adds a second
+For 1 KiB, session `20261116193938-e9d9dad43d38` put the slowest P1 and P3 medians at 0.80 s for 7,500 records
+and 12.1 s for 250,000 records. Those rates project to about 13 s and 17 s at the new counts. P4 and P5 use
+initial estimates based on P3. C1–C4 use 1,350,000 measured records and 50,000 warm-up records, near the
+test's storage budget. At the observed C1 and C2 rates, the fastest cells are projected to take about 0.8 s.
+Verify the new counts in Docker before publishing, especially Confluent's consume runs under the 2 GiB client cap.
+
+Before publishing on a machine:
+
+1. Select a scenario with `--scenarios` and check its estimated topic size, including warm-up, before raising
+   `--count-scale`. Aim for 10–20 s for the slowest client or stop when the topic reaches the storage budget.
+   Update `runner/schedule.ts` with the resulting counts. The runner deletes each topic and waits for its files
+   to go before starting the next run. `runner/schedule.test.ts` checks that every default topic fits within
+   75% of the broker's 2 GiB tmpfs. This leaves room for internal topics and for error in the size estimate.
+2. Run an A/A session: `pnpm benchmarks:run --tier standard --payload medium --clients kafka-core --aa`.
+   Match the payload and tier of the comparison you plan to publish. This adds a second
    kafka-core series, `kafka-core#2`; the report lists the largest difference between the two per scenario.
    That is the noise floor of the machine. A/A sessions themselves cannot be published.
-3. Pass the floor, and a coefficient-of-variation threshold if 5% does not fit, to `report` and `publish`:
-   `--noise-floor 0.03 --noise-threshold 0.04`. Differences inside the floor are reported as inconclusive.
+3. Pass the largest A/A floor among the scenarios and metrics you plan to compare to `report` and `publish`:
+   `--noise-floor 0.03`. Differences inside the floor are reported as inconclusive. Set `--noise-threshold`
+   separately if you need a coefficient-of-variation threshold other than 5%.
 
 ### What one session does
 
@@ -216,12 +225,11 @@ Recorded from session `20261112113347-fe9c38b14aa8` (tier `standard`, 2026-11-12
   979–2,029 MiB against the 2 GiB client limit, so these are out-of-memory kills inside the library's process, not
   kafka-core failures. The limit stays the same for every client to keep results comparable. `publish` refuses a
   session with these failures.
-- **Consume counts are not calibrated for the faster clients.** With 2,000,000 measured records, the slowest
+- **100 B consume runs finish quickly for faster clients.** With 2,000,000 measured records, the slowest
   passing series took 11.3 s for C1 `normalized` and 8.2 s for C2 (both Confluent; only 2 of its 5 C2 runs passed).
   kafka-core's C1 `defaults` took about 50 s on Node because it committed every 500 records; that build predates
-  the once-per-batch default. Every other series finished in 0.9–6.4 s, which makes those cells the noisiest. The counts stay unchanged, because
-  larger topics would push Confluent into more out-of-memory failures. Recalibrate them, as described in
-  [Calibrating](#calibrating-before-the-first-published-run), once kafka-core's consumer changes have landed.
+  the once-per-batch default. Every other series finished in 0.9–6.4 s, which makes those cells the noisiest.
+  The 100 B counts stay unchanged because larger topics would push Confluent into more out-of-memory failures.
 
 ## Results
 

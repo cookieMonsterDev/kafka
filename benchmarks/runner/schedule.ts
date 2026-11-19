@@ -48,7 +48,7 @@ const smokeCounts: CountTable = {
 };
 
 // Standard counts aim at a 10 to 20 s measured window for the slowest client, and each run's topic must fit
-// the broker's tmpfs (README, "Calibrating"). P2 is calibrated for both payloads; the rest are first estimates.
+// the broker's tmpfs (README, "Calibrating"). For 100 B, only P2 has been calibrated.
 const smallStandardCounts: CountTable = {
   P1: sized(30_000, 2_000, 300_000),
   P2: sized(3_000_000, 100_000, 300_000),
@@ -63,18 +63,18 @@ const smallStandardCounts: CountTable = {
   L1: sized(1, 0, 60_000),
 };
 
-// 1 KiB records are about 10 times larger on disk, so the uncalibrated scenarios run a quarter of the
-// 100 B counts.
+// For 1 KiB, storage caps consume counts before every client can reach the target window.
+// 1.4M records including warm-up fit within the schedule test's 75% tmpfs budget.
 const mediumStandardCounts: CountTable = {
-  P1: sized(7_500, 500, 300_000),
+  P1: sized(120_000, 5_000, 300_000),
   P2: sized(1_200_000, 60_000, 300_000),
-  P3: sized(250_000, 12_500, 300_000),
-  P4: sized(125_000, 6_250, 300_000),
-  P5: sized(250_000, 12_500, 300_000),
-  C1: sized(500_000, 12_500, 300_000),
-  C2: sized(500_000, 12_500, 300_000),
-  C3: sized(250_000, 12_500, 300_000),
-  C4: sized(250_000, 12_500, 300_000),
+  P3: sized(350_000, 17_500, 300_000),
+  P4: sized(250_000, 12_500, 300_000),
+  P5: sized(350_000, 17_500, 300_000),
+  C1: sized(1_350_000, 50_000, 300_000),
+  C2: sized(1_350_000, 50_000, 300_000),
+  C3: sized(1_350_000, 50_000, 300_000),
+  C4: sized(1_350_000, 50_000, 300_000),
   E1: rated(5_000, 15_000, 5_000, 120_000),
   L1: sized(1, 0, 60_000),
 };

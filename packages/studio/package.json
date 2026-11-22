@@ -84,7 +84,7 @@
     "@vitest/coverage-v8": "catalog:",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.70.0",
+    "lucide-react": "^1.73.0",
     "oxc-transform-react": "^0.157.0",
     "radix-ui": "^1.8.1",
     "react": "^19.3.1",

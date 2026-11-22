@@ -47,7 +47,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
     "@axe-core/playwright": "^4.14.0",
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "prettier-plugin-astro": "^1.1.2",
     "typescript": "catalog:docs-check"
   }

@@ -175,7 +175,33 @@ Releases are not done from topic PRs. Merge `develop` into `master` (merge commi
 - Protocol and public API changes need tests.
 - New broker behavior should use the version helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, …) instead of parsing `KAFKA_VERSION` in the test file.
 - Docs UI changes must keep [accessibility](#accessibility) (keyboard, names, focus, contrast, reduced motion).
+- Visible docs site or Studio UI changes come with [screenshots or a video](#screenshots-and-videos).
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.
+
+### Screenshots and videos
+
+A PR that changes how the docs site (`packages/docs`) or the Studio UI
+(`packages/studio/src/web`) looks or behaves shows the change in the PR description, so a
+reviewer can judge it without checking out the branch. This covers layouts, components, pages,
+and CSS.
+
+- Show the same page **before and after**, at the same viewport size. Take the before shot from
+  `develop`. A new page or view only needs the after.
+- Record a **short video or GIF** when the change involves interaction or motion, such as menus,
+  dialogs, focus states, loading states, or animation.
+- Add a **narrow viewport** shot when the layout depends on width.
+- Drag the files into the PR description instead of committing them. Size and format limits are
+  in [GitHub's attachment docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files).
+
+Attachments on a public PR stay readable by anyone with the link, even after you edit them out.
+For Studio, use throwaway data from the start rather than editing the footage afterwards:
+
+- Run Studio against a local broker, such as the one in
+  [`packages/studio/README.md`](packages/studio/README.md#local-kafka-with-docker), with a config
+  that has only that profile, so real cluster names and hosts do not show in the profile switcher.
+- Keep the terminal and DevTools out of the frame. Both can show the session token. If it leaks,
+  restart Studio to get a new one.
+- If a secret ends up in an attachment anyway, rotate it.
 
 ### Labels
 

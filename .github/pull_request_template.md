@@ -2,6 +2,10 @@
 
 <!-- What changed and why. Link the issue: Closes #123 -->
 
+## Screenshots or video
+
+<!-- Required when the docs site or the Studio UI looks or behaves differently; see https://github.com/cookieMonsterDev/kafka/blob/develop/CONTRIBUTING.md#screenshots-and-videos. Drop the files below this comment. Delete this section when nothing visible changed. -->
+
 ## Test plan
 
 - [ ] Unit tests (`pnpm test`) cover the change

@@ -4,6 +4,7 @@
  * the same failure surfaced with a different sentence depending on which screen you were on.
  */
 
+import type { LogDirListResponse } from '../../shared/contracts/cluster';
 import { rejectSession, withAuthHeaders } from './auth';
 
 interface ErrorEnvelope {
@@ -59,3 +60,6 @@ export const clusterQueryKey = ['cluster'] as const;
 
 export const fetchHealth = (): Promise<HealthResponse> => apiGet<HealthResponse>('/api/health');
 export const fetchClusterStatus = (): Promise<ClusterStatus> => apiGet<ClusterStatus>('/api/cluster');
+
+export const logDirsQueryKey = ['cluster', 'log-dirs'] as const;
+export const fetchLogDirs = (): Promise<LogDirListResponse> => apiGet<LogDirListResponse>('/api/cluster/log-dirs');

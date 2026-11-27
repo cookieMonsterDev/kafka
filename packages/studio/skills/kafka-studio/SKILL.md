@@ -28,7 +28,8 @@ sources:
 A local web UI for a Kafka cluster: browse, create, and configure topics; produce messages
 (single sends and rate-limited bursts); browse and tail live messages; inspect consumer groups
 (members, lag, offset reset, deletion) and share groups; a live topology board; read-only views of
-ACLs, quotas, and transactions. Served on `localhost`, built on `@cookiemonsterdev/kafka-core`.
+ACLs, quotas, transactions, and each broker's log directories with their volume usage. Served
+on `localhost`, built on `@cookiemonsterdev/kafka-core`.
 
 ## Setup
 

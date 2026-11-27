@@ -1,3 +1,4 @@
+import type { LogDirListResponse, LogDirView } from '../../shared/contracts/cluster';
 import { sendJson } from '../create-server';
 import type { AdminPool } from '../kafka/admin-pool';
 import type { Router } from '../router';
@@ -32,5 +33,33 @@ export function registerClusterRoutes(router: Router, context: ClusterRouteConte
       const status: ClusterStatus = { connected: false };
       sendJson(res, 200, status);
     }
+  });
+
+  /**
+   * `GET /api/cluster/log-dirs` — every broker's log dirs with their volume sizes. An empty topic
+   * list asks the brokers for no partitions, so the response stays small on a large cluster.
+   */
+  router.get('/api/cluster/log-dirs', async (_req, res) => {
+    const admin = await context.pool.get(context.getActiveProfile());
+    const { brokers } = await admin.describeLogDirs({ topics: [] });
+
+    const logDirs: LogDirView[] = brokers.flatMap(({ brokerId, logDirs: brokerLogDirs }) =>
+      brokerLogDirs.map((logDir) => {
+        const { totalBytes, usableBytes } = logDir;
+        const hasSizes = totalBytes !== undefined && usableBytes !== undefined;
+        return {
+          brokerId,
+          path: logDir.logDir,
+          totalBytes: hasSizes ? String(totalBytes) : null,
+          usableBytes: hasSizes ? String(usableBytes) : null,
+          usedBytes: hasSizes ? String(totalBytes - usableBytes) : null,
+          isCordoned: logDir.isCordoned ?? null,
+        };
+      }),
+    );
+    logDirs.sort((a, b) => a.brokerId - b.brokerId || a.path.localeCompare(b.path));
+
+    const response: LogDirListResponse = { logDirs };
+    sendJson(res, 200, response);
   });
 }

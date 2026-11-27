@@ -18,7 +18,8 @@ that URL or include it in screenshots. The screenshots below show the local demo
 
 ## 1. Check the cluster
 
-The overview identifies the connected cluster and displays topic, partition, and broker counts.
+The overview identifies the connected cluster and displays topic, partition, and broker counts,
+and each broker's log directories with their volume usage.
 Open **Topics**, then select `docs-demo-events`. Confirm the topic name before making changes.
 
 <img src="../../../../images/studio-overview.png" alt="Studio cluster overview showing the connected demo cluster and navigation" loading="lazy" width="1200" height="800" />

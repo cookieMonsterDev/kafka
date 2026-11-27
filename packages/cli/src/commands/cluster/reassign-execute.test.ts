@@ -104,7 +104,24 @@ describe('clusterReassignExecuteCommand', () => {
     expect(alterPartitionReassignments).toHaveBeenCalledWith({
       topics: [{ topic: 'orders', partitionAssignment: [{ partition: 0, replicas: [1, 2] }] }],
       timeout: undefined,
+      allowReplicationFactorChange: true,
     });
+  });
+
+  it('--disallow-replication-factor-change disallows replica count changes', async () => {
+    const file = writeReassignmentFile({ partitions: [{ topic: 'orders', partition: 0, replicas: [1, 2] }] });
+    const alterPartitionReassignments = vi.fn(async () => {});
+    const admin = createFakeAdmin({ alterPartitionReassignments, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': file, yes: true, 'disallow-replication-factor-change': true },
+      openAdmin: async () => admin,
+    });
+
+    await clusterReassignExecuteCommand.run(context);
+
+    expect(alterPartitionReassignments).toHaveBeenCalledWith(
+      expect.objectContaining({ allowReplicationFactorChange: false }),
+    );
   });
 
   it('reports a partial batch when only some partitions fail', async () => {

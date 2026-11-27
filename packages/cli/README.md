@@ -321,9 +321,11 @@ kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-
 `cluster info` describes the cluster's brokers, controller, and cluster id. `cluster quorum`
 describes the metadata quorum — each `__cluster_metadata` partition's leader, voters, and
 observers. `cluster features` lists supported vs. finalized feature versions, merged by name.
-`cluster log-dirs` describes every broker's log directories and their partition sizes, narrowed
-with a repeatable `--broker`/`--topic` — the topic filter is applied client-side, matching
-`kafka-log-dirs.sh --topic-list` itself rather than a server-side option.
+`cluster log-dirs` describes every broker's log directories — their volume's total and usable
+bytes (Kafka 3.3+) and whether they are cordoned (Kafka 4.3+), `-` when the broker does not report
+them — and their partition sizes, narrowed with a repeatable `--broker`/`--topic`. The topic filter
+is applied client-side, matching `kafka-log-dirs.sh --topic-list` itself rather than a server-side
+option, and narrows only the partition table.
 
 `cluster update-features --feature name=maxVersionLevel` (repeatable) upgrades, safe-downgrades,
 or unsafe-downgrades one or more finalized features in one call — `--upgrade-type` applies to
@@ -341,7 +343,8 @@ since it can lose data; `--dry-run` prints the election target without connectin
 `kafka-reassign-partitions.sh --list`, it takes no topic filter. `cluster reassign execute
 --from-file <path>` submits a reassignment from the `kafka-reassign-partitions.sh
 --reassignment-json-file` shape, gated behind confirmation; `--dry-run` prints the plan without
-connecting. That file's `log_dirs` entries are parsed and validated but not applied — moving a
+connecting. `--disallow-replication-factor-change` makes the broker reject any partition whose
+replica count would change (Kafka 4.1+; older brokers fail the command). That file's `log_dirs` entries are parsed and validated but not applied — moving a
 replica between log dirs on the same broker needs a separate command.
 
 `cluster unregister-broker --broker-id <id>` decommissions a broker from a KRaft cluster, gated

@@ -116,6 +116,9 @@ kafka group reset-offsets my-group --topic orders --to earliest --execute --yes
 
 kafka topic delete orders --yes
 kafka admin call createAcls --from-file ./acls.json --yes --force
+
+# Refuse replica count changes (Kafka 4.1+)
+kafka cluster reassign execute --from-file reassignment.json --disallow-replication-factor-change --yes
 ```
 
 ### Scripting with `--json`

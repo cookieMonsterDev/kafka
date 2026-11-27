@@ -19,7 +19,7 @@ Shared options and defaults: [connection profiles, JSON output, logging and help
 
 ## Defaults
 
-The reassignment file supplies target replicas. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.
+The reassignment file supplies target replicas. Replication factor changes are allowed unless --disallow-replication-factor-change is set. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.
 
 ## Before you run
 
@@ -27,13 +27,14 @@ Moves partition replicas and can increase network/disk load. Save the current as
 
 ## Flags
 
-| Flag                   | Description                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------- |
-| `--brokers <string>`   | comma-separated broker list, e.g. localhost:9092                                       |
-| `--from-file <string>` | path to a JSON file in the kafka-reassign-partitions.sh --reassignment-json-file shape |
-| `--timeout <number>`   | request timeout in ms                                                                  |
-| `--dry-run`            | print the planned reassignment and exit without connecting                             |
-| `--yes`                | confirm the reassignment without an interactive prompt                                 |
+| Flag                                   | Description                                                                            |
+| -------------------------------------- | -------------------------------------------------------------------------------------- |
+| `--brokers <string>`                   | comma-separated broker list, e.g. localhost:9092                                       |
+| `--from-file <string>`                 | path to a JSON file in the kafka-reassign-partitions.sh --reassignment-json-file shape |
+| `--timeout <number>`                   | request timeout in ms                                                                  |
+| `--disallow-replication-factor-change` | reject any partition whose replica count would change (needs Kafka 4.1+)               |
+| `--dry-run`                            | print the planned reassignment and exit without connecting                             |
+| `--yes`                                | confirm the reassignment without an interactive prompt                                 |
 
 ## Examples
 

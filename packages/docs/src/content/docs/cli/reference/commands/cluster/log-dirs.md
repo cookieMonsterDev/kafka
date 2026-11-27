@@ -1,6 +1,6 @@
 ---
 title: 'cluster log-dirs'
-description: 'Describe log directories and their partition sizes, per broker'
+description: 'Describe log directories, their volume sizes, and their partition sizes, per broker'
 order: 24
 section: reference
 hidden: true
@@ -13,7 +13,7 @@ commandPath: ['cluster', 'log-dirs']
 kafka cluster log-dirs
 ```
 
-Describe log directories and their partition sizes, per broker
+Describe log directories, their volume sizes, and their partition sizes, per broker
 
 Shared options and defaults: [connection profiles, JSON output, logging and help](../../../global-options/).
 

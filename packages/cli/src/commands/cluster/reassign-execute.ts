@@ -52,6 +52,11 @@ export const clusterReassignExecuteCommand: CommandSpec = {
       brief: 'path to a JSON file in the kafka-reassign-partitions.sh --reassignment-json-file shape',
     },
     { name: 'timeout', type: 'number', brief: 'request timeout in ms' },
+    {
+      name: 'disallow-replication-factor-change',
+      type: 'boolean',
+      brief: 'reject any partition whose replica count would change (needs Kafka 4.1+)',
+    },
     { name: 'dry-run', type: 'boolean', brief: 'print the planned reassignment and exit without connecting' },
     { name: 'yes', type: 'boolean', brief: 'confirm the reassignment without an interactive prompt' },
   ],
@@ -73,6 +78,7 @@ export const clusterReassignExecuteCommand: CommandSpec = {
 
     const timeout = flags.timeout as number | undefined;
     const dryRun = flags['dry-run'] === true;
+    const allowReplicationFactorChange = flags['disallow-replication-factor-change'] !== true;
 
     if (dryRun) {
       output.write({
@@ -108,7 +114,7 @@ export const clusterReassignExecuteCommand: CommandSpec = {
       let results: PartitionResult[];
 
       try {
-        await admin.alterPartitionReassignments({ topics, timeout });
+        await admin.alterPartitionReassignments({ topics, timeout, allowReplicationFactorChange });
         results = targets.map((target) => ({ ...target, ok: true }));
       } catch (error) {
         if (!isKafkaAggregateError(error)) throw error;

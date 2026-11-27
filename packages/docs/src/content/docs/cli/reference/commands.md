@@ -32,7 +32,7 @@ section: reference
 - [`cluster elect-leaders`](./cluster/elect-leaders/) <span>Trigger a preferred or unclean leader election on one or more partitions</span>
 - [`cluster features`](./cluster/features/) <span>Describe supported and finalized feature versions</span>
 - [`cluster info`](./cluster/info/) <span>Describe the cluster: its brokers, controller, and cluster id</span>
-- [`cluster log-dirs`](./cluster/log-dirs/) <span>Describe log directories and their partition sizes, per broker</span>
+- [`cluster log-dirs`](./cluster/log-dirs/) <span>Describe log directories, their volume sizes, and their partition sizes, per broker</span>
 - [`cluster quorum`](./cluster/quorum/) <span>Describe the metadata quorum: leader, voters, and observers</span>
 - [`cluster raft-voter add`](./cluster/raft-voter-add/) <span>Add a voter to the KRaft metadata quorum</span>
 - [`cluster raft-voter remove`](./cluster/raft-voter-remove/) <span>Remove a voter from the KRaft metadata quorum</span>

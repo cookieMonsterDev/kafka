@@ -61,6 +61,22 @@ describe('clusterLogDirsCommand', () => {
     expect(describeLogDirs).toHaveBeenCalledWith({ brokerIds: [1, 2] });
   });
 
+  it('treats empty --broker and --topic lists, as the parser gives them, as no filter', async () => {
+    const describeLogDirs = vi.fn(async () => fakeLogDirs());
+    const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', broker: [], topic: [] },
+      openAdmin: async () => admin,
+    });
+
+    await clusterLogDirsCommand.run(context);
+
+    expect(describeLogDirs).toHaveBeenCalledWith({});
+    const written = stdoutWrite.mock.calls[0]![0];
+    expect(written).toContain('orders');
+    expect(written).toContain('payments');
+  });
+
   it('filters to matching topics only, client-side, in both human and json output', async () => {
     const describeLogDirs = async () => fakeLogDirs();
     const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });

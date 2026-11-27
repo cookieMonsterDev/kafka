@@ -16,16 +16,19 @@ export const clusterLogDirsCommand: CommandSpec = {
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
   async run({ flags, runtime, output, config }) {
     const brokers = parseBrokersFlag(flags.brokers);
+    // A repeatable flag that was not passed parses as `[]`, which means "no filter" here.
     const brokerIds = flags.broker as number[] | undefined;
     // Filtered client-side by topic, matching `kafka-log-dirs.sh --topic-list`: the real tool
     // filters its own already-fetched response rather than sending a per-topic filter on the
     // wire (core's own `topics` option exists but is left unused here for exactly that reason).
     const topicFilter = flags.topic as string[] | undefined;
-    const topicFilterSet = topicFilter === undefined ? null : new Set(topicFilter);
+    const topicFilterSet = topicFilter === undefined || topicFilter.length === 0 ? null : new Set(topicFilter);
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      const { brokers: allBrokerLogDirs } = await admin.describeLogDirs({ brokerIds });
+      const { brokers: allBrokerLogDirs } = await admin.describeLogDirs(
+        brokerIds === undefined || brokerIds.length === 0 ? {} : { brokerIds },
+      );
 
       const matchesFilter = (topic: string): boolean => topicFilterSet === null || topicFilterSet.has(topic);
       const brokerLogDirs = allBrokerLogDirs.map((broker) => ({

@@ -118,7 +118,7 @@ because it used more CPU" stays visible.
 On macOS the VM's vCPUs cannot be pinned to performance cores. That is the main remaining source of noise, and the
 reason for interleaved repetitions and the A/A test.
 
-The broker is `apache/kafka:4.3.2` in KRaft mode, PLAINTEXT only, on an internal Docker network with no published
+The broker is `apache/kafka:4.4.0` in KRaft mode, PLAINTEXT only, on an internal Docker network with no published
 ports ([`docker/compose.yml`](docker/compose.yml)). Client containers have no internet access, no bind mounts, a
 read-only root filesystem, all capabilities dropped, `no-new-privileges` and a pids limit.
 

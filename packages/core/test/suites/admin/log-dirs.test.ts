@@ -1,6 +1,12 @@
 import { afterEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, newLogger, testIfKafkaAtLeast_1_1 } from '../../helpers/index';
+import {
+  createCluster,
+  newLogger,
+  testIfKafkaAtLeast_1_1,
+  testIfKafkaAtLeast_3_6,
+  testIfKafkaAtLeast_4_3,
+} from '../../helpers/index';
 
 describe('admin.logDirs', () => {
   let admin: ReturnType<typeof createAdmin> | undefined;
@@ -22,6 +28,28 @@ describe('admin.logDirs', () => {
         errorCode: 0,
       }),
     );
+  });
+
+  testIfKafkaAtLeast_3_6('reports the volume size of every log dir', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const { brokers } = await admin.describeLogDirs();
+    for (const logDir of brokers.flatMap((broker) => broker.logDirs)) {
+      expect(logDir.totalBytes).toBeGreaterThan(0n);
+      expect(logDir.usableBytes).toBeGreaterThanOrEqual(0n);
+      expect(logDir.usableBytes).toBeLessThanOrEqual(logDir.totalBytes ?? 0n);
+    }
+  });
+
+  testIfKafkaAtLeast_4_3('reports whether each log dir is cordoned', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const { brokers } = await admin.describeLogDirs();
+    for (const logDir of brokers.flatMap((broker) => broker.logDirs)) {
+      expect(logDir.isCordoned).toBe(false);
+    }
   });
 
   testIfKafkaAtLeast_1_1('describes replica log dirs for a topic partition on a broker', async () => {

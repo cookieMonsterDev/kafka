@@ -78,4 +78,51 @@ describe('registerClusterRoutes', () => {
       await expect(res.json()).resolves.toEqual({ connected: false });
     });
   });
+
+  it('lists every log dir with its volume sizes, sorted by broker then path', async () => {
+    const describeLogDirs = async (options: unknown) => {
+      expect(options).toEqual({ topics: [] });
+      return {
+        brokers: [
+          {
+            brokerId: 2,
+            logDirs: [{ errorCode: 0, logDir: '/data/b', topics: [] }],
+          },
+          {
+            brokerId: 1,
+            logDirs: [
+              { errorCode: 0, logDir: '/data/z', topics: [], totalBytes: 1000n, usableBytes: 250n, isCordoned: true },
+              { errorCode: 0, logDir: '/data/a', topics: [], totalBytes: 2000n, usableBytes: 2000n, isCordoned: false },
+            ],
+          },
+        ],
+      };
+    };
+    const context = buildContext({ describeLogDirs });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/cluster/log-dirs`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        logDirs: [
+          { brokerId: 1, path: '/data/a', totalBytes: '2000', usableBytes: '2000', usedBytes: '0', isCordoned: false },
+          { brokerId: 1, path: '/data/z', totalBytes: '1000', usableBytes: '250', usedBytes: '750', isCordoned: true },
+          { brokerId: 2, path: '/data/b', totalBytes: null, usableBytes: null, usedBytes: null, isCordoned: null },
+        ],
+      });
+    });
+  });
+
+  it('reports a describeLogDirs failure as an error response', async () => {
+    const context = buildContext({
+      describeLogDirs: async () => {
+        throw new Error('KAFKA_STORAGE_ERROR');
+      },
+    });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/cluster/log-dirs`);
+      expect(res.status).toBeGreaterThanOrEqual(500);
+    });
+  });
 });

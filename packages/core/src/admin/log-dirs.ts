@@ -2,20 +2,19 @@ import { KafkaNonRetriableError, KafkaProtocolError } from '../errors';
 import type { AlterReplicaLogDir } from '../protocol/requests/alter-replica-log-dirs/v0/request';
 import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
 import type { DescribeLogDirsTopic } from '../protocol/requests/describe-log-dirs/v0/request';
-import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
 import { NOT_CONTROLLER_ERRORS, STALE_METADATA_ERRORS, unionOf } from '../cluster/error-classifier';
 import { nodeTarget } from '../cluster/run';
 import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown } from './helpers';
-import type { DescribeReplicaLogDirsReplica, DescribeReplicaLogDirsResult } from './types';
+import type { DescribeReplicaLogDirsReplica, DescribeReplicaLogDirsResult, LogDirDescription } from './types';
 import { AlterReplicaLogDirs, DescribeLogDirs } from '../protocol/requests/lazy-families';
 
 export interface LogDirsApi {
   describeLogDirs: (options?: {
     topics?: DescribeLogDirsTopic[] | null;
     brokerIds?: Array<string | number>;
-  }) => Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }>;
+  }) => Promise<{ brokers: { brokerId: number; logDirs: LogDirDescription[] }[] }>;
   alterReplicaLogDirs: (options: {
     dirs: AlterReplicaLogDir[];
     brokerId: string | number;
@@ -28,12 +27,22 @@ export interface LogDirsApi {
 /** A replica that moved off the broker, or a request that reached a broker that is not the controller. */
 const DESCRIBE_LOG_DIRS_RETRY_ON = unionOf(NOT_CONTROLLER_ERRORS, STALE_METADATA_ERRORS);
 
+/** Drops the `-1n` a broker sends for a volume it cannot read, so an absent size always means unknown. */
+function toLogDirDescription(logDir: LogDirDescription): LogDirDescription {
+  const { totalBytes, usableBytes, ...description } = logDir;
+  return {
+    ...description,
+    ...(totalBytes !== undefined && totalBytes >= 0n ? { totalBytes } : {}),
+    ...(usableBytes !== undefined && usableBytes >= 0n ? { usableBytes } : {}),
+  };
+}
+
 export function createLogDirsApi({ cluster, retry }: AdminContext): LogDirsApi {
   const retrier = createRetrier(retry);
 
   const describeLogDirs = async (
     options: { topics?: DescribeLogDirsTopic[] | null; brokerIds?: Array<string | number> } = {},
-  ): Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }> => {
+  ): Promise<{ brokers: { brokerId: number; logDirs: LogDirDescription[] }[] }> => {
     // Read after each attempt's metadata refresh, so the default covers the brokers known then.
     let nodeIds: string[] = [];
     return cluster.run(
@@ -50,7 +59,7 @@ export function createLogDirsApi({ cluster, retry }: AdminContext): LogDirsApi {
           brokers: await Promise.all(
             brokers.map(async (broker, index) => {
               const { logDirs } = await broker.send(DescribeLogDirs, { topics: options.topics });
-              return { brokerId: Number(nodeIds[index]), logDirs };
+              return { brokerId: Number(nodeIds[index]), logDirs: logDirs.map(toLogDirDescription) };
             }),
           ),
         };

@@ -1,12 +1,12 @@
 # Single-node KRaft broker for the benchmark suite, on an internal network with no published ports.
 # Started by runner/broker.ts, which passes the resource budget through the BROKER_* variables.
-# Keep the image tag in step with packages/core/test/assets/docker-compose.kraft-4-3.yml.
+# Keep the image tag in step with packages/core/test/assets/docker-compose.kraft-4-4.yml.
 
 name: kafka-bench
 
 services:
   broker:
-    image: apache/kafka:4.3.2
+    image: apache/kafka:4.4.0
     container_name: kafka-bench-broker
     hostname: broker
     restart: 'no'

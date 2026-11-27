@@ -102,6 +102,9 @@ Methods tied to newer brokers throw `KafkaServerDoesNotSupportApiKey` on older o
 `describeTopicPartitions` (4.0+), `describeConsumerGroups` (4.0+, KIP-848 groups),
 share-group methods (4.1+), `describeTransactions` and `describeProducers` (3.0+), KRaft quorum
 methods (3.6+/3.7+). Use `describeClassicGroups` for classic groups.
+`alterPartitionReassignments({ allowReplicationFactorChange: false })` needs 4.1+ and throws on
+older brokers rather than allowing the change. `describeLogDirs` returns `totalBytes` /
+`usableBytes` (3.3+) and `isCordoned` (4.3+) only when the broker sends them.
 
 For ACLs, SCRAM, delegation tokens, transactions, features, and controller bootstrap, read
 [admin operations](references/operations.md).

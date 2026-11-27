@@ -1,11 +1,11 @@
-# 3-broker Kafka 4.3 KRaft cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
+# 3-broker Kafka 4.4 KRaft cluster: PLAINTEXT + SSL + SASL_SSL (PLAIN + SCRAM).
 # Port map matches the kafkajs harness: 9092/9095/9098 PLAINTEXT, 9093/9096/9099 SSL,
 # 9094/9097/9100 SASL_SSL. Same layout as docker-compose.kraft.yml (4.0).
 
-name: kafka-core-kraft-4-3
+name: kafka-core-kraft-4-4
 
 x-broker-common: &broker-common
-  image: apache/kafka:4.3.2
+  image: apache/kafka:4.4.0
   restart: unless-stopped
   entrypoint: ['/usr/local/bin/format-and-start.sh']
   volumes:

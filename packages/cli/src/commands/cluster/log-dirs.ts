@@ -6,7 +6,7 @@ import { renderTable } from '../../output/table';
 
 export const clusterLogDirsCommand: CommandSpec = {
   path: ['cluster', 'log-dirs'],
-  summary: 'Describe log directories and their partition sizes, per broker',
+  summary: 'Describe log directories, their volume sizes, and their partition sizes, per broker',
   flags: [
     { name: 'brokers', type: 'string', brief: 'comma-separated broker list, e.g. localhost:9092' },
     { name: 'broker', type: 'number', multiple: true, brief: 'limit to this broker id (repeatable; default: all)' },
@@ -16,16 +16,19 @@ export const clusterLogDirsCommand: CommandSpec = {
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
   async run({ flags, runtime, output, config }) {
     const brokers = parseBrokersFlag(flags.brokers);
+    // A repeatable flag that was not passed parses as `[]`, which means "no filter" here.
     const brokerIds = flags.broker as number[] | undefined;
     // Filtered client-side by topic, matching `kafka-log-dirs.sh --topic-list`: the real tool
     // filters its own already-fetched response rather than sending a per-topic filter on the
     // wire (core's own `topics` option exists but is left unused here for exactly that reason).
     const topicFilter = flags.topic as string[] | undefined;
-    const topicFilterSet = topicFilter === undefined ? null : new Set(topicFilter);
+    const topicFilterSet = topicFilter === undefined || topicFilter.length === 0 ? null : new Set(topicFilter);
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      const { brokers: allBrokerLogDirs } = await admin.describeLogDirs({ brokerIds });
+      const { brokers: allBrokerLogDirs } = await admin.describeLogDirs(
+        brokerIds === undefined || brokerIds.length === 0 ? {} : { brokerIds },
+      );
 
       const matchesFilter = (topic: string): boolean => topicFilterSet === null || topicFilterSet.has(topic);
       const brokerLogDirs = allBrokerLogDirs.map((broker) => ({
@@ -36,12 +39,22 @@ export const clusterLogDirsCommand: CommandSpec = {
         })),
       }));
 
-      const rows: string[][] = [];
+      const logDirRows = brokerLogDirs.flatMap((broker) =>
+        broker.logDirs.map((logDir) => [
+          String(broker.brokerId),
+          logDir.logDir,
+          logDir.totalBytes?.toString() ?? '-',
+          logDir.usableBytes?.toString() ?? '-',
+          logDir.isCordoned === undefined ? '-' : String(logDir.isCordoned),
+        ]),
+      );
+
+      const partitionRows: string[][] = [];
       for (const broker of brokerLogDirs) {
         for (const logDir of broker.logDirs) {
           for (const topic of logDir.topics) {
             for (const partition of topic.partitions) {
-              rows.push([
+              partitionRows.push([
                 String(broker.brokerId),
                 logDir.logDir,
                 topic.topic,
@@ -56,10 +69,20 @@ export const clusterLogDirsCommand: CommandSpec = {
       }
 
       output.write({
-        human: () =>
-          rows.length === 0
-            ? '(no matching log dirs)'
-            : renderTable(['BROKER', 'LOG_DIR', 'TOPIC', 'PARTITION', 'SIZE', 'OFFSET_LAG', 'IS_FUTURE'], rows),
+        human: () => {
+          if (logDirRows.length === 0) return '(no matching log dirs)';
+          const partitionTable =
+            partitionRows.length === 0
+              ? '(no matching partitions)'
+              : renderTable(
+                  ['BROKER', 'LOG_DIR', 'TOPIC', 'PARTITION', 'SIZE', 'OFFSET_LAG', 'IS_FUTURE'],
+                  partitionRows,
+                );
+          return [
+            renderTable(['BROKER', 'LOG_DIR', 'TOTAL_BYTES', 'USABLE_BYTES', 'CORDONED'], logDirRows),
+            partitionTable,
+          ].join('\n\n');
+        },
         json: () => stringifyJsonSafe({ brokers: brokerLogDirs }),
       });
 

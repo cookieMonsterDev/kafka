@@ -15,11 +15,11 @@ and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
 
 ## Tested brokers
 
-Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.3**
+Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.4**
 (the 3.6 stack runs `apache/kafka:3.9.2`). Default `KAFKA_VERSION` remains
 **4.0**. Which versions CI runs depends on the event; see the table below.
 
-The client talks to **4.0 and 4.3** via overlap (Produce 3–13, Fetch 4–18,
+The client talks to **4.0 and 4.4** via overlap (Produce 3–13, Fetch 4–18,
 Metadata 0–13). Kafka 4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896;
 see
 [Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/));
@@ -38,7 +38,7 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 | `KAFKA_VERSION`      | CI runs                                          |
 | -------------------- | ------------------------------------------------ |
-| 3.6, 4.0, 4.3        | Every run, including pull requests               |
+| 3.6, 4.0, 4.4        | Every run, including pull requests               |
 | 4.1, 4.2             | Pushes to `develop` and `master`, weekly, manual |
 | 0.10, 0.11, 1.1, 2.4 | Weekly scheduled run and manual runs only        |
 
@@ -132,8 +132,16 @@ on Kafka 4.2+. Classic `consumer()` remains the default.
 (key 47). `admin.describeUserScramCredentials` and `admin.alterUserScramCredentials`
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
-34–35. `admin.describeReplicaLogDirs` filters DescribeLogDirs (35) to specific
-broker/replica pairs. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
+34–35. DescribeLogDirs negotiates v0–v5: v3 adds a request-level error code, so
+a broker that refuses the request (such as `CLUSTER_AUTHORIZATION_FAILED`) now
+makes `describeLogDirs` throw where older versions returned no log dirs; v4
+(Kafka 3.3+, KIP-827) adds each log dir's `totalBytes` and `usableBytes`; v5
+(Kafka 4.3+) adds `isCordoned`. Fields the broker does not send are left out, and
+a volume size of `-1` (unreadable) is left out too. `admin.describeReplicaLogDirs`
+filters DescribeLogDirs (35) to specific broker/replica pairs.
+`admin.alterPartitionReassignments` implements AlterPartitionReassignments
+(key 45) v0–v1. `allowReplicationFactorChange: false` (KIP-860) needs v1
+(Kafka 4.1+); on an older broker it throws instead of being ignored. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction

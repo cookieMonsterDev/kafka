@@ -48,6 +48,49 @@ describe('clusterLogDirsCommand', () => {
     expect(written).toContain('1024');
   });
 
+  it('renders each log dir with its volume sizes and cordoning', async () => {
+    const logDirs = fakeLogDirs();
+    const [logDir] = logDirs.brokers[0]!.logDirs;
+    const describeLogDirs = async () => ({
+      brokers: [
+        {
+          brokerId: 1,
+          logDirs: [
+            { ...logDir!, totalBytes: 107374182400n, usableBytes: 53687091200n, isCordoned: true },
+            { errorCode: 0, logDir: '/data/kafka-old', topics: [] },
+          ],
+        },
+      ],
+    });
+    const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092' },
+      openAdmin: async () => admin,
+    });
+
+    await clusterLogDirsCommand.run(context);
+
+    const lines = stdoutWrite.mock.calls[0]![0].split('\n');
+    expect(lines[0]).toMatch(/BROKER\s+LOG_DIR\s+TOTAL_BYTES\s+USABLE_BYTES\s+CORDONED/);
+    expect(lines.find((line) => line.includes('/data/kafka-1'))).toMatch(/107374182400\s+53687091200\s+true/);
+    expect(lines.find((line) => line.includes('/data/kafka-old'))).toMatch(/-\s+-\s+-/);
+  });
+
+  it('keeps the log dirs when no partition matches the topic filter', async () => {
+    const describeLogDirs = async () => fakeLogDirs();
+    const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', topic: ['missing'] },
+      openAdmin: async () => admin,
+    });
+
+    await clusterLogDirsCommand.run(context);
+
+    const written = stdoutWrite.mock.calls[0]![0];
+    expect(written).toContain('/data/kafka-1');
+    expect(written).toContain('(no matching partitions)');
+  });
+
   it('passes --broker through as numeric brokerIds', async () => {
     const describeLogDirs = vi.fn(async () => fakeLogDirs());
     const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });
@@ -59,6 +102,22 @@ describe('clusterLogDirsCommand', () => {
     await clusterLogDirsCommand.run(context);
 
     expect(describeLogDirs).toHaveBeenCalledWith({ brokerIds: [1, 2] });
+  });
+
+  it('treats empty --broker and --topic lists, as the parser gives them, as no filter', async () => {
+    const describeLogDirs = vi.fn(async () => fakeLogDirs());
+    const admin = createFakeAdmin({ describeLogDirs, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', broker: [], topic: [] },
+      openAdmin: async () => admin,
+    });
+
+    await clusterLogDirsCommand.run(context);
+
+    expect(describeLogDirs).toHaveBeenCalledWith({});
+    const written = stdoutWrite.mock.calls[0]![0];
+    expect(written).toContain('orders');
+    expect(written).toContain('payments');
   });
 
   it('filters to matching topics only, client-side, in both human and json output', async () => {

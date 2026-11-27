@@ -125,7 +125,7 @@
   },
   "cluster reassign execute": {
     "source": "packages/cli/src/commands/cluster/reassign-execute.ts",
-    "defaults": "The reassignment file supplies target replicas. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.",
+    "defaults": "The reassignment file supplies target replicas. Replication factor changes are allowed unless --disallow-replication-factor-change is set. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.",
     "output": {
       "json": {
         "results": [

@@ -170,7 +170,7 @@ Integration tests select a compose file from `KAFKA_VERSION` (default `4.0`). Yo
 ```sh
 KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running after the suite. Mapping, feature gates, and CI matrix: [`test/assets/README.md`](test/assets/README.md).

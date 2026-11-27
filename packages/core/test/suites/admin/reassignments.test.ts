@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, createTopic, newLogger, secureRandom, testIfKafkaAtLeast_2_4 } from '../../helpers/index';
+import { KafkaAggregateError } from '../../../src/errors';
+import {
+  createCluster,
+  createTopic,
+  newLogger,
+  secureRandom,
+  testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_1,
+} from '../../helpers/index';
 
 describe('admin.reassignments', () => {
   let topicName: string;
@@ -39,6 +47,24 @@ describe('admin.reassignments', () => {
       topics: [{ topic: topicName, partitions: [0] }],
     });
     expect(listed.topics).toEqual(expect.any(Array));
+  });
+
+  testIfKafkaAtLeast_4_1('refuses a replication factor change when it is disallowed', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+    const { topics } = await admin.fetchTopicMetadata({ topics: [topicName] });
+    const [firstReplica] = topics[0]?.partitions[0]?.replicas ?? [];
+    if (firstReplica === undefined) throw new Error('expected a replica for partition 0');
+
+    const altered = admin.alterPartitionReassignments({
+      topics: [{ topic: topicName, partitionAssignment: [{ partition: 0, replicas: [firstReplica] }] }],
+      allowReplicationFactorChange: false,
+    });
+
+    await expect(altered).rejects.toBeInstanceOf(KafkaAggregateError);
+    await expect(altered).rejects.toMatchObject({
+      errors: [expect.objectContaining({ topic: topicName, partition: 0, type: 'INVALID_REPLICATION_FACTOR' })],
+    });
   });
 
   testIfKafkaAtLeast_2_4('elects preferred leaders', async () => {

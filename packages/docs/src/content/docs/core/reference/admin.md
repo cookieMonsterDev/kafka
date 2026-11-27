@@ -55,7 +55,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `clientInstanceId()`                                           | KIP-714 UUID; `null` until assigned       |
 | `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+    |
 | `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                    |
-| `alterPartitionReassignments` / `listPartitionReassignments`   |                                           |
+| `alterPartitionReassignments` / `listPartitionReassignments`   | `allowReplicationFactorChange`: 4.1+      |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels              |
 | `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+     |
 | `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+       |
@@ -144,7 +144,7 @@ around `fenceProducers`. Returns `{ transactionalId, errorCode, ... }`.
 | `createAcls` / `describeAcls` / `deleteAcls`                 | Prefixed patterns need ACL APIs v1 (2.0+)  |
 | `describeUserScramCredentials` / `alterUserScramCredentials` | Keys 50–51                                 |
 | `describeClientQuotas` / `alterClientQuotas`                 | Keys 48–49                                 |
-| `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35                                 |
+| `describeLogDirs` / `alterReplicaLogDirs`                    | Keys 34–35; sizes 3.3+, cordoned 4.3+      |
 | `describeReplicaLogDirs(replicas)`                           | DescribeLogDirs filtered by broker/replica |
 
 ## Tokens

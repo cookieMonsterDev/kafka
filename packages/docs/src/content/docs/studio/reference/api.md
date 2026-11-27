@@ -25,6 +25,7 @@ the server was started with `--read-only`.
 | `GET`    | `/api/profiles`                                 | Configured `cli.profiles`, credentials redacted              |
 | `POST`   | `/api/profiles/active`                          | Switch the active connection profile                         |
 | `GET`    | `/api/cluster`                                  | Connection status                                            |
+| `GET`    | `/api/cluster/log-dirs`                         | Every broker's log dirs: volume usage and cordoning          |
 | `GET`    | `/api/topics`                                   | List topics with partition/replication counts                |
 | `POST`   | `/api/topics`                                   | Create a topic                                               |
 | `GET`    | `/api/topics/:name`                             | Partitions, ISR, offsets, size, configs                      |

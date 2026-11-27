@@ -1,6 +1,7 @@
 import { CircleAlert, Layers, Plug } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createLazyRoute } from '@tanstack/react-router';
+import { LogDirsCard } from '../components/cluster/log-dirs-card';
 import { PageLayout } from '../components/layout/page';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -177,6 +178,8 @@ function ClusterOverview() {
             )}
           </CardContent>
         </Card>
+
+        {cluster.data?.connected === true && <LogDirsCard />}
 
         {/* A topics failure is reported once, by the rail that owns the topic list — repeating it
             here would put the same message on screen twice. */}

@@ -11,7 +11,7 @@ KAFKA_VERSION=3.6 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.1 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.2 pnpm --filter @cookiemonsterdev/kafka-core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `global-setup.ts`, `scripts/compose-up.sh`, `scripts/compose-down.sh`, and `scripts/compose-pull.sh` all resolve the same mapping. `COMPOSE_FILE` overrides it when you need a one-off stack.
@@ -28,7 +28,7 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 | `4.0` (default) | `docker-compose.kraft.yml`     | KRaft | available |
 | `4.1`           | `docker-compose.kraft-4-1.yml` | KRaft | available |
 | `4.2`           | `docker-compose.kraft-4-2.yml` | KRaft | available |
-| `4.3`           | `docker-compose.kraft-4-3.yml` | KRaft | available |
+| `4.4`           | `docker-compose.kraft-4-4.yml` | KRaft | available |
 
 `KAFKA_VERSION=0.10` uses `confluentinc/cp-kafka:3.2.4` (Kafka 0.10.2) plus ZooKeeper. Produce negotiates v2 and Fetch v3 (MessageSet magic 1). Headers, transactions, DescribeConfigs, and ACLs are absent. CreateTopics / DeleteTopics are available (0.10.1+). SASL uses handshake + raw bytes.
 
@@ -44,7 +44,7 @@ KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 `KAFKA_VERSION=4.2` uses `apache/kafka:4.2.2` (KRaft). Same layout as 4.0.
 
-`KAFKA_VERSION=4.3` uses `apache/kafka:4.3.2` (KRaft). Same layout as 4.0. This is the current docs line.
+`KAFKA_VERSION=4.4` uses `apache/kafka:4.4.0` (KRaft). Same layout as 4.0.
 
 OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1`, the runner uses `docker-compose.kraft-oauthbearer.yml` (Kafka 4.0) regardless of `KAFKA_VERSION`.
 

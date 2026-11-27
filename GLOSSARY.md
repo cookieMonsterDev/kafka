@@ -8,6 +8,13 @@ The domain language of this repository's Kafka client and the tools built on it.
 One Kafka server that stores partitions and serves clients, identified in cluster metadata by its node id.
 _Avoid_: server, host, node (when you mean the broker rather than its id)
 
+**Log directory**:
+A directory on a broker's disk that stores partition replicas. A broker can have several.
+_Avoid_: data dir, log path
+
+**Cordoned log directory**:
+A log directory on which the broker places no new partition replicas, while the replicas already on it stay.
+
 **Bootstrap broker**:
 A broker address the client is given up front and uses only to discover the cluster.
 _Avoid_: seed broker, bootstrap server

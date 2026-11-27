@@ -90,7 +90,7 @@ pnpm --filter @cookiemonsterdev/kafka-core test:watch                  # watch m
 pnpm --filter @cookiemonsterdev/kafka-core typecheck                   # src + test/tsconfig.json
 
 KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration   # requires Docker
-KAFKA_VERSION=4.3  pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.4  pnpm --filter @cookiemonsterdev/kafka-core test:integration
 # KAFKA_EXTERNAL=1 skips compose up/down; DO_NOT_STOP=1 leaves the cluster running
 ```
 

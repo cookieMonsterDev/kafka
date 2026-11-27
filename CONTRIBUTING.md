@@ -250,7 +250,7 @@ Integration tests pick a Compose file from `KAFKA_VERSION` (default `4.0`):
 ```sh
 KAFKA_VERSION=0.10 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 KAFKA_VERSION=4.0 pnpm --filter @cookiemonsterdev/kafka-core test:integration
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:integration
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-core test:integration
 ```
 
 `KAFKA_EXTERNAL=1` skips compose up/down. `DO_NOT_STOP=1` leaves the cluster running. Mapping, feature gates, and the CI matrix: [`packages/core/test/assets/README.md`](packages/core/test/assets/README.md).
@@ -281,9 +281,9 @@ Each package with integration tests also has `test:bun:integration`, which takes
 `KAFKA_VERSION` and flags as on Node.js:
 
 ```sh
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-core test:bun:integration
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-cli test:bun:integration     # build config and core first
-KAFKA_VERSION=4.3 pnpm --filter @cookiemonsterdev/kafka-studio test:bun:integration  # build config, core and cli first
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-core test:bun:integration
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-cli test:bun:integration     # build config and core first
+KAFKA_VERSION=4.4 pnpm --filter @cookiemonsterdev/kafka-studio test:bun:integration  # build config, core and cli first
 pnpm --filter @cookiemonsterdev/kafka-core bench:bun   # core's microbenches on Bun (no Docker)
 ```
 

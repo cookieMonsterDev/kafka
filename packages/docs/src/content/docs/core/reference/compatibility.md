@@ -15,11 +15,11 @@ and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
 
 ## Tested brokers
 
-Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.3**
+Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.4**
 (the 3.6 stack runs `apache/kafka:3.9.2`). Default `KAFKA_VERSION` remains
 **4.0**. Which versions CI runs depends on the event; see the table below.
 
-The client talks to **4.0 and 4.3** via overlap (Produce 3–13, Fetch 4–18,
+The client talks to **4.0 and 4.4** via overlap (Produce 3–13, Fetch 4–18,
 Metadata 0–13). Kafka 4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896;
 see
 [Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/));
@@ -38,7 +38,7 @@ versions still use topic names. `admin.describeTopicPartitions`
 
 | `KAFKA_VERSION`      | CI runs                                          |
 | -------------------- | ------------------------------------------------ |
-| 3.6, 4.0, 4.3        | Every run, including pull requests               |
+| 3.6, 4.0, 4.4        | Every run, including pull requests               |
 | 4.1, 4.2             | Pushes to `develop` and `master`, weekly, manual |
 | 0.10, 0.11, 1.1, 2.4 | Weekly scheduled run and manual runs only        |
 

@@ -6,10 +6,10 @@ const UNIQUE = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * This suite's compose matrix (`test/helpers/global-setup.ts`) only ever selects `0.10`, `4.0`,
- * or `4.3` — share groups (KIP-932) need a broker at least at 4.1, which among those three is
- * only `4.3`.
+ * or `4.4` — share groups (KIP-932) need a broker at least at 4.1, which among those three is
+ * only `4.4`.
  */
-const SUPPORTS_SHARE_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.3';
+const SUPPORTS_SHARE_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
 
 /**
  * Runs against a real broker started by `test/helpers/global-setup.ts`. Transactions, SCRAM

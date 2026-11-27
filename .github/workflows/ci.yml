@@ -131,13 +131,13 @@ jobs:
         run: |
           case "${EVENT}" in
             schedule | workflow_dispatch)
-              versions='["0.10","0.11","1.1","2.4","3.6","4.0","4.1","4.2","4.3"]'
+              versions='["0.10","0.11","1.1","2.4","3.6","4.0","4.1","4.2","4.4"]'
               ;;
             push)
-              versions='["3.6","4.0","4.1","4.2","4.3"]'
+              versions='["3.6","4.0","4.1","4.2","4.4"]'
               ;;
             *)
-              versions='["3.6","4.0","4.3"]'
+              versions='["3.6","4.0","4.4"]'
               ;;
           esac
           echo "versions=${versions}" >> "$GITHUB_OUTPUT"
@@ -157,8 +157,8 @@ jobs:
         include:
           - { kafka-version: '3.6', bun: '1.4.x' }
           - { kafka-version: '3.6', bun: latest }
-          - { kafka-version: '4.3', bun: '1.4.x' }
-          - { kafka-version: '4.3', bun: latest }
+          - { kafka-version: '4.4', bun: '1.4.x' }
+          - { kafka-version: '4.4', bun: latest }
     env:
       KAFKA_VERSION: ${{ matrix.kafka-version }}
     steps:
@@ -175,11 +175,11 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-core ${{ matrix.bun && 'test:bun:integration' || 'test:integration' }}
 
   cli-integration:
-    name: Integration (CLI / Kafka 4.3${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
+    name: Integration (CLI / Kafka 4.4${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
     needs: [unit]
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # 4.3 rather than the CLI's other supported version (4.0): share group commands (KIP-932)
+    # 4.4 rather than the CLI's other supported version (4.0): share group commands (KIP-932)
     # need a broker at least at 4.1, and this is the one leg that exercises them.
     strategy:
       fail-fast: false
@@ -187,7 +187,7 @@ jobs:
         # '' runs on Node.js; the same Bun versions as the core integration job.
         bun: ['', '1.4.x', 'latest']
     env:
-      KAFKA_VERSION: '4.3'
+      KAFKA_VERSION: '4.4'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm
@@ -204,7 +204,7 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-cli ${{ matrix.bun && 'test:bun:integration' || 'test:integration' }}
 
   studio-integration:
-    name: Integration (Studio / Kafka 4.3${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
+    name: Integration (Studio / Kafka 4.4${{ matrix.bun && format(' / Bun {0}', matrix.bun) || '' }})
     needs: [unit]
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -215,7 +215,7 @@ jobs:
         # '' runs on Node.js; the same Bun versions as the core integration job.
         bun: ['', '1.4.x', 'latest']
     env:
-      KAFKA_VERSION: '4.3'
+      KAFKA_VERSION: '4.4'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-node-pnpm

@@ -17,7 +17,7 @@ export const KAFKA_VERSION_COMPOSE_FILES: Readonly<Record<string, string>> = Obj
   '4.0': 'docker-compose.kraft.yml',
   '4.1': 'docker-compose.kraft-4-1.yml',
   '4.2': 'docker-compose.kraft-4-2.yml',
-  '4.3': 'docker-compose.kraft-4-3.yml',
+  '4.4': 'docker-compose.kraft-4-4.yml',
 });
 
 export const OAUTHBEARER_COMPOSE_FILE = 'docker-compose.kraft-oauthbearer.yml';

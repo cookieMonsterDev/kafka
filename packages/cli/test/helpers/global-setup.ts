@@ -16,7 +16,7 @@ const DEFAULT_KAFKA_VERSION = '4.0';
 const KAFKA_VERSION_COMPOSE_FILES: Readonly<Record<string, string>> = Object.freeze({
   '0.10': 'docker-compose.zk-0-10.yml',
   '4.0': 'docker-compose.kraft.yml',
-  '4.3': 'docker-compose.kraft-4-3.yml',
+  '4.4': 'docker-compose.kraft-4-4.yml',
 });
 
 function resolveComposeFile(): string {

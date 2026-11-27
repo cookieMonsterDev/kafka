@@ -57,6 +57,25 @@ describe('admin/log-dirs', () => {
       expect(cluster.resolveTarget).toHaveBeenCalledTimes(1);
       expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('3'));
     });
+
+    it('returns volume sizes and cordoning, dropping a size the broker could not read', async () => {
+      const logDir = { errorCode: 0, topics: [], isCordoned: true };
+      const broker = withSend({
+        describeLogDirs: vi.fn().mockResolvedValue({
+          logDirs: [
+            { ...logDir, logDir: '/data/a', totalBytes: 2048n, usableBytes: 1024n },
+            { ...logDir, logDir: '/data/b', totalBytes: -1n, usableBytes: -1n },
+          ],
+        }),
+      });
+      const cluster = fakeRunCluster({ node: broker });
+
+      const { brokers } = await makeApi(cluster).describeLogDirs({ brokerIds: [1] });
+      expect(brokers[0]?.logDirs).toStrictEqual([
+        { ...logDir, logDir: '/data/a', totalBytes: 2048n, usableBytes: 1024n },
+        { ...logDir, logDir: '/data/b' },
+      ]);
+    });
   });
 
   describe('alterReplicaLogDirs', () => {

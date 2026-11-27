@@ -5,7 +5,7 @@ import { CONTROLLER } from '../cluster/run';
 import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { formatUnknown } from './helpers';
-import type { PartitionReassignment, TopicPartitions } from './types';
+import type { AlterPartitionReassignmentsOptions, TopicPartitions } from './types';
 import {
   AlterPartitionReassignments,
   ElectLeaders,
@@ -13,7 +13,7 @@ import {
 } from '../protocol/requests/lazy-families';
 
 export interface ReassignmentsApi {
-  alterPartitionReassignments: (options: { topics: PartitionReassignment[]; timeout?: number }) => Promise<void>;
+  alterPartitionReassignments: (options: AlterPartitionReassignmentsOptions) => Promise<void>;
   listPartitionReassignments: (options?: {
     topics?: TopicPartitions[] | null;
     timeout?: number;
@@ -31,10 +31,8 @@ export function createReassignmentsApi({ cluster, retry }: AdminContext): Reassi
   const alterPartitionReassignments = async ({
     topics,
     timeout,
-  }: {
-    topics: PartitionReassignment[];
-    timeout?: number;
-  }): Promise<void> => {
+    allowReplicationFactorChange,
+  }: AlterPartitionReassignmentsOptions): Promise<void> => {
     if (!topics || !Array.isArray(topics)) {
       throw new KafkaNonRetriableError(`Invalid topics array ${formatUnknown(topics)}`);
     }
@@ -77,7 +75,7 @@ export function createReassignmentsApi({ cluster, retry }: AdminContext): Reassi
     await cluster.run(
       CONTROLLER,
       async (broker) => {
-        await broker.send(AlterPartitionReassignments, { topics, timeout });
+        await broker.send(AlterPartitionReassignments, { topics, timeout, allowReplicationFactorChange });
       },
       { retrier, refreshMetadata: true, description: 'Could not reassign partitions' },
     );

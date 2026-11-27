@@ -24,7 +24,7 @@ function encodePartition({ partition, replicas }: AlterPartitionReassignmentsReq
     .writeUVarIntBytes(undefined);
 }
 
-function encodeTopic({ topic, partitionAssignment }: AlterPartitionReassignmentsRequestV0Topic): Encoder {
+export function encodeTopic({ topic, partitionAssignment }: AlterPartitionReassignmentsRequestV0Topic): Encoder {
   return new Encoder()
     .writeUVarIntString(topic)
     .writeUVarIntArray(partitionAssignment.map(encodePartition))

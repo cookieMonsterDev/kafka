@@ -26,7 +26,7 @@ function decodePartition(decoder: Decoder): AlterPartitionReassignmentsResponseV
   return partition;
 }
 
-function decodeResponse(decoder: Decoder): AlterPartitionReassignmentsResponseV0Topic {
+export function decodeTopicResponse(decoder: Decoder): AlterPartitionReassignmentsResponseV0Topic {
   const response = {
     topic: decoder.readUVarIntString() ?? '',
     partitions: decoder.readUVarIntArray(decodePartition) ?? [],
@@ -56,7 +56,7 @@ export const alterPartitionReassignmentsResponseV0: ResponseDefinition<AlterPart
     const throttleTime = decoder.readInt32();
     const errorCode = decoder.readInt16();
     decoder.readUVarIntString(); // error_message, unused
-    return { throttleTime, errorCode, responses: decoder.readUVarIntArray(decodeResponse) ?? [] };
+    return { throttleTime, errorCode, responses: decoder.readUVarIntArray(decodeTopicResponse) ?? [] };
   },
   parse: async (data) => {
     // Request-level failures have no topic/partition, so they surface as a plain protocol error.

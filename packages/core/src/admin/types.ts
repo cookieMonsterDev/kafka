@@ -12,7 +12,7 @@ import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-conf
 import type { AlterReplicaLogDirsResponseV2Body } from '../protocol/requests/alter-replica-log-dirs/v2/response';
 import type { DescribeAclsResponseV1Body } from '../protocol/requests/describe-acls/v1/response';
 import type { DescribeClientQuotasResponseV1Body } from '../protocol/requests/describe-client-quotas/v1/response';
-import type { DescribeLogDirsResponseV2Body } from '../protocol/requests/describe-log-dirs/v2/response';
+import type { DescribeLogDirsResult } from '../protocol/requests/describe-log-dirs/v0/response';
 import type { DescribeConfigsResponseV2Body } from '../protocol/requests/describe-configs/v2/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type {
@@ -259,6 +259,22 @@ export interface DeleteShareGroupOffsetsOptions {
   topics: string[];
 }
 
+/** One log dir on a broker, as `describeLogDirs` reports it. */
+export interface LogDirDescription extends DescribeLogDirsResult {
+  /**
+   * Size in bytes of the volume that holds the log dir, excluding remote storage. Absent when the
+   * broker negotiates DescribeLogDirs v3 or older, or cannot read the volume.
+   */
+  totalBytes?: bigint;
+  /** Usable bytes on that volume, excluding remote storage. Absent in the same cases as `totalBytes`. */
+  usableBytes?: bigint;
+  /**
+   * Whether the broker keeps new partition replicas off this log dir. Absent when the broker
+   * negotiates DescribeLogDirs v4 or older.
+   */
+  isCordoned?: boolean;
+}
+
 export interface DescribeReplicaLogDirsReplica {
   topic: string;
   partition: number;
@@ -441,6 +457,17 @@ export interface PartitionReassignment {
   partitionAssignment: ReplicaAssignment[];
 }
 
+export interface AlterPartitionReassignmentsOptions {
+  topics: PartitionReassignment[];
+  timeout?: number;
+  /**
+   * When `false`, the broker rejects every partition whose replica count would change
+   * (KIP-860). Needs AlterPartitionReassignments v1; on an older broker `false` throws instead of
+   * being ignored. Defaults to `true`.
+   */
+  allowReplicationFactorChange?: boolean;
+}
+
 export interface TopicPartitions {
   topic: string;
   partitions: number[];
@@ -606,7 +633,7 @@ export interface Admin {
   deleteAcls: (options: {
     filters: AclFilter[];
   }) => Promise<{ filterResponses: DeleteAclsResponseV1Body['filterResponses'] }>;
-  alterPartitionReassignments: (options: { topics: PartitionReassignment[]; timeout?: number }) => Promise<void>;
+  alterPartitionReassignments: (options: AlterPartitionReassignmentsOptions) => Promise<void>;
   listPartitionReassignments: (options?: {
     topics?: TopicPartitions[] | null;
     timeout?: number;
@@ -640,7 +667,7 @@ export interface Admin {
   describeLogDirs: (options?: {
     topics?: { topic: string; partitions: number[] }[] | null;
     brokerIds?: Array<string | number>;
-  }) => Promise<{ brokers: { brokerId: number; logDirs: DescribeLogDirsResponseV2Body['logDirs'] }[] }>;
+  }) => Promise<{ brokers: { brokerId: number; logDirs: LogDirDescription[] }[] }>;
   describeReplicaLogDirs: (replicas: DescribeReplicaLogDirsReplica[]) => Promise<{
     replicas: DescribeReplicaLogDirsResult[];
   }>;

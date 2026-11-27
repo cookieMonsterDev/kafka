@@ -39,8 +39,11 @@ const partitionSchema = flexibleObject([
   field('offsetLag', int64),
   field('isFuture', boolean),
 ]);
-const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);
-const logDirSchema = flexibleObject([
+export const topicSchema = flexibleObject([
+  field('topic', compactString),
+  field('partitions', compactArray(partitionSchema)),
+]);
+export const logDirSchema = flexibleObject([
   field('errorCode', int16),
   field('logDir', compactString),
   field('topics', compactArray(topicSchema)),

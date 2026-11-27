@@ -132,8 +132,16 @@ on Kafka 4.2+. Classic `consumer()` remains the default.
 (key 47). `admin.describeUserScramCredentials` and `admin.alterUserScramCredentials`
 are keys 50–51. `admin.describeClientQuotas` / `admin.alterClientQuotas` are
 keys 48–49. `admin.describeLogDirs` / `admin.alterReplicaLogDirs` are keys
-34–35. `admin.describeReplicaLogDirs` filters DescribeLogDirs (35) to specific
-broker/replica pairs. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
+34–35. DescribeLogDirs negotiates v0–v5: v3 adds a request-level error code, so
+a broker that refuses the request (such as `CLUSTER_AUTHORIZATION_FAILED`) now
+makes `describeLogDirs` throw where older versions returned no log dirs; v4
+(Kafka 3.3+, KIP-827) adds each log dir's `totalBytes` and `usableBytes`; v5
+(Kafka 4.3+) adds `isCordoned`. Fields the broker does not send are left out, and
+a volume size of `-1` (unreadable) is left out too. `admin.describeReplicaLogDirs`
+filters DescribeLogDirs (35) to specific broker/replica pairs.
+`admin.alterPartitionReassignments` implements AlterPartitionReassignments
+(key 45) v0–v1. `allowReplicationFactorChange: false` (KIP-860) needs v1
+(Kafka 4.1+); on an older broker it throws instead of being ignored. `admin.describeCluster` uses DescribeCluster (key 60) when advertised
 and Metadata otherwise. `admin.describeProducers` uses key 61 on Kafka 3.0+
 and queries partition leaders unless a `brokerId` is supplied.
 `admin.describeTransactions` uses key 65, dynamically discovers transaction

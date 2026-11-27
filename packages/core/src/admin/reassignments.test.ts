@@ -70,6 +70,20 @@ describe('admin/reassignments', () => {
       expect(broker.alterPartitionReassignments).toHaveBeenCalledWith({ topics: [validAssignment], timeout: 5000 });
     });
 
+    it('passes allowReplicationFactorChange to the request', async () => {
+      const broker = withSend({ alterPartitionReassignments: vi.fn().mockResolvedValue(undefined) });
+      const cluster = fakeRunCluster({ controller: broker });
+      await makeApi(cluster).alterPartitionReassignments({
+        topics: [validAssignment],
+        allowReplicationFactorChange: false,
+      });
+
+      expect(broker.alterPartitionReassignments).toHaveBeenCalledWith({
+        topics: [validAssignment],
+        allowReplicationFactorChange: false,
+      });
+    });
+
     it('retries on NOT_CONTROLLER', async () => {
       const error = Object.assign(new Error('not controller'), { type: 'NOT_CONTROLLER' });
       const broker = withSend({

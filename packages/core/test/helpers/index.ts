@@ -481,6 +481,7 @@ export const testIfKafkaAtLeast_4_0 = testIfKafkaVersion('4.0', kafkaVersionAtLe
 export const testIfKafkaAtLeast_4_1 = testIfKafkaVersion('4.1', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_4_2 = testIfKafkaVersion('4.2', kafkaVersionAtLeast);
 export const testIfKafkaAtLeast_4_3 = testIfKafkaVersion('4.3', kafkaVersionAtLeast);
+export const testIfKafkaAtLeast_4_4 = testIfKafkaVersion('4.4', kafkaVersionAtLeast);
 
 /** Transactions exist from Kafka 0.11; transaction V2 (KIP-890, `AddPartitionsToTxn` skip) takes over from Kafka 4.0. */
 export const testIfKafkaTransactionV1 = kafkaVersionAtLeast('0.11') && kafkaVersionAtMost('3.6') ? it : it.skip;

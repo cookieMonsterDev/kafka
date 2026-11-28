@@ -9,8 +9,11 @@ import {
   retryProtocol,
   secureRandom,
   testIfKafkaAtLeast_4_0,
+  testIfKafkaAtLeast_4_4,
   testIfKafkaAtMost_3_6,
 } from '../../helpers/index';
+import { lookup } from '../../../src/protocol/requests/index';
+import { DeleteGroups } from '../../../src/protocol/requests/delete-groups/index';
 import { DescribeGroups } from '../../../src/protocol/requests/describe-groups/index';
 import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
 import { Heartbeat } from '../../../src/protocol/requests/heartbeat/index';
@@ -95,5 +98,14 @@ describe('broker.groups', () => {
     await expect(coordinator!.send(DescribeGroups, { groupIds: [groupId] })).rejects.toMatchObject({
       type: 'GROUP_ID_NOT_FOUND',
     });
+  });
+
+  testIfKafkaAtLeast_4_4('negotiates DeleteGroups v3 and decodes its per-group results', async () => {
+    expect(lookup(coordinator!.versions!)(DeleteGroups)({ groupIds: [groupId] }).request.apiVersion).toBe(3);
+
+    const { results } = await coordinator!.send(DeleteGroups, { groupIds: [groupId] });
+    expect(results).toEqual([
+      expect.objectContaining({ groupId, error: expect.objectContaining({ type: 'GROUP_ID_NOT_FOUND' }) }),
+    ]);
   });
 });

@@ -163,7 +163,9 @@ or one that is not a classic group, makes `admin.describeGroups` throw (`cause.t
 `GROUP_ID_NOT_FOUND`) where older versions returned an empty `Dead` group;
 `consumer.describeGroup()` still returns the `Dead` group. `admin.listGroups` implements ListGroups
 (key 16) v0–v5; its `types` filter (KIP-848) needs v5 (Kafka 3.8+) and throws on an older
-broker instead of being ignored. `admin.describeShareGroups`, `listShareGroupOffsets`,
+broker instead of being ignored. `admin.deleteGroups` implements DeleteGroups (key 42)
+v0–v3; on v3 (Kafka 4.4+) a failed group's `error` carries the broker's message when it sends
+one, such as the cause of `GROUP_DELETION_FAILED`. `admin.describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
 implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
 `admin.describeTopicPartitions` uses

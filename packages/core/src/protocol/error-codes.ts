@@ -834,6 +834,12 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: true,
     message: 'The limit of share sessions has been reached',
   },
+  {
+    type: 'GROUP_DELETION_FAILED',
+    code: 134,
+    retriable: false,
+    message: 'The group could not be deleted',
+  },
 ];
 
 /** Pre-2.6 name for error code 6. Prefer `NOT_LEADER_OR_FOLLOWER`. */

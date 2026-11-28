@@ -6,6 +6,8 @@ import { deleteGroupsRequestV1 } from './v1/request';
 import { deleteGroupsResponseV1 } from './v1/response';
 import { deleteGroupsRequestV2 } from './v2/request';
 import { deleteGroupsResponseV2 } from './v2/response';
+import { deleteGroupsRequestV3 } from './v3/request';
+import { deleteGroupsResponseV3 } from './v3/response';
 
 export interface DeleteGroupsOptions {
   groupIds: string[];
@@ -15,6 +17,7 @@ const VERSIONS = {
   0: (options) => ({ request: deleteGroupsRequestV0(options), response: deleteGroupsResponseV0 }),
   1: (options) => ({ request: deleteGroupsRequestV1(options), response: deleteGroupsResponseV1 }),
   2: (options) => ({ request: deleteGroupsRequestV2(options), response: deleteGroupsResponseV2 }),
+  3: (options) => ({ request: deleteGroupsRequestV3(options), response: deleteGroupsResponseV3 }),
 } satisfies VersionFactories<DeleteGroupsOptions>;
 
 export const DeleteGroups = defineRequestFamily(KAFKA_APIS.DeleteGroups, VERSIONS);

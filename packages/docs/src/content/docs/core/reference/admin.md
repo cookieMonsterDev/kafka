@@ -42,7 +42,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | -------------------------------------------------------------- | ------------------------------------------- |
 | `listGroups({ types? })`                                       | ListGroups (16); `types`: 3.8+              |
 | `describeGroups(ids)` / `describeClassicGroups(ids)`           | DescribeGroups (15); unknown throws on 4.0+ |
-| `deleteGroups(ids)`                                            |                                             |
+| `deleteGroups(ids)`                                            | DeleteGroups (42); broker messages: 4.4+    |
 | `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+      |
 | `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+         |
 | `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)              |

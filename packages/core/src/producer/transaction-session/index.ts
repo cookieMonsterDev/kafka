@@ -1,4 +1,4 @@
-import { supportsTransactionV2 } from '../../broker/capabilities';
+import { supportsTransactionV2, supportsTxnOffsetCommitTopicIds } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
 import {
@@ -431,10 +431,11 @@ export function createTransactionSession({
     }
     hasOffsetsAddedToTransaction = true;
 
-    const requestTopics = topics.map(({ topic, partitions }) => ({
-      topic,
-      partitions: partitions.map(({ partition, offset }) => ({ partition, offset, metadata: null })),
-    }));
+    // TxnOffsetCommit v6 (KIP-1319) needs transaction version 2 and an id for every topic.
+    const { versions } = cluster.brokerPool;
+    if (usesTransactionV2 && versions != null && supportsTxnOffsetCommitTopicIds(versions)) {
+      await loadTopicIds(topics.map(({ topic }) => topic));
+    }
 
     await cluster.run(
       coordinatorTarget(consumerGroupId, COORDINATOR_TYPES.GROUP),
@@ -444,7 +445,12 @@ export function createTransactionSession({
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),
           groupId: consumerGroupId,
-          topics: requestTopics,
+          // Read on every attempt, so the retry after UNKNOWN_TOPIC_ID sends the refreshed ids.
+          topics: topics.map(({ topic, partitions }) => ({
+            topic,
+            topicId: loadedTopicId(topic),
+            partitions: partitions.map(({ partition, offset }) => ({ partition, offset, metadata: null })),
+          })),
           isTransactionV2Enabled: usesTransactionV2,
         }),
       { retrier: retry, retryOn: TXN_OFFSET_COMMIT_RETRY_ON },
@@ -455,6 +461,31 @@ export function createTransactionSession({
         transactionOffsets.push({ groupId: consumerGroupId, topic, partition, offset });
       }
     }
+  }
+
+  /**
+   * Adds `topics` to the metadata the producer keeps, as the Java client does before it sends
+   * offsets, so TxnOffsetCommit can address them by id. Only on Kafka 4.4+, where v6 exists, so
+   * older clusters fetch no metadata they cannot use. On failure the request names the topics
+   * instead, and any lasting cause, such as an unknown topic, fails that request.
+   */
+  async function loadTopicIds(topics: readonly string[]): Promise<void> {
+    try {
+      await cluster.addMultipleTargetTopics(topics);
+    } catch (error) {
+      logger.debug('Could not load topic ids for the offsets; sending them by topic name', {
+        error: (error as Error).message,
+        transactionalId,
+      });
+    }
+  }
+
+  /**
+   * The topic's id from the producer's metadata, or `undefined` while it has none, such as before a
+   * failed `loadTopicIds`: `Cluster.findTopicId` throws while no metadata is loaded.
+   */
+  function loadedTopicId(topic: string): Buffer | undefined {
+    return cluster.brokerPool.metadata ? cluster.findTopicId(topic) : undefined;
   }
 
   return {

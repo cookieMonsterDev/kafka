@@ -74,6 +74,12 @@ export function supportsBatchedOffsetFetch(versions: BrokerVersions): boolean {
   return offsetFetch != null && offsetFetch.maxVersion >= 8;
 }
 
+/** KIP-1319: TxnOffsetCommit v6 addresses topics by topic id. Kafka 4.4+. */
+export function supportsTxnOffsetCommitTopicIds(versions: BrokerVersions): boolean {
+  const txnOffsetCommit = advertised(versions, API_KEYS.TxnOffsetCommit);
+  return txnOffsetCommit != null && txnOffsetCommit.maxVersion >= 6;
+}
+
 /**
  * KIP-1242: ApiVersions v5 carries the cluster id and node id the client expects, so a broker
  * reached through a reused address can answer `REBOOTSTRAP_REQUIRED`. Kafka 4.4+.

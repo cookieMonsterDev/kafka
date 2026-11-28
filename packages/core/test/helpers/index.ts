@@ -14,10 +14,17 @@ import { connectionPoolBuilder, type ConnectionPoolBuilder } from '../../src/clu
 import type { Consumer } from '../../src/consumer/index';
 import type { ConsumerEventName } from '../../src/consumer/instrumentation-events';
 import { Kafka } from '../../src/client';
+import { InstrumentationEventEmitter } from '../../src/instrumentation/emitter';
+import type { InstrumentationEvent } from '../../src/instrumentation/event';
 import { createLogger, LOG_LEVELS, type Logger } from '../../src/loggers/index';
 import { consoleLogCreator } from '../../src/loggers/console';
 import { ConnectionPool } from '../../src/network/connection-pool';
 import type { ConnectionOptions } from '../../src/network/connection';
+import {
+  NETWORK_REQUEST,
+  type NetworkEventMap,
+  type NetworkRequestEvent,
+} from '../../src/network/instrumentation-events';
 import { createDefaultSocketFactory } from '../../src/network/socket-factory';
 import { FAST_RETRY_DEFAULTS } from '../../src/retry/test-defaults';
 import type { KafkaConfig } from '../../src/types/index';
@@ -520,4 +527,43 @@ export function generateMessages({ prefix, number = 100 }: { prefix?: string; nu
 export function createAdminClient(opts: CreateClusterOpts = {}, brokers = plainTextBrokers()) {
   const cluster = createCluster(opts, brokers);
   return { cluster, admin: createAdmin({ cluster, logger: newLogger() }) };
+}
+
+/** Records the API name and version of every request a cluster built with its `instrumentationEmitter` sends. */
+export function recordRequests() {
+  const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
+  const requests: { apiName: string; apiVersion: number }[] = [];
+  instrumentationEmitter.addListener(NETWORK_REQUEST, (event: InstrumentationEvent<NetworkRequestEvent>) => {
+    requests.push({ apiName: event.payload.apiName, apiVersion: event.payload.apiVersion });
+  });
+  const versionsOf = (apiName: string) =>
+    requests.filter((request) => request.apiName === apiName).map(({ apiVersion }) => apiVersion);
+  /** The distinct versions an API was sent with, as retries repeat a request. */
+  const distinctVersionsOf = (apiName: string) => [...new Set(versionsOf(apiName))];
+  return { instrumentationEmitter, versionsOf, distinctVersionsOf };
+}
+
+/**
+ * Waits until the broker reports `offset` committed by `groupId` on partition 0 of `topic`. A
+ * transaction's offsets show once its markers are written, after `commit()` resolves.
+ */
+export async function waitForCommittedOffset({
+  groupId,
+  topic,
+  offset,
+}: {
+  groupId: string;
+  topic: string;
+  offset: bigint;
+}): Promise<void> {
+  const { admin } = createAdminClient();
+  await admin.connect();
+  try {
+    await waitFor(async () => {
+      const offsets = await admin.fetchOffsets({ groupId, topics: [topic] });
+      return offsets.find((entry) => entry.topic === topic)?.partitions[0]?.offset === offset;
+    });
+  } finally {
+    await admin.disconnect();
+  }
 }

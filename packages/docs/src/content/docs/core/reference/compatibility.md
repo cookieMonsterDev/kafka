@@ -125,7 +125,7 @@ only brokers look up) is not sent.
 
 **Transactions.** The transactional producer sends InitProducerId (key 22) v0–v5,
 AddPartitionsToTxn (24) v0–v3, AddOffsetsToTxn (25) v0–v4, EndTxn (26) v0–v5, and
-TxnOffsetCommit (28) v0–v5. On Kafka 3.8+ these versions tell the broker the client
+TxnOffsetCommit (28) v0–v6. On Kafka 3.8+ these versions tell the broker the client
 handles `TRANSACTION_ABORTABLE` (KIP-890 part 1). A transaction that fails with it can
 only be aborted, as after any other failed send, `sendOffsets`, or rejected `commit()`;
 after `abort()` the producer begins the next transaction as usual. If the broker rejects
@@ -136,7 +136,7 @@ only from other brokers, so the producer stays on v3, as the Java client does.
 
 Transaction version 2 (KIP-890 part 2) is used when the cluster has finalized the
 `transaction.version` feature at 2 or higher. New Kafka 4.0+ clusters do this by default.
-Under it, Produce v12+ adds partitions to the transaction and TxnOffsetCommit v5 adds the
+Under it, Produce v12+ adds partitions to the transaction and TxnOffsetCommit v5+ adds the
 group's offsets, so the producer sends no AddPartitionsToTxn or AddOffsetsToTxn. Each
 EndTxn v5 bumps the producer epoch and returns the producer id and epoch for the next
 transaction, so the producer sends InitProducerId only before its first transaction.
@@ -148,6 +148,17 @@ response as the broker's API versions, when it first connects, and keeps it whil
 reuses those versions; create a new producer to pick up a change. If a producer does read
 a new level that turns transaction version 2 on, it bumps its epoch before its first
 transaction under it, as the Java client does.
+
+On Kafka 4.4+ (TxnOffsetCommit v6, KIP-1319), `sendOffsets` addresses each topic by its
+topic id. Like the Java client, the producer sends v6 only under transaction version 2 and
+only when its metadata has an id for every topic. Before it sends the offsets to a cluster
+that supports v6, it adds their topics to the metadata it keeps; if that lookup fails, or a
+topic has no id, the offsets go by topic name on v5. `UNKNOWN_TOPIC_ID` refreshes the
+metadata before the retry. v6 can also answer `GROUP_ID_NOT_FOUND` or `STALE_MEMBER_EPOCH`
+where older versions answer `ILLEGAL_GENERATION`; as with any failed `sendOffsets`, the
+transaction can then only be aborted. The producer sends offsets without a member id or
+generation, which the coordinator accepts without checking the group's members, so in
+practice neither error occurs.
 
 **Offset lookups.** ListOffsets (key 2) v0–v11. `admin.fetchTopicOffsets`
 takes an `offsetSpec` from `OffsetSpecs`: max timestamp (v7, Kafka 3.0), earliest

@@ -19,7 +19,7 @@ export type TxnOffsetCommitResponseV3Body = TxnOffsetCommitResponseV2Body;
  *
  * @see https://kafka.apache.org/44/design/protocol/
  */
-const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
+export const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);
 const bodySchema = flexibleObject([field('throttleTime', int32), field('topics', compactArray(topicSchema))]);
 

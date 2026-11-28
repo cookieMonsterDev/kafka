@@ -34,7 +34,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * @see https://kafka.apache.org/44/design/protocol/
  */
-const partitionSchema = flexibleObject([
+export const partitionSchema = flexibleObject([
   field('partition', int32),
   field('offset', int64),
   field('leaderEpoch', int32),

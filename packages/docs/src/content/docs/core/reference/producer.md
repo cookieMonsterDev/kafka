@@ -102,6 +102,8 @@ producer.
 
 On a cluster with transaction version 2 (Kafka 4.0+), each transaction ends with
 a new producer epoch and needs no AddPartitionsToTxn or AddOffsetsToTxn round trip.
+On Kafka 4.4+, `sendOffsets` there also loads the metadata of the offsets' topics the
+first time it sees them, so the broker can take them by topic id.
 See [Compatibility](../compatibility/#implemented-surface).
 
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.

@@ -1,25 +1,21 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
-import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
-import type { InstrumentationEvent } from '../../../src/instrumentation/event';
-import {
-  NETWORK_REQUEST,
-  type NetworkEventMap,
-  type NetworkRequestEvent,
-} from '../../../src/network/instrumentation-events';
 import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { END_TXN_TRANSACTION_V2_MIN_VERSION } from '../../../src/protocol/requests/end-txn/index';
 import { PRODUCE_TRANSACTION_V2_MIN_VERSION } from '../../../src/protocol/requests/produce/shared';
-import { TXN_OFFSET_COMMIT_TRANSACTION_V2_MIN_VERSION } from '../../../src/protocol/requests/txn-offset-commit/index';
+import {
+  TXN_OFFSET_COMMIT_TOPIC_ID_MIN_VERSION,
+  TXN_OFFSET_COMMIT_TRANSACTION_V2_MIN_VERSION,
+} from '../../../src/protocol/requests/txn-offset-commit/index';
 import { createProducer } from '../../../src/producer/index';
 import {
-  createAdminClient,
   createCluster,
   createTopic,
   newLogger,
+  recordRequests,
   secureRandom,
+  waitForCommittedOffset,
   waitForConsumerToJoinGroup,
-  waitFor,
   waitForMessages,
   testIfKafkaAtLeast_0_11,
   testIfKafkaTransactionV1,
@@ -151,34 +147,6 @@ describe('producer.transactions', () => {
     }
   });
 
-  /** Records the API name and version of every request the cluster sends. */
-  function recordRequests() {
-    const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
-    const requests: { apiName: string; apiVersion: number }[] = [];
-    instrumentationEmitter.addListener(NETWORK_REQUEST, (event: InstrumentationEvent<NetworkRequestEvent>) => {
-      requests.push({ apiName: event.payload.apiName, apiVersion: event.payload.apiVersion });
-    });
-    const versionsOf = (apiName: string) =>
-      requests.filter((request) => request.apiName === apiName).map(({ apiVersion }) => apiVersion);
-    /** The distinct versions an API was sent with, as retries repeat a request. */
-    const distinctVersionsOf = (apiName: string) => [...new Set(versionsOf(apiName))];
-    return { instrumentationEmitter, versionsOf, distinctVersionsOf };
-  }
-
-  /** The offset `groupId` has committed on partition 0, once the broker reports `expected`. */
-  async function waitForCommittedOffset(groupId: string, expected: bigint): Promise<void> {
-    const { admin } = createAdminClient();
-    await admin.connect();
-    try {
-      await waitFor(async () => {
-        const offsets = await admin.fetchOffsets({ groupId, topics: [topicName] });
-        return offsets.find(({ topic }) => topic === topicName)?.partitions[0]?.offset === expected;
-      });
-    } finally {
-      await admin.disconnect();
-    }
-  }
-
   testIfKafkaTransactionV2('does not send AddPartitionsToTxn under transaction V2', async () => {
     const recorder = recordRequests();
     producer = createProducer({
@@ -215,11 +183,12 @@ describe('producer.transactions', () => {
   });
 
   testIfKafkaTransactionV2(
-    'bumps the epoch through EndTxn v5 and adds offsets with TxnOffsetCommit v5 under transaction V2',
+    'bumps the epoch through EndTxn v5 and adds offsets with TxnOffsetCommit v5+ under transaction V2',
     async () => {
       const recorder = recordRequests();
+      const cluster = createCluster({ instrumentationEmitter: recorder.instrumentationEmitter });
       producer = createProducer({
-        cluster: createCluster({ instrumentationEmitter: recorder.instrumentationEmitter }),
+        cluster,
         logger: newLogger(),
         idempotent: true,
         transactionalId,
@@ -238,7 +207,7 @@ describe('producer.transactions', () => {
         });
         await transaction.commit();
       }
-      await waitForCommittedOffset(consumerGroupId, 2n);
+      await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 2n });
 
       // An aborted transaction leaves the committed offset where it was.
       const aborted = await producer.transaction();
@@ -250,12 +219,16 @@ describe('producer.transactions', () => {
       const next = await producer.transaction();
       await next.send({ topic: topicName, messages: [{ key: 'k', value: 'after-abort' }] });
       await next.commit();
-      await waitForCommittedOffset(consumerGroupId, 2n);
+      await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 2n });
 
       // Only the first transaction needed InitProducerId; every EndTxn after it carried the bumped epoch.
       expect(recorder.versionsOf('InitProducerId').length - initProducerIdsAtConnect).toBe(1);
       expect(recorder.distinctVersionsOf('EndTxn')).toEqual([5]);
-      expect(recorder.distinctVersionsOf('TxnOffsetCommit')).toEqual([5]);
+      // Kafka 4.4+ also takes the topic by id (v6, KIP-1319).
+      const txnOffsetCommitMaxVersion = cluster.brokerPool.versions?.[API_KEYS.TxnOffsetCommit]?.maxVersion ?? 0;
+      expect(recorder.distinctVersionsOf('TxnOffsetCommit')).toEqual([
+        Math.min(txnOffsetCommitMaxVersion, TXN_OFFSET_COMMIT_TOPIC_ID_MIN_VERSION),
+      ]);
       expect(recorder.versionsOf('AddOffsetsToTxn')).toEqual([]);
       expect(recorder.versionsOf('AddPartitionsToTxn')).toEqual([]);
     },
@@ -275,7 +248,7 @@ describe('producer.transactions', () => {
       topics: [{ topic: topicName, partitions: [{ partition: 0, offset: 1n }] }],
     });
     await transaction.commit();
-    await waitForCommittedOffset(consumerGroupId, 1n);
+    await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 1n });
 
     expect(recorder.versionsOf('AddPartitionsToTxn').length).toBeGreaterThan(0);
     expect(recorder.versionsOf('AddOffsetsToTxn').length).toBeGreaterThan(0);

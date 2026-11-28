@@ -10,6 +10,7 @@ import {
   supportsRecordBatch,
   supportsTransactions,
   supportsTransactionV2,
+  supportsTxnOffsetCommitTopicIds,
   supportsZstd,
 } from './capabilities';
 
@@ -64,5 +65,11 @@ describe('broker/capabilities', () => {
     expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 4 } })).toBe(false);
     expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 5 } })).toBe(true);
     expect(supportsMisroutedConnectionCheck({})).toBe(false);
+  });
+
+  it('supportsTxnOffsetCommitTopicIds when TxnOffsetCommit maxVersion is at least 6', () => {
+    expect(supportsTxnOffsetCommitTopicIds({})).toBe(false);
+    expect(supportsTxnOffsetCommitTopicIds({ [API_KEYS.TxnOffsetCommit]: { maxVersion: 5 } })).toBe(false);
+    expect(supportsTxnOffsetCommitTopicIds({ [API_KEYS.TxnOffsetCommit]: { maxVersion: 6 } })).toBe(true);
   });
 });

@@ -48,6 +48,7 @@
     "@semantic-release/npm": "^13.2.0",
     "@semantic-release/release-notes-generator": "^14.1.1",
     "@tanstack/intent": "^0.5.6",
+    "@types/node": "catalog:",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.1",
     "oxlint": "catalog:",

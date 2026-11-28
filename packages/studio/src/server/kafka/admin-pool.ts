@@ -13,6 +13,7 @@ export type PooledAdmin = Pick<
   | 'fetchTopicOffsetsByTimestamp'
   | 'describeConfigs'
   | 'describeLogDirs'
+  | 'describeApiVersions'
   | 'createTopics'
   | 'deleteTopics'
   | 'deleteTopicRecords'

@@ -1,4 +1,4 @@
-import type { LogDirListResponse } from '../../../shared/contracts/cluster';
+import type { ApiVersionsResponse, LogDirListResponse } from '../../../shared/contracts/cluster';
 import type { DebugRecord, ScanCoverage, ScanRequest, ScanResult } from '../../../shared/contracts/debug';
 import type { StudioEvent } from '../../../shared/contracts/event';
 import type {
@@ -36,6 +36,7 @@ import { StudioEventBus, type StudioEventInput } from '../../../server/kafka/eve
 import { encodeText } from '../../lib/debug-api';
 import {
   GROUP_SEEDS,
+  SAMPLE_API_VERSIONS,
   STREAMS_GROUP_SEEDS,
   TOPIC_SEEDS,
   createRandom,
@@ -227,6 +228,18 @@ export class DemoCluster {
           isCordoned: false,
         };
       }),
+    };
+  }
+
+  apiVersions(): ApiVersionsResponse {
+    return {
+      brokers: BROKER_IDS.map((nodeId, index) => ({
+        nodeId,
+        host: 'localhost',
+        port: 9092 + index,
+        rack: `rack-${String.fromCharCode(97 + index)}`,
+        apis: SAMPLE_API_VERSIONS,
+      })),
     };
   }
 

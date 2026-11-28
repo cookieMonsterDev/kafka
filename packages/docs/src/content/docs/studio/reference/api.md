@@ -31,6 +31,7 @@ reason: `404 unknown_group` for an unknown group, `409 group_not_empty` while it
 | `POST`   | `/api/profiles/active`                          | Switch the active connection profile                         |
 | `GET`    | `/api/cluster`                                  | Connection status                                            |
 | `GET`    | `/api/cluster/log-dirs`                         | Every broker's log dirs: volume usage and cordoning          |
+| `GET`    | `/api/cluster/api-versions`                     | Every broker's API versions and the version Studio uses      |
 | `GET`    | `/api/topics`                                   | List topics with partition/replication counts                |
 | `POST`   | `/api/topics`                                   | Create a topic                                               |
 | `GET`    | `/api/topics/:name`                             | Partitions, ISR, offsets, size, configs                      |

@@ -199,6 +199,19 @@ describe('studio server against a real broker', () => {
     expect(Array.isArray(groups)).toBe(true);
   });
 
+  it('lists the API versions of every broker, with the version the client uses', async () => {
+    const result = await api(studio, 'GET', '/api/cluster/api-versions');
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
+    const { brokers } = (await result.json()) as {
+      brokers: { apis: { apiKey: number; isImplemented: boolean; version: number | null }[] }[];
+    };
+    expect(brokers.length).toBeGreaterThan(0);
+    expect(brokers[0]?.apis.find(({ apiKey }) => apiKey === 0)).toMatchObject({
+      isImplemented: true,
+      version: expect.any(Number),
+    });
+  });
+
   it('lists streams groups without error (none joined yet)', async () => {
     const result = await api(studio, 'GET', '/api/streams-groups');
     expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });

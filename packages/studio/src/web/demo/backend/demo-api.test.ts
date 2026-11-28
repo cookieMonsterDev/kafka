@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ApiVersionsResponse } from '../../../shared/contracts/cluster';
 import type { ScanResult } from '../../../shared/contracts/debug';
 import type { StudioEvent } from '../../../shared/contracts/event';
 import type {
@@ -109,6 +110,16 @@ describe('DemoApi', () => {
     expect(detail).toMatchObject({ groupId: 'order-totals', state: 'Stable' });
     expect(detail.members).toHaveLength(2);
     expect(call(api, 'GET', '/api/streams-groups/missing').status).toBe(404);
+  });
+
+  it('serves the API versions of every broker, including APIs the client does not implement', async () => {
+    const api = new DemoApi();
+
+    const { brokers } = await callJson<ApiVersionsResponse>(api, 'GET', '/api/cluster/api-versions');
+    expect(brokers.map(({ nodeId }) => nodeId)).toEqual([1, 2, 3]);
+    const apis = brokers[0]?.apis ?? [];
+    expect(apis.find(({ apiKey }) => apiKey === 0)).toMatchObject({ apiName: 'Produce', version: 13 });
+    expect(apis.find(({ apiKey }) => apiKey === 88)).toMatchObject({ isImplemented: false, version: null });
   });
 
   it('creates a topic with config overrides and reports them as non-default', async () => {

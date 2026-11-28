@@ -198,6 +198,7 @@ export class DemoApi {
       } satisfies ClusterStatus),
     );
     this.request('GET', '/api/cluster/log-dirs', () => json(200, cluster.logDirs()));
+    this.request('GET', '/api/cluster/api-versions', () => json(200, cluster.apiVersions()));
     this.request('GET', '/api/profiles', () =>
       json(200, {
         active: DEMO_PROFILE,

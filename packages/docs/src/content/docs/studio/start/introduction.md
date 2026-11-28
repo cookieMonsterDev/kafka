@@ -3,6 +3,7 @@ title: Introduction
 description: A local web UI for inspecting and driving an Apache Kafka cluster
 order: 1
 section: start
+demo: studio
 ---
 
 `@cookiemonsterdev/kafka-studio` is a local web UI for inspecting and interacting with an Apache

@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, type Plugin, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
@@ -52,12 +52,17 @@ function precompressAssets(): Plugin {
   };
 }
 
+/** The SPA's compile plugins, shared with the documentation demo build (`vite.demo.config.ts`). */
+export function spaPlugins(): PluginOption[] {
+  return [react({ compiler: true }), tailwindcss()];
+}
+
 // Builds the browser SPA served by the studio server (see src/server/static.ts). Kept as a
 // separate config from vite.config.ts because the server bundle targets Node and externalizes
 // core/config, while this one targets browsers and bundles everything it needs.
 export default defineConfig({
   root: 'src/web',
-  plugins: [react({ compiler: true }), tailwindcss(), precompressAssets()],
+  plugins: [...spaPlugins(), precompressAssets()],
   build: {
     outDir: '../../dist/web',
     emptyOutDir: true,

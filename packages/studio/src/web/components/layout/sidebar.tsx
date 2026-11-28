@@ -29,7 +29,7 @@ export function BrandMark({ className }: { readonly className?: string }) {
         className,
       )}
     >
-      <img src="/logo-mark.svg" alt="" width="22" height="22" className="size-5.5" />
+      <img src={`${import.meta.env.BASE_URL}logo-mark.svg`} alt="" width="22" height="22" className="size-5.5" />
     </span>
   );
 }

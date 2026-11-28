@@ -15,6 +15,8 @@ const docs = defineCollection({
     /** Excluded from the sidebar and mobile nav, but still a real page — reachable by direct link or search. For pages an index already links to individually, like one per CLI command. */
     hidden: z.boolean().optional(),
     commandPath: z.array(z.string()).optional(),
+    /** Embeds an interactive demo under the page title. `studio` is the Studio web UI on a sample cluster. */
+    demo: z.literal('studio').optional(),
   }),
 });
 

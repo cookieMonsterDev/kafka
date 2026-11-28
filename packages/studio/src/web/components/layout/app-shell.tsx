@@ -119,9 +119,12 @@ export function AppShell({ children }: AppShellProps) {
         {/*
           `h-dvh` + `overflow-hidden` so the nav rail and the detail rail scroll independently of
           the work canvas, as in a desktop dashboard. Under `xl` the canvas takes the page scroll
-          back (see PageLayout) so mobile still behaves like a normal document.
+          back (see PageLayout) so mobile still behaves like a normal document. `relative` makes this
+          box the containing block for absolutely positioned descendants such as `sr-only` headings;
+          without it they are placed against the document, and one below the fold makes the whole
+          document scroll, sliding the shell up past the viewport.
         */}
-        <div className="flex h-dvh overflow-hidden">
+        <div className="relative flex h-dvh overflow-hidden">
           <a
             href="#main-content"
             className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-lg focus-visible:bg-background focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm"

@@ -1,4 +1,4 @@
-import { createRouter } from '@tanstack/react-router';
+import { createRouter, type RouterHistory } from '@tanstack/react-router';
 import { debugRoute } from './routes/debug';
 import { boardRoute } from './routes/board';
 import { clusterRoute } from './routes/cluster';
@@ -28,10 +28,15 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
 ]);
 
-export const router = createRouter({ routeTree, defaultErrorComponent: PageError });
+/** Omitting `history` uses the browser URL. The docs demo passes a memory history so it never touches its iframe's URL. */
+export function createStudioRouter(history?: RouterHistory) {
+  return createRouter({ routeTree, defaultErrorComponent: PageError, history });
+}
+
+export type StudioRouter = ReturnType<typeof createStudioRouter>;
 
 declare module '@tanstack/react-router' {
   interface Register {
-    router: typeof router;
+    router: StudioRouter;
   }
 }

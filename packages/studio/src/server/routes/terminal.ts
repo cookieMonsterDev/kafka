@@ -4,6 +4,7 @@ import type { ProducerPool } from '../kafka/produce';
 import type { MessageConsumerFactory } from '../kafka/messages';
 import type { StudioEventBus } from '../kafka/events';
 import { z } from 'zod';
+import { terminalInputSchema } from '../../shared/contracts/terminal';
 import { readJsonBody } from '../json';
 import { sendError, sendJson } from '../create-server';
 import { openSseStream } from '../sse';
@@ -12,7 +13,6 @@ import type { AdminPool } from '../kafka/admin-pool';
 import { createKafkaClient, type StudioConnectionConfig } from '../kafka/connection';
 import { TerminalSession } from '../terminal/session';
 
-const inputSchema = z.object({ data: z.string().max(8192) });
 const resizeSchema = z.object({ columns: z.number().int().min(20).max(500) });
 
 export function registerTerminalRoutes(
@@ -75,7 +75,7 @@ export function registerTerminalRoutes(
   router.post(
     '/api/terminal/sessions/:id/input',
     async (req, res, params) => {
-      const parsed = inputSchema.safeParse(await readJsonBody(req));
+      const parsed = terminalInputSchema.safeParse(await readJsonBody(req));
       if (!parsed.success) {
         sendError(res, 400, 'bad_request', 'data must be a string of at most 8192 characters.');
         return;

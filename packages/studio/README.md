@@ -44,8 +44,16 @@ pnpm --filter @cookiemonsterdev/kafka-studio... build
 node packages/studio/dist/bin.js
 ```
 
-`build` produces the server bundle (`dist/`) and the browser SPA (`dist/web/`). Run
-`node packages/studio/dist/bin.js --help` for the flag list (port, host, browser, read-only mode).
+`build` produces the server bundle (`dist/`), the browser SPA (`dist/web/`), and the documentation
+demo (`dist/demo/`, not published to npm). Run `node packages/studio/dist/bin.js --help` for the
+flag list (port, host, browser, read-only mode).
+
+The demo is the same SPA built by `vite.demo.config.ts` with `src/web/demo/main.tsx` as its entry. It
+replaces `fetch` and `EventSource` with an in-page fake cluster (`src/web/demo/backend/`) that
+answers the studio API from sample data, so it needs no server or broker. The documentation site
+publishes it at `/studio-demo/` and embeds it on the Studio introduction page. A change to an API
+route or contract the UI depends on needs a matching change in `src/web/demo/backend/demo-api.ts`;
+endpoints the demo does not simulate answer `501`.
 
 The studio needs Node.js 24 or newer, or Bun 1.4 or newer. To run the build on Bun, use
 `bun packages/studio/dist/bin.js`. An installed `kafka-studio` has a `node` shebang, so run it

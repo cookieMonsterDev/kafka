@@ -51,14 +51,16 @@
   "files": [
     "dist",
     "!dist/**/*.map",
+    "!dist/demo",
     "skills",
     "README.md"
   ],
   "scripts": {
-    "build": "pnpm run build:js && pnpm run build:types && pnpm run build:web",
+    "build": "pnpm run build:js && pnpm run build:types && pnpm run build:web && pnpm run build:demo",
     "build:js": "vite build",
     "build:types": "tsc -p tsconfig.json --emitDeclarationOnly && node ../../scripts/add-declaration-extensions.mjs dist",
     "build:web": "vite build --config vite.web.config.ts",
+    "build:demo": "vite build --config vite.demo.config.ts",
     "dev": "vite build --watch",
     "dev:server": "KAFKA_STUDIO_DEV=1 node dist/bin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit && tsc -p test/tsconfig.json --noEmit",

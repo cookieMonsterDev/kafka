@@ -47,6 +47,16 @@ export type BurstRequest = z.infer<typeof burstRequestSchema>;
 /** What a caller may send — `ratePerSecond` optional; the server fills in {@link DEFAULT_BURST_RATE_PER_SECOND}. */
 export type BurstRequestInput = z.input<typeof burstRequestSchema>;
 
+/** Replaces every `{{seq}}` token in `key`/`value` with the 0-based message index — the one piece of per-message variation a burst template gets. */
+export function applySequence(template: ProduceMessage, seq: number): ProduceMessage {
+  const substitute = (text: string): string => text.replaceAll('{{seq}}', String(seq));
+  return {
+    ...template,
+    ...(template.key !== undefined ? { key: substitute(template.key) } : {}),
+    value: template.value === null ? null : substitute(template.value),
+  };
+}
+
 export interface BurstStartResponse {
   readonly jobId: string;
 }

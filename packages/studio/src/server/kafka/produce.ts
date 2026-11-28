@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { ProfileClientPool } from './profile-client-pool';
 import type { Message, Producer } from '@cookiemonsterdev/kafka-core';
-import type {
-  BurstJobStatus,
-  BurstProgress,
-  BurstRequest,
-  ProduceMessage,
-  ProduceResponse,
+import {
+  applySequence,
+  type BurstJobStatus,
+  type BurstProgress,
+  type BurstRequest,
+  type ProduceMessage,
+  type ProduceResponse,
 } from '../../shared/contracts/produce';
 
 export type PooledProducer = Pick<Producer, 'connect' | 'disconnect' | 'send'>;
@@ -48,16 +49,6 @@ export async function sendMessages(producer: PooledProducer, input: SendMessages
   });
   return {
     results: metadata.map((entry) => ({ partition: entry.partition, offset: entry.baseOffset.toString() })),
-  };
-}
-
-/** Replaces every `{{seq}}` token in `key`/`value` with the 0-based message index — the one piece of per-message variation a burst template gets. */
-function applySequence(template: ProduceMessage, seq: number): ProduceMessage {
-  const substitute = (text: string): string => text.replaceAll('{{seq}}', String(seq));
-  return {
-    ...template,
-    ...(template.key !== undefined ? { key: substitute(template.key) } : {}),
-    value: template.value === null ? null : substitute(template.value),
   };
 }
 

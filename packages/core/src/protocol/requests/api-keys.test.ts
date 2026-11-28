@@ -36,6 +36,7 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.DescribeTopicPartitions).toBe(75);
     expect(API_KEYS.AddRaftVoter).toBe(80);
     expect(API_KEYS.RemoveRaftVoter).toBe(81);
+    expect(API_KEYS.StreamsGroupDescribe).toBe(89);
     expect(API_KEYS.UnregisterController).toBe(94);
   });
 

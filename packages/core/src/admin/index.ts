@@ -17,6 +17,7 @@ import { createRaftVotersApi } from './raft-voters';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createShareGroupsApi } from './share-groups';
+import { createStreamsGroupsApi } from './streams-groups';
 import { createTopicsApi } from './topics';
 import { createTransactionsApi } from './transactions';
 import { createUnregisterBrokerApi } from './unregister-broker';
@@ -63,6 +64,10 @@ export type {
   RemoveMembersFromConsumerGroupOptions,
   RemoveMembersFromConsumerGroupResult,
   ShareGroupDescription,
+  DescribeStreamsGroupsOptions,
+  StreamsGroupDescription,
+  StreamsGroupMemberDescription,
+  StreamsTopologyDescription,
   ListShareGroupOffsetsOptions,
   AlterShareGroupOffsetsOptions,
   DeleteShareGroupOffsetsOptions,
@@ -116,6 +121,7 @@ export function createAdmin({
   const transactions = createTransactionsApi(context);
   const delegationTokens = createDelegationTokensApi(context);
   const shareGroups = createShareGroupsApi(context);
+  const streamsGroups = createStreamsGroupsApi(context);
   const unregisterBrokerApi = createUnregisterBrokerApi(context);
   const unregisterControllerApi = createUnregisterControllerApi(context);
   const assignReplicasToDirsApi = createAssignReplicasToDirsApi(context);
@@ -172,6 +178,7 @@ export function createAdmin({
     ...transactions,
     ...delegationTokens,
     ...shareGroups,
+    ...streamsGroups,
     on,
     logger: () => logger,
     events,

@@ -245,6 +245,10 @@ v0–v3; on v3 (Kafka 4.4+) a failed group's `error` carries the broker's messag
 one, such as the cause of `GROUP_DELETION_FAILED`. `admin.describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
 implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
+`admin.describeStreamsGroups` implements StreamsGroupDescribe (key 89) v0–v1 (KIP-1071) on
+Kafka 4.2+; v1 (Kafka 4.4+) adds topology descriptions (KIP-1331) and the assignor name, and
+`includeTopologyDescription` throws on an older broker instead of being ignored. The client
+does not implement StreamsGroupHeartbeat, so it cannot join a streams group.
 `admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements

@@ -83,6 +83,7 @@ describe('protocol/requests/kafka-apis', () => {
     expect(KAFKA_APIS.AddRaftVoter.firstFlexibleVersion).toBe(0);
     expect(KAFKA_APIS.RemoveRaftVoter.firstFlexibleVersion).toBe(0);
     expect(KAFKA_APIS.UnregisterController.firstFlexibleVersion).toBe(0);
+    expect(KAFKA_APIS.StreamsGroupDescribe.firstFlexibleVersion).toBe(0);
     expect(KAFKA_APIS.SaslHandshake.firstFlexibleVersion).toBeNull();
   });
 
@@ -106,6 +107,7 @@ describe('protocol/requests/kafka-apis', () => {
     expect(usesFlexibleRequestHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UnregisterBroker, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.UnregisterController, 0)).toBe(true);
+    expect(usesFlexibleRequestHeader(API_KEYS.StreamsGroupDescribe, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.AssignReplicasToDirs, 0)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.AddRaftVoter, 1)).toBe(true);
     expect(usesFlexibleRequestHeader(API_KEYS.RemoveRaftVoter, 0)).toBe(true);
@@ -146,6 +148,7 @@ describe('protocol/requests/kafka-apis', () => {
     expect(usesFlexibleResponseHeader(API_KEYS.UpdateFeatures, 2)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UnregisterBroker, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.UnregisterController, 0)).toBe(true);
+    expect(usesFlexibleResponseHeader(API_KEYS.StreamsGroupDescribe, 1)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.AssignReplicasToDirs, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.AddRaftVoter, 0)).toBe(true);
     expect(usesFlexibleResponseHeader(API_KEYS.RemoveRaftVoter, 0)).toBe(true);

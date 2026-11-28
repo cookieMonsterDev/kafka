@@ -124,6 +124,8 @@ methods (3.6+/3.7+), `unregisterController` (4.4+; the cluster's `metadata.versi
 older brokers rather than allowing the change. `describeLogDirs` returns `totalBytes` /
 `usableBytes` (3.3+) and `isCordoned` (4.3+) only when the broker sends them.
 `listGroups({ types })` needs 3.8+ and throws on older brokers rather than listing every group.
+`describeStreamsGroups` needs 4.2+; its `includeTopologyDescription: true` needs 4.4+ and throws on
+older brokers rather than being ignored.
 On 4.0+ `describeGroups` throws for an unknown or non-classic group (`error.cause.type` is
 `GROUP_ID_NOT_FOUND`); older brokers return it with `state: 'Dead'`.
 

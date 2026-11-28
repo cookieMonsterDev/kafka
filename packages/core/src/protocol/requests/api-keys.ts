@@ -74,6 +74,7 @@ export const API_KEYS = Object.freeze({
   ShareGroupDescribe: 77,
   ShareFetch: 78,
   ShareAcknowledge: 79,
+  StreamsGroupDescribe: 89,
   DescribeShareGroupOffsets: 90,
   AlterShareGroupOffsets: 91,
   DeleteShareGroupOffsets: 92,

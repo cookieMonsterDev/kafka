@@ -21,6 +21,11 @@ import type {
   ConsumerGroupDescribeMemberV1,
 } from '../protocol/requests/consumer-group-describe/v1/response';
 import type {
+  StreamsGroupDescribeGroupV1,
+  StreamsGroupDescribeMemberV1,
+} from '../protocol/requests/streams-group-describe/v1/response';
+import type { StreamsTopologyDescription } from '../protocol/requests/streams-group-describe/v0/response';
+import type {
   DescribeTransactionsState,
   DescribeTransactionsTopic,
 } from '../protocol/requests/describe-transactions/v0/response';
@@ -45,6 +50,9 @@ export type TransactionTopic = DescribeTransactionsTopic;
 export type TransactionListing = ListTransactionsState;
 export type ConsumerGroupDescription = ConsumerGroupDescribeGroupV1;
 export type ConsumerGroupMemberDescription = ConsumerGroupDescribeMemberV1;
+export type StreamsGroupDescription = StreamsGroupDescribeGroupV1;
+export type StreamsGroupMemberDescription = StreamsGroupDescribeMemberV1;
+export type { StreamsTopologyDescription };
 export type { ListTransactionsOptions };
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
@@ -248,6 +256,15 @@ export interface RemoveMembersFromConsumerGroupResult {
 
 export type ShareGroupDescription =
   import('../protocol/requests/share-group-describe/v1/response').ShareGroupDescribeGroupV1;
+
+export interface DescribeStreamsGroupsOptions {
+  /**
+   * Ask for each group's topology description (KIP-1331), which the broker returns when a
+   * topology description plugin stored one. Needs StreamsGroupDescribe v1 (Kafka 4.4+); on an
+   * older broker `true` throws instead of being ignored. Defaults to `false`.
+   */
+  includeTopologyDescription?: boolean;
+}
 
 export interface ListShareGroupOffsetsTopicInput {
   topicName: string;
@@ -684,6 +701,10 @@ export interface Admin {
     options: RemoveMembersFromConsumerGroupOptions,
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
   describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescription[] }>;
+  describeStreamsGroups: (
+    groupIds: string[],
+    options?: DescribeStreamsGroupsOptions,
+  ) => Promise<{ groups: StreamsGroupDescription[] }>;
   listShareGroupOffsets: (options: ListShareGroupOffsetsOptions) => Promise<{
     groups: import('../protocol/requests/describe-share-group-offsets/v1/response').DescribeShareGroupOffsetsGroupV1[];
   }>;

@@ -119,6 +119,9 @@ Share groups (KIP-932, Kafka 4.1+): `describeShareGroups`,
 `listShareGroupOffsets`, `alterShareGroupOffsets`, `deleteShareGroupOffsets`,
 `deleteShareGroups`.
 
+Streams groups (KIP-1071, Kafka 4.2+): `describeStreamsGroups`. List them with
+`listGroups({ types: ['streams'] })`.
+
 ## Delegation tokens
 
 Kafka 1.1+ can mint HMAC delegation tokens through the Admin API when the

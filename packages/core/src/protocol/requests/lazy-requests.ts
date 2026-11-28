@@ -45,6 +45,7 @@ export { OffsetDelete } from './offset-delete/index';
 export { RemoveRaftVoter } from './remove-raft-voter/index';
 export { RenewDelegationToken } from './renew-delegation-token/index';
 export { ShareGroupDescribe } from './share-group-describe/index';
+export { StreamsGroupDescribe } from './streams-group-describe/index';
 export { UnregisterBroker } from './unregister-broker/index';
 export { UnregisterController } from './unregister-controller/index';
 export { UpdateFeatures } from './update-features/index';

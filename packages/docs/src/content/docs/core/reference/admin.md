@@ -59,6 +59,7 @@ spec needs a minimum ListOffsets (key 2) version and throws
 | `deleteGroups(ids)`                                            | DeleteGroups (42); broker messages: 4.4+    |
 | `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+      |
 | `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+         |
+| `describeStreamsGroups(ids, options?)`                         | StreamsGroupDescribe (89), Kafka 4.2+       |
 | `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)              |
 | `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)                 |
 | `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)                |
@@ -96,6 +97,17 @@ KIP-1043) `describeGroups` throws a `KafkaNonRetriableError` whose `cause` has t
 includes a KIP-848 consumer group, and one such id fails the whole call. Older brokers return
 that group with `state: 'Dead'` and no members. `consumer.describeGroup()` keeps returning that empty `Dead` description on every
 broker version.
+
+`describeStreamsGroups` discovers each group coordinator and sends StreamsGroupDescribe
+(key 89) for KIP-1071 streams groups. Each group carries its `topology` (subtopologies with
+their source, repartition and changelog topics, or `null` subtopologies while the group is not
+ready) and each member's process id, active, standby and warm-up tasks, and changelog offsets.
+`includeTopologyDescription: true` asks for the processing graph a topology description plugin
+stored (KIP-1331); `topologyDescriptionStatus` is one of `StreamsTopologyDescriptionStatuses`, and
+`topologyDescription` is set only when it is `AVAILABLE`. That option and `assignorName` need
+StreamsGroupDescribe v1 (Kafka 4.4+): on an older broker the option throws instead of being
+ignored, and `assignorName` is `null`. A group id that is unknown or not a streams group throws a
+`KafkaNonRetriableError` whose `cause` has type `GROUP_ID_NOT_FOUND`, and fails the whole call.
 
 `listShareGroupOffsets` returns each share partition's `startOffset` and `lag`. `lag` is
 `-1n` (unknown) when the coordinator answers with DescribeShareGroupOffsets v0, which does

@@ -31,10 +31,10 @@ A connection that reaches a different broker, or a broker of a different cluster
 
 **Metadata**:
 The client's current view of the cluster: its brokers, topics, partitions and partition leaders.
-_Avoid_: topology, cluster state
+_Avoid_: topology (that names a Kafka Streams processing graph), cluster state
 
 **Coordinator**:
-The broker responsible for one consumer group, share group or transactional id. Name it by its kind: group coordinator or transaction coordinator.
+The broker responsible for one consumer group, share group, streams group or transactional id. Name it by its kind: group coordinator or transaction coordinator.
 _Avoid_: controller (for this role)
 
 **Kafka API**:
@@ -136,10 +136,10 @@ A set of produced messages and consumer offset commits that become visible toget
 
 **Consumer group**:
 Consumers sharing a group id that split a topic's partitions so each partition belongs to one member.
-_Avoid_: group (alone, where a share group could be meant)
+_Avoid_: group (alone, where a share group or streams group could be meant)
 
 **Member**:
-One consumer within a consumer group or share group, identified by its member id.
+One consumer within a consumer group, share group or streams group, identified by its member id.
 _Avoid_: client, instance (when you mean the member rather than its group instance id)
 
 **Static member**:
@@ -179,7 +179,7 @@ The set of partitions a member currently owns.
 
 **Assigner**:
 A client-side strategy that computes assignments under the classic group protocol: range, round-robin, sticky or cooperative-sticky.
-_Avoid_: assignor (except for the broker-side strategy of the consumer protocol, which Kafka calls an assignor)
+_Avoid_: assignor (except for the broker-side strategy of the consumer protocol, a share group or a streams group, which Kafka calls an assignor)
 
 **Revoked**:
 Given up cleanly by a member during a rebalance, after it had the chance to commit.
@@ -227,3 +227,22 @@ _Avoid_: ack (in prose), commit
 
 **Share session**:
 A share group member's per-broker fetch state (KIP-932), the share group counterpart of a fetch session. Opening a new one releases the messages the previous one acquired.
+
+## Streams groups
+
+**Streams group**:
+A group whose members run one Kafka Streams application and get their tasks from the group coordinator through heartbeats (KIP-1071).
+_Avoid_: streams consumer group, application (as the group's name)
+
+**Topology**:
+The processing graph of a Kafka Streams application, split into subtopologies.
+
+**Subtopology**:
+A part of a topology that reads its own source topics and is split into tasks independently of the other subtopologies.
+_Avoid_: sub-topology
+
+**Task**:
+One subtopology's processing of one partition of its source topics. A member runs it as an **active task**, keeps its state as a **standby task**, or restores that state as a **warm-up task** before taking it over.
+
+**Topology description**:
+The nodes and state stores of a streams group's topology, which a broker plugin can store and return when the group is described (KIP-1331).

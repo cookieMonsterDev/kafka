@@ -17,6 +17,7 @@ import {
   Partitioners,
   ResourcePatternTypes,
   ScramMechanisms,
+  StreamsTopologyDescriptionStatuses,
   getCrc32cImplementation,
   logLevel,
 } from './index';
@@ -64,6 +65,7 @@ describe('public surface', () => {
     expect(ScramMechanisms.SCRAM_SHA_512).toBe(2);
     expect(OffsetSpecs.LATEST_TIERED).toBe(-5n);
     expect(Object.isFrozen(OffsetSpecs)).toBe(true);
+    expect(StreamsTopologyDescriptionStatuses.AVAILABLE).toBe(3);
   });
 
   it('exports the CRC32C implementation diagnostic', () => {

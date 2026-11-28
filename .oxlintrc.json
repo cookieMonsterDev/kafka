@@ -248,6 +248,7 @@
               "testIfKafkaAtMost_0_11",
               "testIfKafkaAtMost_1_1",
               "testIfKafkaAtMost_3_6",
+              "testIfKafkaAtMost_4_1",
               "testIfKafkaAtLeast_0_11",
               "testIfKafkaAtLeast_1_0",
               "testIfKafkaAtLeast_1_1",

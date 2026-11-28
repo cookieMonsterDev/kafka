@@ -158,7 +158,9 @@ failure exits `4` rather than masking which topics actually went away.
 not a delta, matching `kafka-topics.sh --alter --partitions`. `topic offsets <topic>` prints each
 partition's current high/low watermark, or with `--time earliest|latest|max-timestamp|<ms>`, the
 offset as of that point — the same three named timestamps `kafka-run-class
-kafka.tools.GetOffsetShell` accepts, plus a literal millisecond epoch.
+kafka.tools.GetOffsetShell` accepts, plus a literal millisecond epoch. With
+`--time earliest-local|latest-tiered|earliest-pending-upload` it prints the high/low watermark next
+to that tiered storage offset, or `-1` for a partition without one (Kafka 3.5+, 3.9+, and 4.2+).
 
 `topic delete-records --from-file <path>` deletes every record before the given offset, per
 partition, reading the same JSON shape as `kafka-delete-records.sh --offset-json-file`:

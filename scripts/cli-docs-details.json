@@ -436,7 +436,7 @@
   },
   "topic offsets": {
     "source": "packages/cli/src/commands/topic/offsets.ts",
-    "defaults": "The selected offset query controls whether the result is a single offset or low/high offsets per partition.",
+    "defaults": "The selected offset query controls whether the result is a single offset or low/high offsets per partition. A tiered storage --time value prints low/high offsets with -1 as the offset of a partition that has none.",
     "output": {
       "json": {
         "partitions": [

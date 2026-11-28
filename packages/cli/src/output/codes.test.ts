@@ -10,6 +10,7 @@ import {
   describeCode,
   FEATURE_UPDATE_UPGRADE_TYPES,
   formatCode,
+  OFFSET_SPECS,
   RESOURCE_PATTERN_TYPES,
   SCRAM_MECHANISMS,
 } from './codes';
@@ -68,6 +69,12 @@ describe('RESOURCE_PATTERN_TYPES', () => {
 describe('FEATURE_UPDATE_UPGRADE_TYPES', () => {
   it("deep-equals core's real export", () => {
     expect(FEATURE_UPDATE_UPGRADE_TYPES).toEqual(core.FeatureUpdateUpgradeTypes);
+  });
+});
+
+describe('OFFSET_SPECS', () => {
+  it("deep-equals core's real export", () => {
+    expect(OFFSET_SPECS).toEqual(core.OffsetSpecs);
   });
 });
 

@@ -13,6 +13,8 @@ import {
   type ResetGroupOffsetsResponse,
   type ShareGroupDetailResponse,
   type ShareGroupListResponse,
+  type StreamsGroupDetailResponse,
+  type StreamsGroupListResponse,
 } from '../../shared/contracts/group';
 import { sendError, sendJson } from '../create-server';
 import type { AdminPool, PooledAdmin } from '../kafka/admin-pool';
@@ -25,9 +27,13 @@ export interface GroupsRouteContext {
   getActiveProfile(): string | null;
 }
 
-/** Classic and KIP-848 consumer groups both report this `protocolType`; KIP-932 share groups report `share`. */
+/**
+ * Classic and KIP-848 consumer groups both report this `protocolType`; KIP-932 share groups report
+ * `share` and KIP-1071 streams groups report `streams`.
+ */
 const CONSUMER_PROTOCOL_TYPE = 'consumer';
 const SHARE_PROTOCOL_TYPE = 'share';
+const STREAMS_PROTOCOL_TYPE = 'streams';
 
 function listingsByProtocol(
   groups: readonly { readonly groupId: string; readonly protocolType: string }[],
@@ -146,7 +152,10 @@ function groupDeletionError(error: unknown, groupId: string): unknown {
   return new Error(`could not delete group "${groupId}": ${failure.error.message}`, { cause: failure.error });
 }
 
-/** Consumer group inspection, offset reset/delete, member removal, and read-only share group inspection (KIP-932). */
+/**
+ * Consumer group inspection, offset reset/delete, member removal, and read-only share group
+ * (KIP-932) and streams group (KIP-1071) inspection.
+ */
 export function registerGroupRoutes(router: Router, context: GroupsRouteContext): void {
   router.get('/api/groups', async (_req, res) => {
     const admin = await context.pool.get(context.getActiveProfile());
@@ -312,6 +321,52 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
           startOffset: partition.startOffset.toString(),
           lag: partition.lag.toString(),
         })),
+      })),
+    };
+    sendJson(res, 200, response);
+  });
+
+  router.get('/api/streams-groups', async (_req, res) => {
+    const admin = await context.pool.get(context.getActiveProfile());
+    const { groups } = await admin.listGroups();
+    const response: StreamsGroupListResponse = { groups: listingsByProtocol(groups, STREAMS_PROTOCOL_TYPE) };
+    sendJson(res, 200, response);
+  });
+
+  router.get('/api/streams-groups/:id', async (_req, res, params) => {
+    const groupId = requireParam(params, 'id');
+    const admin = await context.pool.get(context.getActiveProfile());
+    // An unknown id, or one that is not a streams group, throws GROUP_ID_NOT_FOUND, which the
+    // shared error mapping turns into this same 404.
+    const { groups } = await admin.describeStreamsGroups([groupId]);
+    const group = groups[0];
+    if (group === undefined || isGroupErrored(group)) {
+      sendError(res, 404, 'unknown_group', `streams group "${groupId}" not found`);
+      return;
+    }
+
+    const response: StreamsGroupDetailResponse = {
+      groupId: group.groupId,
+      state: group.groupState,
+      groupEpoch: group.groupEpoch,
+      assignorName: group.assignorName,
+      topologyEpoch: group.topology?.epoch ?? null,
+      subtopologies:
+        group.topology?.subtopologies?.map((subtopology) => ({
+          subtopologyId: subtopology.subtopologyId,
+          sourceTopics: subtopology.sourceTopics,
+          repartitionSinkTopics: subtopology.repartitionSinkTopics,
+          stateChangelogTopics: subtopology.stateChangelogTopics.map((topic) => topic.name),
+          repartitionSourceTopics: subtopology.repartitionSourceTopics.map((topic) => topic.name),
+        })) ?? null,
+      members: group.members.map((member) => ({
+        memberId: member.memberId,
+        processId: member.processId,
+        clientId: member.clientId,
+        clientHost: member.clientHost,
+        activeTasks: member.assignment.activeTasks,
+        standbyTasks: member.assignment.standbyTasks,
+        warmupTasks: member.assignment.warmupTasks,
       })),
     };
     sendJson(res, 200, response);

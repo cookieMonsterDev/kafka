@@ -1,6 +1,6 @@
 /** The demo cluster's starting state and sample records. Seeded, so every visit opens on the same data. */
 
-import type { GroupMember } from '../../../shared/contracts/group';
+import type { GroupMember, StreamsGroupDetailResponse } from '../../../shared/contracts/group';
 import type { ProduceMessage } from '../../../shared/contracts/produce';
 import type { AclEntryView, QuotaEntryView, TransactionListEntry } from '../../../shared/contracts/settings';
 
@@ -236,6 +236,59 @@ export const GROUP_SEEDS: readonly GroupSeed[] = [
     ],
     initialLag: 8,
     consumeChance: 0.8,
+  },
+];
+
+/** Streams groups (KIP-1071) are read-only in the studio, so the demo serves them as they are. */
+export const STREAMS_GROUP_SEEDS: readonly StreamsGroupDetailResponse[] = [
+  {
+    groupId: 'order-totals',
+    state: 'Stable',
+    groupEpoch: 7,
+    assignorName: 'sticky',
+    topologyEpoch: 1,
+    subtopologies: [
+      {
+        subtopologyId: '0',
+        sourceTopics: ['orders'],
+        repartitionSinkTopics: ['order-totals-by-customer-repartition'],
+        stateChangelogTopics: [],
+        repartitionSourceTopics: [],
+      },
+      {
+        subtopologyId: '1',
+        sourceTopics: [],
+        repartitionSinkTopics: [],
+        stateChangelogTopics: ['order-totals-totals-store-changelog'],
+        repartitionSourceTopics: ['order-totals-by-customer-repartition'],
+      },
+    ],
+    members: [
+      {
+        memberId: 'streams-a1',
+        processId: '3f1c9e2a-6b4d-4f0e-9a8b-1c2d3e4f5a6b',
+        clientId: 'order-totals-StreamThread-1',
+        clientHost: '/10.0.11.21',
+        activeTasks: [
+          { subtopologyId: '0', partitions: [0, 1, 2] },
+          { subtopologyId: '1', partitions: [0, 1, 2] },
+        ],
+        standbyTasks: [{ subtopologyId: '1', partitions: [3, 4, 5] }],
+        warmupTasks: [],
+      },
+      {
+        memberId: 'streams-b2',
+        processId: '8a7b6c5d-4e3f-4a1b-8c9d-0e1f2a3b4c5d',
+        clientId: 'order-totals-StreamThread-1',
+        clientHost: '/10.0.11.22',
+        activeTasks: [
+          { subtopologyId: '0', partitions: [3, 4, 5] },
+          { subtopologyId: '1', partitions: [3, 4, 5] },
+        ],
+        standbyTasks: [{ subtopologyId: '1', partitions: [0, 1, 2] }],
+        warmupTasks: [],
+      },
+    ],
   },
 ];
 

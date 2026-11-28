@@ -199,6 +199,13 @@ describe('studio server against a real broker', () => {
     expect(Array.isArray(groups)).toBe(true);
   });
 
+  it('lists streams groups without error (none joined yet)', async () => {
+    const result = await api(studio, 'GET', '/api/streams-groups');
+    expect(await statusOf(result)).toEqual({ status: 200, body: expect.any(String) });
+    const { groups } = (await result.json()) as { groups: unknown[] };
+    expect(Array.isArray(groups)).toBe(true);
+  });
+
   it('runs the embedded CLI and Studio message helpers through the terminal', async () => {
     const shell = await openShell(studio);
     const topic = `${TOPIC}-shell`;

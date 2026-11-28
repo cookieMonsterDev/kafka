@@ -285,6 +285,10 @@ export class DemoApi {
     this.request('GET', '/api/share-groups/:id', ({ params }) =>
       json(200, cluster.shareGroupDetail(param(params, 'id'))),
     );
+    this.request('GET', '/api/streams-groups', () => json(200, cluster.listStreamsGroups()));
+    this.request('GET', '/api/streams-groups/:id', ({ params }) =>
+      json(200, cluster.streamsGroupDetail(param(params, 'id'))),
+    );
 
     this.request('GET', '/api/acls', () => json(200, { acls: SAMPLE_ACLS } satisfies AclListResponse));
     this.request('GET', '/api/quotas', () => json(200, { quotas: SAMPLE_QUOTAS } satisfies QuotaListResponse));

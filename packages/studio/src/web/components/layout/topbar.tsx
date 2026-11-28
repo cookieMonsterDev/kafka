@@ -14,6 +14,9 @@ interface Crumb {
   readonly to?: '/topics' | '/messages' | '/groups';
 }
 
+/** Detail pages of the group kinds listed on `/groups`. */
+const GROUP_DETAIL_PREFIXES = ['/groups/', '/streams-groups/'];
+
 /** `title: null` means no specific page — falls back to the bare app title, no third segment. */
 function getPageInfo(pathname: string): { readonly title: string | null; readonly crumbs: readonly Crumb[] } {
   if (pathname === '/') return { title: 'Overview', crumbs: [{ label: 'Cluster' }, { label: 'Overview' }] };
@@ -32,8 +35,9 @@ function getPageInfo(pathname: string): { readonly title: string | null; readonl
       crumbs: [{ label: 'Topics', to: '/topics' }, { label: name }],
     };
   }
-  if (pathname.startsWith('/groups/')) {
-    const groupId = decodeURIComponent(pathname.slice('/groups/'.length));
+  const groupDetailPrefix = GROUP_DETAIL_PREFIXES.find((prefix) => pathname.startsWith(prefix));
+  if (groupDetailPrefix !== undefined) {
+    const groupId = decodeURIComponent(pathname.slice(groupDetailPrefix.length));
     return {
       title: groupId,
       crumbs: [{ label: 'Consumer groups', to: '/groups' }, { label: groupId }],

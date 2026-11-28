@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScanResult } from '../../../shared/contracts/debug';
 import type { StudioEvent } from '../../../shared/contracts/event';
-import type { GroupDetailResponse, RemoveGroupMembersResponse } from '../../../shared/contracts/group';
+import type {
+  GroupDetailResponse,
+  GroupListResponse,
+  RemoveGroupMembersResponse,
+  StreamsGroupDetailResponse,
+} from '../../../shared/contracts/group';
 import type { MessageRecord, MessagesPageResponse } from '../../../shared/contracts/message';
 import type { BurstProgress, ProduceResponse } from '../../../shared/contracts/produce';
 import type { TopicDetailResponse, TopicListResponse } from '../../../shared/contracts/topic';
@@ -93,6 +98,17 @@ describe('DemoApi', () => {
     });
     expect(call(api, 'POST', '/api/topics', { topic: 'bad name!' }).status).toBe(400);
     expect(call(api, 'GET', '/api/topics/missing').status).toBe(404);
+  });
+
+  it('lists and describes a seeded streams group, and 404s an unknown one', async () => {
+    const api = new DemoApi();
+
+    const listed = await callJson<GroupListResponse>(api, 'GET', '/api/streams-groups');
+    expect(listed.groups).toEqual([{ groupId: 'order-totals', protocolType: 'streams' }]);
+    const detail = await callJson<StreamsGroupDetailResponse>(api, 'GET', '/api/streams-groups/order-totals');
+    expect(detail).toMatchObject({ groupId: 'order-totals', state: 'Stable' });
+    expect(detail.members).toHaveLength(2);
+    expect(call(api, 'GET', '/api/streams-groups/missing').status).toBe(404);
   });
 
   it('creates a topic with config overrides and reports them as non-default', async () => {

@@ -306,4 +306,131 @@ describe('registerGroupRoutes', () => {
       expect(body.offsets).toEqual([{ topic: 'orders', partitions: [{ partition: 0, startOffset: '3', lag: '2' }] }]);
     });
   });
+
+  it('GET /api/streams-groups lists only streams-protocol groups', async () => {
+    const context = buildContext({
+      listGroups: async () => ({
+        groups: [
+          { groupId: 'checkout', protocolType: 'consumer' },
+          { groupId: 'word-count', protocolType: 'streams', groupState: 'Stable', groupType: 'streams' },
+        ],
+      }),
+    });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/streams-groups`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({ groups: [{ groupId: 'word-count', protocolType: 'streams' }] });
+    });
+  });
+
+  it('GET /api/streams-groups/:id returns the topology and each member with its tasks', async () => {
+    const assignment = {
+      activeTasks: [{ subtopologyId: '0', partitions: [0, 1] }],
+      standbyTasks: [{ subtopologyId: '1', partitions: [0] }],
+      warmupTasks: [],
+    };
+    const describeStreamsGroups = vi.fn(async () => ({
+      groups: [
+        {
+          errorCode: 0,
+          errorMessage: null,
+          groupId: 'word-count',
+          groupState: 'Stable',
+          groupEpoch: 4,
+          assignmentEpoch: 4,
+          topology: {
+            epoch: 2,
+            subtopologies: [
+              {
+                subtopologyId: '0',
+                sourceTopics: ['orders'],
+                repartitionSinkTopics: ['word-count-repartition'],
+                stateChangelogTopics: [
+                  { name: 'word-count-store-changelog', partitions: 0, replicationFactor: 0, topicConfigs: [] },
+                ],
+                repartitionSourceTopics: [],
+              },
+            ],
+          },
+          members: [
+            {
+              memberId: 'm1',
+              memberEpoch: 4,
+              instanceId: null,
+              rackId: null,
+              clientId: 'c1',
+              clientHost: '/127.0.0.1',
+              topologyEpoch: 2,
+              processId: 'p1',
+              userEndpoint: null,
+              clientTags: [],
+              taskOffsets: [],
+              taskEndOffsets: [],
+              assignment,
+              targetAssignment: assignment,
+              isClassic: false,
+            },
+          ],
+          authorizedOperations: -2147483648,
+          topologyDescription: null,
+          topologyDescriptionStatus: 0,
+          assignorName: 'sticky',
+        },
+      ],
+    }));
+    const context = buildContext({ describeStreamsGroups });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/streams-groups/word-count`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        groupId: 'word-count',
+        state: 'Stable',
+        groupEpoch: 4,
+        assignorName: 'sticky',
+        topologyEpoch: 2,
+        subtopologies: [
+          {
+            subtopologyId: '0',
+            sourceTopics: ['orders'],
+            repartitionSinkTopics: ['word-count-repartition'],
+            stateChangelogTopics: ['word-count-store-changelog'],
+            repartitionSourceTopics: [],
+          },
+        ],
+        members: [
+          {
+            memberId: 'm1',
+            processId: 'p1',
+            clientId: 'c1',
+            clientHost: '/127.0.0.1',
+            activeTasks: assignment.activeTasks,
+            standbyTasks: assignment.standbyTasks,
+            warmupTasks: [],
+          },
+        ],
+      });
+    });
+    expect(describeStreamsGroups).toHaveBeenCalledWith(['word-count']);
+  });
+
+  it('GET /api/streams-groups/:id returns 404 when the broker reports GROUP_ID_NOT_FOUND', async () => {
+    const context = buildContext({
+      describeStreamsGroups: async () => {
+        // Admin wraps the broker's non-retriable error, so its type is on `cause`.
+        throw Object.assign(new Error('Group checkout is not a streams group.'), {
+          name: 'KafkaNonRetriableError',
+          cause: { name: 'KafkaProtocolError', type: 'GROUP_ID_NOT_FOUND' },
+        });
+      },
+    });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/streams-groups/checkout`);
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('unknown_group');
+    });
+  });
 });

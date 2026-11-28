@@ -10,18 +10,43 @@ import { ErrorState } from '../components/ui/error-state';
 import { Input } from '../components/ui/input';
 import { Skeleton } from '../components/ui/skeleton';
 import { cn } from '../lib/utils';
-import { groupQueryKeys, listGroups, listShareGroups, shareGroupQueryKeys } from '../lib/groups-api';
+import type { GroupListEntry } from '../../shared/contracts/group';
+import {
+  groupQueryKeys,
+  listGroups,
+  listShareGroups,
+  listStreamsGroups,
+  shareGroupQueryKeys,
+  streamsGroupQueryKeys,
+} from '../lib/groups-api';
 
 export const Route = createLazyRoute('/groups')({
   component: GroupsPage,
 });
 
-type GroupKind = 'consumer' | 'share';
+type GroupKind = 'consumer' | 'share' | 'streams';
 
-const KIND_LABEL: Record<GroupKind, string> = { consumer: 'Consumer groups', share: 'Share groups' };
-const KIND_ROUTE: Record<GroupKind, '/groups/$groupId' | '/share-groups/$groupId'> = {
+const KIND_LABEL: Record<GroupKind, string> = {
+  consumer: 'Consumer groups',
+  share: 'Share groups',
+  streams: 'Streams groups',
+};
+const KIND_ROUTE: Record<GroupKind, '/groups/$groupId' | '/share-groups/$groupId' | '/streams-groups/$groupId'> = {
   consumer: '/groups/$groupId',
   share: '/share-groups/$groupId',
+  streams: '/streams-groups/$groupId',
+};
+
+const KIND_LIST_QUERY: Record<
+  GroupKind,
+  {
+    readonly queryKey: readonly string[];
+    readonly queryFn: () => Promise<{ readonly groups: readonly GroupListEntry[] }>;
+  }
+> = {
+  consumer: { queryKey: groupQueryKeys.list(), queryFn: listGroups },
+  share: { queryKey: shareGroupQueryKeys.list(), queryFn: listShareGroups },
+  streams: { queryKey: streamsGroupQueryKeys.list(), queryFn: listStreamsGroups },
 };
 
 function KindToggle({ kind, onChange }: { readonly kind: GroupKind; readonly onChange: (kind: GroupKind) => void }) {
@@ -53,17 +78,7 @@ function GroupsPage() {
   const [kind, setKind] = useState<GroupKind>('consumer');
   const [search, setSearch] = useState('');
 
-  const consumerQuery = useQuery({
-    queryKey: groupQueryKeys.list(),
-    queryFn: listGroups,
-    enabled: kind === 'consumer',
-  });
-  const shareQuery = useQuery({
-    queryKey: shareGroupQueryKeys.list(),
-    queryFn: listShareGroups,
-    enabled: kind === 'share',
-  });
-  const { data, isPending, isError, error, refetch } = kind === 'consumer' ? consumerQuery : shareQuery;
+  const { data, isPending, isError, error, refetch } = useQuery(KIND_LIST_QUERY[kind]);
 
   const filtered = useMemo(() => {
     const groups = data?.groups ?? [];

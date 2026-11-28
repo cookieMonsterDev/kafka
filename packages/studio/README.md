@@ -16,9 +16,9 @@ spirit of Prisma Studio. Built on top of
 
 **Status:** early — the CLI, HTTP server, and web shell run end to end. The studio can browse,
 create and configure topics; produce messages (single sends and rate-limited bursts); browse and
-tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion)
-and share groups; render a live topology board of cluster activity; and browse read-only ACL,
-client quota, and transaction state. A command palette (`⌘K`/`Ctrl+K`) jumps between pages. Every
+tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion),
+share groups, and streams groups (subtopologies, members, and tasks); render a live topology board
+of cluster activity; and browse read-only ACL, client quota, and transaction state. A command palette (`⌘K`/`Ctrl+K`) jumps between pages. Every
 session is authenticated (see [Security](#security)), and `--read-only` is enforced by the server,
 not just hidden in the UI. Launchable standalone (`kafka-studio`, this package's own `bin`) or as
 `kafka studio` from [`@cookiemonsterdev/kafka-cli`](../cli/README.md), which resolves this package

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { rejectSession } from './auth';
 import { assertOk } from './api';
 import { listTopics, deleteTopic } from './topics-api';
-import { listGroups, deleteGroup, listShareGroups } from './groups-api';
+import { listGroups, deleteGroup, listShareGroups, listStreamsGroups } from './groups-api';
 
 vi.mock('./auth', () => ({ rejectSession: vi.fn(), withAuthHeaders: () => new Headers() }));
 
@@ -30,6 +30,7 @@ describe('assertOk session recovery', () => {
     ['topics', () => listTopics()],
     ['groups', () => listGroups()],
     ['share groups', () => listShareGroups()],
+    ['streams groups', () => listStreamsGroups()],
     ['delete topic', () => deleteTopic('orders')],
     ['delete group', () => deleteGroup('readers')],
   ])('uses session recovery for %s requests', async (_name, request) => {

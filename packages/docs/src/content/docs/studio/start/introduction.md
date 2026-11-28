@@ -16,9 +16,9 @@ implementation, no separate config format.
 
 **Status:** early. The CLI, HTTP server, and web shell run end to end: the studio can browse,
 create, and configure topics; produce messages (single sends and rate-limited bursts); browse and
-tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion)
-and share groups; render a live topology board of cluster activity; and browse read-only ACL,
-client quota, and transaction state. Every session is authenticated, and `--read-only` is enforced
+tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion),
+share groups, and streams groups (subtopologies, members, and tasks); render a live topology board
+of cluster activity; and browse read-only ACL, client quota, and transaction state. Every session is authenticated, and `--read-only` is enforced
 by the server, not just hidden in the UI — see [Security](../../reference/api/#security).
 
 ## Finding your way around

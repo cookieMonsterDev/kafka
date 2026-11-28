@@ -9,6 +9,8 @@ import type {
   ResetGroupOffsetsResponse,
   ShareGroupDetailResponse,
   ShareGroupListResponse,
+  StreamsGroupDetailResponse,
+  StreamsGroupListResponse,
 } from '../../shared/contracts/group';
 import { withAuthHeaders } from './auth';
 import { assertOk } from './api';
@@ -23,6 +25,12 @@ export const shareGroupQueryKeys = {
   all: ['share-groups'] as const,
   list: () => [...shareGroupQueryKeys.all, 'list'] as const,
   detail: (groupId: string) => [...shareGroupQueryKeys.all, 'detail', groupId] as const,
+};
+
+export const streamsGroupQueryKeys = {
+  all: ['streams-groups'] as const,
+  list: () => [...streamsGroupQueryKeys.all, 'list'] as const,
+  detail: (groupId: string) => [...streamsGroupQueryKeys.all, 'detail', groupId] as const,
 };
 
 async function parseJsonOrThrow<T>(res: Response, what: string): Promise<T> {
@@ -92,4 +100,14 @@ export async function listShareGroups(): Promise<ShareGroupListResponse> {
 export async function getShareGroup(groupId: string): Promise<ShareGroupDetailResponse> {
   const res = await fetch(`/api/share-groups/${encodeURIComponent(groupId)}`, { headers: withAuthHeaders() });
   return parseJsonOrThrow(res, 'GET /api/share-groups/:id');
+}
+
+export async function listStreamsGroups(): Promise<StreamsGroupListResponse> {
+  const res = await fetch('/api/streams-groups', { headers: withAuthHeaders() });
+  return parseJsonOrThrow(res, 'GET /api/streams-groups');
+}
+
+export async function getStreamsGroup(groupId: string): Promise<StreamsGroupDetailResponse> {
+  const res = await fetch(`/api/streams-groups/${encodeURIComponent(groupId)}`, { headers: withAuthHeaders() });
+  return parseJsonOrThrow(res, 'GET /api/streams-groups/:id');
 }

@@ -28,6 +28,7 @@ export type PooledAdmin = Pick<
   | 'removeMembersFromConsumerGroup'
   | 'describeShareGroups'
   | 'listShareGroupOffsets'
+  | 'describeStreamsGroups'
   | 'describeAcls'
   | 'describeClientQuotas'
   | 'listTransactions'

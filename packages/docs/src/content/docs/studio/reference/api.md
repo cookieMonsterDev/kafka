@@ -52,6 +52,8 @@ reason: `404 unknown_group` for an unknown group, `409 group_not_empty` while it
 | `POST`   | `/api/groups/:id/members/remove`                | Remove members from a group                                  |
 | `DELETE` | `/api/groups/:id`                               | Delete a group                                               |
 | `GET`    | `/api/share-groups/:id`                         | Share group members and offsets (read-only)                  |
+| `GET`    | `/api/streams-groups`                           | List streams groups (KIP-1071)                               |
+| `GET`    | `/api/streams-groups/:id`                       | Streams group topology, members and tasks (read-only)        |
 | `GET`    | `/api/events`                                   | **SSE** — instrumentation firehose behind the flow board     |
 | `GET`    | `/api/acls`, `/api/quotas`, `/api/transactions` | Read-only cluster inspection                                 |
 

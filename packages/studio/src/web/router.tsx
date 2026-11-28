@@ -10,6 +10,7 @@ import { producerRoute } from './routes/producer';
 import { rootRoute, PageError } from './routes/root';
 import { settingsRoute } from './routes/settings';
 import { shareGroupDetailRoute } from './routes/share-group-detail';
+import { streamsGroupDetailRoute } from './routes/streams-group-detail';
 import { topicDetailRoute } from './routes/topic-detail';
 import { topicsRoute } from './routes/topics';
 
@@ -25,6 +26,7 @@ const routeTree = rootRoute.addChildren([
   groupsRoute,
   groupDetailRoute,
   shareGroupDetailRoute,
+  streamsGroupDetailRoute,
   settingsRoute,
 ]);
 

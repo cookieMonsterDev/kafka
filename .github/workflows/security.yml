@@ -8,8 +8,8 @@
 # Any finding fails either job. Reviewed exceptions live in osv-scanner.toml, each with a reason
 # and an expiry, mirrored by GHSA id under auditConfig in pnpm-workspace.yaml.
 #
-# CI calls this workflow on each of its runs, so its `Ready to merge` job can wait for these jobs.
-# CI's weekly run catches advisories published after the lockfile last changed. There is no
+# CI calls this workflow on each of its runs, so its `Verification gate` job can wait for these
+# jobs. CI's weekly run catches advisories published after the lockfile last changed. There is no
 # concurrency group here: in a called workflow `github.workflow` is `CI`, so a group would collide
 # across CI's events, and CI's own group already cancels superseded runs.
 name: Security

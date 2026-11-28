@@ -298,8 +298,8 @@ jobs:
   # needs no settings change: list it under `needs` here instead. `always()` keeps this job
   # running when a needed job fails or is cancelled; a skipped required check would count as
   # passing.
-  ready-to-merge:
-    name: Ready to merge
+  verification-gate:
+    name: Verification gate
     if: always()
     needs:
       - unit

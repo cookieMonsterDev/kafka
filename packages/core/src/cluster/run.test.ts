@@ -18,10 +18,12 @@ function fakeBroker(nodeId: number): Broker {
 function fakeContext(resolve: (target: BrokerTarget) => Broker = () => fakeBroker(1)) {
   const logger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
   const warn = vi.spyOn(logger, 'warn');
+  const resolveTarget = vi.fn(async (target: BrokerTarget) => resolve(target));
   const context = {
     logger,
     retrier: retrier({ retries: 2, initialRetryTime: 1, maxRetryTime: 5 }),
-    resolve: vi.fn(async (target: BrokerTarget) => resolve(target)),
+    resolve: resolveTarget,
+    resolveAll: vi.fn(async (targets: readonly BrokerTarget[]) => Promise.all(targets.map(resolveTarget))),
     refreshMetadata: vi.fn(async () => undefined),
     recover: vi.fn(async (_error: unknown) => undefined),
   } satisfies RunContext;
@@ -163,6 +165,19 @@ describe('cluster/runOnTargets', () => {
         }),
       ).resolves.toEqual([brokers['1'], brokers['2']]);
       expect(work).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves the whole list in one call, so coordinators can share one lookup', async () => {
+      const { context } = fakeContext();
+      const targets = [coordinatorTarget('a'), coordinatorTarget('b')];
+
+      await runOnTargets(
+        context,
+        () => targets,
+        async (brokers) => brokers,
+      );
+      expect(context.resolveAll).toHaveBeenCalledTimes(1);
+      expect(context.resolveAll).toHaveBeenCalledWith(targets);
     });
 
     it('retries when the error moved any of the targets', async () => {

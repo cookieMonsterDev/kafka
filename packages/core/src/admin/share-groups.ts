@@ -74,7 +74,7 @@ export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGro
     }
 
     // Coordinators are looked up once, then each coordinator's request is retried on its own.
-    const coordinators = await Promise.all(groups.map(({ groupId }) => cluster.findGroupCoordinator({ groupId })));
+    const coordinators = await cluster.findCoordinators({ keys: groups.map(({ groupId }) => groupId) });
     const responses = await Promise.all(
       [...groupByBroker(groups, coordinators)].map(([coordinator, grouped]) =>
         cluster.run(

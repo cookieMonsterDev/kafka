@@ -58,6 +58,7 @@ export function fakeRunCluster<Extra extends object = Record<never, never>>(
     logger: createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} }),
     retrier: retrier(FAST_RETRY_DEFAULTS),
     resolve: resolveTarget,
+    resolveAll: (runTargets) => Promise.all(runTargets.map((target) => resolveTarget(target))),
     refreshMetadata,
     recover,
   };

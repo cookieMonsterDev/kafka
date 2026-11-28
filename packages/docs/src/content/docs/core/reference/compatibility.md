@@ -105,6 +105,13 @@ Method lists: [Producer API](../producer/), [Consumer API](../consumer/),
 [Admin API](../admin/). The notes below are version floors and protocol keys,
 not a backlog.
 
+**Coordinators.** Group and transaction coordinators are found with
+FindCoordinator (key 10) v0–v4. On Kafka 3.0+ (v4, KIP-699) one request finds
+every coordinator an admin call needs, such as `admin.describeGroups`,
+`admin.deleteGroups`, or `admin.describeTransactions` over many IDs; an older
+broker gets one request per distinct ID. v5 (`TRANSACTION_ABORTABLE`, KIP-890) and v6
+(share coordinator keys, KIP-932, which only brokers look up) are not sent.
+
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
 JoinGroup/SyncGroup remains the default membership protocol. Fetch uses

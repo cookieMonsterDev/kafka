@@ -57,3 +57,9 @@ export function supportsClientTelemetry(versions: BrokerVersions): boolean {
   const subscriptions = advertised(versions, API_KEYS.GetTelemetrySubscriptions);
   return subscriptions != null && subscriptions.maxVersion != null;
 }
+
+/** KIP-699: FindCoordinator v4 looks up several coordinator keys in one request. Kafka 3.0+. */
+export function supportsBatchedFindCoordinator(versions: BrokerVersions): boolean {
+  const findCoordinator = advertised(versions, API_KEYS.GroupCoordinator);
+  return findCoordinator != null && findCoordinator.maxVersion >= 4;
+}

@@ -1,3 +1,4 @@
+import { supportsBatchedFindCoordinator } from '../broker/capabilities';
 import { Broker } from '../broker/index';
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import {
@@ -33,11 +34,12 @@ import {
   recoveryAction,
 } from './error-classifier';
 import { runOnTargets, type BrokerTarget, type RunContext, type RunOptions, type Targets } from './run';
+import { groupBy } from '../utils/group-by';
 import { Lock } from '../utils/lock';
 import { sharedPromiseTo } from '../utils/shared-promise-to';
 import { BrokerPool, type ApplyLeaderUpdateOptions, type MetadataRecovery } from './broker-pool';
 import { connectionPoolBuilder } from './connection-pool-builder';
-import { FindCoordinator, type FindCoordinatorResponse } from '../protocol/requests/find-coordinator/index';
+import { FindCoordinator, type FoundCoordinator } from '../protocol/requests/find-coordinator/index';
 import { ListOffsets } from '../protocol/requests/list-offsets/index';
 import { Metadata } from '../protocol/requests/metadata/index';
 
@@ -236,6 +238,7 @@ export class Cluster {
       logger: this.logger,
       retrier: this.retrier,
       resolve: (target) => this.resolveTarget(target),
+      resolveAll: (targets) => this.resolveTargets(targets),
       refreshMetadata: () => this.refreshMetadata(),
       recover: (error) => this.recover(error),
     };
@@ -311,6 +314,39 @@ export class Cluster {
     options?: RunOptions,
   ): Promise<T> {
     return runOnTargets(this.#runContext, targets, work, options);
+  }
+
+  /**
+   * The broker for each of `targets`, in the same order, connected. Coordinator targets of one type
+   * share one lookup, a single FindCoordinator request on Kafka 3.0+.
+   */
+  async resolveTargets(targets: readonly BrokerTarget[]): Promise<Broker[]> {
+    const coordinatorTargets = targets.filter((target) => target.kind === 'coordinator');
+    const targetsByType = await groupBy(
+      coordinatorTargets,
+      (target) => target.coordinatorType ?? COORDINATOR_TYPES.GROUP,
+    );
+
+    const coordinatorsByType = new Map(
+      await Promise.all(
+        [...targetsByType].map(async ([coordinatorType, group]) => {
+          const keys = group.map(({ key }) => key);
+          const brokers = await this.findCoordinators({ keys, coordinatorType });
+          return [coordinatorType, new Map(keys.map((key, index) => [key, brokers[index]]))] as const;
+        }),
+      ),
+    );
+
+    return Promise.all(
+      targets.map(async (target) => {
+        if (target.kind !== 'coordinator') return this.resolveTarget(target);
+        const coordinator = coordinatorsByType.get(target.coordinatorType ?? COORDINATOR_TYPES.GROUP)?.get(target.key);
+        // findCoordinators returns one broker per key, so only the type checker needs this.
+        if (coordinator === undefined)
+          throw new KafkaGroupCoordinatorNotFound(`No coordinator found for ${target.key}`);
+        return coordinator;
+      }),
+    );
   }
 
   /** The broker that currently holds `target`'s role, connected. */
@@ -575,28 +611,55 @@ export class Cluster {
 
   async findGroupCoordinator({
     groupId,
-    coordinatorType = COORDINATOR_TYPES.GROUP,
+    coordinatorType,
   }: {
     groupId: string;
     coordinatorType?: CoordinatorType;
   }): Promise<Broker> {
+    const [coordinator] = await this.findCoordinators({ keys: [groupId], coordinatorType });
+    if (coordinator === undefined) throw new KafkaGroupCoordinatorNotFound(`No coordinator found for ${groupId}`);
+    return coordinator;
+  }
+
+  /**
+   * The coordinator of each of `keys`, in the same order, connected: group ids, or transactional ids
+   * with `COORDINATOR_TYPES.TRANSACTION`. One FindCoordinator request looks them all up on Kafka 3.0+
+   * (KIP-699); an older broker gets one request per key.
+   */
+  async findCoordinators({
+    keys,
+    coordinatorType = COORDINATOR_TYPES.GROUP,
+  }: {
+    keys: readonly string[];
+    coordinatorType?: CoordinatorType;
+  }): Promise<Broker[]> {
+    if (keys.length === 0) return [];
+
     return this.retrier(async (bail, retryCount, retryTime) => {
       try {
-        const { coordinator } = await this.findGroupCoordinatorMetadata({ groupId, coordinatorType });
-        const nodeId = String(coordinator.nodeId);
+        const coordinators = await this.findCoordinatorsMetadata({ keys, coordinatorType });
         // A coordinator can move to a new address under the same node id before the cached
         // metadata knows it; the cached broker would keep reaching the old address.
-        if (this.brokerPool.hasBrokerMoved({ nodeId, host: coordinator.host, port: coordinator.port })) {
-          await this.#refreshStaleMetadata();
-        }
-        return await this.findBroker({ nodeId });
+        const hasMoved = coordinators.some(({ nodeId, host, port }) =>
+          this.brokerPool.hasBrokerMoved({ nodeId: String(nodeId), host, port }),
+        );
+        if (hasMoved) await this.#refreshStaleMetadata();
+
+        const nodeIdsByKey = new Map(coordinators.map(({ key, nodeId }) => [key, String(nodeId)]));
+        return await Promise.all(
+          keys.map((key) => {
+            const nodeId = nodeIdsByKey.get(key);
+            if (nodeId === undefined) throw new KafkaGroupCoordinatorNotFound(`No coordinator returned for ${key}`);
+            return this.findBroker({ nodeId });
+          }),
+        );
       } catch (e) {
         const error = e as Error;
 
         // A new broker can join the cluster before we have the chance to refresh metadata.
         if (error.name === 'KafkaBrokerNotFound' || isStaleCoordinator(error)) {
           this.logger.debug(`${error.message}, refreshing metadata and trying again...`, {
-            groupId,
+            keys,
             retryCount,
             retryTime,
           });
@@ -615,28 +678,27 @@ export class Cluster {
     });
   }
 
-  async findGroupCoordinatorMetadata({
-    groupId,
+  /** Sends FindCoordinator for `keys` to any broker; each distinct key gets one coordinator. */
+  async findCoordinatorsMetadata({
+    keys,
     coordinatorType,
   }: {
-    groupId: string;
-    coordinatorType?: CoordinatorType;
-  }): Promise<FindCoordinatorResponse> {
-    const brokerMetadata = await this.brokerPool.withBroker(async ({ nodeId, broker }) => {
+    keys: readonly string[];
+    coordinatorType: CoordinatorType;
+  }): Promise<FoundCoordinator[]> {
+    const distinctKeys = [...new Set(keys)];
+    const coordinators = await this.brokerPool.withBroker(async ({ nodeId: askedNodeId, broker }) => {
       return this.retrier(async (bail, retryCount, retryTime) => {
         try {
-          const brokerMetadata = await broker.send(FindCoordinator, { groupId, coordinatorType });
-          this.logger.debug('Found group coordinator', {
-            broker: brokerMetadata.coordinator.host,
-            nodeId: brokerMetadata.coordinator.nodeId,
-          });
-          return brokerMetadata;
+          const found = await sendFindCoordinator(broker, distinctKeys, coordinatorType);
+          this.logger.debug('Found coordinators', { coordinators: found.map(({ key, nodeId }) => ({ key, nodeId })) });
+          return found;
         } catch (e) {
           const error = e as Error;
-          this.logger.debug('Tried to find group coordinator', { nodeId, groupId, error });
+          this.logger.debug('Tried to find coordinators', { nodeId: askedNodeId, keys: distinctKeys, error });
 
           if (isStaleCoordinator(error)) {
-            this.logger.debug('Group coordinator not available, retrying...', { nodeId, retryCount, retryTime });
+            this.logger.debug('Coordinator not available, retrying...', { nodeId: askedNodeId, retryCount, retryTime });
             throw error;
           }
 
@@ -646,11 +708,11 @@ export class Cluster {
       });
     });
 
-    if (brokerMetadata) {
-      return brokerMetadata;
+    if (coordinators) {
+      return coordinators;
     }
 
-    throw new KafkaGroupCoordinatorNotFound('Failed to find group coordinator');
+    throw new KafkaGroupCoordinatorNotFound('Failed to find coordinator');
   }
 
   defaultOffset({ fromBeginning }: { fromBeginning?: boolean }): bigint {
@@ -789,3 +851,19 @@ export interface TopicPartitionInfo {
 }
 
 export type { MetadataBroker, PartitionMetadata };
+
+/** One FindCoordinator request for every key on Kafka 3.0+ (KIP-699), one per key before that. */
+async function sendFindCoordinator(
+  broker: Broker,
+  coordinatorKeys: readonly string[],
+  coordinatorType: CoordinatorType,
+): Promise<FoundCoordinator[]> {
+  if (broker.versions != null && supportsBatchedFindCoordinator(broker.versions)) {
+    const { coordinators } = await broker.send(FindCoordinator, { coordinatorKeys, coordinatorType });
+    return coordinators;
+  }
+  const responses = await Promise.all(
+    coordinatorKeys.map((key) => broker.send(FindCoordinator, { coordinatorKeys: [key], coordinatorType })),
+  );
+  return responses.flatMap(({ coordinators }) => coordinators);
+}

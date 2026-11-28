@@ -52,6 +52,8 @@ export interface RunContext {
   logger: Logger;
   retrier: Retrier;
   resolve(target: BrokerTarget): Promise<Broker>;
+  /** Resolves several targets, in order; coordinator targets may share one lookup. */
+  resolveAll(targets: readonly BrokerTarget[]): Promise<Broker[]>;
   refreshMetadata(): Promise<void>;
   /** Carries out the recovery the error classifier picks for `error`. */
   recover(error: unknown): Promise<void>;
@@ -102,7 +104,7 @@ export function runOnTargets<T>(
       if (typeof targets === 'function') {
         const resolvedTargets = targets();
         kinds = resolvedTargets.map(({ kind }) => kind);
-        const brokers = await Promise.all(resolvedTargets.map((target) => context.resolve(target)));
+        const brokers = await context.resolveAll(resolvedTargets);
         return await (work as (brokers: Broker[]) => Promise<T>)(brokers);
       }
 

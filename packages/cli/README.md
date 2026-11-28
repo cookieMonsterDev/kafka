@@ -25,7 +25,7 @@ map to the `kafka` equivalent.
   - [Group commands](#group-commands)
   - [ACL commands](#acl-commands)
   - [Cluster commands](#cluster-commands)
-  - [Transaction, token, SCRAM, quota, and share group commands](#transaction-token-scram-quota-and-share-group-commands)
+  - [Transaction, token, SCRAM, quota, share group, and streams group commands](#transaction-token-scram-quota-share-group-and-streams-group-commands)
   - [Reaching the rest of the Admin API](#reaching-the-rest-of-the-admin-api)
 - [Shell completion](#shell-completion)
 - [Configuration](#configuration)
@@ -360,10 +360,11 @@ unregisters a controller removed from the quorum for good (Kafka 4.4+, `metadata
 
 </details>
 
-### Transaction, token, SCRAM, quota, and share group commands
+### Transaction, token, SCRAM, quota, share group, and streams group commands
 
 Everything else the broker's admin API covers that doesn't fit the categories above: in-flight
-transactions, delegation tokens, SCRAM credentials, client quotas, and KIP-932 share groups.
+transactions, delegation tokens, SCRAM credentials, client quotas, KIP-932 share groups, and
+KIP-1071 streams groups.
 
 ```sh
 kafka txn list --state-filter Ongoing --brokers localhost:9092
@@ -383,6 +384,8 @@ kafka share-group list --brokers localhost:9092
 kafka share-group describe orders-readers --brokers localhost:9092
 kafka share-group offsets orders-readers --brokers localhost:9092
 kafka share-group delete orders-readers --brokers localhost:9092 --yes
+kafka streams-group list --brokers localhost:9092
+kafka streams-group describe word-count --brokers localhost:9092
 ```
 
 <details>
@@ -438,6 +441,14 @@ deletes committed offsets for those topics — each fanned out one call per topi
 behind confirmation. `share-group delete <groupIds...>` deletes one or more share groups in a single
 call, gated behind confirmation like `group delete`, with the same per-group partial-failure
 handling.
+
+`streams-group list` filters `listGroups` down to streams groups (KIP-1071's `streams` protocol
+type) and shows each group's state. `streams-group describe <groupIds...>` reads back each group's
+state, group and topology epochs, assignor, and member count, fanning out one call per group id
+like `share-group describe`; a group id that is unknown or not a streams group is reported with the
+broker's message, and a partial failure exits `4`. `--topology-description` also reads each group's
+topology description status and, with `--json`, the description itself (Kafka 4.4+; an older broker
+fails the call instead of leaving it out). Streams groups need Kafka 4.2+.
 
 </details>
 

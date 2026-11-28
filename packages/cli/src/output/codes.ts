@@ -91,6 +91,13 @@ export const OFFSET_SPECS = Object.freeze({
   EARLIEST_PENDING_UPLOAD: -6n,
 } as const);
 
+export const STREAMS_TOPOLOGY_DESCRIPTION_STATUSES = Object.freeze({
+  NOT_REQUESTED: 0,
+  NOT_STORED: 1,
+  ERROR: 2,
+  AVAILABLE: 3,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

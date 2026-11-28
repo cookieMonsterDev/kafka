@@ -51,7 +51,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   alterShareGroupOffsets: 'mounted',
   deleteShareGroupOffsets: 'mounted',
   deleteShareGroups: 'mounted',
-  describeStreamsGroups: 'passthrough-only',
+  describeStreamsGroups: 'mounted',
   createAcls: 'mounted',
   describeAcls: 'mounted',
   deleteAcls: 'mounted',

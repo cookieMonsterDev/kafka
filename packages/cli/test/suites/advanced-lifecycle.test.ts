@@ -11,6 +11,9 @@ const UNIQUE = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
  */
 const SUPPORTS_SHARE_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
 
+/** Streams groups (KIP-1071) need a broker at least at 4.2, which among the same three is only `4.4`. */
+const SUPPORTS_STREAMS_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
+
 /**
  * Runs against a real broker started by `test/helpers/global-setup.ts`. Transactions, SCRAM
  * credentials, quotas, and share group topology are all cluster-wide state shared with every
@@ -27,7 +30,7 @@ const SUPPORTS_SHARE_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
  * (`src/commands/token/*.test.ts`). Covering every write path against a disposable cluster of its
  * own is a gap this suite discloses rather than silently leaves untested.
  */
-describe('transaction, scram, quota, and share group read commands against a real broker', () => {
+describe('transaction, scram, quota, share group, and streams group read commands against a real broker', () => {
   it('lists transactions (empty or not) without error', async () => {
     const result = await runCli(['txn', 'list', '--brokers', BROKERS, '--json']);
     expect(result.code).toBe(0);
@@ -100,5 +103,20 @@ describe('transaction, scram, quota, and share group read commands against a rea
       BROKERS,
     ]);
     expect(result.code).not.toBe(0);
+  });
+
+  it.runIf(SUPPORTS_STREAMS_GROUPS)('lists streams groups (empty or not) without error', async () => {
+    const result = await runCli(['streams-group', 'list', '--brokers', BROKERS, '--json']);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as { groups: unknown[] };
+    expect(Array.isArray(parsed.groups)).toBe(true);
+  });
+
+  it.runIf(SUPPORTS_STREAMS_GROUPS)('exits non-zero describing a streams group that has never existed', async () => {
+    const groupId = `kafka-cli-it-nonexistent-streams-group-${UNIQUE}`;
+    const result = await runCli(['streams-group', 'describe', groupId, '--brokers', BROKERS, '--json']);
+    expect(result.code).toBe(1);
+    const parsed = JSON.parse(result.stdout) as { groups: { groupId: string; ok: boolean }[] };
+    expect(parsed.groups).toEqual([expect.objectContaining({ groupId, ok: false })]);
   });
 });

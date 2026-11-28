@@ -1,7 +1,7 @@
 ---
 title: 'topic producers'
 description: "Show a topic's active producer state, per partition"
-order: 64
+order: 66
 section: reference
 hidden: true
 commandPath: ['topic', 'producers']

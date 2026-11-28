@@ -13,6 +13,7 @@ import {
   OFFSET_SPECS,
   RESOURCE_PATTERN_TYPES,
   SCRAM_MECHANISMS,
+  STREAMS_TOPOLOGY_DESCRIPTION_STATUSES,
 } from './codes';
 
 // Loaded once, in `beforeAll`, rather than per test: importing core is real work (it's not a
@@ -81,6 +82,12 @@ describe('OFFSET_SPECS', () => {
 describe('SCRAM_MECHANISMS', () => {
   it("deep-equals core's real export", () => {
     expect(SCRAM_MECHANISMS).toEqual(core.ScramMechanisms);
+  });
+});
+
+describe('STREAMS_TOPOLOGY_DESCRIPTION_STATUSES', () => {
+  it("deep-equals core's real export", () => {
+    expect(STREAMS_TOPOLOGY_DESCRIPTION_STATUSES).toEqual(core.StreamsTopologyDescriptionStatuses);
   });
 });
 

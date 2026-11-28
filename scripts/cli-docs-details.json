@@ -589,6 +589,24 @@
     },
     "effect": "Removes share-group state. Stop members first and plan how a recreated group should resume delivery."
   },
+  "streams-group list": {
+    "source": "packages/cli/src/commands/streams-group/list.ts",
+    "defaults": "Lists streams groups reported by the broker; streams groups need Kafka 4.2+.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
+  "streams-group describe": {
+    "source": "packages/cli/src/commands/streams-group/describe.ts",
+    "defaults": "Describes the supplied streams group ids, reporting errors per group. Topology descriptions are read only with --topology-description, which needs Kafka 4.4+.",
+    "output": {
+      "json": {
+        "groups": []
+      }
+    }
+  },
   "scram set": {
     "source": "packages/cli/src/commands/scram/set.ts",
     "defaults": "Requires an explicit mechanism and password input. PBKDF2 iterations default to 4096.",

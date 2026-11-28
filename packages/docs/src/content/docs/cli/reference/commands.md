@@ -77,6 +77,11 @@ section: reference
 - [`share-group list`](./share-group/list/) <span>List every share group the cluster knows about</span>
 - [`share-group offsets`](./share-group/offsets/) <span>Read, set, or delete a share group’s committed start offsets</span>
 
+## streams-group
+
+- [`streams-group describe`](./streams-group/describe/) <span>Describe one or more streams groups</span>
+- [`streams-group list`](./streams-group/list/) <span>List every streams group the cluster knows about</span>
+
 ## token
 
 - [`token create`](./token/create/) <span>Create a delegation token</span>

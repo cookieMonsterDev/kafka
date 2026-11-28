@@ -1,7 +1,7 @@
 ---
 title: 'token list'
 description: 'List delegation tokens, optionally filtered by owner'
-order: 55
+order: 57
 section: reference
 hidden: true
 commandPath: ['token', 'list']

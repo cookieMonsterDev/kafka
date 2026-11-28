@@ -42,6 +42,8 @@ import { shareGroupDeleteCommand } from './share-group/delete';
 import { shareGroupDescribeCommand } from './share-group/describe';
 import { shareGroupListCommand } from './share-group/list';
 import { shareGroupOffsetsCommand } from './share-group/offsets';
+import { streamsGroupDescribeCommand } from './streams-group/describe';
+import { streamsGroupListCommand } from './streams-group/list';
 import { studioCommand } from './studio/studio';
 import { tokenCreateCommand } from './token/create';
 import { tokenExpireCommand } from './token/expire';
@@ -122,6 +124,8 @@ export const ALL_COMMANDS: CommandSpec[] = [
   shareGroupDescribeCommand,
   shareGroupOffsetsCommand,
   shareGroupDeleteCommand,
+  streamsGroupListCommand,
+  streamsGroupDescribeCommand,
   adminCallCommand,
   adminMethodsCommand,
 ];

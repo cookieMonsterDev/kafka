@@ -1,7 +1,7 @@
 ---
 title: 'topic create'
 description: 'Create one or more topics'
-order: 58
+order: 60
 section: reference
 hidden: true
 commandPath: ['topic', 'create']

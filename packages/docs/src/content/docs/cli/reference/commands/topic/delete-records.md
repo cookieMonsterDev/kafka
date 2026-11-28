@@ -1,7 +1,7 @@
 ---
 title: 'topic delete-records'
 description: 'Delete records before a given offset, per partition'
-order: 60
+order: 62
 section: reference
 hidden: true
 commandPath: ['topic', 'delete-records']

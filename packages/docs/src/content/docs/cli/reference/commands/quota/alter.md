@@ -1,7 +1,7 @@
 ---
 title: 'quota alter'
 description: 'Set or remove client quota values for one entity'
-order: 43
+order: 44
 section: reference
 hidden: true
 commandPath: ['quota', 'alter']

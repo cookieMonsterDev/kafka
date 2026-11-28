@@ -81,6 +81,7 @@ export const API_KEYS = Object.freeze({
   DescribeTopicPartitions: 75,
   AddRaftVoter: 80,
   RemoveRaftVoter: 81,
+  UnregisterController: 94,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];

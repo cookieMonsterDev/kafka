@@ -1,7 +1,7 @@
 ---
 title: 'group remove-members'
 description: "Remove one or more static members from a consumer group's session"
-order: 41
+order: 42
 section: reference
 hidden: true
 commandPath: ['group', 'remove-members']

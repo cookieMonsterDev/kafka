@@ -75,6 +75,7 @@ spec needs a minimum ListOffsets (key 2) version and throws
 | `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+       |
 | `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+         |
 | `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+       |
+| `unregisterController({ controllerId })`                       | UnregisterController (key 94); Kafka 4.4+   |
 | `assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })`   | AssignReplicasToDirs (key 73); KRaft 3.7+   |
 | `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+           |
 | `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+        |
@@ -121,6 +122,14 @@ AssignReplicasToDirs (key 73) to the active controller (KIP-858, Kafka 3.7+).
 Each replica is `{ topic, partition, directoryId }` where `directoryId` is a
 16-byte `Buffer`. Topic names are resolved to topic IDs from metadata.
 `brokerEpoch` defaults to `-1n`.
+
+`unregisterController({ controllerId })` sends UnregisterController (key 94) to
+the active controller (KIP-1312, Kafka 4.4+). Use it for a controller that was
+removed from the quorum for good: remove its voter with `removeRaftVoter` first. The
+cluster must run `metadata.version` 4.4-IV2 or later; on an older one the controller
+answers `UNSUPPORTED_VERSION`. An id with no registration fails with
+`CONTROLLER_ID_NOT_REGISTERED`, and the active controller cannot unregister itself
+(`INVALID_REQUEST`). None of these errors is retried.
 
 ## Transactions
 

@@ -39,6 +39,7 @@ section: reference
 - [`cluster reassign execute`](./cluster/reassign-execute/) <span>Execute a partition reassignment from a kafka-reassign-partitions.sh-shaped JSON file</span>
 - [`cluster reassign list`](./cluster/reassign-list/) <span>List every active partition reassignment</span>
 - [`cluster unregister-broker`](./cluster/unregister-broker/) <span>Unregister a broker from the cluster (KRaft broker decommissioning)</span>
+- [`cluster unregister-controller`](./cluster/unregister-controller/) <span>Unregister a controller that was removed from the KRaft quorum for good (Kafka 4.4+)</span>
 - [`cluster update-features`](./cluster/update-features/) <span>Upgrade, safe-downgrade, or unsafe-downgrade one or more finalized feature versions</span>
 
 ## config

@@ -14,6 +14,7 @@ import { clusterRaftVoterRemoveCommand } from './cluster/raft-voter-remove';
 import { clusterReassignExecuteCommand } from './cluster/reassign-execute';
 import { clusterReassignListCommand } from './cluster/reassign-list';
 import { clusterUnregisterBrokerCommand } from './cluster/unregister-broker';
+import { clusterUnregisterControllerCommand } from './cluster/unregister-controller';
 import { clusterUpdateFeaturesCommand } from './cluster/update-features';
 import { configDescribeCommand } from './config/describe';
 import { configListResourcesCommand } from './config/list-resources';
@@ -93,6 +94,7 @@ export const ALL_COMMANDS: CommandSpec[] = [
   clusterReassignListCommand,
   clusterReassignExecuteCommand,
   clusterUnregisterBrokerCommand,
+  clusterUnregisterControllerCommand,
   clusterRaftVoterAddCommand,
   clusterRaftVoterRemoveCommand,
   groupListCommand,

@@ -1,7 +1,7 @@
 ---
 title: 'config list-resources'
 description: 'List every config resource the broker knows about'
-order: 33
+order: 34
 section: reference
 hidden: true
 commandPath: ['config', 'list-resources']

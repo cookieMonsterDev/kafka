@@ -6,12 +6,13 @@ const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
 /**
  * Runs against a real broker started by `test/helpers/global-setup.ts`. Deliberately read-only:
  * `cluster update-features`, `cluster elect-leaders`, `cluster reassign execute`,
- * `cluster unregister-broker`, and `cluster raft-voter add`/`remove` all mutate cluster topology
- * or quorum membership on the shared 3-broker KRaft compose every integration suite in this
- * package runs against — running any of them here risks leaving that compose in a state the
- * *other* suites (started in the same `beforeAll`, torn down in the same `afterAll`) don't expect,
- * for a family whose read commands already exercise the same connection and admin-open path.
- * Covering those five against a disposable cluster of their own is a gap this suite discloses
+ * `cluster unregister-broker`, `cluster unregister-controller`, and `cluster raft-voter add`/`remove`
+ * all mutate cluster topology or quorum membership on the shared 3-broker KRaft compose every
+ * integration suite in this package runs against — running any of them here risks leaving that
+ * compose in a state the *other* suites (started in the same `beforeAll`, torn down in the same
+ * `afterAll`) don't expect, for a family whose read commands already exercise the same connection
+ * and admin-open path.
+ * Covering those six against a disposable cluster of their own is a gap this suite discloses
  * rather than silently leaves untested.
  */
 describe('cluster read commands against a real broker', () => {

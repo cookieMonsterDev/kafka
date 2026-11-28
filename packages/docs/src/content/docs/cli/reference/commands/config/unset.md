@@ -1,7 +1,7 @@
 ---
 title: 'config unset'
 description: 'Remove one or more config entries from a resource, reverting them to default'
-order: 35
+order: 36
 section: reference
 hidden: true
 commandPath: ['config', 'unset']

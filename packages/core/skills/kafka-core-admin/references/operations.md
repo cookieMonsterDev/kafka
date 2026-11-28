@@ -80,5 +80,5 @@ await controllerAdmin.connect();
 await controllerAdmin.describeMetadataQuorum();
 ```
 
-Only controller-targeted methods (quorum, voters, features, `unregisterBroker`) work this way;
-topic metadata and produce/consume still need brokers.
+Only controller-targeted methods (quorum, voters, features, `unregisterBroker`,
+`unregisterController`) work this way; topic metadata and produce/consume still need brokers.

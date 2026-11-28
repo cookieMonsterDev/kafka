@@ -313,6 +313,7 @@ kafka cluster elect-leaders --election-type preferred --all-topic-partitions --b
 kafka cluster reassign list --brokers localhost:9092
 kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
 kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
+kafka cluster unregister-controller --controller-id 3001 --brokers localhost:9092 --yes
 kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
 kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
 ```
@@ -353,7 +354,9 @@ replica between log dirs on the same broker needs a separate command.
 behind confirmation. `cluster raft-voter add --voter-id <id> --voter-directory-id <uuid> --listener
 name=host:port` (repeatable) and `cluster raft-voter remove --voter-id <id> --voter-directory-id
 <uuid>` add or remove a voter from the metadata quorum — `remove` is gated behind confirmation like
-every other removal in this package.
+every other removal in this package. `cluster unregister-controller --controller-id <id>` then
+unregisters a controller removed from the quorum for good (Kafka 4.4+, `metadata.version`
+4.4-IV2 or later), also gated behind confirmation; the active controller cannot unregister itself.
 
 </details>
 

@@ -1,7 +1,7 @@
 ---
 title: 'topic add-partitions'
 description: 'Raise a topic to a new total partition count'
-order: 56
+order: 57
 section: reference
 hidden: true
 commandPath: ['topic', 'add-partitions']

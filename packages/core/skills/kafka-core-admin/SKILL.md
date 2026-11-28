@@ -118,7 +118,8 @@ tiered storage. The last two are `-1n` for a partition without it. An older brok
 Methods tied to newer brokers throw `KafkaServerDoesNotSupportApiKey` on older ones:
 `describeTopicPartitions` (4.0+), `describeConsumerGroups` (4.0+, KIP-848 groups),
 share-group methods (4.1+), `describeTransactions` and `describeProducers` (3.0+), KRaft quorum
-methods (3.6+/3.7+). Use `describeClassicGroups` for classic groups.
+methods (3.6+/3.7+), `unregisterController` (4.4+; the cluster's `metadata.version` must be
+4.4-IV2 or later, or it fails with `UNSUPPORTED_VERSION`). Use `describeClassicGroups` for classic groups.
 `alterPartitionReassignments({ allowReplicationFactorChange: false })` needs 4.1+ and throws on
 older brokers rather than allowing the change. `describeLogDirs` returns `totalBytes` /
 `usableBytes` (3.3+) and `isCordoned` (4.3+) only when the broker sends them.

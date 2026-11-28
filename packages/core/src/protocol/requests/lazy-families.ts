@@ -175,6 +175,10 @@ export const UnregisterBroker = lazyRequestFamily(
   KAFKA_APIS.UnregisterBroker,
   async () => (await import('./lazy-requests')).UnregisterBroker,
 );
+export const UnregisterController = lazyRequestFamily(
+  KAFKA_APIS.UnregisterController,
+  async () => (await import('./lazy-requests')).UnregisterController,
+);
 export const UpdateFeatures = lazyRequestFamily(
   KAFKA_APIS.UpdateFeatures,
   async () => (await import('./lazy-requests')).UpdateFeatures,

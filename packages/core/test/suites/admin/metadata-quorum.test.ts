@@ -1,6 +1,12 @@
 import { afterEach, expect } from 'vitest';
 import { createAdmin } from '../../../src/admin/index';
-import { createCluster, describeIfKRaft, newLogger, testIfKafkaAtLeast_3_6 } from '../../helpers/index';
+import {
+  createCluster,
+  describeIfKRaft,
+  newLogger,
+  testIfKafkaAtLeast_3_6,
+  testIfKafkaAtLeast_4_4,
+} from '../../helpers/index';
 
 describeIfKRaft('admin.metadata-quorum', () => {
   let admin: ReturnType<typeof createAdmin> | undefined;
@@ -48,6 +54,24 @@ describeIfKRaft('admin.unregister-broker', () => {
 
     await expect(admin.unregisterBroker({ brokerId: 99_999 })).rejects.toMatchObject({
       type: expect.stringMatching(/BROKER|NOT/i),
+    });
+  });
+});
+
+describeIfKRaft('admin.unregister-controller', () => {
+  let admin: ReturnType<typeof createAdmin> | undefined;
+
+  afterEach(async () => {
+    await admin?.disconnect();
+  });
+
+  // Needs metadata.version 4.4-IV2, which the 4.4 stack gets by formatting at its latest production version.
+  testIfKafkaAtLeast_4_4('rejects unregistering an unknown controller id', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    await expect(admin.unregisterController({ controllerId: 99_999 })).rejects.toMatchObject({
+      type: 'CONTROLLER_ID_NOT_REGISTERED',
     });
   });
 });

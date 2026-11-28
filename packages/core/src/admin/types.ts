@@ -137,6 +137,10 @@ export interface UnregisterBrokerOptions {
   brokerId: number;
 }
 
+export interface UnregisterControllerOptions {
+  controllerId: number;
+}
+
 export interface AssignReplicasToDirsReplica {
   topic: string;
   partition: number;
@@ -741,6 +745,7 @@ export interface Admin {
   describeFeatures: () => Promise<DescribeFeaturesResult>;
   describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
   unregisterBroker: (options: UnregisterBrokerOptions) => Promise<void>;
+  unregisterController: (options: UnregisterControllerOptions) => Promise<void>;
   assignReplicasToDirs: (options: AssignReplicasToDirsOptions) => Promise<void>;
   addRaftVoter: (options: AddRaftVoterOptions) => Promise<void>;
   removeRaftVoter: (options: RemoveRaftVoterOptions) => Promise<void>;

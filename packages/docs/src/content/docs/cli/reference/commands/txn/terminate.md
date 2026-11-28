@@ -1,7 +1,7 @@
 ---
 title: 'txn terminate'
 description: "Force-terminate a transactional id's current transaction"
-order: 68
+order: 69
 section: reference
 hidden: true
 commandPath: ['txn', 'terminate']

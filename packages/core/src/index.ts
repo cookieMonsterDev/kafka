@@ -215,6 +215,7 @@ export type {
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  UnregisterControllerOptions,
   AssignReplicasToDirsOptions,
   AssignReplicasToDirsReplica,
   TopicConfig,

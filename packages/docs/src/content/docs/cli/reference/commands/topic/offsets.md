@@ -1,7 +1,7 @@
 ---
 title: 'topic offsets'
 description: 'Show partition offsets for a topic'
-order: 62
+order: 63
 section: reference
 hidden: true
 commandPath: ['topic', 'offsets']

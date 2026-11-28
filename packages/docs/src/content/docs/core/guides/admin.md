@@ -208,8 +208,8 @@ active controller.
 cover leader election, cluster metadata, log dirs, and quotas.
 
 On KRaft clusters, `describeMetadataQuorum`, `unregisterBroker`,
-`assignReplicasToDirs`, `addRaftVoter`, and `removeRaftVoter` target the active
-controller. Method signatures and version floors: [Admin API](../../reference/admin/).
+`unregisterController`, `assignReplicasToDirs`, `addRaftVoter`, and `removeRaftVoter`
+target the active controller. Method signatures and version floors: [Admin API](../../reference/admin/).
 
 ## Controller bootstrap
 

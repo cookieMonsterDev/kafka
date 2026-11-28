@@ -1,7 +1,7 @@
 ---
 title: 'share-group delete'
 description: 'Delete one or more share groups'
-order: 48
+order: 49
 section: reference
 hidden: true
 commandPath: ['share-group', 'delete']

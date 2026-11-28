@@ -68,6 +68,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   describeFeatures: 'mounted',
   describeMetadataQuorum: 'mounted',
   unregisterBroker: 'mounted',
+  unregisterController: 'mounted',
   assignReplicasToDirs: 'passthrough-only',
   addRaftVoter: 'mounted',
   removeRaftVoter: 'mounted',

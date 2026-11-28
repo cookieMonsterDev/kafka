@@ -1,7 +1,7 @@
 ---
 title: 'topic delete'
 description: 'Delete one or more topics'
-order: 58
+order: 59
 section: reference
 hidden: true
 commandPath: ['topic', 'delete']

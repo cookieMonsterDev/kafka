@@ -20,6 +20,7 @@ import { createShareGroupsApi } from './share-groups';
 import { createTopicsApi } from './topics';
 import { createTransactionsApi } from './transactions';
 import { createUnregisterBrokerApi } from './unregister-broker';
+import { createUnregisterControllerApi } from './unregister-controller';
 import { createAssignReplicasToDirsApi } from './assign-replicas-to-dirs';
 import type { Admin, AdminOptions } from './types';
 
@@ -68,6 +69,7 @@ export type {
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  UnregisterControllerOptions,
   AssignReplicasToDirsOptions,
   AssignReplicasToDirsReplica,
   TopicConfig,
@@ -115,6 +117,7 @@ export function createAdmin({
   const delegationTokens = createDelegationTokensApi(context);
   const shareGroups = createShareGroupsApi(context);
   const unregisterBrokerApi = createUnregisterBrokerApi(context);
+  const unregisterControllerApi = createUnregisterControllerApi(context);
   const assignReplicasToDirsApi = createAssignReplicasToDirsApi(context);
 
   const on = (
@@ -164,6 +167,7 @@ export function createAdmin({
     ...metadataQuorum,
     ...raftVoters,
     ...unregisterBrokerApi,
+    ...unregisterControllerApi,
     ...assignReplicasToDirsApi,
     ...transactions,
     ...delegationTokens,

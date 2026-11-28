@@ -57,6 +57,17 @@
     },
     "effect": "Removes the broker registration; it does not migrate replicas or safely decommission the host by itself. Complete reassignment and verify cluster health first."
   },
+  "cluster unregister-controller": {
+    "source": "packages/cli/src/commands/cluster/unregister-controller.ts",
+    "defaults": "Unregisters the explicitly named controller; it does not remove it from the metadata quorum.",
+    "output": {
+      "json": {
+        "controllerId": 3001,
+        "ok": true
+      }
+    },
+    "effect": "Removes the controller registration. Remove the controller from the quorum first with cluster raft-voter remove; the active controller cannot be unregistered, and the cluster must run metadata.version 4.4-IV2 or later."
+  },
   "cluster info": {
     "source": "packages/cli/src/commands/cluster/info.ts",
     "defaults": "Describes the selected cluster; broker ids and addresses depend on its metadata.",

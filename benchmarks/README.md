@@ -288,7 +288,7 @@ docker/            Dockerfile (core-builder, deps, runtime stages) and the broke
   they need no Docker and no installed dependencies (the footprint test runs the in-image script on a temporary
   directory). Shutdown waits for in-flight topic setup and client-container
   cancellation before disposing attempt topics, including probes when `--keep-broker` retains the broker.
-- ESLint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
+- Oxlint covers `benchmarks/**/*.ts` with non-type-aware rules from the repository root (`pnpm lint`).
 - Dependabot proposes competitor bumps monthly. Re-run and re-publish after merging one, and re-check what the
   docs page says each client implements (`CLIENT_COVERAGE` in `scripts/generate-benchmark-docs.mjs`). The docs
   generator, `--check` included, fails until `CLIENT_COVERAGE_CHECKED_VERSIONS` there matches the versions

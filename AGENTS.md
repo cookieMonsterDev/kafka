@@ -39,7 +39,7 @@ version of the change checklist below. Fill it honestly when opening a PR.
 After every completed change (or batch), walk this list. Mark each item **done**
 or **N/A** with a one-line reason. Do not skip silently.
 
-1. **Scope** — One concern. No drive-by refactors, unrelated files, or hand-formatting (Prettier/ESLint run on commit and in CI).
+1. **Scope** — One concern. No drive-by refactors, unrelated files, or hand-formatting (Prettier/Oxlint run on commit and in CI).
 2. **CONTRIBUTING.md** — Branch naming, commits, public API, tests, and docs match that file.
 3. **Tests**
    - Protocol or public API change: unit tests beside source (`src/**/*.test.ts`).
@@ -65,7 +65,7 @@ or **N/A** with a one-line reason. Do not skip silently.
 - After a completed task or batch of tasks, suggest a Conventional Commit message. Do not commit unless asked.
 - Filenames and folders: kebab-case only (`fetch-request`, not `fetchRequest`).
 - One concern per change. Do not mix a feature with a repo-wide reformat.
-- Do not hand-format. Prettier and ESLint run on commit and in CI.
+- Do not hand-format. Prettier and Oxlint run on commit and in CI.
 
 ## Commands
 
@@ -75,7 +75,7 @@ Run from the repo root unless noted. `pnpm -r` walks the workspace dependency gr
 nvm use && corepack enable && pnpm install   # Node 26 (.nvmrc; 24+ supported) + pnpm 12 pinned, engineStrict enforced
 
 pnpm build         # all packages, dependency order
-pnpm lint          # ESLint (root)
+pnpm lint          # Oxlint (root)
 pnpm format:check  # Prettier
 pnpm typecheck     # tsc --noEmit (per package) + astro check
 pnpm test          # unit tests only, never starts Docker
@@ -96,7 +96,7 @@ KAFKA_VERSION=4.4  pnpm --filter @cookiemonsterdev/kafka-core test:integration
 
 Unit tests live beside source as `*.test.ts` (`src/**/*.test.ts`) and never touch Docker. Integration tests live in `packages/core/test/suites/**` and select a `docker-compose*.yml` from `test/assets/` based on `KAFKA_VERSION` (default `4.0`) — see `packages/core/test/assets/README.md` for the version matrix and feature gates. Version-gate integration tests with the helpers in `packages/core/test/helpers` (`testIfKafkaAtLeast_4_0`, `describeIfKRaft`, etc.) instead of parsing `KAFKA_VERSION` directly.
 
-Pre-commit runs ESLint + Prettier on staged files then `pnpm test`; commit-msg runs commitlint. Skip hooks for one command with `HUSKY=0` (avoid unless necessary).
+Pre-commit runs Oxlint + Prettier on staged files then `pnpm test`; commit-msg runs commitlint. Skip hooks for one command with `HUSKY=0` (avoid unless necessary).
 
 Shared dependency versions (TypeScript, Vite, Vitest, Astro) live in the `catalog:` in `pnpm-workspace.yaml`; reference them as `"typescript": "catalog:"` rather than pinning per-package. `pnpm-workspace.yaml`, not `.npmrc`, is the source of truth for pnpm settings (`engineStrict`, `catalog`, `allowBuilds`, etc.) — pnpm 12 only reads auth/registry config from `.npmrc`. Depend on another workspace package with the `workspace:` protocol.
 
@@ -120,7 +120,7 @@ Key defaults that intentionally diverge from the Java client (full table in `pac
 
 TypeScript is strict (`noUncheckedIndexedAccess`, `noImplicitOverride`), `verbatimModuleSyntax` (use `import type`), `erasableSyntaxOnly` (no enums, no parameter properties — Node's type-stripping must run the source as-is), `bundler` resolution with extensionless relative imports. Shared compiler options live in `tsconfig.base.json`; override per-package, not in the base.
 
-- ESLint's type-checked rules apply to `packages/core/{src,test}`; `packages/core/src/protocol` (excluding tests) additionally forbids non-null assertions. `packages/docs` is not ESLint-linted (Prettier still applies to its Markdown/JSON/YAML/CSS; `*.astro` is Prettier-ignored).
+- Oxlint (`.oxlintrc.json`) runs type-aware rules through `oxlint-tsgolint` on `packages/{core,config,cli,studio}/{src,test}`; `packages/core/src/protocol` (excluding tests) additionally forbids non-null assertions. `packages/docs` is not linted (Prettier still applies to its Markdown/JSON/YAML/CSS; `*.astro` is Prettier-ignored).
 - Public API surface is exported only from `packages/core/src/index.ts`. Types are generated via `tsc --emitDeclarationOnly` — never hand-write `index.d.ts`.
 - Protocol and public API changes need tests. New broker behavior should use the version helpers in `packages/core/test/helpers` instead of parsing `KAFKA_VERSION` in the test file.
 - Do not commit `dist/`, `.env`, certificates that are not already in the test fixtures, or secrets.

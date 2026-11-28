@@ -66,6 +66,9 @@ jobs:
       - run: pnpm --filter @cookiemonsterdev/kafka-core build
       - run: pnpm --filter @cookiemonsterdev/kafka-cli build
       - run: pnpm --filter @cookiemonsterdev/kafka-studio build
+      # Type-aware lint rules resolve the workspace packages through their built dist, like typecheck.
+      - if: matrix.primary
+        run: pnpm lint
       - if: matrix.primary
         run: pnpm typecheck
       # bash ships on every GitHub-hosted Ubuntu runner; zsh doesn't. The CLI's shell-completion

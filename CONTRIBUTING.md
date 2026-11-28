@@ -29,7 +29,7 @@ From the repo root:
 ```sh
 pnpm dev           # docs site on http://localhost:4321 + Vite watch for @cookiemonsterdev/kafka-core
 pnpm build         # all packages, in dependency order
-pnpm lint          # ESLint
+pnpm lint          # Oxlint
 pnpm format        # Prettier write
 pnpm format:check  # Prettier check (CI)
 pnpm typecheck     # tsc --noEmit + astro check
@@ -152,7 +152,7 @@ docs(getting-started): document lingerMs default
 
 | Hook         | What it runs                                                        |
 | ------------ | ------------------------------------------------------------------- |
-| `pre-commit` | ESLint + Prettier on staged files (`lint-staged`), then `pnpm test` |
+| `pre-commit` | Oxlint + Prettier on staged files (`lint-staged`), then `pnpm test` |
 | `commit-msg` | commitlint                                                          |
 
 Integration tests are not in the hook. They need Docker. CI still runs them.
@@ -163,7 +163,7 @@ Integration tests are not in the hook. They need Docker. CI still runs them.
 2. Implement the change. Add or update tests. Update docs or READMEs when the public API or workflow changes.
 3. Push and open a PR against **`develop`**. The PR template is filled in for you.
 4. Link the issue with `Closes #123` when there is one.
-5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, an integration matrix across Kafka versions with Bun legs ([which versions run on which event](packages/docs/src/content/docs/core/reference/compatibility.md#tested-brokers)), and a build and smoke test of the standalone binaries. What runs on Bun is listed on the [Bun page](packages/docs/src/content/docs/core/reference/bun.md#how-we-test). The [Security workflow](.github/workflows/security.yml) scans `pnpm-lock.yaml` with [OSV-Scanner](https://google.github.io/osv-scanner/) and `pnpm audit`, and fails on any known-vulnerable or malicious dependency. Fix it by upgrading; if that is not possible yet, add a reviewed entry with a `reason` and `ignoreUntil` date to [`osv-scanner.toml`](osv-scanner.toml), and add its GHSA id to `auditConfig.ignoreGhsas` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
+5. Wait for CI. The [CI workflow](.github/workflows/ci.yml) runs format, commitlint, lint, typecheck, unit tests (on Node.js and Bun), a smoke test of the built packages, an integration matrix across Kafka versions with Bun legs ([which versions run on which event](packages/docs/src/content/docs/core/reference/compatibility.md#tested-brokers)), and a build and smoke test of the standalone binaries. What runs on Bun is listed on the [Bun page](packages/docs/src/content/docs/core/reference/bun.md#how-we-test). The [Security workflow](.github/workflows/security.yml) scans `pnpm-lock.yaml` with [OSV-Scanner](https://google.github.io/osv-scanner/) and `pnpm audit`, and fails on any known-vulnerable or malicious dependency. Fix it by upgrading; if that is not possible yet, add a reviewed entry with a `reason` and `ignoreUntil` date to [`osv-scanner.toml`](osv-scanner.toml), and add its GHSA id to `auditConfig.ignoreGhsas` in [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
 6. [CODEOWNERS](.github/CODEOWNERS) requests a review from the maintainer.
 
 A PR should do **one** thing. Do not mix a feature with a repo-wide reformat.
@@ -215,7 +215,7 @@ that file, not the labels list in repo settings.
 
 ## Code style
 
-Do not hand-format. Prettier and ESLint run on commit and in CI.
+Do not hand-format. Prettier and Oxlint run on commit and in CI.
 
 **Prettier** (`.prettierrc.json`): print width 120, single quotes, trailing commas.
 
@@ -226,7 +226,7 @@ Do not hand-format. Prettier and ESLint run on commit and in CI.
 - `erasableSyntaxOnly` — no TypeScript enums or parameter properties (Node type-stripping must still run the source)
 - `bundler` module resolution; relative imports omit file extensions (except in `benchmarks/`, which runs TypeScript directly and needs `.ts` extensions)
 
-**ESLint** (`eslint.config.js`): type-checked rules on `packages/core/{src,test}`, plain TypeScript rules on `benchmarks/`. Protocol code (`packages/core/src/protocol`, excluding tests) forbids non-null assertions. `packages/docs` is not linted with ESLint; Prettier still applies to Markdown, JSON, YAML, and CSS. `*.astro` is Prettier-ignored.
+**Oxlint** (`.oxlintrc.json`): type-aware rules (through `oxlint-tsgolint`) on `packages/{core,config,cli,studio}/{src,test}`, plain TypeScript rules on `benchmarks/`. Protocol code (`packages/core/src/protocol`, excluding tests) forbids non-null assertions. `packages/docs` is not linted with Oxlint; Prettier still applies to Markdown, JSON, YAML, and CSS. `*.astro` is Prettier-ignored. Existing `eslint-disable` comments still work; Oxlint reads them.
 
 **Filenames and folders:** kebab-case only (`fetch-request`, not `fetchRequest`).
 

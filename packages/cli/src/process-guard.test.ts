@@ -1,38 +1,73 @@
-import { Linter } from 'eslint';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-// This fixture exercises the real no-restricted-globals block from the repo's own
-// eslint.config.js, not a re-typed copy of it, so a future edit that loosens or drops the guard
-// fails this test rather than only failing an eventual manual review.
-let processGuardBlock: Linter.Config;
+// Lints with the repo's own .oxlintrc.json, so an edit that loosens or drops the guard fails here.
+// Override globs are relative to the config file, so it is copied into a temp tree that mirrors
+// the repo. Type-aware linting is off there: the guard does not need it, and oxlint cannot find
+// oxlint-tsgolint from a directory outside the repo.
+const rootConfigPath = fileURLToPath(new URL('../../../.oxlintrc.json', import.meta.url));
+const oxlintPath = fileURLToPath(new URL('../node_modules/.bin/oxlint', import.meta.url));
 
-beforeAll(async () => {
-  // @ts-expect-error -- eslint.config.js is a plain JS module with no declaration file
-  const rootEslintConfig = (await import('../../../eslint.config.js')).default as Linter.Config[];
-  const found = rootEslintConfig.find((block) => block.rules != null && 'no-restricted-globals' in block.rules);
-  if (found === undefined) {
-    throw new Error('eslint.config.js has no no-restricted-globals block for the cli package');
+const commandFile = 'packages/cli/src/commands/topic/list.ts';
+const runtimeFile = 'packages/cli/src/runtime.ts';
+const entryPointFile = 'packages/cli/src/bin.ts';
+
+interface OxlintReport {
+  diagnostics: { code: string; filename: string }[];
+}
+
+let fixtureRoot: string;
+let report: OxlintReport;
+
+beforeAll(() => {
+  fixtureRoot = mkdtempSync(join(tmpdir(), 'cli-process-guard-'));
+  copyFileSync(rootConfigPath, join(fixtureRoot, 'repo.oxlintrc.json'));
+  writeFileSync(
+    join(fixtureRoot, '.oxlintrc.json'),
+    JSON.stringify({ extends: ['./repo.oxlintrc.json'], options: { typeAware: false } }),
+  );
+  for (const file of [commandFile, runtimeFile, entryPointFile]) {
+    mkdirSync(join(fixtureRoot, dirname(file)), { recursive: true });
+    writeFileSync(join(fixtureRoot, file), 'export const x = process.env.FOO;\n');
   }
-  processGuardBlock = found;
+
+  const result = spawnSync(oxlintPath, ['--format', 'json', commandFile, runtimeFile, entryPointFile], {
+    cwd: fixtureRoot,
+    encoding: 'utf8',
+  });
+  if (result.error !== undefined) {
+    throw result.error;
+  }
+  if (!result.stdout.startsWith('{')) {
+    throw new Error(`oxlint did not print a JSON report:\n${result.stdout}${result.stderr}`);
+  }
+  report = JSON.parse(result.stdout) as OxlintReport;
 });
 
-const linter = new Linter({ configType: 'flat' });
-const code = 'export const x = process.env.FOO;\n';
+afterAll(() => {
+  rmSync(fixtureRoot, { recursive: true, force: true });
+});
 
-function ruleIdsFor(filename: string): (string | null)[] {
-  return linter.verify(code, [processGuardBlock], filename).map((message) => message.ruleId);
+function ruleCodesFor(filename: string): string[] {
+  return report.diagnostics
+    .filter((diagnostic) => diagnostic.filename === filename)
+    .map((diagnostic) => diagnostic.code);
 }
 
 describe('the cli src process guard', () => {
   it('rejects a bare `process` reference in an ordinary command file', () => {
-    expect(ruleIdsFor('packages/cli/src/commands/topic/list.ts')).toContain('no-restricted-globals');
+    expect(ruleCodesFor(commandFile)).toContain('eslint(no-restricted-globals)');
   });
 
   it('allows `process` in the runtime port', () => {
-    expect(ruleIdsFor('packages/cli/src/runtime.ts')).not.toContain('no-restricted-globals');
+    expect(ruleCodesFor(runtimeFile)).not.toContain('eslint(no-restricted-globals)');
   });
 
   it('allows `process` in the process entry point', () => {
-    expect(ruleIdsFor('packages/cli/src/bin.ts')).not.toContain('no-restricted-globals');
+    expect(ruleCodesFor(entryPointFile)).not.toContain('eslint(no-restricted-globals)');
   });
 });

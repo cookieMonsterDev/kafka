@@ -115,7 +115,7 @@ pnpm install
 ```sh
 pnpm dev           # docs + library watchers
 pnpm build         # all packages, dependency order
-pnpm lint          # ESLint
+pnpm lint          # Oxlint
 pnpm format:check  # Prettier
 pnpm typecheck     # tsc --noEmit + astro check
 pnpm test          # unit tests only (never starts Docker)

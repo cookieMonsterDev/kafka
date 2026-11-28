@@ -11,6 +11,7 @@ catalog:
   vitest: ^5.1.0
   '@vitest/coverage-v8': ^5.1.0
   '@types/node': ^26.6.6
+  oxlint: ^1.95.0
 
 # Astro's current checker requires TypeScript 6; runtime packages retain the main catalog.
 catalogs:

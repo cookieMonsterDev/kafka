@@ -95,7 +95,7 @@ const metadataRequest = () => ({
  * A fake `net.Socket`: an `EventEmitter` with the write/end/destroy/unref/removeAllListeners
  * surface `Connection` touches. The teardown methods are also returned as plain spy references
  * (rather than read back off the typed `net.Socket`) so assertions don't trip
- * `@typescript-eslint/unbound-method` on its class methods.
+ * `typescript/unbound-method` on its class methods.
  */
 function createFakeSocket(): { socket: net.Socket; destroy: Mock; end: Mock; removeAllListeners: Mock } {
   const socket = new EventEmitter() as unknown as net.Socket;

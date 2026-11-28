@@ -19,7 +19,8 @@ import type { SocketFactory } from '../network/socket-factory';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
-import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
+import { isUsableTopicId } from '../protocol/requests/topic-ids';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import {
@@ -586,10 +587,7 @@ export class Cluster {
     }
 
     const topicId = metadata.topicMetadata.find((entry) => entry.topic === topic)?.topicId;
-    if (topicId == null || topicId.length !== 16 || topicId.equals(ZERO_TOPIC_ID)) {
-      return undefined;
-    }
-    return topicId;
+    return isUsableTopicId(topicId) ? topicId : undefined;
   }
 
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {

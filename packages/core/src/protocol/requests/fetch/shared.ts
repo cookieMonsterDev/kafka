@@ -18,7 +18,7 @@ import {
   type RequestDefinition,
 } from '../../schema';
 import { API_KEYS } from '../api-keys';
-import { ZERO_TOPIC_ID } from '../metadata/shared';
+import { isUsableTopicId, requireTopicId } from '../topic-ids';
 
 /** The wire's `topic` field is a non-nullable STRING; every version's response decode uses this. */
 export function readTopicName(decoder: Decoder): string {
@@ -84,24 +84,12 @@ export const FETCH_TOPIC_ID_MIN_VERSION = 13;
 /** First Fetch version that moves ReplicaId into tagged ReplicaState (KIP-903). */
 export const FETCH_REPLICA_STATE_MIN_VERSION = 15;
 
-/** True when `topicId` is a non-zero 16-byte UUID the broker can look up. */
-export function isUsableTopicId(topicId: Buffer | undefined): topicId is Buffer {
-  return topicId != null && topicId.length === 16 && !topicId.equals(ZERO_TOPIC_ID);
-}
-
 /** Topics and forgotten topics all carry a usable KIP-516 UUID. */
 export function fetchRequestHasUsableTopicIds(options: FetchRequestOptions): boolean {
   return (
     options.topics.every((topic) => isUsableTopicId(topic.topicId)) &&
     (options.forgottenTopics ?? []).every((topic) => isUsableTopicId(topic.topicId))
   );
-}
-
-export function resolveFetchTopicName(topicId: Buffer, index: number, topics: readonly FetchTopicRequest[]): string {
-  const byId = topics.find((entry) => entry.topicId != null && entry.topicId.equals(topicId));
-  if (byId) return byId.topic;
-  const byIndex = topics[index];
-  return byIndex?.topic ?? '';
 }
 
 const OFFSET_OUT_OF_RANGE_ERROR_CODE = ERROR_CODES.find((e) => e.type === 'OFFSET_OUT_OF_RANGE')?.code;
@@ -346,12 +334,10 @@ export function createFetchRequest(apiVersion: number, options: FetchRequestOpti
     apiVersion,
     apiName: 'Fetch',
     encode: async () => {
-      const topics = options.topics.map(({ topic, topicId, partitions }) => {
-        if (!isUsableTopicId(topicId)) {
-          throw new RangeError(`Fetch v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
-        }
-        return { topicId, partitions: encodeFetchPartitions(partitions) };
-      });
+      const topics = options.topics.map((topic) => ({
+        topicId: requireTopicId('Fetch', apiVersion, topic),
+        partitions: encodeFetchPartitions(topic.partitions),
+      }));
       const forgottenTopics = (options.forgottenTopics ?? []).map(({ topic, topicId, partitions }) => {
         if (!isUsableTopicId(topicId)) {
           throw new RangeError(`Fetch v${apiVersion} requires a 16-byte topicId for forgotten topic ${topic}`);

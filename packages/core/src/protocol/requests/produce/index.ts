@@ -34,7 +34,8 @@ import { produceRequestV12 } from './v12/request';
 import { produceResponseV12 } from './v12/response';
 import { produceRequestV13 } from './v13/request';
 import { produceResponseV13 } from './v13/response';
-import { isUsableTopicId, PRODUCE_TOPIC_ID_MIN_VERSION, type ProduceRequestOptions } from './shared';
+import { PRODUCE_TOPIC_ID_MIN_VERSION, type ProduceRequestOptions } from './shared';
+import { isUsableTopicId } from '../topic-ids';
 
 const VERSIONS = {
   0: (options) => ({ request: produceRequestV0(options), response: produceResponseV0 }),

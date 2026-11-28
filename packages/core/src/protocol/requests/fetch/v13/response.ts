@@ -5,9 +5,9 @@ import {
   parseFetchResponse,
   readFetchPartitionTaggedFields,
   readFetchResponseNodeEndpoints,
-  resolveFetchTopicName,
   type FetchRequestOptions,
 } from '../shared';
+import { requestedTopicName } from '../../topic-ids';
 import type { FetchPartitionResponseV11, FetchResponseV11Body, FetchTopicResponseV11 } from '../v11/response';
 
 export type FetchPartitionResponseV13 = FetchPartitionResponseV11;
@@ -93,7 +93,7 @@ export function fetchResponseV13(
         errorCode,
         sessionId,
         responses: responses.map((topic, index) => ({
-          topicName: resolveFetchTopicName(topic.topicId, index, resolutionTopics),
+          topicName: requestedTopicName(topic.topicId, index, resolutionTopics),
           topicId: topic.topicId,
           partitions: topic.partitions,
         })),

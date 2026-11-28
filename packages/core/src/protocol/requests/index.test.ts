@@ -4,6 +4,7 @@ import { API_KEYS } from './api-keys';
 import { ApiVersions } from './api-versions/index';
 import {
   defineRequestFamily,
+  highestCommonVersion,
   highestVersionBelow,
   lazyRequestFamily,
   lookup,
@@ -324,6 +325,18 @@ describe('lazyRequestFamily', () => {
     await expect(stub.load()).resolves.toBe(family);
     await expect(stub.load()).resolves.toBe(family);
     expect(load).toHaveBeenCalledOnce();
+  });
+});
+
+describe('highestCommonVersion', () => {
+  it('picks the highest implemented version within the advertised range', () => {
+    expect(highestCommonVersion([0, 1, 2, 3], { minVersion: 1, maxVersion: 2 })).toBe(2);
+    expect(highestCommonVersion([0, 1, 2, 3], { maxVersion: 9 })).toBe(3);
+  });
+
+  it('returns null when the broker is too old or too new for every implemented version', () => {
+    expect(highestCommonVersion([3, 4], { minVersion: 0, maxVersion: 2 })).toBeNull();
+    expect(highestCommonVersion([0, 1], { minVersion: 2, maxVersion: 5 })).toBeNull();
   });
 });
 

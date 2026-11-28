@@ -3,6 +3,7 @@ import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } 
 import type { InstrumentationEvent } from '../instrumentation/event';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createAclsApi } from './acls';
+import { createApiVersionsApi } from './api-versions';
 import { createConfigsApi } from './configs';
 import { createDelegationTokensApi } from './delegation-tokens';
 import { createFeaturesApi } from './features';
@@ -31,11 +32,14 @@ export type {
   AdminOptions,
   AclEntry,
   AclFilter,
+  ApiVersionDescription,
+  BrokerApiVersionsDescription,
   ConsumerGroupDescription,
   ConsumerGroupMemberDescription,
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
   DelegationToken,
+  DescribeApiVersionsOptions,
   DescribeDelegationTokenOptions,
   DescribeFeaturesResult,
   DescribeMetadataQuorumResult,
@@ -115,6 +119,7 @@ export function createAdmin({
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
+  const apiVersions = createApiVersionsApi(context);
   const features = createFeaturesApi(context);
   const metadataQuorum = createMetadataQuorumApi(context);
   const raftVoters = createRaftVotersApi(context);
@@ -169,6 +174,7 @@ export function createAdmin({
     ...scram,
     ...quotas,
     ...logDirs,
+    ...apiVersions,
     ...features,
     ...metadataQuorum,
     ...raftVoters,

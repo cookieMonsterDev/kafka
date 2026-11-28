@@ -204,6 +204,17 @@ downgrades and `validateOnly`; newer brokers negotiate v1 or v2 automatically.
 `describeFeatures()` reads ApiVersions v3+ tagged fields (KIP-584) from the
 active controller.
 
+`describeApiVersions()` lists, for each broker, the version range it advertises for every
+Kafka API and the version this client negotiates, and marks the APIs the client does not
+implement (KIP-1220):
+
+```ts
+const { brokers } = await admin.describeApiVersions({ brokerIds: [1] });
+for (const api of brokers[0]?.apis ?? []) {
+  console.log(api.apiName, api.brokerVersions, api.isImplemented ? api.version : 'not implemented');
+}
+```
+
 ## Cluster and KRaft
 
 `electLeaders`, `describeCluster`, `describeLogDirs` / `alterReplicaLogDirs` /

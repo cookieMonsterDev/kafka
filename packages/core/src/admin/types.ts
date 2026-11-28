@@ -318,6 +318,40 @@ export interface LogDirDescription extends DescribeLogDirsResult {
   isCordoned?: boolean;
 }
 
+/** Options for {@link Admin.describeApiVersions}. */
+export interface DescribeApiVersionsOptions {
+  /** The brokers to describe, by node id; every broker in the cluster metadata when omitted or empty. */
+  brokerIds?: number[];
+}
+
+/** One Kafka API as a broker advertises it and this client implements it. */
+export interface ApiVersionDescription {
+  apiKey: number;
+  /** The protocol's name for the API, such as `Produce`; absent for an api key this client cannot name. */
+  apiName?: string;
+  /** The lowest and highest version the broker advertises; absent when the broker does not support the API. */
+  brokerVersions?: { minVersion: number; maxVersion: number };
+  /** Whether this client implements the API. */
+  isImplemented: boolean;
+  /**
+   * The API version this client negotiates with the broker: the highest version both support. Absent
+   * when the broker does not support the API, this client does not implement it, or the two share
+   * no version. A request whose options need an older version, such as Produce without topic ids,
+   * still goes out at that version.
+   */
+  version?: number;
+}
+
+/** One broker's Kafka APIs, as {@link Admin.describeApiVersions} reports them. */
+export interface BrokerApiVersionsDescription {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+  /** Every API the broker advertises or this client implements, in api key order. */
+  apis: ApiVersionDescription[];
+}
+
 export interface DescribeReplicaLogDirsReplica {
   topic: string;
   partition: number;
@@ -755,6 +789,12 @@ export interface Admin {
     topics?: { topic: string; partitions: number[] }[] | null;
     brokerIds?: Array<string | number>;
   }) => Promise<{ brokers: { brokerId: number; logDirs: LogDirDescription[] }[] }>;
+  /**
+   * The Kafka APIs each broker advertises in a fresh ApiVersions response, with the API version this
+   * client negotiates for each (KIP-1220). Lists every API the broker advertises or this client
+   * implements. One unreachable broker rejects the call.
+   */
+  describeApiVersions: (options?: DescribeApiVersionsOptions) => Promise<{ brokers: BrokerApiVersionsDescription[] }>;
   describeReplicaLogDirs: (replicas: DescribeReplicaLogDirsReplica[]) => Promise<{
     replicas: DescribeReplicaLogDirsResult[];
   }>;

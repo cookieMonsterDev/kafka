@@ -128,6 +128,9 @@ older brokers rather than allowing the change. `describeLogDirs` returns `totalB
 older brokers rather than being ignored.
 On 4.0+ `describeGroups` throws for an unknown or non-classic group (`error.cause.type` is
 `GROUP_ID_NOT_FOUND`); older brokers return it with `state: 'Dead'`.
+To see what each broker supports, `describeApiVersions({ brokerIds? })` returns every Kafka API
+with the broker's `brokerVersions`, `isImplemented`, and the negotiated `version` (absent when
+the two share none), on any broker version.
 
 For ACLs, SCRAM, delegation tokens, transactions, features, and controller bootstrap, read
 [admin operations](references/operations.md).

@@ -74,6 +74,7 @@ spec needs a minimum ListOffsets (key 2) version and throws
 | `alterPartitionReassignments` / `listPartitionReassignments`   | `allowReplicationFactorChange`: 4.1+        |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels                |
 | `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+       |
+| `describeApiVersions({ brokerIds? })`                          | ApiVersions (18) per broker; KIP-1220       |
 | `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+         |
 | `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+       |
 | `unregisterController({ controllerId })`                       | UnregisterController (key 94); Kafka 4.4+   |
@@ -134,6 +135,20 @@ AssignReplicasToDirs (key 73) to the active controller (KIP-858, Kafka 3.7+).
 Each replica is `{ topic, partition, directoryId }` where `directoryId` is a
 16-byte `Buffer`. Topic names are resolved to topic IDs from metadata.
 `brokerEpoch` defaults to `-1n`.
+
+`describeApiVersions({ brokerIds? })` sends a fresh ApiVersions (key 18) request to
+each broker in the cluster metadata, or to the given node ids, like `kafka-cluster.sh
+api-versions` (KIP-1220). It returns `{ brokers }`, one entry per broker with its `nodeId`,
+`host`, `port`, `rack`, and `apis`: every Kafka API the broker advertises or this client
+implements, in api key order. Each API has its `apiKey`, its protocol `apiName` (absent for an
+api key the client cannot name), the broker's `brokerVersions` range (absent when the broker
+does not support it), `isImplemented`, and `version`, the API version the client negotiates:
+the highest version both support, absent when either side lacks the API or they share none.
+A request whose options need an older version, such as Produce without topic ids, still goes
+out at that version. `version` comes from the broker's own advertised range; before Kafka 4.4
+the client reuses the bootstrap broker's versions for the other brokers, so during a rolling
+upgrade it can differ from what the client sends. A node id missing from the metadata, or one
+unreachable broker, rejects the call.
 
 `unregisterController({ controllerId })` sends UnregisterController (key 94) to
 the active controller (KIP-1312, Kafka 4.4+). Use it for a controller that was

@@ -231,6 +231,8 @@ WriteTxnMarkers (27) on partition leaders (Kafka 3.0+ / v1+; v0 removed in
 4.0). `admin.forceTerminateTransaction` fences one transactional ID via
 InitProducerId. `admin.describeFeatures` reads
 ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
+`admin.describeApiVersions` sends ApiVersions (18) to every broker, on any broker version,
+and reports the version the client negotiates for each API (KIP-1220).
 `admin.removeMembersFromConsumerGroup` uses LeaveGroup (13) v3+ with explicit
 member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`

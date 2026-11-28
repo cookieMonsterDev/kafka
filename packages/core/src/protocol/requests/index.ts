@@ -209,6 +209,16 @@ function unsupportedApiKeyError(
 }
 
 /**
+ * The highest of `versions` within the range the broker advertised, which is the version `lookup`
+ * negotiates, or `null` when the two share none.
+ */
+export function highestCommonVersion(versions: readonly number[], advertised: BrokerApiVersion): number | null {
+  const brokerMinVersion = advertised.minVersion ?? 0;
+  const overlapping = versions.filter((v) => v >= brokerMinVersion && v <= advertised.maxVersion);
+  return overlapping.length === 0 ? null : Math.max(...overlapping);
+}
+
+/**
  * `lookup(brokerVersions)(family)` picks the highest `v` in `family.versions` such that
  * `broker.minVersion <= v <= broker.maxVersion`. Throws `KafkaServerDoesNotSupportApiKey` when the
  * broker never advertised the API or when there is no overlap with the versions we implement.
@@ -230,19 +240,15 @@ export function lookup(
       throw unsupportedApiKeyError(family);
     }
 
-    const brokerMinVersion = version.minVersion ?? 0;
-    const brokerMaxVersion = version.maxVersion;
-    const overlapping = family.versions.filter((v) => v >= brokerMinVersion && v <= brokerMaxVersion);
-
-    if (overlapping.length === 0) {
+    const bestSupportedVersion = highestCommonVersion(family.versions, version);
+    if (bestSupportedVersion === null) {
       throw unsupportedApiKeyError(family, {
-        brokerMinVersion,
-        brokerMaxVersion,
+        brokerMinVersion: version.minVersion ?? 0,
+        brokerMaxVersion: version.maxVersion,
         implementedVersions: family.versions,
       });
     }
 
-    const bestSupportedVersion = Math.max(...overlapping);
     const factory = family.protocol({ version: bestSupportedVersion });
     negotiatedFactories.set(family, factory);
     return factory;

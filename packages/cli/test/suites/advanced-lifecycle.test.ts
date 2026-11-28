@@ -1,18 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { SUPPORTS_SHARE_GROUPS, SUPPORTS_STREAMS_GROUPS } from '../helpers/broker-features';
 import { runCli } from '../helpers/run-cli';
 
 const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
 const UNIQUE = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-/**
- * This suite's compose matrix (`test/helpers/global-setup.ts`) only ever selects `0.10`, `4.0`,
- * or `4.4` — share groups (KIP-932) need a broker at least at 4.1, which among those three is
- * only `4.4`.
- */
-const SUPPORTS_SHARE_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
-
-/** Streams groups (KIP-1071) need a broker at least at 4.2, which among the same three is only `4.4`. */
-const SUPPORTS_STREAMS_GROUPS = (process.env.KAFKA_VERSION ?? '4.0') === '4.4';
 
 /**
  * Runs against a real broker started by `test/helpers/global-setup.ts`. Transactions, SCRAM

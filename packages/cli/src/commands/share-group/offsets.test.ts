@@ -1,5 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Admin } from '@cookiemonsterdev/kafka-core';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CliAbortedError } from '../../errors/aborted-error';
 import { CliUsageError } from '../../args/coerce';
 import { createFakeAdmin } from '../../testing/create-fake-admin';
@@ -278,6 +281,122 @@ describe('shareGroupOffsetsCommand — --set mode', () => {
     await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow('boom');
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('shareGroupOffsetsCommand — --from-file mode', () => {
+  let tmpDir: string | undefined;
+
+  afterEach(() => {
+    if (tmpDir !== undefined) {
+      rmSync(tmpDir, { recursive: true, force: true });
+      tmpDir = undefined;
+    }
+  });
+
+  function writeOffsetsFile(contents: string): string {
+    tmpDir = mkdtempSync(join(tmpdir(), 'kafka-cli-share-group-offsets-'));
+    const file = join(tmpDir, 'offsets.csv');
+    writeFileSync(file, contents);
+    return file;
+  }
+
+  it('sets the offsets the file lists, one call per topic', async () => {
+    const file = writeOffsetsFile('orders,0,1000\norders,1,2000\npayments,0,0\n');
+    const alterShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
+    const admin = createFakeAdmin({ alterShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': file, yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    expect(await shareGroupOffsetsCommand.run(context)).toBe(0);
+    expect(alterShareGroupOffsets).toHaveBeenCalledTimes(2);
+    expect(alterShareGroupOffsets).toHaveBeenCalledWith({
+      groupId: 'g1',
+      topics: [
+        {
+          topicName: 'orders',
+          partitions: [
+            { partitionIndex: 0, startOffset: 1000n },
+            { partitionIndex: 1, startOffset: 2000n },
+          ],
+        },
+      ],
+    });
+    expect(alterShareGroupOffsets).toHaveBeenCalledWith({
+      groupId: 'g1',
+      topics: [{ topicName: 'payments', partitions: [{ partitionIndex: 0, startOffset: 0n }] }],
+    });
+  });
+
+  it('uses only the share group’s records from a group,topic,partition,offset file', async () => {
+    const file = writeOffsetsFile('other,orders,0,5\ng1,orders,0,1000\n');
+    const alterShareGroupOffsets = vi.fn(async () => ({ responses: [] }));
+    const admin = createFakeAdmin({ alterShareGroupOffsets, disconnect: async () => {} });
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': file, yes: true },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+    });
+
+    await shareGroupOffsetsCommand.run(context);
+    expect(alterShareGroupOffsets).toHaveBeenCalledWith({
+      groupId: 'g1',
+      topics: [{ topicName: 'orders', partitions: [{ partitionIndex: 0, startOffset: 1000n }] }],
+    });
+  });
+
+  it('reports an unreadable file as a usage error naming the flag', async () => {
+    const openAdmin = vi.fn();
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': '/nonexistent/offsets.csv', yes: true },
+      positionals: ['g1'],
+      openAdmin,
+    });
+
+    const run = shareGroupOffsetsCommand.run(context);
+    await expect(run).rejects.toThrow(CliUsageError);
+    await expect(run).rejects.toThrow(/could not read --from-file "\/nonexistent\/offsets.csv"/);
+    expect(openAdmin).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid record before prompting or connecting', async () => {
+    const file = writeOffsetsFile('orders,0,1000\norders,x,2000\n');
+    const openAdmin = vi.fn();
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': file },
+      positionals: ['g1'],
+      openAdmin,
+    });
+
+    await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow(
+      /line 2: partition must be an integer from 0 to 2147483647/,
+    );
+    expect(openAdmin).not.toHaveBeenCalled();
+  });
+
+  it('aborts without --yes off a TTY', async () => {
+    const file = writeOffsetsFile('orders,0,1000\n');
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', 'from-file': file },
+      positionals: ['g1'],
+    });
+    await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow(CliAbortedError);
+  });
+
+  it.each([[{ set: ['orders:0:1000'] }], [{ 'delete-topic': ['orders'] }]])(
+    'rejects combining --from-file with %j',
+    async (otherFlags) => {
+      const { context } = createFakeCommandContext({
+        flags: { brokers: 'localhost:9092', 'from-file': 'offsets.csv', yes: true, ...otherFlags },
+        positionals: ['g1'],
+      });
+      await expect(shareGroupOffsetsCommand.run(context)).rejects.toThrow(
+        'share-group offsets accepts at most one of --set, --from-file, or --delete-topic',
+      );
+    },
+  );
 });
 
 describe('shareGroupOffsetsCommand — --delete-topic mode', () => {

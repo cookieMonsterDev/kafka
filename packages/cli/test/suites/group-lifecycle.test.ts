@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SUPPORTS_SHARE_GROUPS } from '../helpers/broker-features';
 import { runCli } from '../helpers/run-cli';
 
 const BROKERS = process.env.KAFKA_BROKERS ?? 'localhost:9092';
@@ -61,5 +65,39 @@ describe('group lifecycle against a real broker', () => {
     const parsed = JSON.parse(result.stdout) as { topics: { topic: string; ok: boolean }[] };
     expect(parsed.topics[0]?.topic).toBe(TOPIC);
     expect(parsed.topics[0]?.ok).toBe(true);
+  });
+
+  it.runIf(SUPPORTS_SHARE_GROUPS)('sets share group start offsets from a kafka-share-groups.sh CSV file', async () => {
+    const shareGroupId = `${TOPIC}-share`;
+    const tmpDir = mkdtempSync(join(tmpdir(), 'kafka-cli-it-share-offsets-'));
+    const file = join(tmpDir, 'offsets.csv');
+    writeFileSync(file, `${TOPIC},0,0\n`);
+    try {
+      const set = await runCli([
+        'share-group',
+        'offsets',
+        shareGroupId,
+        '--from-file',
+        file,
+        '--yes',
+        '--brokers',
+        BROKERS,
+        '--json',
+      ]);
+      expect(set.code).toBe(0);
+      expect(JSON.parse(set.stdout)).toEqual({ results: [{ topic: TOPIC, ok: true }] });
+
+      // Setting start offsets creates the share group. This checks the group rather than reading
+      // offsets back, because `share-group offsets` read mode returns no partitions on Kafka 4.4;
+      // read them back here once that read works.
+      const described = await runCli(['share-group', 'describe', shareGroupId, '--brokers', BROKERS, '--json']);
+      expect(described.code).toBe(0);
+      expect(JSON.parse(described.stdout)).toEqual({
+        groups: [expect.objectContaining({ groupId: shareGroupId, ok: true, state: 'Empty' })],
+      });
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+      await runCli(['share-group', 'delete', shareGroupId, '--yes', '--brokers', BROKERS]);
+    }
   });
 });

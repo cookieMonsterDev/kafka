@@ -576,13 +576,13 @@
   },
   "share-group offsets": {
     "source": "packages/cli/src/commands/share-group/offsets.ts",
-    "defaults": "Reads offsets unless a set/delete operation is requested; without a topic filter, reads the full group state.",
+    "defaults": "Reads offsets unless a set/delete operation is requested; without a topic filter, reads the full group state. --from-file reads the headerless CSV that kafka-share-groups.sh --from-file reads and --export writes: topic,partition,offset lines, or group,topic,partition,offset lines filtered to this group. It cannot be combined with --set or --delete-topic.",
     "output": {
       "json": {
         "results": []
       }
     },
-    "effect": "Set/delete operations change future record delivery. Inspect current offsets and coordinate active consumers before mutating; backward changes can redeliver records."
+    "effect": "Set/delete operations change future record delivery. Inspect current offsets and coordinate active consumers before mutating; backward changes can redeliver records. Offsets are sent as given: unlike kafka-share-groups.sh, an offset outside the partition's earliest-to-latest range is not clamped."
   },
   "share-group list": {
     "source": "packages/cli/src/commands/share-group/list.ts",

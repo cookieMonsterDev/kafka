@@ -443,9 +443,14 @@ and lag per partition by default; a single `--topic` (or none, for every topic t
 call, but more than one `--topic` filter fans out one call per topic for the same reason. Passing a
 repeatable `--set topic:partition:offset` or `--delete-topic` instead writes new start offsets or
 deletes committed offsets for those topics — each fanned out one call per topic too — both gated
-behind confirmation. `share-group delete <groupIds...>` deletes one or more share groups in a single
-call, gated behind confirmation like `group delete`, with the same per-group partial-failure
-handling.
+behind confirmation. `--from-file <path>` sets start offsets from the headerless CSV that
+`kafka-share-groups.sh --reset-offsets --from-file` reads (KIP-1323): `topic,partition,offset` lines,
+such as a single-group `--export`, or `group,topic,partition,offset` lines, such as a multi-group
+`kafka-consumer-groups.sh` export, filtered to the named group. It uses the same validation and
+confirmation as `--set` and cannot be combined with it; unlike the shell tool, offsets are not
+clamped to the partition's earliest and latest offsets. `share-group delete <groupIds...>` deletes
+one or more share groups in a single call, gated behind confirmation like `group delete`, with the
+same per-group partial-failure handling.
 
 `streams-group list` filters `listGroups` down to streams groups (KIP-1071's `streams` protocol
 type) and shows each group's state. `streams-group describe <groupIds...>` reads back each group's

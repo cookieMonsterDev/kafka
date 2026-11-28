@@ -25,27 +25,29 @@ Shared options and defaults: [connection profiles, JSON output, logging and help
 
 ## Defaults
 
-Reads offsets unless a set/delete operation is requested; without a topic filter, reads the full group state.
+Reads offsets unless a set/delete operation is requested; without a topic filter, reads the full group state. --from-file reads the headerless CSV that kafka-share-groups.sh --from-file reads and --export writes: topic,partition,offset lines, or group,topic,partition,offset lines filtered to this group. It cannot be combined with --set or --delete-topic.
 
 ## Before you run
 
-Set/delete operations change future record delivery. Inspect current offsets and coordinate active consumers before mutating; backward changes can redeliver records.
+Set/delete operations change future record delivery. Inspect current offsets and coordinate active consumers before mutating; backward changes can redeliver records. Offsets are sent as given: unlike kafka-share-groups.sh, an offset outside the partition's earliest-to-latest range is not clamped.
 
 ## Flags
 
-| Flag                                   | Description                                                          |
-| -------------------------------------- | -------------------------------------------------------------------- |
-| `--brokers <string>`                   | comma-separated broker list, e.g. localhost:9092                     |
-| `--topic <string> (repeatable)`        | limit a read to these topics (repeatable)                            |
-| `--set <string> (repeatable)`          | "topic:partition:offset" to set as the new start offset (repeatable) |
-| `--delete-topic <string> (repeatable)` | delete committed offsets for this topic (repeatable)                 |
-| `--yes`                                | confirm --set/--delete-topic without an interactive prompt           |
+| Flag                                   | Description                                                             |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| `--brokers <string>`                   | comma-separated broker list, e.g. localhost:9092                        |
+| `--topic <string> (repeatable)`        | limit a read to these topics (repeatable)                               |
+| `--set <string> (repeatable)`          | "topic:partition:offset" to set as the new start offset (repeatable)    |
+| `--from-file <string>`                 | path to a kafka-share-groups.sh --from-file CSV of start offsets to set |
+| `--delete-topic <string> (repeatable)` | delete committed offsets for this topic (repeatable)                    |
+| `--yes`                                | confirm --set/--from-file/--delete-topic without an interactive prompt  |
 
 ## Examples
 
 ```sh
 kafka share-group offsets orders-readers --brokers localhost:9092
 kafka share-group offsets orders-readers --set orders:0:1000 --yes --brokers localhost:9092
+kafka share-group offsets orders-readers --from-file offsets.csv --yes --brokers localhost:9092
 kafka share-group offsets orders-readers --delete-topic orders --yes --brokers localhost:9092
 ```
 

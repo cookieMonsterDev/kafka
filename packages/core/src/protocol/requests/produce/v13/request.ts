@@ -14,7 +14,7 @@ import { createProduceRequest, type ProduceRequestOptions } from '../shared';
  *
  * Replaces topic names with topic IDs (KIP-516). May return UNKNOWN_TOPIC_ID.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const produceRequestV13 = (options: ProduceRequestOptions): RequestDefinition =>
   createProduceRequest(13, options);

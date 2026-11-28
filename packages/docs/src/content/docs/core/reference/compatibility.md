@@ -10,8 +10,8 @@ Node.js that speaks the Kafka wire protocol directly — no JVM.
 
 The client negotiates protocol versions from `ApiVersions`. The support floor
 is **Kafka 0.10+**. See
-[Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/)
-and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
+[Apache Kafka compatibility](https://kafka.apache.org/44/getting-started/compatibility/)
+and the [protocol guide](https://kafka.apache.org/44/design/protocol/).
 
 ## Tested brokers
 
@@ -22,7 +22,7 @@ Integration tests cover **0.10, 0.11, 1.1, 2.4, 3.6, 4.0, 4.1, 4.2, and 4.4**
 The client talks to **4.0 and 4.4** via overlap (Produce 3–13, Fetch 4–18,
 Metadata 0–13). Kafka 4.0 brokers dropped Produce v0–2 and Fetch v0–3 (KIP-896;
 see
-[Apache Kafka compatibility](https://kafka.apache.org/43/getting-started/compatibility/));
+[Apache Kafka compatibility](https://kafka.apache.org/44/getting-started/compatibility/));
 the client still encodes those versions for 0.10 clusters and will not send
 them to 4.0 because the broker does not advertise them. Kafka 4.0 advertises
 Produce through v12; v13 (topic IDs, KIP-516) is used when the broker
@@ -57,8 +57,8 @@ These defaults are product choices.
 | Partition assigner    | round-robin (`PartitionAssigners.roundRobin`); range, sticky, and cooperative-sticky are opt-in                                                                               |
 | Compression           | GZIP, Snappy, LZ4, and ZSTD are built in (overridable via `CompressionCodecs`). GZIP/ZSTD use the zlib threadpool; Snappy/LZ4 run off-thread                                  |
 
-See [producer configs](https://kafka.apache.org/43/configuration/producer-configs/)
-and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/) for
+See [producer configs](https://kafka.apache.org/44/configuration/producer-configs/)
+and [consumer configs](https://kafka.apache.org/44/configuration/consumer-configs/) for
 the equivalent broker-facing property names.
 
 The opt-in sticky partitioner keeps unkeyed records on one partition for each
@@ -158,7 +158,14 @@ ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
 member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
 aliases `admin.describeGroups` (DescribeGroups, key 15) for classic JoinGroup
-groups. `admin.describeShareGroups`, `listShareGroupOffsets`,
+groups. DescribeGroups negotiates v0–v6: on v6 (Kafka 4.0+, KIP-1043) an unknown group id,
+or one that is not a classic group, makes `admin.describeGroups` throw (`cause.type` is
+`GROUP_ID_NOT_FOUND`) where older versions returned an empty `Dead` group;
+`consumer.describeGroup()` still returns the `Dead` group. `admin.listGroups` implements ListGroups
+(key 16) v0–v5; its `types` filter (KIP-848) needs v5 (Kafka 3.8+) and throws on an older
+broker instead of being ignored. `admin.deleteGroups` implements DeleteGroups (key 42)
+v0–v3; on v3 (Kafka 4.4+) a failed group's `error` carries the broker's message when it sends
+one, such as the cause of `GROUP_DELETION_FAILED`. `admin.describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
 implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
 `admin.describeTopicPartitions` uses
@@ -191,7 +198,7 @@ SASL login with a delegation token is opt-in: set `sasl.mechanism` to
 `scram-sha-256` or `scram-sha-512` and pass `tokenId` / `tokenHmac` (see
 [Security](../../guides/security/)). The broker still needs
 `delegation.token.secret.key` and SASL/SCRAM. See
-[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/)
+[SASL authentication](https://kafka.apache.org/44/security/authentication-using-sasl/)
 and the [security guide](../../guides/security/).
 
 ## Not implemented
@@ -201,8 +208,8 @@ These are not in `@cookiemonsterdev/kafka-core`. Broker-internal RPCs
 client APIs and are omitted here.
 
 **Packages.** No Kafka Streams or Kafka Connect packages. See
-[Kafka Streams](https://kafka.apache.org/43/streams/introduction/) and
-[Kafka Connect](https://kafka.apache.org/43/kafka-connect/overview/).
+[Kafka Streams](https://kafka.apache.org/44/streams/introduction/) and
+[Kafka Connect](https://kafka.apache.org/44/kafka-connect/overview/).
 
 **Streams groups (KIP-1071).** No StreamsGroupHeartbeat or StreamsGroupDescribe
 (keys 88–89). Admin has no `describeStreamsGroups`, `listStreamsGroupOffsets`,

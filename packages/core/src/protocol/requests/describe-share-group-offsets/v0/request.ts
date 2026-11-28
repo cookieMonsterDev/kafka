@@ -33,7 +33,7 @@ export interface DescribeShareGroupOffsetsRequestV0Fields {
  *
  * Flexible from v0 (KIP-932). Version 1 of the request is the same as version 0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topicName', compactString), field('partitions', compactArray(int32))]);
 const groupSchema = flexibleObject([

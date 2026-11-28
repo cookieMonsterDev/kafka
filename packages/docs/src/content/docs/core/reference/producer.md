@@ -28,7 +28,7 @@ Source: [`producer/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/mas
 Types: [`producer/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/producer/types.ts).
 Guide: [Producer](../../guides/producer/). Config:
 [ProducerConfig](../configuration/#producerconfig).
-Apache: [producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
+Apache: [producer configs](https://kafka.apache.org/44/configuration/producer-configs/).
 
 ## `send` / `sendBatch`
 

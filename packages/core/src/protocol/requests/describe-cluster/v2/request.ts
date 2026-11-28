@@ -17,7 +17,7 @@ export interface DescribeClusterRequestV2Fields {
  * Adds `includeFencedBrokers` (KIP-1073). Flexible-version API.
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('includeClusterAuthorizedOperations', boolean),

@@ -27,7 +27,7 @@ export type MetadataResponseV12Body = Omit<MetadataResponseV11Body, 'topicMetada
  * Topic `name` is nullable (null when queried by id and missing). Name is never null when
  * the topic-level error code is 0. Throttle semantics stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

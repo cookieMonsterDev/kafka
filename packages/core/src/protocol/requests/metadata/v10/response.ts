@@ -33,7 +33,7 @@ export type MetadataResponseV10Body = Omit<MetadataResponseV6Body, 'topicMetadat
  * Adds `topicId` on each topic (KIP-516). Name is still non-null. Throttle semantics stay
  * the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

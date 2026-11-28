@@ -18,7 +18,7 @@ export interface DescribeLogDirsRequestV0Fields {
  *
  * `topics` is nullable; null describes every replica, while an empty array describes none.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = object([field('topic', string), field('partitions', array(int32))]);
 export const requestSchema = object([field('topics', nullPreservingArray(topicSchema))]);

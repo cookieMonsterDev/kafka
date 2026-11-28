@@ -102,7 +102,7 @@ function decodeNodeEndpoint(decoder: Decoder): ShareNodeEndpoint {
  *
  * Flexible from v0. Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const shareFetchResponseV1: ResponseDefinition<ShareFetchResponseV1Body> = {
   decode: async (rawData) => {

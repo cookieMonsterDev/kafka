@@ -16,7 +16,7 @@ export interface DecodedMemberMetadata {
 
 /**
  * Encode/decode JoinGroup member metadata and SyncGroup assignments.
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const MemberMetadata = Object.freeze({
   encode({ version, topics, userData = Buffer.alloc(0) }: EncodedMemberMetadata): Buffer {

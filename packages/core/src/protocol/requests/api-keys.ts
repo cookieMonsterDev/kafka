@@ -3,7 +3,7 @@
  * `GroupCoordinator` is FindCoordinator (10); `ElectLeaders` (43) was originally
  * named ElectPreferredLeaders in the protocol.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const API_KEYS = Object.freeze({
   Produce: 0,

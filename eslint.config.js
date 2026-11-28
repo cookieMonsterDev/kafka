@@ -151,6 +151,7 @@ export default tseslint.config(
             'testIfKafkaAtLeast_4_1',
             'testIfKafkaAtLeast_4_2',
             'testIfKafkaAtLeast_4_3',
+            'testIfKafkaAtLeast_4_4',
             'testIfKafkaTransactionV1',
           ],
         },

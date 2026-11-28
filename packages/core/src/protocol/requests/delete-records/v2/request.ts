@@ -13,7 +13,7 @@ import { API_KEYS } from '../../api-keys';
  * First flexible version (KIP-482). Same fields as v0/v1. Request header v2's trailing
  * TAG_BUFFER is written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partition', int32), field('offset', int64)]);
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);

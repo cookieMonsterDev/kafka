@@ -20,7 +20,7 @@ export interface DeleteGroupsResponseV2Body {
  * First flexible version (KIP-482). `parse` never throws: per-group failures are attached as
  * `.error` on each result, matching v0. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const resultSchema = flexibleObject([field('groupId', compactString), field('errorCode', int16)]);
 const bodySchema = flexibleObject([field('throttleTime', int32), field('results', compactArray(resultSchema))]);

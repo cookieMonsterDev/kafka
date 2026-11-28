@@ -17,7 +17,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * Adds `leaderEpoch` on each partition (default -1).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = object([
   field('partition', int32),

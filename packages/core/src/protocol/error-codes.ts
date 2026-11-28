@@ -8,7 +8,7 @@ export interface ErrorCodeEntry {
   helpUrl?: string;
 }
 
-/** @see https://kafka.apache.org/43/design/protocol/ */
+/** @see https://kafka.apache.org/44/design/protocol/ */
 export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   {
     type: 'UNKNOWN',
@@ -834,6 +834,12 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: true,
     message: 'The limit of share sessions has been reached',
   },
+  {
+    type: 'GROUP_DELETION_FAILED',
+    code: 134,
+    retriable: false,
+    message: 'The group could not be deleted',
+  },
 ];
 
 /** Pre-2.6 name for error code 6. Prefer `NOT_LEADER_OR_FOLLOWER`. */
@@ -857,12 +863,21 @@ export function failure(code: number): boolean {
   return code !== SUCCESS_CODE;
 }
 
+/**
+ * Builds the protocol error for a broker error code. `message`, such as a response's
+ * `error_message` field, replaces the error code's generic message when it is set.
+ */
 export function createErrorFromCode(
   code: number,
-  extras: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> = {},
+  {
+    message,
+    ...extras
+  }: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> & {
+    message?: string | null;
+  } = {},
 ): KafkaProtocolError {
   const entry = ERROR_CODES_BY_CODE.get(code) ?? unknownErrorCode(code);
-  return new KafkaProtocolError(entry, extras);
+  return new KafkaProtocolError(message == null ? entry : { ...entry, message }, extras);
 }
 
 export function failIfVersionNotSupported(code: number): void {

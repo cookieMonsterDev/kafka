@@ -5,7 +5,7 @@ import { RETRY_DEFAULTS } from './defaults';
 
 /**
  * Exponential backoff used by producer, consumer, and admin requests.
- * @see https://kafka.apache.org/43/configuration/producer-configs/#retries
+ * @see https://kafka.apache.org/44/configuration/producer-configs/#retries
  */
 export interface RetryConfig {
   maxRetryTime: number;

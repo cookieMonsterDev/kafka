@@ -23,7 +23,7 @@ export interface ListConfigResourcesResponseV0Body {
  * Version 0 is ListClientMetricsResources. ResourceType is ignorable on v1 with default 16
  * (CLIENT_METRICS), so v0 listings surface that type when decoded as the shared body.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const configResourceSchema = flexibleObject([field('resourceName', compactString)]);
 export const responseSchema = flexibleObject([

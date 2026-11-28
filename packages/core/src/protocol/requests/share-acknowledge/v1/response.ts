@@ -69,7 +69,7 @@ function decodeNodeEndpoint(decoder: Decoder): ShareNodeEndpoint {
  *
  * Flexible from v0. AcquisitionLockTimeoutMs is v2+ and omitted. Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const shareAcknowledgeResponseV1: ResponseDefinition<ShareAcknowledgeResponseV1Body> = {
   decode: async (rawData) => {

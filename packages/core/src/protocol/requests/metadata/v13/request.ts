@@ -10,7 +10,7 @@ export type MetadataRequestV13Fields = MetadataRequestV11Fields;
  * Metadata Request (Version: 13) — wire format identical to v11/v12. Response v13 adds a
  * top-level error code.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const create = defineRequest({
   apiKey: API_KEYS.Metadata,

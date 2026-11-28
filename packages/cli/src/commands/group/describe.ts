@@ -1,5 +1,6 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
+import { isGroupIdNotFoundError } from '../../admin/protocol-error';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
@@ -31,14 +32,25 @@ interface DescribedGroup {
  * hazard `config describe` already works around for `describeConfigs`.
  */
 async function describeOne(admin: Admin, groupId: string): Promise<DescribedGroup> {
-  const { groups } = await admin.describeGroups([groupId]);
+  const notFound: DescribedGroup = { groupId, ok: false, detail: 'group does not exist' };
+  let groups: Awaited<ReturnType<Admin['describeGroups']>>['groups'];
+  try {
+    ({ groups } = await admin.describeGroups([groupId]));
+  } catch (error) {
+    // DescribeGroups v6 (Kafka 4.0+) rejects a group id that is unknown or not a classic group;
+    // the broker's message says which.
+    if (isGroupIdNotFoundError(error)) {
+      return { groupId, ok: false, detail: error instanceof Error ? error.message : notFound.detail };
+    }
+    throw error;
+  }
   const found = groups[0];
   if (found === undefined) return { groupId, ok: false, detail: 'broker returned no result' };
 
-  // A group id the coordinator has never seen (or has fully forgotten) isn't reported as an
-  // error — the broker replies with `errorCode: 0` and `state: "Dead"` — so this has to be
-  // checked explicitly, or `group describe nonexistent-group` would exit 0.
-  if (found.state === 'Dead') return { groupId, ok: false, detail: 'group does not exist' };
+  // Before DescribeGroups v6, a group id the coordinator has never seen (or has fully forgotten)
+  // isn't reported as an error — the broker replies with `errorCode: 0` and `state: "Dead"` — so
+  // this has to be checked explicitly, or `group describe nonexistent-group` would exit 0.
+  if (found.state === 'Dead') return notFound;
 
   return {
     groupId,

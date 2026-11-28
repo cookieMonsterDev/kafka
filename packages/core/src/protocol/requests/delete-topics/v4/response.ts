@@ -16,7 +16,7 @@ export type DeleteTopicsResponseV4Body = DeleteTopicsResponseV1Body;
  * Flexible compact form of v1–v3. Response header v1's trailing TAG_BUFFER is skipped by
  * `Connection` before `decode()` runs. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicErrorSchema = flexibleObject([field('topic', compactString), field('errorCode', int16)]);
 const bodySchema = flexibleObject([field('throttleTime', int32), field('topicErrors', compactArray(topicErrorSchema))]);

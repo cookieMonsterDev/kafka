@@ -101,7 +101,7 @@ const bodySchema = object([
  * 0) and NodeEndpoints (response tag 0) are decoded from v10+ (KIP-951); a v9 broker never sends
  * either tag, so both default to their "no leader change" values.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const produceResponseV9: ResponseDefinition<ProduceResponseV9Body> = {
   decode: async (rawData) => {

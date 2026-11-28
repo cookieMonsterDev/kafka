@@ -19,7 +19,7 @@ export type ElectLeadersResponseV1Body = ElectLeadersResponseV0Body;
  *       error_code => INT16
  *       error_message => NULLABLE_STRING
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = object([
   field('partition', int32),

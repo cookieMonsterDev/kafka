@@ -60,7 +60,7 @@ export interface DescribeQuorumResponseV2Body {
  * DescribeQuorum Response (Version: 2) adds ErrorMessage, Nodes, partition ErrorMessage,
  * and ReplicaDirectoryId (KIP-853).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const replicaSchema = flexibleObject([
   field('replicaId', int32),

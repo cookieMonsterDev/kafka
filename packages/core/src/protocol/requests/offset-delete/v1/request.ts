@@ -17,7 +17,7 @@ export {
  *
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32)]);
 const topicSchema = flexibleObject([field('name', compactString), field('partitions', compactArray(partitionSchema))]);

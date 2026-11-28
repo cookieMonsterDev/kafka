@@ -25,7 +25,7 @@ export interface DescribeLogDirsRequestV2Fields {
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  * `topics: null` describes every log dir.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 export const requestSchema = flexibleObject([field('topics', compactNullableArray(topicSchema))]);

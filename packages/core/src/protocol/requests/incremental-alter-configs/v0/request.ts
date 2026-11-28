@@ -29,7 +29,7 @@ export interface IncrementalAlterConfigsRequestV0Fields {
  *       value => NULLABLE_STRING
  *   validate_only => BOOLEAN
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const configSchema = object([field('name', string), field('operation', int8), field('value', nullableString)]);
 const resourceSchema = object([field('type', int8), field('name', string), field('configs', array(configSchema))]);

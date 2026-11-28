@@ -21,7 +21,7 @@ const ZERO_UUID = Buffer.alloc(16);
  * Topics become `{ name, topicId }` structs (KIP-516). Name-only deletes write the topic name
  * and a zero UUID. Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('name', compactNullableString), field('topicId', uuid)]);
 export const requestSchema = flexibleObject([field('topics', compactArray(topicSchema)), field('timeout', int32)]);

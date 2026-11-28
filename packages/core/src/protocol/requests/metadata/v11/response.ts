@@ -24,7 +24,7 @@ export type MetadataResponseV11Body = Omit<MetadataResponseV10Body, 'clusterAuth
  * Drops `clusterAuthorizedOperations` (KIP-700). Topic `name` is still non-null. Throttle
  * semantics stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

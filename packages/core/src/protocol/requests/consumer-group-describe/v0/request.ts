@@ -14,7 +14,7 @@ export interface ConsumerGroupDescribeRequestV0Fields {
  * Flexible from v0 (KIP-848). Version 1 of the request is the same as version 0.
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('groupIds', compactArray(compactString)),

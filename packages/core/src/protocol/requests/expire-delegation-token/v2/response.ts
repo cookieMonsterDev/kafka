@@ -9,7 +9,7 @@ export type ExpireDelegationTokenResponseV2Body = ExpireDelegationTokenResponseV
 /**
  * ExpireDelegationToken Response (Version: 2) => error_code expiry_timestamp_ms throttle_time_ms TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('errorCode', int16),

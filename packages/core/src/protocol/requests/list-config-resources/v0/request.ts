@@ -9,7 +9,7 @@ export type ListConfigResourcesRequestV0Fields = Record<string, never>;
  * Version 0 is ListClientMetricsResources: empty body besides the flexible tagged-fields
  * buffer. Resource type filtering is v1 (KIP-1142).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([]);
 

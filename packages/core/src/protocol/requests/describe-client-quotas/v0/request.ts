@@ -22,7 +22,7 @@ export interface DescribeClientQuotasRequestV0Fields {
  *
  * KIP-546 client quota filters. match_type: 0 exact, 1 default, 2 any specified name.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const componentSchema = object([field('entityType', string), field('matchType', int8), field('match', nullableString)]);
 export const requestSchema = object([field('components', array(componentSchema)), field('strict', boolean)]);

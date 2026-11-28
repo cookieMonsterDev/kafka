@@ -111,6 +111,25 @@ describe('registerGroupRoutes', () => {
     });
   });
 
+  it('GET /api/groups/:id returns 404 when DescribeGroups v6 reports GROUP_ID_NOT_FOUND', async () => {
+    const context = buildContext({
+      describeGroups: async () => {
+        // Admin wraps the broker's non-retriable error, so its type is on `cause`.
+        throw Object.assign(new Error('Group missing not found.'), {
+          name: 'KafkaNonRetriableError',
+          cause: { name: 'KafkaProtocolError', type: 'GROUP_ID_NOT_FOUND' },
+        });
+      },
+    });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/groups/missing`);
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { error: { code: string } };
+      expect(body.error.code).toBe('unknown_group');
+    });
+  });
+
   it('POST /api/groups/:id/offsets/reset resolves earliest/latest/offset/timestamp targets before committing', async () => {
     const setOffsets = vi.fn(async () => {});
     const context = buildContext({

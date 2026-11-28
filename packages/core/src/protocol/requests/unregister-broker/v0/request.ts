@@ -11,7 +11,7 @@ export interface UnregisterBrokerRequestV0Fields {
  *
  * Flexible from v0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('brokerId', int32)]);
 

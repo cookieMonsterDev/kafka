@@ -52,7 +52,7 @@ export const boolean: FieldCodec<boolean> = codec(
 /**
  * IEEE 754 binary64 (`DOUBLE` on the wire). Client-quota APIs store quota values this way.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const float64: FieldCodec<number> = codec(
   (e, v) => void e.writeDouble(v),
@@ -146,7 +146,7 @@ export const uuid: FieldCodec<Buffer> = codec(
  * Empty tagged-fields buffer (`TAG_BUFFER`). Flexible structs always end with one; this codec
  * writes the empty form (`uvarint 0`) and skips whatever tagged fields the broker sent.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const taggedFields: FieldCodec<Record<string, unknown> | null> = codec(
   (e) => void e.writeUVarInt(0),
@@ -190,7 +190,7 @@ export function array<T>(element: FieldCodec<T>): FieldCodec<T[]> {
  * "all topics" on Metadata. A true empty array cannot be requested through this
  * codec. A `-1` or `0` length always decodes as `[]`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
   return codec(
@@ -211,7 +211,7 @@ export function nullableArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
  * `0`. Use it where null means "all" and an empty array must stay a no-op. A `-1` length
  * decodes as `null`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function nullPreservingArray<T>(element: FieldCodec<T>): FieldCodec<T[] | null> {
   return codec(
@@ -240,7 +240,7 @@ function readCompactArrayBody<T>(d: Decoder, encodedLength: number, element: Fie
  * Compact (flexible) array: length is an unsigned varint of `N + 1`. A null compact array
  * (encoded length `0`) decodes as `[]`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function compactArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
   return codec(
@@ -255,7 +255,7 @@ export function compactArray<T>(element: FieldCodec<T>): FieldCodec<T[]> {
 /**
  * Compact array that preserves wire null (encoded length `0`) instead of mapping it to `[]`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function compactNullableArray<T>(element: FieldCodec<T>): FieldCodec<T[] | null> {
   return codec(
@@ -279,7 +279,7 @@ export function compactNullableArray<T>(element: FieldCodec<T>): FieldCodec<T[] 
  * Nullable struct (Kafka `NULLABLE_STRUCT`): a leading INT8 marker of `-1` (null) or `1`
  * (present), then the struct body. Used by ConsumerGroupHeartbeat's Assignment field.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function nullableStruct<T>(element: FieldCodec<T>): FieldCodec<T | null> {
   return codec(
@@ -339,7 +339,7 @@ export function object<const Fields extends readonly FieldSpec<string, unknown>[
  * Like `object()`, but appends an empty `TAG_BUFFER` so callers of flexible request/response
  * bodies cannot forget the trailing tagged fields required by KIP-482.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function flexibleObject<const Fields extends readonly FieldSpec<string, unknown>[]>(
   fields: Fields,
@@ -363,7 +363,7 @@ export function flexibleObject<const Fields extends readonly FieldSpec<string, u
  * compact struct (including its TAG_BUFFER) when present. Used by DescribeTopicPartitions
  * Cursor / NextCursor (API key 75).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function nullableFlexibleObject<const Fields extends readonly FieldSpec<string, unknown>[]>(
   fields: Fields,
@@ -402,7 +402,7 @@ export interface RequestDefinition {
 /**
  * Builds a per-version request factory from `{ apiKey, apiVersion, apiName }` and a body schema.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function defineRequest<T>(options: {
   apiKey: number;

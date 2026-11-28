@@ -35,7 +35,7 @@ need an Admin client to discover topics and partition leaders. See
 
 Each `Message` can set `key`, `value`, `headers`, `partition`, and `timestamp`.
 `value` may be `string`, `Buffer`, or `null`. See
-[Messages](https://kafka.apache.org/43/implementation/messages/).
+[Messages](https://kafka.apache.org/44/implementation/messages/).
 
 ## Acks, linger, and batching
 
@@ -47,7 +47,7 @@ share a Produce request. Pass `lingerMs: 0` to send without added delay
 spread [`throughputPreset()`](../throughput/) for sticky partitioning and a
 32 MiB send buffer. See
 [Breaking changes](../../migration/breaking-changes/). See
-[producer configs](https://kafka.apache.org/43/configuration/producer-configs/).
+[producer configs](https://kafka.apache.org/44/configuration/producer-configs/).
 
 GZIP, Snappy, LZ4, and ZSTD are built in (`CompressionTypes.GZIP` / `.Snappy` /
 `.LZ4` / `.ZSTD`). Kafka Snappy uses xerial snappy-java framing. LZ4 uses the
@@ -146,7 +146,7 @@ remains unchanged. See [Compatibility](../../reference/compatibility/).
 `StickyPartitioner` tracks each broker node's Produce latency and, by
 default, rotates unkeyed records toward whichever candidate's leader has
 responded fastest rather than choosing uniformly at random — the same idea
-as [`partitioner.adaptive.partitioning.enable`](https://kafka.apache.org/43/configuration/producer-configs/#partitioner.adaptive.partitioning.enable).
+as [`partitioner.adaptive.partitioning.enable`](https://kafka.apache.org/44/configuration/producer-configs/#partitioner.adaptive.partitioning.enable).
 It falls back to a plain uniform choice whenever none of the candidates have
 been measured yet (e.g. right after a rebalance). Disable it with
 `createPartitioner: () => Partitioners.StickyPartitioner({ adaptive: false })`.

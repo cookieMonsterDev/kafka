@@ -15,7 +15,7 @@ export type ListGroupsResponseV3Body = ListGroupsResponseV2Body;
  *
  * First flexible version (KIP-482). Same fields as v2. Quota timing follows v2 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const groupSchema = flexibleObject([field('groupId', compactString), field('protocolType', compactString)]);
 const bodySchema = flexibleObject([

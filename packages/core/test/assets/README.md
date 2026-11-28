@@ -55,7 +55,7 @@ OAUTHBEARER cannot share listeners with PLAIN/SCRAM. When `OAUTHBEARER_ENABLED=1
 Suites that need a minimum (or maximum) broker version should import the helpers from `test/helpers/index.ts`:
 
 - `testIfKafkaAtMost_0_10` / `_0_11` / `_1_1` / `_3_6`
-- `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0` / `_4_1` / `_4_2` / `_4_3`
+- `testIfKafkaAtLeast_0_11` / `_1_0` / `_1_1` / `_2_1` / `_2_2` / `_2_4` / `_3_0` / `_3_6` / `_4_0` / `_4_1` / `_4_2` / `_4_3` / `_4_4`
 - `testIfKafkaEquals_0_11` / `_1_1`
 - `describeIfKRaft` / `describeIfZooKeeper`
 

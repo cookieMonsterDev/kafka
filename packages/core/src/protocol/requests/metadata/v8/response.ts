@@ -31,7 +31,7 @@ import { checkTopicMetadataErrors } from '../shared';
  * KIP-430 authorized-operations bitmasks. `-2147483648` (INT32_MIN) means the broker omitted them.
  * Throttle semantics stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = object([
   field('nodeId', int32),

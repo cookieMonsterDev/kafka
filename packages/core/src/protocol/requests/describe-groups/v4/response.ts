@@ -35,7 +35,7 @@ export interface DescribeGroupsResponseV4Body {
  *
  * Adds `groupInstanceId` on each member. Quota timing follows v2 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const memberSchema = object([
   field('memberId', string),

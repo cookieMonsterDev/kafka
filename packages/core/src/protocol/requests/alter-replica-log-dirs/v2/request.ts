@@ -18,7 +18,7 @@ export interface AlterReplicaLogDirsRequestV2Fields {
  *
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 const dirSchema = flexibleObject([field('path', compactString), field('topics', compactArray(topicSchema))]);

@@ -23,7 +23,7 @@ export interface CreateDelegationTokenRequestV3Fields {
  *
  * Version 3 adds a nullable owner principal. Null owner fields default to the request principal.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const renewerSchema = flexibleObject([field('principalType', compactString), field('name', compactString)]);
 export const requestSchema = flexibleObject([

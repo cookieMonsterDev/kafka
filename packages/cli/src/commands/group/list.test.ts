@@ -20,7 +20,24 @@ describe('groupListCommand', () => {
     const code = await groupListCommand.run(context);
 
     expect(code).toBe(0);
-    expect(listGroups).toHaveBeenCalledWith();
+    expect(listGroups).toHaveBeenCalledWith({ types: undefined });
+  });
+
+  it('passes each --type to listGroups and shows the group type', async () => {
+    const listGroups = vi.fn(async () => ({
+      groups: [{ groupId: 'g1', protocolType: 'consumer', groupType: 'consumer' }],
+    }));
+    const admin = createFakeAdmin({ listGroups, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', type: ['consumer', 'classic'] },
+      openAdmin: async () => admin,
+    });
+
+    const code = await groupListCommand.run(context);
+
+    expect(code).toBe(0);
+    expect(listGroups).toHaveBeenCalledWith({ types: ['consumer', 'classic'] });
+    expect(stdoutWrite.mock.calls[0]![0]).toContain('GROUP TYPE');
   });
 
   it('renders "(no groups)" when the cluster has none', async () => {

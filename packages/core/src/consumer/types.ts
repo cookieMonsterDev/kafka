@@ -4,7 +4,7 @@ import type { Logger } from '../loggers/index';
 import type { RecordBatchContext, RecordHeaders } from '../protocol/records/record';
 import type { RetryOptions } from '../retry/index';
 
-/** Decoded record from a Fetch response. @see https://kafka.apache.org/43/implementation/messages/ */
+/** Decoded record from a Fetch response. @see https://kafka.apache.org/44/implementation/messages/ */
 export interface KafkaMessage {
   magicByte: number;
   attributes: number;
@@ -43,7 +43,7 @@ export type EachMessageHandler = (payload: EachMessagePayload) => Promise<void>;
 
 /**
  * Options for {@link Consumer.run} and {@link Consumer.stream}.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/
  */
 export interface ConsumerRunConfig {
   /** Commit offsets automatically after processing. */
@@ -122,7 +122,7 @@ export interface TopicPartition {
  * {@link ConsumerRunConfig.onPartitionsAssigned}, and {@link ConsumerRunConfig.onPartitionsLost}.
  * Called with only the partitions actually moving in that rebalance step (see each option's doc
  * comment). Ecosystem term for the equivalent protocol concept: Java's `ConsumerRebalanceListener`.
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export type RebalanceListener = (topicPartitions: TopicPartition[]) => void | Promise<void>;
 
@@ -172,7 +172,7 @@ export interface GroupProtocol {
 
 /**
  * Partition assigner used during SyncGroup.
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export interface Assigner {
   name: string;

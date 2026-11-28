@@ -11,7 +11,7 @@ export interface ListConfigResourcesRequestV1Fields {
  *
  * An empty resourceTypes list asks the broker for its default supported types (KIP-1142).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('resourceTypes', compactArray(int8))]);
 

@@ -48,7 +48,7 @@ export interface DescribeClusterResponseV0Body {
  * before `decode()` runs. Quota timing follows KIP-219: the decoded throttle is exposed as
  * `clientSideThrottleTime`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

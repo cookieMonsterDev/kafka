@@ -17,3 +17,7 @@ export function protocolErrorType(error: unknown, depth = 0): string | undefined
 export function isUnknownTopicOrPartitionError(error: unknown): boolean {
   return protocolErrorType(error) === 'UNKNOWN_TOPIC_OR_PARTITION';
 }
+
+export function isGroupIdNotFoundError(error: unknown): boolean {
+  return protocolErrorType(error) === 'GROUP_ID_NOT_FOUND';
+}

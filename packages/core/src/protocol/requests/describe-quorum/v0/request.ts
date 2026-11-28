@@ -24,7 +24,7 @@ export interface DescribeQuorumRequestV0Fields {
  * Flexible from v0. An empty `topics` array requests metadata quorum state (Java
  * `Admin.describeMetadataQuorum`).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32)]);
 const topicSchema = flexibleObject([

@@ -16,7 +16,7 @@ export interface CreateDelegationTokenResponseV3Body extends CreateDelegationTok
  *
  * Version 3 adds the token requester principal. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('errorCode', int16),

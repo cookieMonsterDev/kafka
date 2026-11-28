@@ -20,7 +20,7 @@ export interface ListTransactionsRequestV2Fields extends ListTransactionsRequest
  *
  * Adds `transactionalIdPattern` (KIP-1152). Null or empty means no pattern filter.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('stateFilters', compactArray(compactString)),

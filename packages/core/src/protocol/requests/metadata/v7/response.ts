@@ -28,7 +28,7 @@ import { checkTopicMetadataErrors } from '../shared';
  * KIP-320 adds `leader_epoch` after `leader`. `offline_replicas` remains from v5 (KIP-112).
  * Throttle semantics stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = object([
   field('nodeId', int32),

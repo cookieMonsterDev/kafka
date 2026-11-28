@@ -17,7 +17,7 @@ function subscribedTopics(member: GroupMember, fallbackTopics: readonly string[]
 /**
  * Spreads topic-partitions across members in member-id order, assigning a partition only to
  * members whose metadata lists that topic (Java `RoundRobinAssignor`).
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export const roundRobin: PartitionAssigner = ({ cluster }: { cluster: Cluster }): Assigner => {
   const assigner: Assigner = {

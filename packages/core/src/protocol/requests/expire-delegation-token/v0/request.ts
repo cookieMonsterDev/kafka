@@ -13,7 +13,7 @@ export interface ExpireDelegationTokenRequestV0Fields {
  *
  * Version 1 is the same as version 0. `-1` expires the token immediately.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = object([field('hmac', bytes), field('expiryTimePeriodMs', int64)]);
 

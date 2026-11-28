@@ -9,7 +9,7 @@ export interface DescribeTransactionsRequestV0Fields {
  * DescribeTransactions Request (Version: 0) => [transactional_ids] TAG_BUFFER
  *   transactional_ids => COMPACT_STRING
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('transactionalIds', compactArray(compactString))]);
 

@@ -10,7 +10,7 @@ export interface ExpireDelegationTokenResponseV0Body {
 /**
  * ExpireDelegationToken Response (Version: 0) => error_code expiry_timestamp throttle_time_ms
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = object([
   field('errorCode', int16),

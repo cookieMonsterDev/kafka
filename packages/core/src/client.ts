@@ -57,7 +57,7 @@ function normalizeSsl(ssl: KafkaConfig['ssl']): TlsConnectionOptions | null {
  * Entry point for the client. One instance holds shared logging and a committed-offset map;
  * each `producer()`, `consumer()`, and `admin()` call gets its own cluster connection pool.
  *
- * @see https://kafka.apache.org/43/getting-started/introduction/
+ * @see https://kafka.apache.org/44/getting-started/introduction/
  */
 export class Kafka {
   readonly #logger: Logger;
@@ -161,7 +161,7 @@ export class Kafka {
 
   /**
    * Create a producer. Idempotent and transactional producers require matching broker support.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/
+   * @see https://kafka.apache.org/44/configuration/producer-configs/
    */
   producer(explicit: ProducerConfig = {}): Producer {
     const {
@@ -220,7 +220,7 @@ export class Kafka {
 
   /**
    * Create a consumer in the given group.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/
    */
   consumer(explicit: ConsumerConfig): Consumer {
     const {
@@ -285,7 +285,7 @@ export class Kafka {
 
   /**
    * Create a share-group consumer (KIP-932, Kafka 4.0+).
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/
    */
   shareConsumer(explicit: ShareConsumerConfig): ShareConsumer {
     const {
@@ -331,8 +331,8 @@ export class Kafka {
 
   /**
    * Create an admin client for topics, groups, ACLs, configs, and reassignments.
-   * @see https://kafka.apache.org/43/configuration/admin-configs/
-   * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+   * @see https://kafka.apache.org/44/configuration/admin-configs/
+   * @see https://kafka.apache.org/44/operations/basic-kafka-operations/
    */
   admin(explicit: AdminConfig = {}): Admin {
     const { retry, bootstrapControllers } = mergeFileSection(explicit, this.#fileConfig?.admin);

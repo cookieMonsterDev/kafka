@@ -8,6 +8,6 @@ import { createFetchRequest, type FetchRequestOptions } from '../shared';
  * Drops the ReplicaId INT32. ReplicaState (replicaId + replicaEpoch) is tagged field 1 and
  * omitted for consumers (KIP-903 defaults: replicaId -1, replicaEpoch -1).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const fetchRequestV15 = (options: FetchRequestOptions): RequestDefinition => createFetchRequest(15, options);

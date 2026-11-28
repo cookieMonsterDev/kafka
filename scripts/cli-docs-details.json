@@ -326,7 +326,7 @@
   },
   "group list": {
     "source": "packages/cli/src/commands/group/list.ts",
-    "defaults": "Lists consumer groups without an implicit group-id filter.",
+    "defaults": "Lists groups of every type; each `--type` limits the list to that group type.",
     "output": {
       "json": {
         "groups": []

@@ -34,9 +34,9 @@ export type DescribeGroupsResponseV5Body = DescribeGroupsResponseV4Body;
  * First flexible version (KIP-482). Same fields as v4. Decoded names stay `state` / `protocol`
  * to match this client. Quota timing follows v2 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
-const memberSchema = flexibleObject([
+export const memberSchema = flexibleObject([
   field('memberId', compactString),
   field('groupInstanceId', compactNullableString),
   field('clientId', compactString),

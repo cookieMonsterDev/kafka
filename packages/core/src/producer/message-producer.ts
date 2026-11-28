@@ -44,7 +44,7 @@ export interface MessageProducerOptions {
   /**
    * Delay in ms to wait for more records before sending a Produce request. Default 5. `0` adds no
    * delay: calls made in the same event-loop turn still leave together, as one Produce per broker.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
   /**
@@ -53,13 +53,13 @@ export interface MessageProducerOptions {
    * including records from an earlier flush still awaiting their response. The buffer flushes as
    * soon as that total reaches `batchSize`, without waiting out `lingerMs`. Ignored when lingerMs
    * is 0. Default 16384; pass `0` to not flush by size.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
   /**
    * Max bytes of linger-buffered records. `send()` waits until a flush frees space,
    * or rejects with `KafkaTimeout` after the send timeout. Unset or 0 is unlimited.
-   * Ignored when lingerMs is 0. @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
+   * Ignored when lingerMs is 0. @see https://kafka.apache.org/44/configuration/producer-configs/#buffer.memory
    */
   bufferMemory?: number;
   /**
@@ -67,7 +67,7 @@ export interface MessageProducerOptions {
    * retry attempt, together. Once it elapses, the call rejects with `KafkaDeliveryTimeoutError`
    * regardless of retries remaining. Default 120_000; 0 (or below) disables the deadline.
    * No retry starts after the deadline; an attempt already in flight is left to finish.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
   /**
@@ -76,7 +76,7 @@ export interface MessageProducerOptions {
    * occupies a linger slot. Records accumulating in the linger buffer are flushed before a new
    * call would push the pending total past the cap, so no single flush groups more than
    * `maxRequestSize` bytes together. Default 1_048_576 (1 MiB), matching Java's default.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#max.request.size
    */
   maxRequestSize?: number;
   /** Ordered async `onSend`/`onAck` hooks. See {@link ProducerHooks}. */
@@ -96,7 +96,7 @@ const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_LINGER_MS = 5;
 const DEFAULT_BATCH_SIZE = 16_384;
 const DEFAULT_DELIVERY_TIMEOUT_MS = 120_000;
-/** Java `max.request.size` default. @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size */
+/** Java `max.request.size` default. @see https://kafka.apache.org/44/configuration/producer-configs/#max.request.size */
 const DEFAULT_MAX_REQUEST_SIZE = 1_048_576;
 
 function fieldBytes(value: Buffer | string | null | undefined): number {

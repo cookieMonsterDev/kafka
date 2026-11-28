@@ -8,7 +8,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * Wire format is identical to v6. The bump is on the response (KIP-320 `leader_epoch`).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const requestSchema = object([field('topics', nullableArray(string)), field('allowAutoTopicCreation', boolean)]);
 

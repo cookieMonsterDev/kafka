@@ -39,7 +39,7 @@ broker keeps returning full-size batches. This only slices how many of the
 already-returned records are handed to the handler at once; any remainder
 carries over to the next internal cycle instead of being dropped or
 re-fetched. The protocol/ecosystem term for the same idea is
-[max.poll.records](https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.records).
+[max.poll.records](https://kafka.apache.org/44/configuration/consumer-configs/#max.poll.records).
 
 The default differs by handler:
 

@@ -11,7 +11,7 @@ export interface ListTransactionsRequestV1Fields extends ListTransactionsRequest
  *
  * Adds `durationFilter` (KIP-994). Values below 0 mean no duration filter.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('stateFilters', compactArray(compactString)),

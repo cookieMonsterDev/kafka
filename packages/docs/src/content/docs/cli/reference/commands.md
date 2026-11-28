@@ -53,7 +53,7 @@ section: reference
 - [`group delete`](./group/delete/) <span>Delete one or more consumer groups</span>
 - [`group delete-offsets`](./group/delete-offsets/) <span>Delete a consumer group's committed offsets on one or more topics</span>
 - [`group describe`](./group/describe/) <span>Describe one or more consumer groups</span>
-- [`group list`](./group/list/) <span>List every consumer group the cluster knows about</span>
+- [`group list`](./group/list/) <span>List the groups the cluster knows about, optionally by group type</span>
 - [`group offsets`](./group/offsets/) <span>Show a consumer group's committed offsets</span>
 - [`group remove-members`](./group/remove-members/) <span>Remove one or more static members from a consumer group's session</span>
 - [`group reset-offsets`](./group/reset-offsets/) <span>Reset a consumer group's committed offsets on one or more topics</span>

@@ -34,7 +34,7 @@ export interface AssignReplicasToDirsRequestV0Fields {
  *
  * Flexible from v0. Controller-only (KIP-858).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32)]);
 const topicSchema = flexibleObject([field('topicId', uuid), field('partitions', compactArray(partitionSchema))]);

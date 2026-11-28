@@ -39,7 +39,7 @@ export interface DescribeClusterResponseV1Body extends DescribeClusterResponseV0
  * Adds `endpointType` (KIP-919). `MISMATCHED_ENDPOINT_TYPE` and `UNSUPPORTED_ENDPOINT_TYPE`
  * are valid top-level error codes. Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

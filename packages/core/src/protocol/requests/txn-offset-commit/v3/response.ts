@@ -17,7 +17,7 @@ export type TxnOffsetCommitResponseV3Body = TxnOffsetCommitResponseV2Body;
  * First flexible version (KIP-482). Same response fields as v0–v2. Quota timing follows v1
  * (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);

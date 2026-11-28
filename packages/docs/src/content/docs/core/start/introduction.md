@@ -14,8 +14,8 @@ hand-maintained.
 
 The client never talks to ZooKeeper. ZooKeeper is a broker deployment detail
 for pre-KRaft clusters, not a client feature. See
-[KRaft vs ZooKeeper](https://kafka.apache.org/43/getting-started/zk2kraft/)
-and the [Apache Kafka introduction](https://kafka.apache.org/43/getting-started/introduction/).
+[KRaft vs ZooKeeper](https://kafka.apache.org/44/getting-started/zk2kraft/)
+and the [Apache Kafka introduction](https://kafka.apache.org/44/getting-started/introduction/).
 
 This site documents the public API. The library lives in
 [`packages/core`](https://github.com/cookieMonsterDev/kafka/tree/develop/packages/core);

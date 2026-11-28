@@ -32,7 +32,7 @@ export interface GetTelemetrySubscriptionsResponseV0Body {
  *
  * Empty `requestedMetrics`: push nothing. A single empty string: push all client metrics.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('throttleTime', int32),

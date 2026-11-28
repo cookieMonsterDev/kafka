@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isUnknownTopicOrPartitionError, protocolErrorType } from './protocol-error';
+import { isGroupIdNotFoundError, isUnknownTopicOrPartitionError, protocolErrorType } from './protocol-error';
 
 describe('protocolErrorType', () => {
   it('reads .type directly off the error', () => {
@@ -42,5 +42,12 @@ describe('isUnknownTopicOrPartitionError', () => {
   it('is false for an unrelated error', () => {
     expect(isUnknownTopicOrPartitionError(new Error('boom'))).toBe(false);
     expect(isUnknownTopicOrPartitionError({ type: 'NOT_CONTROLLER' })).toBe(false);
+  });
+});
+
+describe('isGroupIdNotFoundError', () => {
+  it('is true only for GROUP_ID_NOT_FOUND', () => {
+    expect(isGroupIdNotFoundError({ type: 'GROUP_ID_NOT_FOUND' })).toBe(true);
+    expect(isGroupIdNotFoundError({ type: 'UNKNOWN_TOPIC_OR_PARTITION' })).toBe(false);
   });
 });

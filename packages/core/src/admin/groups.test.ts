@@ -116,6 +116,26 @@ describe('admin/groups', () => {
     expect(cluster.refreshMetadata).toHaveBeenCalled();
   });
 
+  it('sends the type filter to every broker', async () => {
+    const listGroups = vi.fn(async () => ({ groups: [{ groupId: 'g-a', groupType: 'consumer' }] }));
+    const cluster = {
+      refreshMetadata: vi.fn().mockResolvedValue(undefined),
+      brokerPool: { brokers: { 1: {} } },
+      findBroker: vi.fn(async () => withSend({ listGroups })),
+    };
+
+    await expect(makeApi(cluster).listGroups({ types: ['consumer'] })).resolves.toEqual({
+      groups: [{ groupId: 'g-a', groupType: 'consumer' }],
+    });
+    expect(listGroups).toHaveBeenCalledWith({ types: ['consumer'] });
+  });
+
+  it('rejects a types filter that is not an array of non-empty strings', async () => {
+    const api = makeApi({});
+    await expect(api.listGroups({ types: 'consumer' as never })).rejects.toThrow('Invalid types array');
+    await expect(api.listGroups({ types: [''] })).rejects.toThrow('Invalid types array');
+  });
+
   describe('deleteGroups', () => {
     it('rejects a missing or non-array groupIds list', async () => {
       const api = makeApi({});

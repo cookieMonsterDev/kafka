@@ -32,7 +32,7 @@ import type { FetchRequestOptions } from '../shared';
  * detection. ClusterId is tagged field 0 and omitted (empty TAG_BUFFER). Topic names remain
  * through v12; topic IDs start at v13.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partition', int32),

@@ -19,6 +19,15 @@ describe('protocol/error-codes', () => {
   });
 
   describe('createErrorFromCode', () => {
+    it("uses the broker's message when one is given and the generic one otherwise", () => {
+      expect(createErrorFromCode(69, { message: 'Group g1 not found.' })).toMatchObject({
+        type: 'GROUP_ID_NOT_FOUND',
+        code: 69,
+        message: 'Group g1 not found.',
+      });
+      expect(createErrorFromCode(69, { message: null }).message).toBe('The group id was not found');
+    });
+
     it('builds a KafkaProtocolError from a known code', () => {
       const error = createErrorFromCode(1);
       expect(error.type).toBe('OFFSET_OUT_OF_RANGE');

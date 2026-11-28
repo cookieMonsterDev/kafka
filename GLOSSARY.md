@@ -137,6 +137,9 @@ A member with a stable group instance id, so a restart within its session timeou
 The membership protocol a consumer group uses: **classic** (JoinGroup/SyncGroup with client-side assigners) or **consumer** (KIP-848, broker-side assignment through heartbeats).
 _Avoid_: old protocol, new protocol, next-gen protocol
 
+**Group type**:
+The kind of group a group coordinator tracks: classic, consumer, share or streams. A consumer group's group type follows its group protocol.
+
 **Generation**:
 The classic protocol's count of completed rebalances. Commits tagged with an older generation are rejected.
 _Avoid_: epoch (for the classic protocol)

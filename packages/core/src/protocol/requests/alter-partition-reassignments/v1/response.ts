@@ -21,7 +21,7 @@ export interface AlterPartitionReassignmentsResponseV1Body extends AlterPartitio
  * v1 echoes whether the request allowed replication factor changes (KIP-860). A partition the
  * request would resize while that is disallowed fails with INVALID_REPLICATION_FACTOR.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const alterPartitionReassignmentsResponseV1: ResponseDefinition<AlterPartitionReassignmentsResponseV1Body> = {
   decode: async (rawData) => {

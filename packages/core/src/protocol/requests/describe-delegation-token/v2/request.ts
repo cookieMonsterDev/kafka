@@ -12,7 +12,7 @@ export interface DescribeDelegationTokenRequestV2Fields {
  *
  * Flexible compact + tagged form of v1. `owners: null` describes every token.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const ownerSchema = flexibleObject([field('principalType', compactString), field('name', compactString)]);
 export const requestSchema = flexibleObject([field('owners', compactNullableArray(ownerSchema))]);

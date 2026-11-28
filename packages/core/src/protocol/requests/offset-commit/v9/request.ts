@@ -7,7 +7,7 @@ import { requestSchema } from '../v8/request';
  * be used with the new consumer group protocol (KIP-848); `groupGenerationId` carries the
  * member epoch.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export { requestSchema };
 

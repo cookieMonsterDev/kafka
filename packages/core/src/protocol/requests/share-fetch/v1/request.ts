@@ -67,7 +67,7 @@ export interface ShareFetchRequestV1Fields {
  *
  * Flexible from v0 (KIP-932). ShareAcquireMode and Renew acknowledgements are v2+ and omitted.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partitionIndex', int32),

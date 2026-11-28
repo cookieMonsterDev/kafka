@@ -352,7 +352,7 @@ const produceNodeEndpointsArraySchema = compactArray(produceNodeEndpointSchema);
  * Reads a Produce partition's trailing tagged fields: CurrentLeader (tag 0, v10+, KIP-951).
  * Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
   let currentLeader: LeaderIdAndEpoch | null = null;
@@ -370,7 +370,7 @@ export function readProducePartitionTaggedFields(decoder: Decoder): LeaderIdAndE
  * the broker addresses for any `currentLeader.leaderId` values in the response the client may
  * not already have cached.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function readProduceResponseNodeEndpoints(decoder: Decoder): ProduceNodeEndpoint[] {
   let nodeEndpoints: ProduceNodeEndpoint[] = [];

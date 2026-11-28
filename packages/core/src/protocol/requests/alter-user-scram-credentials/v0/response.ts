@@ -18,7 +18,7 @@ export interface AlterUserScramCredentialsResponseV0Body {
 /**
  * AlterUserScramCredentials Response (Version: 0) => throttle_time_ms [results] TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const resultSchema = flexibleObject([
   field('user', compactString),

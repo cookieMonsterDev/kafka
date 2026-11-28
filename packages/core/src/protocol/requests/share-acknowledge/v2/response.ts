@@ -68,7 +68,7 @@ function decodeNodeEndpoint(decoder: Decoder): ShareNodeEndpoint {
  * ShareAcknowledge Response (Version: 2) inserts AcquisitionLockTimeoutMs after ErrorMessage
  * (KIP-1222). Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const shareAcknowledgeResponseV2: ResponseDefinition<ShareAcknowledgeResponseV2Body> = {
   decode: async (rawData) => {

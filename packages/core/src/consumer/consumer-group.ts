@@ -137,7 +137,7 @@ export interface ConsumerGroupOptions {
   /**
    * Group membership protocol. `'classic'` uses JoinGroup/SyncGroup; `'consumer'` uses
    * ConsumerGroupHeartbeat (KIP-848). Default `'classic'`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
   /**
@@ -145,7 +145,7 @@ export interface ConsumerGroupOptions {
    * (`serverAssignor` on ConsumerGroupHeartbeat). Only meaningful when `groupProtocol` is
    * `'consumer'`; set with `groupProtocol: 'classic'` it is ignored (logged at debug level),
    * the same as this codebase's other consumer-protocol-only options.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.remote.assignor
    */
   groupRemoteAssignor?: 'uniform' | 'range';
   /**
@@ -167,7 +167,7 @@ export interface ConsumerGroupOptions {
   /**
    * Verify each fetched record batch's CRC on decode; `false` skips the check for throughput.
    * Default `true`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#check.crcs
    */
   checkCrcs?: boolean;
   /** See {@link ConsumerRunConfig.onPartitionsRevoked}. */

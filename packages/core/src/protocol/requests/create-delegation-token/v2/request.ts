@@ -11,7 +11,7 @@ export type CreateDelegationTokenRequestV2Fields = CreateDelegationTokenRequestV
  * Flexible compact + tagged form of v1 (KIP-482). Request header v2's trailing TAG_BUFFER is
  * written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const renewerSchema = flexibleObject([field('principalType', compactString), field('name', compactString)]);
 export const requestSchema = flexibleObject([

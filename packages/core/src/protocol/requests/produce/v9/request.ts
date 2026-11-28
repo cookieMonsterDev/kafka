@@ -14,6 +14,6 @@ import { createProduceRequest, type ProduceRequestOptions } from '../shared';
  *
  * First flexible Produce version (KIP-482). Request header v2 is added by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const produceRequestV9 = (options: ProduceRequestOptions): RequestDefinition => createProduceRequest(9, options);

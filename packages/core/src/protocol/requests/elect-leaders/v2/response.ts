@@ -27,7 +27,7 @@ export type ElectLeadersResponseV2Body = ElectLeadersResponseV0Body;
  * Flexible-version API. Response header v1's trailing TAG_BUFFER is skipped by `Connection`
  * before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partition', int32),

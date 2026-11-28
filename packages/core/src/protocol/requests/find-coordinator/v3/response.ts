@@ -18,7 +18,7 @@ export type FindCoordinatorResponseV3Body = FindCoordinatorResponseV2Body;
  * this client. Quota timing follows v2 (KIP-219). Response header v1's trailing TAG_BUFFER is
  * skipped by `Connection` before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const coordinatorSchema = object([field('nodeId', int32), field('host', compactString), field('port', int32)]);
 const bodySchema = flexibleObject([

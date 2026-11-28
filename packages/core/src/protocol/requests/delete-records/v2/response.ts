@@ -28,7 +28,7 @@ export interface DeleteRecordsResponseV2Body {
  * parse can attach request offsets to {@link KafkaDeleteTopicRecordsError}. Quota timing follows
  * v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partition', int32),

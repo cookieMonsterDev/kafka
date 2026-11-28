@@ -31,7 +31,7 @@ export interface WriteTxnMarkersRequestV2Fields {
  *
  * Adds `transactionVersion` (KIP-1228) for stricter epoch validation on partition leaders.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 

@@ -8,7 +8,7 @@ section: reference
 Returned by `kafka.admin()`. Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Guide: [Admin](../../guides/admin/). Apache:
-[basic operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
+[basic operations](https://kafka.apache.org/44/operations/basic-kafka-operations/).
 
 Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 `bigint | number | string`. Responses use `bigint`.
@@ -38,31 +38,32 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Groups, configs, cluster
 
-| Method                                                         | Notes                                     |
-| -------------------------------------------------------------- | ----------------------------------------- |
-| `listGroups()` / `describeGroups(ids)` / `deleteGroups(ids)`   |                                           |
-| `describeClassicGroups(ids)`                                   | DescribeGroups (15); classic JoinGroup    |
-| `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+    |
-| `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+       |
-| `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)            |
-| `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)               |
-| `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)              |
-| `deleteShareGroups(ids)`                                       | DeleteGroups (42) for share groups        |
-| `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors    |
-| `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                        |
-| `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults        |
-| `describeCluster()`                                            | DescribeCluster (key 60) when advertised  |
-| `clientInstanceId()`                                           | KIP-714 UUID; `null` until assigned       |
-| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+    |
-| `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                    |
-| `alterPartitionReassignments` / `listPartitionReassignments`   | `allowReplicationFactorChange`: 4.1+      |
-| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels              |
-| `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+     |
-| `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+       |
-| `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+     |
-| `assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })`   | AssignReplicasToDirs (key 73); KRaft 3.7+ |
-| `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+         |
-| `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+      |
+| Method                                                         | Notes                                       |
+| -------------------------------------------------------------- | ------------------------------------------- |
+| `listGroups({ types? })`                                       | ListGroups (16); `types`: 3.8+              |
+| `describeGroups(ids)` / `describeClassicGroups(ids)`           | DescribeGroups (15); unknown throws on 4.0+ |
+| `deleteGroups(ids)`                                            | DeleteGroups (42); broker messages: 4.4+    |
+| `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+      |
+| `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+         |
+| `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)              |
+| `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)                 |
+| `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)                |
+| `deleteShareGroups(ids)`                                       | DeleteGroups (42) for share groups          |
+| `removeMembersFromConsumerGroup({ groupId, members })`         | LeaveGroup (13) v3+; per-member errors      |
+| `describeConfigs` / `alterConfigs` / `incrementalAlterConfigs` | Prefer incremental                          |
+| `listConfigResources({ resourceTypes? })`                      | Key 74; empty types lists defaults          |
+| `describeCluster()`                                            | DescribeCluster (key 60) when advertised    |
+| `clientInstanceId()`                                           | KIP-714 UUID; `null` until assigned         |
+| `describeProducers({ topicPartitions, brokerId? })`            | DescribeProducers (key 61), Kafka 3.0+      |
+| `electLeaders({ topicPartitions?, electionType?, timeout? })`  | Key 43                                      |
+| `alterPartitionReassignments` / `listPartitionReassignments`   | `allowReplicationFactorChange`: 4.1+        |
+| `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels                |
+| `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+       |
+| `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+         |
+| `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+       |
+| `assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })`   | AssignReplicasToDirs (key 73); KRaft 3.7+   |
+| `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+           |
+| `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+        |
 
 `describeConsumerGroups` discovers each group coordinator and sends
 ConsumerGroupDescribe (key 69). Use it for KIP-848 `groupProtocol: 'consumer'`
@@ -70,6 +71,16 @@ groups on Kafka 4.0+. Each member's `memberType` is `0` (classic) or `1` (consum
 `-1` (unknown) when the coordinator answers with ConsumerGroupDescribe v0, which does not
 carry it (KIP-1099). `describeClassicGroups` is an alias for `describeGroups`
 (DescribeGroups, key 15) for classic JoinGroup/SyncGroup groups.
+
+`listGroups` returns each group's `groupState` (ListGroups v4+) and `groupType`
+(`classic`, `consumer`, `share` or `streams`, ListGroups v5+, Kafka 3.8+) when the broker
+sends them. `types` lists only groups of those types (KIP-848); it needs ListGroups v5 and
+throws on an older broker instead of listing every group. On Kafka 4.0+ (DescribeGroups v6,
+KIP-1043) `describeGroups` throws a `KafkaNonRetriableError` whose `cause` has type
+`GROUP_ID_NOT_FOUND` for a group id the coordinator does not know as a classic group, which
+includes a KIP-848 consumer group, and one such id fails the whole call. Older brokers return
+that group with `state: 'Dead'` and no members. `consumer.describeGroup()` keeps returning that empty `Dead` description on every
+broker version.
 
 `listShareGroupOffsets` returns each share partition's `startOffset` and `lag`. `lag` is
 `-1n` (unknown) when the coordinator answers with DescribeShareGroupOffsets v0, which does

@@ -9,7 +9,7 @@ export type RenewDelegationTokenRequestV2Fields = RenewDelegationTokenRequestV0F
  *
  * Flexible compact + tagged form of v1 (KIP-482).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('hmac', compactBytes), field('renewPeriodMs', int64)]);
 

@@ -18,7 +18,7 @@ export interface DeleteShareGroupOffsetsRequestV0Fields {
  *
  * Flexible from v0 (KIP-932).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topicName', compactString)]);
 export const requestSchema = flexibleObject([

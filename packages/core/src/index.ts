@@ -1,9 +1,9 @@
 /**
  * TypeScript Kafka client for Kafka 0.10+.
  *
- * @see https://kafka.apache.org/43/getting-started/introduction/
- * @see https://kafka.apache.org/43/design/design/
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/getting-started/introduction/
+ * @see https://kafka.apache.org/44/design/design/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export { Kafka } from './client';
 
@@ -201,6 +201,8 @@ export type {
   DescribeTopicPartitionsTopic,
   DescribeTopicPartitionsTopicInput,
   LogDirDescription,
+  ListedGroup,
+  ListGroupsOptions,
   FeatureUpdate,
   FeatureUpdateUpgradeType,
   ListTransactionsOptions,

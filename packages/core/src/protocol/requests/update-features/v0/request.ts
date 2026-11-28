@@ -24,7 +24,7 @@ export interface UpdateFeaturesRequestV0Fields {
 /**
  * UpdateFeatures Request (Version: 0) => timeout_ms [feature_updates] TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const featureUpdateSchema = flexibleObject([
   field('feature', compactString),

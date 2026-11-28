@@ -16,7 +16,7 @@ export type SaslAuthenticateResponseV2Body = SaslAuthenticateResponseV1Body;
  * not re-wrapped with a Kafka BYTES length prefix. Mechanism decode that still expects
  * length-prefixed bytes needs the authenticator to wrap (or to consume the inner buffer).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const bodySchema = flexibleObject([
   field('errorCode', int16),

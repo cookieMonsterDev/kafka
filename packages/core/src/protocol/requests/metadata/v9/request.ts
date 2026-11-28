@@ -22,7 +22,7 @@ export interface MetadataRequestV9Fields {
  * ("all topics"), matching `nullableArray` on v1–v8. Request header v2's trailing TAG_BUFFER
  * is written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('name', compactString)]);
 const requestSchema = flexibleObject([

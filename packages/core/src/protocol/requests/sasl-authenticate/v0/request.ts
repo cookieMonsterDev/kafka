@@ -7,7 +7,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * The body is the raw SASL mechanism bytes with no extra length prefix (`writeBuffer`).
  *
- * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ * @see https://kafka.apache.org/44/security/authentication-using-sasl/
  */
 const requestSchema = object([field('authBytes', rawBytes)]);
 

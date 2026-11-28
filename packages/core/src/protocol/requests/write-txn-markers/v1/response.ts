@@ -34,7 +34,7 @@ export interface WriteTxnMarkersResponseV1Body {
  *
  * v2 uses the same response wire format.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
 

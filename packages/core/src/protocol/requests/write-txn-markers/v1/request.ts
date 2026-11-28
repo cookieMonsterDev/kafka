@@ -41,7 +41,7 @@ export interface WriteTxnMarkersRequestV1Fields {
  *
  * Flexible from v1. v0 was removed in Kafka 4.0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 

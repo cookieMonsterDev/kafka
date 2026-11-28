@@ -34,7 +34,7 @@ export interface DescribeGroupsResponseV3Body {
  *
  * Adds `authorizedOperations` on each group (KIP-430). Quota timing follows v2 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const memberSchema = object([
   field('memberId', string),

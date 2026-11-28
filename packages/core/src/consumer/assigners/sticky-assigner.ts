@@ -315,7 +315,7 @@ export function createStickyAssigner({ cluster, name, protocolType, cooperative 
 /**
  * Eager sticky assignor (Java `sticky`, KIP-54). Prefers keeping each member's previous partitions
  * while remaining balanced.
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export const sticky: PartitionAssigner = ({ cluster }: { cluster: Cluster }): Assigner =>
   createStickyAssigner({ cluster, name: 'sticky', protocolType: 'eager', cooperative: false });

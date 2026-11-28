@@ -45,7 +45,7 @@ export interface ConsumerGroupHeartbeatResponseV0Body {
  * Flexible from v0. Assignment is a nullable struct (INT8 marker -1/1), not a compact array.
  * Quota timing follows KIP-219: the decoded throttle is exposed as `clientSideThrottleTime`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const assignmentSchema = flexibleObject([field('topicPartitions', compactArray(heartbeatTopicPartitionsSchema))]);
 export const responseSchema = flexibleObject([

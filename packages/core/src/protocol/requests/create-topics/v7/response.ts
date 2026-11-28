@@ -47,7 +47,7 @@ export interface CreateTopicsResponseV7Body {
  *
  * Same as v5/v6 plus `topicId` (16-byte UUID). Quota timing follows v3 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const configSchema = flexibleObject([
   field('name', compactString),

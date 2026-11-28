@@ -26,7 +26,7 @@ export interface UpdateFeaturesRequestV1Fields {
 /**
  * UpdateFeatures Request (Version: 1) => timeout_ms [feature_updates] validate_only TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const featureUpdateSchema = flexibleObject([
   field('feature', compactString),

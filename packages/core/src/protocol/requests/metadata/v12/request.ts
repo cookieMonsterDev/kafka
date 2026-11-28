@@ -11,7 +11,7 @@ export type MetadataRequestV12Fields = MetadataRequestV11Fields;
  * `name` nullable so a lookup by id can return a missing topic. This is the first version
  * where the broker uses topicId for real (KIP-516).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const create = defineRequest({
   apiKey: API_KEYS.Metadata,

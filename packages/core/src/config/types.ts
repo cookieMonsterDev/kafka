@@ -6,7 +6,7 @@ import type { AdminConfig, ConsumerConfig, KafkaConfig, ProducerConfig, ShareCon
  * `[key: string]: unknown` means an older `@cookiemonsterdev/kafka-core` never rejects a config
  * file that also carries a section it doesn't know about yet.
  *
- * @see https://kafka.apache.org/43/getting-started/introduction/
+ * @see https://kafka.apache.org/44/getting-started/introduction/
  */
 export interface KafkaFileConfig {
   /**

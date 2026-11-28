@@ -10,7 +10,7 @@ export {
 /**
  * DescribeLogDirs Request (Version: 5) — wire format identical to v2; the response adds whether each log dir is cordoned.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const describeLogDirsRequestV5 = defineRequest({
   apiKey: API_KEYS.DescribeLogDirs,

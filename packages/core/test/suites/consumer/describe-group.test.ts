@@ -37,4 +37,11 @@ describe('consumer.describeGroup', () => {
     expect(described.protocolType).toBe('consumer');
     expect(described.state).toEqual(expect.any(String));
   });
+
+  it('describes a group that does not exist yet as Dead', async () => {
+    await consumer!.connect();
+
+    const described = await consumer!.describeGroup();
+    expect(described).toEqual({ groupId, members: [], protocol: '', protocolType: '', state: 'Dead' });
+  });
 });

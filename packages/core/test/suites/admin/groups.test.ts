@@ -9,6 +9,7 @@ import {
   testIfKafkaAtLeast_1_1,
   testIfKafkaAtLeast_2_4,
   testIfKafkaAtLeast_4_0,
+  testIfKafkaAtMost_3_6,
   waitFor,
   waitForConsumerToJoinGroup,
 } from '../../helpers/index';
@@ -184,8 +185,32 @@ describe('admin.groups', () => {
     // A consumer-protocol member: 1 on ConsumerGroupDescribe v1+, -1 (unknown) on v0.
     expect([-1, 1]).toContain(described.groups[0]?.members[0]?.memberType);
 
-    const classic = await admin.describeClassicGroups([groupId]);
-    const legacy = await admin.describeGroups([groupId]);
-    expect(classic).toEqual(legacy);
+    // DescribeGroups v6 (KIP-1043) answers GROUP_ID_NOT_FOUND for a group that is not a classic group.
+    await expect(admin.describeClassicGroups([groupId])).rejects.toMatchObject({
+      cause: { type: 'GROUP_ID_NOT_FOUND' },
+    });
+    await expect(admin.describeGroups([groupId])).rejects.toMatchObject({ cause: { type: 'GROUP_ID_NOT_FOUND' } });
+
+    const consumerGroups = await admin.listGroups({ types: ['consumer'] });
+    expect(consumerGroups.groups).toEqual(
+      expect.arrayContaining([expect.objectContaining({ groupId, groupType: 'consumer' })]),
+    );
+    const classicGroups = await admin.listGroups({ types: ['classic'] });
+    expect(classicGroups.groups.map((group) => group.groupId)).not.toContain(groupId);
+  });
+
+  testIfKafkaAtMost_3_6('describes an unknown group as Dead', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    const described = await admin.describeGroups([groupId]);
+    expect(described.groups[0]).toMatchObject({ groupId, state: 'Dead' });
+  });
+
+  testIfKafkaAtLeast_4_0('rejects an unknown group with GROUP_ID_NOT_FOUND', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    await expect(admin.describeGroups([groupId])).rejects.toMatchObject({ cause: { type: 'GROUP_ID_NOT_FOUND' } });
   });
 });

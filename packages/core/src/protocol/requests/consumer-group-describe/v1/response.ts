@@ -30,7 +30,7 @@ export type { ConsumerGroupDescribeAssignment };
  * ConsumerGroupDescribe Response (Version: 1) adds `memberType` after target assignment
  * (KIP-1099): -1 unknown, 0 classic, 1 consumer.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicPartitionsSchema = flexibleObject([
   field('topicId', uuid),

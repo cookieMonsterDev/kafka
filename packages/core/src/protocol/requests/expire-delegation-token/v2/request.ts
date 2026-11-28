@@ -9,7 +9,7 @@ export type ExpireDelegationTokenRequestV2Fields = ExpireDelegationTokenRequestV
  *
  * Flexible compact + tagged form of v1 (KIP-482). `-1` expires the token immediately.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('hmac', compactBytes), field('expiryTimePeriodMs', int64)]);
 

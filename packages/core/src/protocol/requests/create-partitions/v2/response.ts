@@ -25,7 +25,7 @@ export type CreatePartitionsResponseV2Body = CreatePartitionsResponseV1Body;
  * First flexible version (KIP-482). Same fields as v0/v1. Decoded results stay `topicErrors` /
  * `topic` to match this client. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicErrorSchema = flexibleObject([
   field('topic', compactString),

@@ -20,7 +20,7 @@ export interface DeleteTopicsResponseV6Body {
  *
  * Adds `topicId`. Topic `name` is nullable when deleting by ID. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicErrorSchema = flexibleObject([
   field('topic', compactNullableString),

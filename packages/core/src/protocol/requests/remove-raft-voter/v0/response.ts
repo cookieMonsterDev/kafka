@@ -15,7 +15,7 @@ export interface RemoveRaftVoterResponseV0Body {
  *
  * Flexible from v0. Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('throttleTime', int32),

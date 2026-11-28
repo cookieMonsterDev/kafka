@@ -20,7 +20,7 @@ await admin.disconnect();
 Full method list: [`Admin`](../../reference/admin/). Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Cluster operations:
-[Basic Kafka operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
+[Basic Kafka operations](https://kafka.apache.org/44/operations/basic-kafka-operations/).
 
 ## Topics
 
@@ -58,7 +58,7 @@ is accepted and ignored on the wire).
 ## Configs
 
 Prefer `incrementalAlterConfigs` (Kafka 2.3+). `alterConfigs` remains for older
-brokers. See [topic configs](https://kafka.apache.org/43/configuration/topic-configs/).
+brokers. See [topic configs](https://kafka.apache.org/44/configuration/topic-configs/).
 
 ## Groups, ACLs, SCRAM
 
@@ -183,4 +183,4 @@ Metadata. This path is for quorum, voter, and other controller-targeted RPCs.
 APIs that need broker-side topic metadata (`listTopics`, produce/consume) still
 need a broker bootstrap list.
 
-[bootstrap.controllers](https://kafka.apache.org/43/configuration/admin-configs/#bootstrap.controllers).
+[bootstrap.controllers](https://kafka.apache.org/44/configuration/admin-configs/#bootstrap.controllers).

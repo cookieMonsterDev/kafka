@@ -1,6 +1,6 @@
 ---
 title: 'group list'
-description: 'List every consumer group the cluster knows about'
+description: 'List the groups the cluster knows about, optionally by group type'
 order: 39
 section: reference
 hidden: true
@@ -13,24 +13,26 @@ commandPath: ['group', 'list']
 kafka group list
 ```
 
-List every consumer group the cluster knows about
+List the groups the cluster knows about, optionally by group type
 
 Shared options and defaults: [connection profiles, JSON output, logging and help](../../../global-options/).
 
 ## Defaults
 
-Lists consumer groups without an implicit group-id filter.
+Lists groups of every type; each `--type` limits the list to that group type.
 
 ## Flags
 
-| Flag                 | Description                                      |
-| -------------------- | ------------------------------------------------ |
-| `--brokers <string>` | comma-separated broker list, e.g. localhost:9092 |
+| Flag                                         | Description                                                               |
+| -------------------------------------------- | ------------------------------------------------------------------------- |
+| `--brokers <string>`                         | comma-separated broker list, e.g. localhost:9092                          |
+| `--type <classic\|consumer\|share\|streams>` | limit to groups of this type (repeatable; default: all; needs Kafka 3.8+) |
 
 ## Examples
 
 ```sh
 kafka group list --brokers localhost:9092
+kafka group list --type consumer --type classic
 ```
 
 ## Output

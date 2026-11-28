@@ -3,7 +3,7 @@ import { KafkaNonRetriableError } from '../errors';
 /**
  * Offset reset policy (`auto.offset.reset`). `by_duration:` takes an ISO-8601 duration
  * (KIP-1106); the client resolves it to a ListOffsets timestamp.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/#auto.offset.reset
  */
 export type AutoOffsetReset = 'earliest' | 'latest' | 'none' | `by_duration:${string}`;
 

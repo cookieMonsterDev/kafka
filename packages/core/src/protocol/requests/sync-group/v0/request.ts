@@ -12,7 +12,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * `memberAssignment` must be a `Buffer` (typically from `AssignerProtocol.MemberAssignment.encode`).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const groupAssignmentSchema = object([field('memberId', string), field('memberAssignment', bytes)]);
 const requestSchema = object([

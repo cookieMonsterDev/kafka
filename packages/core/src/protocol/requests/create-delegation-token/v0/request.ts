@@ -21,7 +21,7 @@ export interface CreateDelegationTokenRequestV0Fields {
  * Version 1 is the same as version 0. Version 0 was removed from Kafka 4.0 brokers
  * (KIP-896); the client still encodes it for 1.1–3.x clusters.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const renewerSchema = object([field('principalType', string), field('name', string)]);
 export const requestSchema = object([field('renewers', array(renewerSchema)), field('maxLifetimeMs', int64)]);

@@ -28,7 +28,7 @@ JoinGroup groups. Isolation defaults to `read_committed`
 (`readUncommitted: false`). See [Compatibility](../../reference/compatibility/),
 [KIP-429](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429%3A+Kafka+Consumer+Incremental+Rebalance+Protocol),
 [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol),
-and [consumer configs](https://kafka.apache.org/43/configuration/consumer-configs/).
+and [consumer configs](https://kafka.apache.org/44/configuration/consumer-configs/).
 
 ### Server-side assignor and regex subscription (KIP-848)
 

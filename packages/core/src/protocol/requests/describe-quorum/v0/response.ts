@@ -48,7 +48,7 @@ export interface DescribeQuorumResponseV0Body {
  * Flexible from v0. Response header v1's trailing TAG_BUFFER is skipped by `Connection`
  * before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const replicaSchema = flexibleObject([field('replicaId', int32), field('logEndOffset', int64)]);
 const partitionSchema = flexibleObject([

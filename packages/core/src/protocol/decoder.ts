@@ -42,7 +42,7 @@ export interface ArrayReader<T> {
  * Wire-format reader for the Kafka protocol. Every read advances an internal offset;
  * out-of-range reads throw rather than returning `undefined`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export class Decoder {
   static int32Size(): number {

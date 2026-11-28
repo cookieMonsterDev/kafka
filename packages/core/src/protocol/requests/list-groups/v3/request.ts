@@ -7,7 +7,7 @@ import { API_KEYS } from '../../api-keys';
  * First flexible version (KIP-482). Empty body plus a trailing TAG_BUFFER. Request header v2's
  * trailing TAG_BUFFER is written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([]);
 

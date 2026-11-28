@@ -13,7 +13,7 @@ export type CreateDelegationTokenResponseV2Body = CreateDelegationTokenResponseV
  * Flexible compact + tagged form of v1. Quota timing follows v1 (KIP-219).
  * Response header v1's trailing TAG_BUFFER is skipped by `Connection` before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('errorCode', int16),

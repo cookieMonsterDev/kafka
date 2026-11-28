@@ -33,7 +33,7 @@ export interface ElectLeadersResponseV0Body {
  * v0 has no top-level error_code; decode synthesizes `errorCode: 0` so callers share a body shape
  * with v1+.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = object([
   field('partition', int32),

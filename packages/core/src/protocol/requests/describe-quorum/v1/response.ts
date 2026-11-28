@@ -34,7 +34,7 @@ export interface DescribeQuorumResponseV1Body {
  * DescribeQuorum Response (Version: 1) adds LastFetchTimestamp and LastCaughtUpTimestamp
  * to each replica (KIP-836).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const replicaSchema = flexibleObject([
   field('replicaId', int32),

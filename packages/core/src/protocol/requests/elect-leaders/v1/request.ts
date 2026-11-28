@@ -22,7 +22,7 @@ export interface ElectLeadersRequestV1Fields {
  * ElectionType, TopicPartitions, TimeoutMs (KIP-460). Null `topic_partitions` means every
  * partition; an empty array elects none.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = object([field('topic', string), field('partitions', array(int32))]);
 export const requestSchema = object([

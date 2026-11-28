@@ -289,3 +289,35 @@ jobs:
       - run: node scripts/build-binaries.mjs studio
       - run: node scripts/smoke-binaries.mjs cli dist/binaries
       - run: node scripts/smoke-binaries.mjs studio dist/binaries
+
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
+  # The only check the branch rulesets require, so adding, renaming, or re-matrixing a job above
+  # needs no settings change: list it under `needs` here instead. `always()` keeps this job
+  # running when a needed job fails or is cancelled; a skipped required check would count as
+  # passing.
+  ready-to-merge:
+    name: Ready to merge
+    if: always()
+    needs:
+      - unit
+      - bun
+      - integration-matrix
+      - integration
+      - cli-integration
+      - studio-integration
+      - oauthbearer
+      - docs
+      - binaries
+      - security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check needed jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "${NEEDS}" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "${NEEDS}" | jq -e 'all(.[]; .result == "success")' > /dev/null

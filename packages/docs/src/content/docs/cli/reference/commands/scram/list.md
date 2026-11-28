@@ -1,7 +1,7 @@
 ---
 title: 'scram list'
 description: 'List SCRAM credentials for one or more users, or every user'
-order: 47
+order: 48
 section: reference
 hidden: true
 commandPath: ['scram', 'list']

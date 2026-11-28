@@ -1,7 +1,7 @@
 ---
 title: 'cluster raft-voter add'
 description: 'Add a voter to the KRaft metadata quorum'
-order: 26
+order: 27
 section: reference
 hidden: true
 commandPath: ['cluster', 'raft-voter', 'add']

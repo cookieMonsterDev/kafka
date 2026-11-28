@@ -134,6 +134,34 @@
       }
     }
   },
+  "cluster api-versions": {
+    "source": "packages/cli/src/commands/cluster/api-versions.ts",
+    "defaults": "Sends ApiVersions to every broker in the cluster metadata, or only the one named by --node. Without --json, prints one kafka-cluster.sh api-versions block per broker: [usable: <version>], UNSUPPORTED when the broker lacks an API this CLI implements, [not implemented] for an API the CLI does not send, and [unusable: no common version].",
+    "output": {
+      "json": {
+        "brokers": [
+          {
+            "nodeId": 1,
+            "host": "localhost",
+            "port": 9092,
+            "rack": null,
+            "apis": [
+              {
+                "apiKey": 0,
+                "apiName": "Produce",
+                "brokerVersions": {
+                  "minVersion": 0,
+                  "maxVersion": 13
+                },
+                "isImplemented": true,
+                "version": 13
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
   "cluster reassign execute": {
     "source": "packages/cli/src/commands/cluster/reassign-execute.ts",
     "defaults": "The reassignment file supplies target replicas. Replication factor changes are allowed unless --disallow-replication-factor-change is set. --dry-run previews the parsed plan; log_dirs entries are reported as ignored.",

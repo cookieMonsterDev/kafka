@@ -4,6 +4,7 @@ import { aclListCommand } from './acl/list';
 import { aclRemoveCommand } from './acl/remove';
 import { adminCallCommand } from './admin/call';
 import { adminMethodsCommand } from './admin/methods';
+import { clusterApiVersionsCommand } from './cluster/api-versions';
 import { clusterElectLeadersCommand } from './cluster/elect-leaders';
 import { clusterFeaturesCommand } from './cluster/features';
 import { clusterInfoCommand } from './cluster/info';
@@ -90,6 +91,7 @@ export const ALL_COMMANDS: CommandSpec[] = [
   clusterInfoCommand,
   clusterQuorumCommand,
   clusterFeaturesCommand,
+  clusterApiVersionsCommand,
   clusterLogDirsCommand,
   clusterUpdateFeaturesCommand,
   clusterElectLeadersCommand,

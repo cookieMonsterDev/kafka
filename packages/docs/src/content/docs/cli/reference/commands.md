@@ -29,6 +29,7 @@ section: reference
 
 ## cluster
 
+- [`cluster api-versions`](./cluster/api-versions/) <span>List the API versions each broker supports and the version this client uses</span>
 - [`cluster elect-leaders`](./cluster/elect-leaders/) <span>Trigger a preferred or unclean leader election on one or more partitions</span>
 - [`cluster features`](./cluster/features/) <span>Describe supported and finalized feature versions</span>
 - [`cluster info`](./cluster/info/) <span>Describe the cluster: its brokers, controller, and cluster id</span>

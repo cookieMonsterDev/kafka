@@ -1,7 +1,7 @@
 ---
 title: 'share-group list'
 description: 'List every share group the cluster knows about'
-order: 51
+order: 52
 section: reference
 hidden: true
 commandPath: ['share-group', 'list']

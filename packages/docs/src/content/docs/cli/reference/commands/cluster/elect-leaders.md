@@ -1,7 +1,7 @@
 ---
 title: 'cluster elect-leaders'
 description: 'Trigger a preferred or unclean leader election on one or more partitions'
-order: 21
+order: 22
 section: reference
 hidden: true
 commandPath: ['cluster', 'elect-leaders']

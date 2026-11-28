@@ -1,7 +1,7 @@
 ---
 title: 'token expire'
 description: 'Expire a delegation token, immediately by default'
-order: 56
+order: 57
 section: reference
 hidden: true
 commandPath: ['token', 'expire']

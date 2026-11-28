@@ -1,7 +1,7 @@
 ---
 title: 'token renew'
 description: 'Renew a delegation token, extending its expiry'
-order: 58
+order: 59
 section: reference
 hidden: true
 commandPath: ['token', 'renew']

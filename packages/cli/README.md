@@ -299,7 +299,7 @@ how many ACLs actually matched and were removed.
 
 ### Cluster commands
 
-Inspect the cluster itself — brokers, controller, metadata quorum, log directories — and run
+Inspect the cluster itself — brokers, controller, metadata quorum, API versions, log directories — and run
 cluster-level operations like feature upgrades, leader elections, reassignments, and quorum
 membership changes.
 
@@ -307,6 +307,7 @@ membership changes.
 kafka cluster info --brokers localhost:9092
 kafka cluster quorum --brokers localhost:9092
 kafka cluster features --brokers localhost:9092
+kafka cluster api-versions --node 1 --brokers localhost:9092
 kafka cluster log-dirs --topic orders --brokers localhost:9092
 kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
 kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes
@@ -324,6 +325,10 @@ kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-
 `cluster info` describes the cluster's brokers, controller, and cluster id. `cluster quorum`
 describes the metadata quorum — each `__cluster_metadata` partition's leader, voters, and
 observers. `cluster features` lists supported vs. finalized feature versions, merged by name.
+`cluster api-versions` lists, for every broker or the one `--node`, each Kafka API with the
+broker's version range and the version this CLI uses, in the `kafka-cluster.sh api-versions` shape
+(KIP-1220): `[usable: <version>]`, `UNSUPPORTED` when the broker lacks an API the CLI implements,
+`[not implemented]` for an API the CLI does not send, and `[unusable: no common version]`.
 `cluster log-dirs` describes every broker's log directories — their volume's total and usable
 bytes (Kafka 3.3+) and whether they are cordoned (Kafka 4.3+), `-` when the broker does not report
 them — and their partition sizes, narrowed with a repeatable `--broker`/`--topic`. The topic filter

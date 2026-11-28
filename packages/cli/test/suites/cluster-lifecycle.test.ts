@@ -31,6 +31,23 @@ describe('cluster read commands against a real broker', () => {
     expect(Array.isArray(parsed.supportedFeatures)).toBe(true);
   });
 
+  it('lists the API versions every broker supports and the version the CLI uses', async () => {
+    const result = await runCli(['cluster', 'api-versions', '--brokers', BROKERS, '--json']);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout) as {
+      brokers: { nodeId: number; apis: { apiKey: number; isImplemented: boolean; version?: number }[] }[];
+    };
+    expect(parsed.brokers.length).toBeGreaterThan(0);
+    const produce = parsed.brokers[0]?.apis.find((api) => api.apiKey === 0);
+    expect(produce).toMatchObject({ isImplemented: true, version: expect.any(Number) });
+
+    const nodeId = parsed.brokers[0]?.nodeId ?? 0;
+    const human = await runCli(['cluster', 'api-versions', '--brokers', BROKERS, '--node', String(nodeId)]);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toContain(`(id: ${String(nodeId)} rack: `);
+    expect(human.stdout).toMatch(/Produce\(0\): \d+ to \d+ \[usable: \d+\]/);
+  });
+
   it('lists active reassignments (none, on a freshly started broker)', async () => {
     const result = await runCli(['cluster', 'reassign', 'list', '--brokers', BROKERS, '--json']);
     expect(result.code).toBe(0);

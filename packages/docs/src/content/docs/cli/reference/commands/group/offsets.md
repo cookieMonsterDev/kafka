@@ -1,7 +1,7 @@
 ---
 title: 'group offsets'
 description: "Show a consumer group's committed offsets"
-order: 41
+order: 42
 section: reference
 hidden: true
 commandPath: ['group', 'offsets']

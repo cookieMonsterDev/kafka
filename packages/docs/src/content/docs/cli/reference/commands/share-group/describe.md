@@ -1,7 +1,7 @@
 ---
 title: 'share-group describe'
 description: 'Describe one or more share groups'
-order: 50
+order: 51
 section: reference
 hidden: true
 commandPath: ['share-group', 'describe']

@@ -96,6 +96,7 @@ kafka topic offsets orders
 kafka group list
 kafka group describe my-group
 kafka group offsets my-group
+kafka cluster api-versions --node 1   # each API's broker version range and the version the CLI uses
 kafka config describe --help
 ```
 

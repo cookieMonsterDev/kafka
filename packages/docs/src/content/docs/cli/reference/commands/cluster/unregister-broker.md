@@ -1,7 +1,7 @@
 ---
 title: 'cluster unregister-broker'
 description: 'Unregister a broker from the cluster (KRaft broker decommissioning)'
-order: 30
+order: 31
 section: reference
 hidden: true
 commandPath: ['cluster', 'unregister-broker']

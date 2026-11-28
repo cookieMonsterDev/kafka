@@ -1,7 +1,7 @@
 ---
 title: 'config describe'
 description: 'Describe the configs of one or more resources'
-order: 33
+order: 34
 section: reference
 hidden: true
 commandPath: ['config', 'describe']

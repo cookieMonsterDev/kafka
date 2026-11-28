@@ -63,7 +63,7 @@ export const ADMIN_METHOD_CLASSIFICATION: Record<AdminMethodName, MethodClassifi
   describeClientQuotas: 'mounted',
   alterClientQuotas: 'mounted',
   describeLogDirs: 'mounted',
-  describeApiVersions: 'passthrough-only',
+  describeApiVersions: 'mounted',
   describeReplicaLogDirs: 'passthrough-only',
   alterReplicaLogDirs: 'passthrough-only',
   updateFeatures: 'mounted',

@@ -1,7 +1,7 @@
 ---
 title: 'txn list'
 description: 'List transactions known to the cluster, optionally filtered'
-order: 70
+order: 71
 section: reference
 hidden: true
 commandPath: ['txn', 'list']

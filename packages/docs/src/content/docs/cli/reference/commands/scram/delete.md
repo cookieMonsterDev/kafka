@@ -1,7 +1,7 @@
 ---
 title: 'scram delete'
 description: 'Delete a SCRAM credential for one or more users'
-order: 46
+order: 47
 section: reference
 hidden: true
 commandPath: ['scram', 'delete']

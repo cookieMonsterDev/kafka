@@ -1,7 +1,7 @@
 ---
 title: 'cluster unregister-controller'
 description: 'Unregister a controller that was removed from the KRaft quorum for good (Kafka 4.4+)'
-order: 31
+order: 32
 section: reference
 hidden: true
 commandPath: ['cluster', 'unregister-controller']

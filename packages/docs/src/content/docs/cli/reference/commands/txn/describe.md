@@ -1,7 +1,7 @@
 ---
 title: 'txn describe'
 description: 'Describe one or more transactional ids'
-order: 68
+order: 69
 section: reference
 hidden: true
 commandPath: ['txn', 'describe']

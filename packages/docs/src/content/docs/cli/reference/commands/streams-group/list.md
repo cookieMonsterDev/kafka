@@ -1,7 +1,7 @@
 ---
 title: 'streams-group list'
 description: 'List every streams group the cluster knows about'
-order: 54
+order: 55
 section: reference
 hidden: true
 commandPath: ['streams-group', 'list']

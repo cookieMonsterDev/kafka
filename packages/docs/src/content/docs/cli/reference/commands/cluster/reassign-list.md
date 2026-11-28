@@ -1,7 +1,7 @@
 ---
 title: 'cluster reassign list'
 description: 'List every active partition reassignment'
-order: 29
+order: 30
 section: reference
 hidden: true
 commandPath: ['cluster', 'reassign', 'list']

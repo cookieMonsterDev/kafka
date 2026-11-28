@@ -1,7 +1,7 @@
 ---
 title: 'group describe'
 description: 'Describe one or more consumer groups'
-order: 39
+order: 40
 section: reference
 hidden: true
 commandPath: ['group', 'describe']

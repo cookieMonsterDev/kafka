@@ -1,7 +1,7 @@
 ---
 title: 'cluster log-dirs'
 description: 'Describe log directories, their volume sizes, and their partition sizes, per broker'
-order: 24
+order: 25
 section: reference
 hidden: true
 commandPath: ['cluster', 'log-dirs']

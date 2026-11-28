@@ -1,7 +1,7 @@
 ---
 title: 'cluster quorum'
 description: 'Describe the metadata quorum: leader, voters, and observers'
-order: 25
+order: 26
 section: reference
 hidden: true
 commandPath: ['cluster', 'quorum']

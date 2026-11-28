@@ -1,7 +1,7 @@
 ---
 title: 'streams-group describe'
 description: 'Describe one or more streams groups'
-order: 53
+order: 54
 section: reference
 hidden: true
 commandPath: ['streams-group', 'describe']

@@ -1,7 +1,7 @@
 ---
 title: 'group reset-offsets'
 description: "Reset a consumer group's committed offsets on one or more topics"
-order: 43
+order: 44
 section: reference
 hidden: true
 commandPath: ['group', 'reset-offsets']

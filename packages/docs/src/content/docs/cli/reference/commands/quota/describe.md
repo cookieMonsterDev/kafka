@@ -1,7 +1,7 @@
 ---
 title: 'quota describe'
 description: 'Describe client quotas matching an entity filter'
-order: 45
+order: 46
 section: reference
 hidden: true
 commandPath: ['quota', 'describe']

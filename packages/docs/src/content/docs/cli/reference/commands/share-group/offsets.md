@@ -1,7 +1,7 @@
 ---
 title: 'share-group offsets'
 description: 'Read, set, or delete a share group’s committed start offsets'
-order: 52
+order: 53
 section: reference
 hidden: true
 commandPath: ['share-group', 'offsets']

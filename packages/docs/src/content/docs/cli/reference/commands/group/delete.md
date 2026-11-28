@@ -1,7 +1,7 @@
 ---
 title: 'group delete'
 description: 'Delete one or more consumer groups'
-order: 37
+order: 38
 section: reference
 hidden: true
 commandPath: ['group', 'delete']

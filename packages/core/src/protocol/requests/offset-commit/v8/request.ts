@@ -27,7 +27,7 @@ import { API_KEYS } from '../../api-keys';
  * First flexible version (KIP-482). Same fields as v7; compact types + TAG_BUFFER on every struct.
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  */
-const partitionSchema = flexibleObject([
+export const partitionSchema = flexibleObject([
   field('partition', int32),
   field('offset', int64),
   field('leaderEpoch', int32),

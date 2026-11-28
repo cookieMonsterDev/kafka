@@ -60,6 +60,12 @@ describe('protocol/error-codes', () => {
       expect(error.retriable).toBe(true);
     });
 
+    it('treats STALE_MEMBER_EPOCH as retriable', () => {
+      const error = createErrorFromCode(113);
+      expect(error.type).toBe('STALE_MEMBER_EPOCH');
+      expect(error.retriable).toBe(true);
+    });
+
     it('treats TRANSACTION_ABORTABLE as non-retriable', () => {
       const error = createErrorFromCode(120);
       expect(error.type).toBe('TRANSACTION_ABORTABLE');

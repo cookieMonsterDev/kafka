@@ -10,8 +10,10 @@ import {
   newLogger,
   retryProtocol,
   secureRandom,
+  testIfKafkaAtLeast_4_2,
   TRANSIENT_METADATA_ERRORS,
 } from '../../helpers/index';
+import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
 import { JoinGroup } from '../../../src/protocol/requests/join-group/index';
 import { LeaveGroup } from '../../../src/protocol/requests/leave-group/index';
@@ -111,12 +113,37 @@ describe('broker.offsets', () => {
     expect(committed.responses[0]?.partitions[0]?.errorCode).toBe(0);
 
     const fetched = await coordinator.send(OffsetFetch, {
-      groupId,
-      topics: [{ topic: topicName, partitions: [{ partition: 0 }] }],
+      groups: [{ groupId, topics: [{ topic: topicName, partitions: [{ partition: 0 }] }] }],
     });
-    expect(fetched.responses[0]?.partitions[0]?.offset).toBe(1n);
+    expect(fetched.groups[0]?.topics[0]?.partitions[0]?.offset).toBe(1n);
+
+    // With a topic id, Kafka 4.2+ takes OffsetCommit and OffsetFetch v10; older brokers stay on names.
+    const topicId = metadata.topicMetadata[0]?.topicId;
+    const committedById = await coordinator.send(OffsetCommit, {
+      groupId,
+      groupGenerationId: join.generationId,
+      memberId: join.memberId,
+      topics: [{ topic: topicName, topicId, partitions: [{ partition: 0, offset: 2n }] }],
+    });
+    expect(committedById.responses[0]).toMatchObject({
+      topic: topicName,
+      partitions: [{ partition: 0, errorCode: 0 }],
+    });
+
+    const fetchedById = await coordinator.send(OffsetFetch, {
+      groups: [{ groupId, topics: [{ topic: topicName, topicId, partitions: [{ partition: 0 }] }] }],
+    });
+    expect(fetchedById.groups[0]?.topics[0]).toMatchObject({
+      topic: topicName,
+      partitions: [{ partition: 0, offset: 2n }],
+    });
 
     await coordinator.send(LeaveGroup, { groupId, memberId: join.memberId });
+  });
+
+  testIfKafkaAtLeast_4_2('advertises OffsetCommit and OffsetFetch v10', () => {
+    expect(seedBroker?.versions?.[API_KEYS.OffsetCommit]?.maxVersion).toBeGreaterThanOrEqual(10);
+    expect(seedBroker?.versions?.[API_KEYS.OffsetFetch]?.maxVersion).toBeGreaterThanOrEqual(10);
   });
 
   it('lists earliest and latest offsets after a produce', async () => {

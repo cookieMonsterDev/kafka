@@ -1,6 +1,8 @@
-import { defineRequestFamily, type VersionFactories } from '../index';
+import { defineRequestFamily, highestVersionBelow, type VersionFactories } from '../index';
 import { KAFKA_APIS } from '../kafka-apis';
+import { isUsableTopicId } from '../topic-ids';
 import {
+  OFFSET_COMMIT_TOPIC_ID_MIN_VERSION,
   RETENTION_TIME,
   type OffsetCommitTopicOptions,
   withDefaultMetadata,
@@ -26,6 +28,8 @@ import { offsetCommitRequestV8 } from './v8/request';
 import { offsetCommitResponseV8 } from './v8/response';
 import { offsetCommitRequestV9 } from './v9/request';
 import { offsetCommitResponseV9 } from './v9/response';
+import { offsetCommitRequestV10 } from './v10/request';
+import { offsetCommitResponseV10 } from './v10/response';
 
 export interface OffsetCommitOptions {
   groupId: string;
@@ -118,6 +122,29 @@ const VERSIONS = {
     }),
     response: offsetCommitResponseV9,
   }),
+  10: ({ groupId, groupGenerationId, memberId, groupInstanceId = null, topics }) => ({
+    request: offsetCommitRequestV10({ groupId, groupGenerationId, memberId, groupInstanceId, topics }),
+    response: offsetCommitResponseV10(topics),
+  }),
 } satisfies VersionFactories<OffsetCommitOptions>;
 
-export const OffsetCommit = defineRequestFamily(KAFKA_APIS.OffsetCommit, VERSIONS);
+const OFFSET_COMMIT_VERSIONS: readonly number[] = Object.keys(VERSIONS).map(Number);
+
+/**
+ * v9 is the first version the consumer protocol (KIP-848) commits with; `groupGenerationId` then
+ * carries the member epoch. v10 addresses topics by id; a commit that cannot name every topic by
+ * id stays on the highest name-based version (v9).
+ *
+ * @see https://kafka.apache.org/44/design/protocol/
+ */
+export const OffsetCommit = defineRequestFamily(KAFKA_APIS.OffsetCommit, VERSIONS, {
+  preferVersion: (options, version, advertised) =>
+    version < OFFSET_COMMIT_TOPIC_ID_MIN_VERSION || options.topics.every(({ topicId }) => isUsableTopicId(topicId))
+      ? version
+      : highestVersionBelow(
+          KAFKA_APIS.OffsetCommit,
+          OFFSET_COMMIT_VERSIONS,
+          OFFSET_COMMIT_TOPIC_ID_MIN_VERSION,
+          advertised,
+        ),
+});

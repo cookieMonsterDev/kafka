@@ -28,7 +28,9 @@ Cluster operations:
 `fetchTopicMetadata`, `describeTopicPartitions`. Offset fields from
 `fetchTopicOffsets` and `fetchOffsets` are `bigint`. On Kafka 2.8+ (Metadata
 v10+), each topic in `fetchTopicMetadata` may include `topicId` as a 16-byte
-`Buffer`. Produce and Fetch still address topics by name.
+`Buffer`. Newer versions of Produce, Fetch, OffsetCommit, and OffsetFetch send
+that id in place of the topic name; see
+[Compatibility](../../reference/compatibility/).
 
 Kafka 4.0+ can page partition metadata with DescribeTopicPartitions (key 75):
 
@@ -78,6 +80,27 @@ storage, `EARLIEST_LOCAL` equals `low` and the other two are `-1n`. An older
 broker throws `KafkaServerDoesNotSupportApiKey`. On Kafka 4.0+ the broker waits
 on tiered storage for up to the client's `requestTimeout` before it fails the
 lookup with `REQUEST_TIMED_OUT`.
+
+## Consumer group offsets
+
+`fetchOffsets` reads one consumer group's committed offsets.
+`listConsumerGroupOffsets` reads several groups at once, in the order given. A
+group with no `topics` returns every topic it has committed offsets for; a
+requested partition with no committed offset returns `-1n`:
+
+```ts
+const { groups } = await admin.listConsumerGroupOffsets({
+  groups: [{ groupId: 'billing' }, { groupId: 'audit', topics: ['events'] }],
+});
+for (const { groupId, topics } of groups) {
+  for (const { topic, partitions } of topics) console.log(groupId, topic, partitions);
+}
+```
+
+On Kafka 3.0+ (OffsetFetch v8, KIP-709) each group coordinator answers for all
+of its groups in one request; an older broker gets one request per group. A
+group id may appear only once, and an error for any group, such as
+`GROUP_AUTHORIZATION_FAILED`, rejects the whole call.
 
 ## Configs
 

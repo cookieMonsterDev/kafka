@@ -27,14 +27,15 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Offsets
 
-| Method                                                | Notes                                                            |
-| ----------------------------------------------------- | ---------------------------------------------------------------- |
-| `fetchTopicOffsets(topic, { offsetSpec? })`           | `offset`, `high`, `low` as `bigint`; `offsetSpec` picks `offset` |
-| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                                                  |
-| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                                                  |
-| `setOffsets({ groupId, topic, partitions })`          |                                                                  |
-| `resetOffsets({ groupId, topic, earliest? })`         |                                                                  |
-| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)                                            |
+| Method                                                | Notes                                                                |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| `fetchTopicOffsets(topic, { offsetSpec? })`           | `offset`, `high`, `low` as `bigint`; `offsetSpec` picks `offset`     |
+| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                                                      |
+| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                                                      |
+| `listConsumerGroupOffsets({ groups })`                | OffsetFetch (key 9); one request per group coordinator on Kafka 3.0+ |
+| `setOffsets({ groupId, topic, partitions })`          |                                                                      |
+| `resetOffsets({ groupId, topic, earliest? })`         |                                                                      |
+| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)                                                |
 
 `offsetSpec` is one of `OffsetSpecs` and defaults to `OffsetSpecs.LATEST`. Each
 spec needs a minimum ListOffsets (key 2) version and throws

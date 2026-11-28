@@ -709,7 +709,9 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   {
     type: 'STALE_MEMBER_EPOCH',
     code: 113,
-    retriable: false,
+    // Java treats this as non-retriable, but the member only has to resend once a heartbeat has
+    // brought its new epoch: OffsetCommit and OffsetFetch read the epoch each time they are sent.
+    retriable: true,
     message:
       'The member epoch is stale. The member must retry after receiving its updated member epoch via the ConsumerGroupHeartbeat API',
   },

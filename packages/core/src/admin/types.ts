@@ -430,6 +430,26 @@ export interface FetchOffsetsPartition {
   metadata: string | null;
 }
 
+export interface ListConsumerGroupOffsetsGroupInput {
+  groupId: string;
+  /**
+   * The topics to look up, each with every partition. Omitted or empty, the group's committed
+   * offsets for every topic it has any for.
+   */
+  topics?: string[];
+}
+
+export interface ListConsumerGroupOffsetsOptions {
+  /** Distinct consumer groups; a group id may appear once. */
+  groups: ListConsumerGroupOffsetsGroupInput[];
+}
+
+/** One consumer group's committed offsets; `-1n` for a requested partition it has none for. */
+export interface ConsumerGroupOffsets {
+  groupId: string;
+  topics: { topic: string; partitions: FetchOffsetsPartition[] }[];
+}
+
 export interface ResourceConfigQuery {
   type: ConfigResourceType;
   name: string;
@@ -619,6 +639,12 @@ export interface Admin {
     topics?: string[];
     resolveOffsets?: boolean;
   }) => Promise<{ topic: string; partitions: FetchOffsetsPartition[] }[]>;
+  /**
+   * The committed offsets of several consumer groups, in `groups` order. A group coordinator on
+   * Kafka 3.0+ answers for all of its groups in one OffsetFetch (KIP-709); an older one gets one
+   * request per group. An error for any group, such as GROUP_AUTHORIZATION_FAILED, rejects the call.
+   */
+  listConsumerGroupOffsets: (options: ListConsumerGroupOffsetsOptions) => Promise<{ groups: ConsumerGroupOffsets[] }>;
   /**
    * The high and low watermark of every partition of `topic`, plus the offset `offsetSpec` selects.
    * A spec the broker is too old for throws `KafkaServerDoesNotSupportApiKey`; `OffsetSpecs` lists

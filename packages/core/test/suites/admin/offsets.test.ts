@@ -76,6 +76,40 @@ describe('admin.offsets', () => {
     expect(partition?.offset).toBe(10n);
   });
 
+  it('lists the committed offsets of several groups in one call', async () => {
+    const otherGroupId = `test-group-${secureRandom()}`;
+    const emptyGroupId = `test-group-${secureRandom()}`;
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    await admin.setOffsets({ groupId, topic: topicName, partitions: [{ partition: 0, offset: 2n }] });
+    await admin.setOffsets({ groupId: otherGroupId, topic: topicName, partitions: [{ partition: 0, offset: 4n }] });
+
+    const { groups } = await admin.listConsumerGroupOffsets({
+      groups: [
+        { groupId: otherGroupId },
+        { groupId, topics: [topicName] },
+        { groupId: emptyGroupId, topics: [topicName] },
+      ],
+    });
+
+    expect(groups).toEqual([
+      {
+        groupId: otherGroupId,
+        topics: [{ topic: topicName, partitions: [{ partition: 0, offset: 4n, metadata: null }] }],
+      },
+      { groupId, topics: [{ topic: topicName, partitions: [{ partition: 0, offset: 2n, metadata: null }] }] },
+      {
+        groupId: emptyGroupId,
+        topics: [{ topic: topicName, partitions: [{ partition: 0, offset: -1n, metadata: null }] }],
+      },
+    ]);
+  });
+
   it('resets offsets to earliest', async () => {
     const cluster = createCluster();
     admin = createAdmin({ cluster, logger: newLogger() });

@@ -79,9 +79,18 @@ const { resources } = await admin.describeConfigs({
 const offsets = await admin.fetchOffsets({ groupId: 'my-group', topics: ['events'] });
 // [{ topic, partitions: [{ partition, offset /* bigint */ }] }]
 
+// Several groups at once, in the order given; a group without topics returns all of its topics.
+const { groups } = await admin.listConsumerGroupOffsets({
+  groups: [{ groupId: 'billing' }, { groupId: 'audit', topics: ['events'] }],
+});
+// [{ groupId, topics: [{ topic, partitions: [{ partition, offset, metadata }] }] }]
+
 await admin.resetOffsets({ groupId: 'my-group', topic: 'events', earliest: true });
 await admin.setOffsets({ groupId: 'my-group', topic: 'events', partitions: [{ partition: 0, offset: 100n }] });
 ```
+
+`listConsumerGroupOffsets` sends one OffsetFetch per group coordinator on Kafka 3.0+ and one per
+group on older brokers. Each group id may appear once; a duplicate throws.
 
 Stop every consumer in the group before resetting or setting its offsets; a running member
 overwrites them with its next commit.

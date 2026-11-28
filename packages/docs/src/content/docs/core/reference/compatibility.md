@@ -122,6 +122,18 @@ on a broker older than 3.0, the max timestamp lookup throws instead of being rea
 a timestamp. From v10 (Kafka 4.0, KIP-1075) the request carries the client's
 `requestTimeout` as the broker's limit for reading tiered storage.
 
+**Committed offsets.** OffsetCommit (key 8) v0–v10 and OffsetFetch (key 9) v1–v10.
+On Kafka 3.0+ (OffsetFetch v8, KIP-709) `admin.listConsumerGroupOffsets` sends one
+request per group coordinator for all of its groups; an older broker gets one request
+per group. From Kafka 3.7 (OffsetFetch v9, KIP-848) a consumer with
+`groupProtocol: 'consumer'` sends its member id and member epoch when it fetches
+committed offsets, so the coordinator rejects a stale member. On Kafka 4.2+ (v10 of
+both) commits and fetches address each topic by its topic id when the client's
+metadata has one; a request with a topic that has none, or an offset fetch for every
+topic of a group, stays on v9. `UNKNOWN_TOPIC_ID` refreshes the metadata before the
+retry. `STALE_MEMBER_EPOCH` is retriable here, unlike in the Java client: the commit
+or fetch is sent again with the epoch the member's next heartbeat brought.
+
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
 JoinGroup/SyncGroup remains the default membership protocol. Fetch uses

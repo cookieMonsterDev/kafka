@@ -63,3 +63,9 @@ export function supportsBatchedFindCoordinator(versions: BrokerVersions): boolea
   const findCoordinator = advertised(versions, API_KEYS.GroupCoordinator);
   return findCoordinator != null && findCoordinator.maxVersion >= 4;
 }
+
+/** KIP-709: OffsetFetch v8 fetches the committed offsets of several groups in one request. Kafka 3.0+. */
+export function supportsBatchedOffsetFetch(versions: BrokerVersions): boolean {
+  const offsetFetch = advertised(versions, API_KEYS.OffsetFetch);
+  return offsetFetch != null && offsetFetch.maxVersion >= 8;
+}

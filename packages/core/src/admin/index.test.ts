@@ -31,7 +31,7 @@ function fakeBroker(overrides: Record<string, unknown> = {}) {
     describeGroups: vi.fn().mockResolvedValue({ groups: [] }),
     deleteGroups: vi.fn().mockResolvedValue({ results: [] }),
     offsetDelete: vi.fn().mockResolvedValue({ topics: [] }),
-    offsetFetch: vi.fn().mockResolvedValue({ responses: [] }),
+    offsetFetch: vi.fn().mockResolvedValue({ groups: [] }),
     createAcls: vi.fn().mockResolvedValue({}),
     describeAcls: vi.fn().mockResolvedValue({ resources: [] }),
     deleteAcls: vi.fn().mockResolvedValue({ filterResponses: [] }),

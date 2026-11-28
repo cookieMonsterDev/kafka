@@ -68,7 +68,7 @@ export type {
   TopicPartitions,
 } from './types';
 import { DescribeGroups } from '../protocol/requests/describe-groups/index';
-import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
+import { committedOffsetsOf, OffsetFetch } from '../protocol/requests/offset-fetch/index';
 
 export { events };
 export { MemberAssignment, MemberMetadata } from './assigner-protocol';
@@ -992,16 +992,20 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const committedRetrier = retrier(retry);
     return committedRetrier(async () => {
-      const { responses } = await coordinator.send(OffsetFetch, {
-        groupId,
-        topics: [...partitionsByTopic.entries()].map(([topic, partitions]) => ({
-          topic,
-          partitions: partitions.map((partition) => ({ partition })),
-        })),
+      const response = await coordinator.send(OffsetFetch, {
+        groups: [
+          {
+            groupId,
+            topics: [...partitionsByTopic.entries()].map(([topic, partitions]) => ({
+              topic,
+              partitions: partitions.map((partition) => ({ partition })),
+            })),
+          },
+        ],
       });
 
       const offsetsByKey = new Map<string, { offset: bigint; metadata: string | null }>();
-      for (const { topic, partitions } of responses) {
+      for (const { topic, partitions } of committedOffsetsOf(response, groupId)) {
         for (const { partition, offset, metadata } of partitions) {
           offsetsByKey.set(`${topic}:${partition}`, { offset, metadata: metadata || null });
         }

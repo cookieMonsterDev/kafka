@@ -150,9 +150,9 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
     const admin = await context.pool.get(context.getActiveProfile());
     const { groups } = await admin.describeGroups([groupId]);
     const group = groups[0];
-    // `describeGroups` never throws for an unknown id — a coordinator that has never heard of this
-    // group id, or has fully forgotten it, replies with `errorCode: 0` and `state: "Dead"` instead
-    // (the same case `kafka group describe` in this repo's CLI already has to check for).
+    // On DescribeGroups v6 (Kafka 4.0+) an unknown id throws GROUP_ID_NOT_FOUND, which the shared
+    // error mapping turns into this same 404. Older brokers reply with `errorCode: 0` and
+    // `state: "Dead"` instead (the same case `kafka group describe` in this repo's CLI checks for).
     if (group === undefined || isGroupErrored(group) || group.state === 'Dead') {
       sendError(res, 404, 'unknown_group', `group "${groupId}" not found`);
       return;

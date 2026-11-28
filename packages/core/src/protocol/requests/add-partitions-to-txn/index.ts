@@ -23,4 +23,9 @@ const VERSIONS = {
   3: (values) => ({ request: addPartitionsToTxnRequestV3(values), response: addPartitionsToTxnResponseV3 }),
 } satisfies VersionFactories<AddPartitionsToTxnOptions>;
 
+/**
+ * Producers send v0–v3. From v4 the request batches transactions for broker-to-broker partition
+ * verification, and the broker accepts it only with CLUSTER_ACTION, so v5 (TRANSACTION_ABORTABLE,
+ * KIP-890) is not sent, as in the Java client.
+ */
 export const AddPartitionsToTxn = defineRequestFamily(KAFKA_APIS.AddPartitionsToTxn, VERSIONS);

@@ -1,7 +1,7 @@
 ---
 title: 'cluster update-features'
 description: 'Upgrade, safe-downgrade, or unsafe-downgrade one or more finalized feature versions'
-order: 31
+order: 33
 section: reference
 hidden: true
 commandPath: ['cluster', 'update-features']

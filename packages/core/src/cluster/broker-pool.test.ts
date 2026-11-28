@@ -4,6 +4,7 @@ import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { KafkaConnectionClosedError, KafkaConnectionError } from '../errors';
 import type { ConnectionPool } from '../network/connection-pool';
 import { createErrorFromCode } from '../protocol/error-codes';
+import { API_KEYS } from '../protocol/requests/api-keys';
 import { BrokerPool, clusterMetadataFromDescribeCluster } from './broker-pool';
 import type { ConnectionPoolBuilder, ConnectionPoolDestination } from './connection-pool-builder';
 
@@ -117,6 +118,24 @@ describe('cluster/BrokerPool', () => {
     await expect(brokerPool.findBroker({ nodeId: '1' })).rejects.toBeInstanceOf(KafkaConnectionClosedError);
     expect(getConnection).toHaveBeenCalledOnce();
     expect(destroy).toHaveBeenCalledOnce();
+  });
+
+  it("connect keeps the seed broker's finalized feature levels until disconnect", async () => {
+    const pool = fakeConnectionPool({
+      send: vi.fn().mockResolvedValue({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [],
+        finalizedFeatures: [{ name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 }],
+      }),
+    });
+    const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(async () => pool), logger: silentLogger });
+
+    await brokerPool.connect();
+    expect(brokerPool.finalizedFeatures).toEqual({ 'transaction.version': 2 });
+
+    await brokerPool.disconnect();
+    expect(brokerPool.finalizedFeatures).toEqual({});
   });
 
   it('disconnect tears down the seed broker and every known broker, clearing state', async () => {
@@ -300,6 +319,7 @@ describe('cluster/BrokerPool', () => {
         errorCode: 0,
         throttleTime: 0,
         apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        finalizedFeatures: [{ name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 }],
       };
       seedPool.send = vi
         .fn()
@@ -331,6 +351,8 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.seedBroker!.connectionPool.rack).toBe('rack-a');
       expect(brokerPool.brokers['2']).toBeDefined();
       expect(brokerPool.brokers['2']).not.toBe(brokerPool.seedBroker);
+      // A broker built from the cached versions keeps the feature levels that came with them.
+      expect(brokerPool.brokers['2']!.finalizedFeatures).toEqual({ 'transaction.version': 2 });
     });
 
     it('refreshMetadataIfNecessary loads metadata when the cache is still empty', async () => {
@@ -803,6 +825,138 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.seedBroker!.connectionPool.host).toBe('fresh-seed');
       expect(brokerPool.metadata).toEqual(metadataResponse);
       expect(build).toHaveBeenCalledTimes(2);
+    });
+
+    describe('misrouted connection (KIP-1242)', () => {
+      const clusterMetadata = (clusterId: string | null) => ({
+        brokers: [
+          { nodeId: 1, host: 'seed-host', port: 9092, rack: null },
+          { nodeId: 2, host: 'other-host', port: 9093, rack: null },
+        ],
+        topicMetadata: [],
+        throttleTime: 0,
+        clusterId,
+        controllerId: 1,
+        clientSideThrottleTime: 0,
+        clusterAuthorizedOperations: -2147483648,
+      });
+
+      async function refreshedBrokerPool(metadataRecovery: 'rebootstrap' | 'none') {
+        const seedPool = fakeConnectionPool({ host: 'seed-host', port: 9092 });
+        seedPool.send = vi
+          .fn()
+          .mockResolvedValueOnce(apiVersionsResponse())
+          .mockResolvedValueOnce(clusterMetadata('cluster-a'));
+        const otherPool = fakeConnectionPool({ host: 'other-host', port: 9093 });
+        const build = vi.fn(async (destination?: ConnectionPoolDestination) =>
+          destination?.host === 'other-host' ? otherPool : seedPool,
+        );
+        const brokerPool = new BrokerPool({
+          connectionPoolBuilder: fakeBuilder(build),
+          logger: silentLogger,
+          metadataRecovery,
+        });
+        await brokerPool.connect();
+        await brokerPool.refreshMetadata([]);
+        return brokerPool;
+      }
+
+      it('gives every known broker, the bootstrap broker included, the cluster id from metadata', async () => {
+        const brokerPool = await refreshedBrokerPool('rebootstrap');
+
+        expect(brokerPool.brokers['1']).toBe(brokerPool.seedBroker);
+        expect(brokerPool.seedBroker!.clusterId).toBe('cluster-a');
+        expect(brokerPool.brokers['2']!.clusterId).toBe('cluster-a');
+      });
+
+      it('sends no cluster id with metadataRecovery: "none", which cannot recover from a mismatch', async () => {
+        const brokerPool = await refreshedBrokerPool('none');
+
+        expect(brokerPool.seedBroker!.clusterId).toBeNull();
+        expect(brokerPool.brokers['2']!.clusterId).toBeNull();
+      });
+
+      it('connects through another bootstrap broker when the seed broker answers REBOOTSTRAP_REQUIRED', async () => {
+        const misroutedSeedPool = fakeConnectionPool({
+          host: 'reused-host',
+          port: 9092,
+          send: vi.fn().mockRejectedValue(createErrorFromCode(129)), // REBOOTSTRAP_REQUIRED
+        });
+        const nextSeedPool = fakeConnectionPool({ host: 'next-seed', port: 9092 });
+        const pools = [misroutedSeedPool, nextSeedPool];
+        let buildCount = 0;
+        const build = vi.fn(async () => pools[buildCount++]!);
+        const brokerPool = new BrokerPool({
+          connectionPoolBuilder: fakeBuilder(build),
+          logger: silentLogger,
+          retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+        });
+        await brokerPool.createSeedBroker();
+        Object.assign(brokerPool.seedBroker!, {
+          nodeId: 1,
+          clusterId: 'cluster-a',
+          versions: { [API_KEYS.ApiVersions]: { maxVersion: 5 } },
+        });
+
+        await brokerPool.connect();
+
+        expect(brokerPool.seedBroker!.connectionPool.host).toBe('next-seed');
+        expect(brokerPool.versions).toEqual({}); // negotiated with the new bootstrap broker
+        expect(build).toHaveBeenCalledTimes(2);
+      });
+
+      it('rebootstraps on the next refresh after a broker answers REBOOTSTRAP_REQUIRED on connect', async () => {
+        const staleSeedPool = fakeConnectionPool({
+          host: 'stale-seed',
+          port: 9092,
+          isConnected: vi.fn().mockReturnValue(true),
+        });
+        const freshSeedPool = fakeConnectionPool({ host: 'fresh-seed', port: 9092 });
+        const freshMetadata = {
+          ...clusterMetadata('cluster-b'),
+          brokers: [{ nodeId: 1, host: 'fresh-seed', port: 9092, rack: null }],
+        };
+        freshSeedPool.send = vi
+          .fn()
+          .mockResolvedValueOnce(apiVersionsResponse()) // apiVersions negotiated while rebootstrapping
+          .mockResolvedValueOnce(freshMetadata);
+        const misroutedDestroy = vi.fn().mockResolvedValue(undefined);
+        const misroutedPool = fakeConnectionPool({
+          host: 'other-host',
+          port: 9093,
+          send: vi.fn().mockRejectedValue(createErrorFromCode(129)), // REBOOTSTRAP_REQUIRED
+          destroy: misroutedDestroy,
+        });
+
+        const pools = [staleSeedPool, freshSeedPool];
+        let buildCount = 0;
+        const build = vi.fn(async () => pools[buildCount++]!);
+        const brokerPool = new BrokerPool({
+          connectionPoolBuilder: fakeBuilder(build),
+          logger: silentLogger,
+          retry: { retries: 2, initialRetryTime: 1, maxRetryTime: 5 },
+        });
+        await brokerPool.createSeedBroker();
+        brokerPool.brokers = {
+          '2': new Broker({
+            connectionPool: misroutedPool,
+            logger: silentLogger,
+            nodeId: 2,
+            clusterId: 'cluster-a',
+            versions: { [API_KEYS.ApiVersions]: { maxVersion: 5 } },
+          }),
+        };
+
+        await expect(brokerPool.findBroker({ nodeId: '2' })).rejects.toMatchObject({ type: 'REBOOTSTRAP_REQUIRED' });
+        expect(misroutedDestroy).toHaveBeenCalled();
+
+        await brokerPool.refreshMetadata([]);
+
+        expect(build).toHaveBeenCalledTimes(2);
+        expect(brokerPool.seedBroker!.connectionPool.host).toBe('fresh-seed');
+        expect(brokerPool.metadata).toEqual(freshMetadata);
+        expect(Object.keys(brokerPool.brokers)).toEqual(['1']);
+      });
     });
 
     it('metadataRecovery: "none" does not rebootstrap and surfaces REBOOTSTRAP_REQUIRED as non-retriable', async () => {

@@ -27,14 +27,28 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Offsets
 
-| Method                                                | Notes                               |
-| ----------------------------------------------------- | ----------------------------------- |
-| `fetchTopicOffsets(topic)`                            | `offset`, `high`, `low` as `bigint` |
-| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                     |
-| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                     |
-| `setOffsets({ groupId, topic, partitions })`          |                                     |
-| `resetOffsets({ groupId, topic, earliest? })`         |                                     |
-| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)               |
+| Method                                                | Notes                                                                |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| `fetchTopicOffsets(topic, { offsetSpec? })`           | `offset`, `high`, `low` as `bigint`; `offsetSpec` picks `offset`     |
+| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                                                      |
+| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                                                      |
+| `listConsumerGroupOffsets({ groups })`                | OffsetFetch (key 9); one request per group coordinator on Kafka 3.0+ |
+| `setOffsets({ groupId, topic, partitions })`          |                                                                      |
+| `resetOffsets({ groupId, topic, earliest? })`         |                                                                      |
+| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)                                                |
+
+`offsetSpec` is one of `OffsetSpecs` and defaults to `OffsetSpecs.LATEST`. Each
+spec needs a minimum ListOffsets (key 2) version and throws
+`KafkaServerDoesNotSupportApiKey` on an older broker:
+
+| `OffsetSpecs`             | `offset` holds                                                 | Kafka |
+| ------------------------- | -------------------------------------------------------------- | ----- |
+| `LATEST`                  | The high watermark (last stable offset under `read_committed`) | any   |
+| `EARLIEST`                | The log start offset                                           | any   |
+| `MAX_TIMESTAMP`           | The offset of the message with the largest timestamp           | 3.0+  |
+| `EARLIEST_LOCAL`          | The first offset on the leader's local disk                    | 3.5+  |
+| `LATEST_TIERED`           | The last offset in tiered storage, or `-1n`                    | 3.9+  |
+| `EARLIEST_PENDING_UPLOAD` | The first offset not yet in tiered storage, or `-1n`           | 4.2+  |
 
 ## Groups, configs, cluster
 
@@ -45,6 +59,7 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `deleteGroups(ids)`                                            | DeleteGroups (42); broker messages: 4.4+    |
 | `describeConsumerGroups(ids)`                                  | ConsumerGroupDescribe (69), Kafka 4.0+      |
 | `describeShareGroups(ids)`                                     | ShareGroupDescribe (77), Kafka 4.1+         |
+| `describeStreamsGroups(ids, options?)`                         | StreamsGroupDescribe (89), Kafka 4.2+       |
 | `listShareGroupOffsets({ groups })`                            | DescribeShareGroupOffsets (90)              |
 | `alterShareGroupOffsets({ groupId, topics })`                  | AlterShareGroupOffsets (91)                 |
 | `deleteShareGroupOffsets({ groupId, topics })`                 | DeleteShareGroupOffsets (92)                |
@@ -59,8 +74,10 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 | `alterPartitionReassignments` / `listPartitionReassignments`   | `allowReplicationFactorChange`: 4.1+        |
 | `updateFeatures({ featureUpdates, validateOnly?, timeout? })`  | Key 57; KRaft feature levels                |
 | `describeFeatures()`                                           | ApiVersions (18) v3+ tags; KRaft 3.6+       |
+| `describeApiVersions({ brokerIds? })`                          | ApiVersions (18) per broker; KIP-1220       |
 | `describeMetadataQuorum()`                                     | DescribeQuorum (key 55); KRaft 3.6+         |
 | `unregisterBroker({ brokerId })`                               | UnregisterBroker (key 64); KRaft 3.7+       |
+| `unregisterController({ controllerId })`                       | UnregisterController (key 94); Kafka 4.4+   |
 | `assignReplicasToDirs({ brokerId, replicas, brokerEpoch? })`   | AssignReplicasToDirs (key 73); KRaft 3.7+   |
 | `addRaftVoter({ voterId, voterDirectoryId, listeners, ... })`  | AddRaftVoter (key 80); KRaft 3.7+           |
 | `removeRaftVoter({ voterId, voterDirectoryId, ... })`          | RemoveRaftVoter (key 81); KRaft 3.7+        |
@@ -81,6 +98,17 @@ KIP-1043) `describeGroups` throws a `KafkaNonRetriableError` whose `cause` has t
 includes a KIP-848 consumer group, and one such id fails the whole call. Older brokers return
 that group with `state: 'Dead'` and no members. `consumer.describeGroup()` keeps returning that empty `Dead` description on every
 broker version.
+
+`describeStreamsGroups` discovers each group coordinator and sends StreamsGroupDescribe
+(key 89) for KIP-1071 streams groups. Each group carries its `topology` (subtopologies with
+their source, repartition and changelog topics, or `null` subtopologies while the group is not
+ready) and each member's process id, active, standby and warm-up tasks, and changelog offsets.
+`includeTopologyDescription: true` asks for the processing graph a topology description plugin
+stored (KIP-1331); `topologyDescriptionStatus` is one of `StreamsTopologyDescriptionStatuses`, and
+`topologyDescription` is set only when it is `AVAILABLE`. That option and `assignorName` need
+StreamsGroupDescribe v1 (Kafka 4.4+): on an older broker the option throws instead of being
+ignored, and `assignorName` is `null`. A group id that is unknown or not a streams group throws a
+`KafkaNonRetriableError` whose `cause` has type `GROUP_ID_NOT_FOUND`, and fails the whole call.
 
 `listShareGroupOffsets` returns each share partition's `startOffset` and `lag`. `lag` is
 `-1n` (unknown) when the coordinator answers with DescribeShareGroupOffsets v0, which does
@@ -107,6 +135,28 @@ AssignReplicasToDirs (key 73) to the active controller (KIP-858, Kafka 3.7+).
 Each replica is `{ topic, partition, directoryId }` where `directoryId` is a
 16-byte `Buffer`. Topic names are resolved to topic IDs from metadata.
 `brokerEpoch` defaults to `-1n`.
+
+`describeApiVersions({ brokerIds? })` sends a fresh ApiVersions (key 18) request to
+each broker in the cluster metadata, or to the given node ids, like `kafka-cluster.sh
+api-versions` (KIP-1220). It returns `{ brokers }`, one entry per broker with its `nodeId`,
+`host`, `port`, `rack`, and `apis`: every Kafka API the broker advertises or this client
+implements, in api key order. Each API has its `apiKey`, its protocol `apiName` (absent for an
+api key the client cannot name), the broker's `brokerVersions` range (absent when the broker
+does not support it), `isImplemented`, and `version`, the API version the client negotiates:
+the highest version both support, absent when either side lacks the API or they share none.
+A request whose options need an older version, such as Produce without topic ids, still goes
+out at that version. `version` comes from the broker's own advertised range; before Kafka 4.4
+the client reuses the bootstrap broker's versions for the other brokers, so during a rolling
+upgrade it can differ from what the client sends. A node id missing from the metadata, or one
+unreachable broker, rejects the call.
+
+`unregisterController({ controllerId })` sends UnregisterController (key 94) to
+the active controller (KIP-1312, Kafka 4.4+). Use it for a controller that was
+removed from the quorum for good: remove its voter with `removeRaftVoter` first. The
+cluster must run `metadata.version` 4.4-IV2 or later; on an older one the controller
+answers `UNSUPPORTED_VERSION`. An id with no registration fails with
+`CONTROLLER_ID_NOT_REGISTERED`, and the active controller cannot unregister itself
+(`INVALID_REQUEST`). None of these errors is retried.
 
 ## Transactions
 

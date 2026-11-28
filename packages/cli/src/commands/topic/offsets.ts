@@ -1,29 +1,48 @@
+import type { OffsetSpec } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
 import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES } from '../../errors/exit-codes';
+import { OFFSET_SPECS } from '../../output/codes';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
 
 /**
- * `-1`/`-2`/`-3` are the broker's own `ListOffsets` sentinel timestamps for "latest", "earliest",
- * and KIP-568's "max timestamp" — not something this CLI invents.
+ * The broker's own `ListOffsets` sentinel timestamps for "latest", "earliest", and KIP-734's
+ * "max timestamp" — not something this CLI invents. They resolve through
+ * `fetchTopicOffsetsByTimestamp`, like a literal millisecond timestamp.
  */
-const TIME_SENTINELS: Readonly<Record<string, bigint>> = {
-  earliest: -2n,
-  latest: -1n,
-  'max-timestamp': -3n,
-};
+const TIME_SENTINELS: ReadonlyMap<string, bigint> = new Map([
+  ['earliest', OFFSET_SPECS.EARLIEST],
+  ['latest', OFFSET_SPECS.LATEST],
+  ['max-timestamp', OFFSET_SPECS.MAX_TIMESTAMP],
+]);
 
-function parseTimeFlag(raw: string): bigint {
-  const sentinel = TIME_SENTINELS[raw];
-  if (sentinel !== undefined) return sentinel;
+/**
+ * Tiered storage boundaries. They resolve through `fetchTopicOffsets`, which reports `-1` for a
+ * partition without one instead of substituting the high watermark.
+ */
+const TIERED_STORAGE_SPECS: ReadonlyMap<string, OffsetSpec> = new Map<string, OffsetSpec>([
+  ['earliest-local', OFFSET_SPECS.EARLIEST_LOCAL],
+  ['latest-tiered', OFFSET_SPECS.LATEST_TIERED],
+  ['earliest-pending-upload', OFFSET_SPECS.EARLIEST_PENDING_UPLOAD],
+]);
+
+const TIME_FLAG_VALUES = `${[...TIME_SENTINELS.keys(), ...TIERED_STORAGE_SPECS.keys()]
+  .map((name) => `"${name}"`)
+  .join(', ')}, or a millisecond timestamp`;
+
+type TimeQuery = { kind: 'timestamp'; timestamp: bigint } | { kind: 'offset-spec'; offsetSpec: OffsetSpec };
+
+function parseTimeFlag(raw: string): TimeQuery {
+  const offsetSpec = TIERED_STORAGE_SPECS.get(raw);
+  if (offsetSpec !== undefined) return { kind: 'offset-spec', offsetSpec };
+  const sentinel = TIME_SENTINELS.get(raw);
+  if (sentinel !== undefined) return { kind: 'timestamp', timestamp: sentinel };
   try {
-    return BigInt(raw);
+    return { kind: 'timestamp', timestamp: BigInt(raw) };
   } catch {
-    throw new CliUsageError(
-      `--time must be "earliest", "latest", "max-timestamp", or a millisecond timestamp, got "${raw}"`,
-    );
+    throw new CliUsageError(`--time must be ${TIME_FLAG_VALUES}, got "${raw}"`);
   }
 }
 
@@ -35,7 +54,7 @@ export const topicOffsetsCommand: CommandSpec = {
     {
       name: 'time',
       type: 'string',
-      brief: 'resolve offsets as of "earliest", "latest", "max-timestamp", or a millisecond timestamp',
+      brief: `resolve offsets as of ${TIME_FLAG_VALUES}`,
     },
   ],
   positionals: [{ name: 'topic', brief: 'topic name' }],
@@ -43,6 +62,7 @@ export const topicOffsetsCommand: CommandSpec = {
     'topic offsets orders --brokers localhost:9092',
     'topic offsets orders --time earliest --brokers localhost:9092',
     'topic offsets orders --time 1735689600000 --brokers localhost:9092',
+    'topic offsets orders --time latest-tiered --brokers localhost:9092',
   ],
   exitCodes: [EXIT_CODES.ok, EXIT_CODES.operationFailed, EXIT_CODES.usage],
   async run({ flags, positionals, runtime, output, config }) {
@@ -53,12 +73,12 @@ export const topicOffsetsCommand: CommandSpec = {
 
     const brokers = parseBrokersFlag(flags.brokers);
     const timeFlag = flags.time as string | undefined;
-    const timestamp = timeFlag !== undefined ? parseTimeFlag(timeFlag) : undefined;
+    const timeQuery = timeFlag !== undefined ? parseTimeFlag(timeFlag) : undefined;
 
     const admin = await runtime.openAdmin({ brokers, env: runtime.env, config });
     try {
-      if (timestamp !== undefined) {
-        const entries = await admin.fetchTopicOffsetsByTimestamp(topic, timestamp);
+      if (timeQuery?.kind === 'timestamp') {
+        const entries = await admin.fetchTopicOffsetsByTimestamp(topic, timeQuery.timestamp);
         output.write({
           human: () =>
             renderTable(
@@ -68,7 +88,10 @@ export const topicOffsetsCommand: CommandSpec = {
           json: () => stringifyJsonSafe({ partitions: entries }),
         });
       } else {
-        const entries = await admin.fetchTopicOffsets(topic);
+        const entries =
+          timeQuery === undefined
+            ? await admin.fetchTopicOffsets(topic)
+            : await admin.fetchTopicOffsets(topic, { offsetSpec: timeQuery.offsetSpec });
         output.write({
           human: () =>
             renderTable(

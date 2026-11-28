@@ -1,7 +1,7 @@
 ---
 title: 'group list'
 description: 'List the groups the cluster knows about, optionally by group type'
-order: 39
+order: 41
 section: reference
 hidden: true
 commandPath: ['group', 'list']

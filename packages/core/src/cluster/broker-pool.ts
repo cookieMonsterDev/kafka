@@ -4,6 +4,7 @@ import { KafkaBrokerNotFound, KafkaConnectionError, KafkaNonRetriableError, Kafk
 import type { Logger } from '../loggers/index';
 import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
 import type { BrokerVersions } from '../protocol/requests/index';
+import type { FinalizedFeatureLevels } from '../protocol/requests/api-versions/feature-fields';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { arrayDiff } from '../utils/array-diff';
 import { shuffle } from '../utils/shuffle';
@@ -102,6 +103,8 @@ export class BrokerPool {
   metadata: ClusterMetadata | null = null;
   metadataExpireAt: number | null = null;
   versions: BrokerVersions | null = null;
+  /** The seed broker's finalized feature levels, read when the pool connects. */
+  finalizedFeatures: FinalizedFeatureLevels = {};
   readonly usingBootstrapControllers: boolean;
 
   /** Tail of the queue that serializes read-await-write updates of `brokers`. */
@@ -111,12 +114,19 @@ export class BrokerPool {
    * update that sees it change while awaiting discards its result instead of reinstalling brokers.
    */
   #generation = 0;
+  /**
+   * KIP-1242: the `REBOOTSTRAP_REQUIRED` a known broker answered on connect, because its address
+   * now leads to another broker or cluster. The next metadata refresh rebootstraps on it.
+   */
+  #misroutedConnectionError: Error | null = null;
 
   readonly #createBroker: (options: {
     connectionPool: Broker['connectionPool'];
     logger: Logger;
     versions?: BrokerVersions | null;
+    finalizedFeatures?: FinalizedFeatureLevels;
     nodeId?: number | null;
+    clusterId?: string | null;
   }) => Broker;
 
   constructor({
@@ -166,11 +176,15 @@ export class BrokerPool {
       try {
         await this.seedBroker!.connect();
         this.versions = this.seedBroker!.versions;
+        this.finalizedFeatures = this.seedBroker!.finalizedFeatures;
       } catch (e) {
         const error = e as Error & { retriable?: boolean };
+        const isMisrouted = isRebootstrapRequired(error);
+        if (isMisrouted) this.#recordMisroutedConnection(this.seedBroker!, error);
 
-        if (e instanceof KafkaConnectionError || isIllegalSaslState(error)) {
-          // The connection pool builder always rotates the seed broker.
+        if (e instanceof KafkaConnectionError || isIllegalSaslState(error) || isMisrouted) {
+          // The connection pool builder always rotates the seed broker. A new one has no node id, so
+          // it connects to whichever broker its address leads to.
           await this.createSeedBroker();
           this.logger.error(`Failed to connect to seed broker, trying another broker from the list: ${error.message}`, {
             retryCount,
@@ -180,6 +194,7 @@ export class BrokerPool {
           this.logger.error(error.message, { retryCount, retryTime });
         }
 
+        if (isMisrouted) throw new KafkaProtocolError({ message: error.message, retriable: true });
         if (error.retriable) throw error;
         bail(error);
       }
@@ -188,12 +203,14 @@ export class BrokerPool {
 
   async disconnect(): Promise<void> {
     this.#generation++;
+    this.#misroutedConnectionError = null;
     if (this.seedBroker) await this.seedBroker.disconnect();
     await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
 
     this.brokers = {};
     this.metadata = null;
     this.versions = null;
+    this.finalizedFeatures = {};
   }
 
   removeBroker({ host, port }: { host: string; port: number }): void {
@@ -237,10 +254,14 @@ export class BrokerPool {
       }
       try {
         const broker = await this.findConnectedBroker();
+        // A known broker's address led elsewhere, since the last refresh or just now while
+        // findConnectedBroker() moved past it; the rest of the metadata may be stale too.
+        if (this.#misroutedConnectionError) throw this.#misroutedConnectionError;
         const seedHost = this.seedBroker!.connectionPool.host;
         const seedPort = this.seedBroker!.connectionPool.port;
 
         const metadata = await this.fetchClusterMetadata(broker, topics);
+        const clusterId = this.#expectedClusterId(metadata);
         this.metadata = metadata;
         this.metadataExpireAt = Date.now() + this.metadataMaxAge;
 
@@ -261,6 +282,7 @@ export class BrokerPool {
 
           if (host === seedHost && port === seedPort) {
             this.seedBroker!.nodeId = nodeId;
+            this.seedBroker!.clusterId = clusterId;
             this.seedBroker!.connectionPool.rack = rack;
             nextBrokers[key] = this.seedBroker!;
             continue;
@@ -269,8 +291,10 @@ export class BrokerPool {
           nextBrokers[key] = this.#createBroker({
             logger: this.rootLogger,
             versions: this.versions,
+            finalizedFeatures: this.finalizedFeatures,
             connectionPool: await this.connectionPoolBuilder.build({ host, port, rack }),
             nodeId,
+            clusterId,
           });
         }
 
@@ -338,6 +362,7 @@ export class BrokerPool {
    * known to be stale or unreachable.
    */
   async rebootstrap(): Promise<void> {
+    this.#misroutedConnectionError = null;
     await Promise.all(Object.values(this.brokers).map((broker) => broker.disconnect()));
     this.brokers = {};
     this.metadata = null;
@@ -400,8 +425,10 @@ export class BrokerPool {
       const broker = this.#createBroker({
         logger: this.rootLogger,
         versions: this.versions,
+        finalizedFeatures: this.finalizedFeatures,
         connectionPool: await this.connectionPoolBuilder.build(endpoint),
         nodeId: endpoint.nodeId,
+        clusterId: this.#expectedClusterId(metadata),
       });
       if (generation !== this.#generation) {
         await broker.disconnect();
@@ -427,6 +454,27 @@ export class BrokerPool {
     partitionMetadata.leader = currentLeader.leaderId;
     if (currentLeader.leaderEpoch >= 0) partitionMetadata.leaderEpoch = currentLeader.leaderEpoch;
     return true;
+  }
+
+  /**
+   * Records that `broker` answered `REBOOTSTRAP_REQUIRED` on connect because its address now leads
+   * to another broker or cluster (KIP-1242), so the next metadata refresh rebootstraps.
+   */
+  #recordMisroutedConnection(broker: Broker, error: Error): void {
+    this.logger.warn('Broker address leads to another broker or cluster; rediscovering the cluster', {
+      broker: broker.brokerAddress,
+      nodeId: broker.nodeId,
+    });
+    this.#misroutedConnectionError = error;
+  }
+
+  /**
+   * The cluster id brokers are asked to confirm on connect (KIP-1242). Only sent when the pool
+   * rebootstraps, the one recovery from a broker that does not confirm it; so `REBOOTSTRAP_REQUIRED`
+   * on connect never reaches a pool with `metadataRecovery: 'none'`.
+   */
+  #expectedClusterId(metadata: ClusterMetadata): string | null {
+    return this.metadataRecovery === 'rebootstrap' ? metadata.clusterId : null;
   }
 
   getNodeIds(): string[] {
@@ -549,6 +597,13 @@ export class BrokerPool {
 
           this.logger.error('Failed to connect to broker, reconnecting', { retryCount, retryTime });
           throw new KafkaProtocolError({ message: error.message, retriable: true });
+        }
+
+        if (isRebootstrapRequired(error)) {
+          // Bail instead of retrying the same address; the next metadata refresh rebootstraps.
+          this.#recordMisroutedConnection(broker, error);
+          bail(error);
+          return;
         }
 
         if (error.retriable) throw error;

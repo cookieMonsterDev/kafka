@@ -105,12 +105,82 @@ Method lists: [Producer API](../producer/), [Consumer API](../consumer/),
 [Admin API](../admin/). The notes below are version floors and protocol keys,
 not a backlog.
 
+**Misrouted connections.** ApiVersions (key 18) v0–v5. On Kafka 4.4+ (v5, KIP-1242),
+when the client connects to a broker known from metadata, it sends the cluster id and
+node id it expects, so a broker reached through a reused hostname or IP answers
+`REBOOTSTRAP_REQUIRED`. The client closes that connection, rediscovers the cluster
+from the bootstrap brokers as with KIP-1102, and looks the broker up again.
+Bootstrap connections send no ids. The check needs `metadataRecovery: 'rebootstrap'`
+(the default); with `'none'` no ids are sent, as in the Java client with
+`metadata.recovery.strategy=none`. Older brokers are not checked: they reject v5 and the
+client falls back to the highest version they support.
+
 **Coordinators.** Group and transaction coordinators are found with
-FindCoordinator (key 10) v0–v4. On Kafka 3.0+ (v4, KIP-699) one request finds
+FindCoordinator (key 10) v0–v5. On Kafka 3.0+ (v4, KIP-699) one request finds
 every coordinator an admin call needs, such as `admin.describeGroups`,
 `admin.deleteGroups`, or `admin.describeTransactions` over many IDs; an older
-broker gets one request per distinct ID. v5 (`TRANSACTION_ABORTABLE`, KIP-890) and v6
-(share coordinator keys, KIP-932, which only brokers look up) are not sent.
+broker gets one request per distinct ID. v5 (Kafka 3.8+) tells the broker the client
+handles `TRANSACTION_ABORTABLE` (KIP-890). v6 (share coordinator keys, KIP-932, which
+only brokers look up) is not sent.
+
+**Transactions.** The transactional producer sends InitProducerId (key 22) v0–v5,
+AddPartitionsToTxn (24) v0–v3, AddOffsetsToTxn (25) v0–v4, EndTxn (26) v0–v5, and
+TxnOffsetCommit (28) v0–v6. On Kafka 3.8+ these versions tell the broker the client
+handles `TRANSACTION_ABORTABLE` (KIP-890 part 1). A transaction that fails with it can
+only be aborted, as after any other failed send, `sendOffsets`, or rejected `commit()`;
+after `abort()` the producer begins the next transaction as usual. If the broker rejects
+the `abort()` itself with anything but a fencing error, the transaction stays open for
+another `abort()`, where the Java client fails the producer. AddPartitionsToTxn
+v4 and later batch transactions for checks between brokers, and the broker accepts them
+only from other brokers, so the producer stays on v3, as the Java client does.
+
+Transaction version 2 (KIP-890 part 2) is used when the cluster has finalized the
+`transaction.version` feature at 2 or higher. New Kafka 4.0+ clusters do this by default.
+Under it, Produce v12+ adds partitions to the transaction and TxnOffsetCommit v5+ adds the
+group's offsets, so the producer sends no AddPartitionsToTxn or AddOffsetsToTxn. Each
+EndTxn v5 bumps the producer epoch and returns the producer id and epoch for the next
+transaction, so the producer sends InitProducerId only before its first transaction.
+Brokers advertise these versions whatever the feature level is. With
+`transaction.version` below 2, a transactional Produce stays on v11 or lower, and EndTxn
+and TxnOffsetCommit stay on v4 or lower, because the broker reads the newer versions as
+transaction version 2. The producer reads the feature level from the same ApiVersions
+response as the broker's API versions, when it first connects, and keeps it while it
+reuses those versions; create a new producer to pick up a change. If a producer does read
+a new level that turns transaction version 2 on, it bumps its epoch before its first
+transaction under it, as the Java client does.
+
+On Kafka 4.4+ (TxnOffsetCommit v6, KIP-1319), `sendOffsets` addresses each topic by its
+topic id. Like the Java client, the producer sends v6 only under transaction version 2 and
+only when its metadata has an id for every topic. Before it sends the offsets to a cluster
+that supports v6, it adds their topics to the metadata it keeps; if that lookup fails, or a
+topic has no id, the offsets go by topic name on v5. `UNKNOWN_TOPIC_ID` refreshes the
+metadata before the retry. v6 can also answer `GROUP_ID_NOT_FOUND` or `STALE_MEMBER_EPOCH`
+where older versions answer `ILLEGAL_GENERATION`; as with any failed `sendOffsets`, the
+transaction can then only be aborted. The producer sends offsets without a member id or
+generation, which the coordinator accepts without checking the group's members, so in
+practice neither error occurs.
+
+**Offset lookups.** ListOffsets (key 2) v0–v11. `admin.fetchTopicOffsets`
+takes an `offsetSpec` from `OffsetSpecs`: max timestamp (v7, Kafka 3.0), earliest
+local offset (v8, 3.5), latest tiered offset (v9, 3.9, KIP-1005), and earliest
+pending upload offset (v11, 4.2, KIP-1023). A spec the broker is too old for
+throws `KafkaServerDoesNotSupportApiKey`. The same check covers
+`admin.fetchTopicOffsetsByTimestamp` and `kafka topic offsets --time max-timestamp`:
+on a broker older than 3.0, the max timestamp lookup throws instead of being read as
+a timestamp. From v10 (Kafka 4.0, KIP-1075) the request carries the client's
+`requestTimeout` as the broker's limit for reading tiered storage.
+
+**Committed offsets.** OffsetCommit (key 8) v0–v10 and OffsetFetch (key 9) v1–v10.
+On Kafka 3.0+ (OffsetFetch v8, KIP-709) `admin.listConsumerGroupOffsets` sends one
+request per group coordinator for all of its groups; an older broker gets one request
+per group. From Kafka 3.7 (OffsetFetch v9, KIP-848) a consumer with
+`groupProtocol: 'consumer'` sends its member id and member epoch when it fetches
+committed offsets, so the coordinator rejects a stale member. On Kafka 4.2+ (v10 of
+both) commits and fetches address each topic by its topic id when the client's
+metadata has one; a request with a topic that has none, or an offset fetch for every
+topic of a group, stays on v9. `UNKNOWN_TOPIC_ID` refreshes the metadata before the
+retry. `STALE_MEMBER_EPOCH` is retriable here, unlike in the Java client: the commit
+or fetch is sent again with the epoch the member's next heartbeat brought.
 
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
@@ -161,6 +231,8 @@ WriteTxnMarkers (27) on partition leaders (Kafka 3.0+ / v1+; v0 removed in
 4.0). `admin.forceTerminateTransaction` fences one transactional ID via
 InitProducerId. `admin.describeFeatures` reads
 ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
+`admin.describeApiVersions` sends ApiVersions (18) to every broker, on any broker version,
+and reports the version the client negotiates for each API (KIP-1220).
 `admin.removeMembersFromConsumerGroup` uses LeaveGroup (13) v3+ with explicit
 member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
@@ -175,6 +247,10 @@ v0–v3; on v3 (Kafka 4.4+) a failed group's `error` carries the broker's messag
 one, such as the cause of `GROUP_DELETION_FAILED`. `admin.describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
 implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
+`admin.describeStreamsGroups` implements StreamsGroupDescribe (key 89) v0–v1 (KIP-1071) on
+Kafka 4.2+; v1 (Kafka 4.4+) adds topology descriptions (KIP-1331) and the assignor name, and
+`includeTopologyDescription` throws on an older broker instead of being ignored. The client
+does not implement StreamsGroupHeartbeat, so it cannot join a streams group.
 `admin.describeTopicPartitions` uses
 key 75 on Kafka 4.0+ (KIP-966), sends topic names, and returns one page plus
 `nextCursor` for the caller to continue. `admin.updateFeatures` implements
@@ -183,6 +259,8 @@ validate-only and rejects unsafe downgrades. `admin.describeMetadataQuorum`
 implements DescribeQuorum (key 55) v0–v2 against the active controller and requires
 KRaft 3.6+. v1 adds replica timestamps (KIP-836); v2 adds directory IDs and
 node listeners (KIP-853). `admin.unregisterBroker` implements UnregisterBroker (key 64) v0.
+`admin.unregisterController` implements UnregisterController (key 94) v0 (KIP-1312) on
+Kafka 4.4+ with `metadata.version` 4.4-IV2 or later.
 `admin.assignReplicasToDirs` implements AssignReplicasToDirs (key 73) v0 (KIP-858)
 and assigns replicas on a broker to log directories by 16-byte directory UUID.
 `admin.addRaftVoter` and `admin.removeRaftVoter` implement keys 80–81; v1 of

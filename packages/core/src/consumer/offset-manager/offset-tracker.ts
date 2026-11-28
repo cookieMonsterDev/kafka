@@ -1,4 +1,4 @@
-import { isStaleCoordinator } from '../../cluster/error-classifier';
+import { isStaleCoordinator, isStaleMetadata } from '../../cluster/error-classifier';
 import type { Cluster } from '../../cluster/index';
 import { KafkaNonRetriableError } from '../../errors';
 import type { InstrumentationEventEmitter } from '../../instrumentation/emitter';
@@ -26,7 +26,7 @@ import { initializeConsumerOffsets } from './initialize-consumer-offsets';
 import { isInvalidOffset } from './is-invalid-offset';
 import { ResolvedOffsets } from './resolved-offsets';
 import { OffsetCommit } from '../../protocol/requests/offset-commit/index';
-import { OffsetFetch } from '../../protocol/requests/offset-fetch/index';
+import { committedOffsetsOf, OffsetFetch } from '../../protocol/requests/offset-fetch/index';
 
 export interface OffsetTrackerOptions {
   cluster: Cluster;
@@ -266,7 +266,7 @@ export class OffsetTracker {
 
     try {
       const coordinator = await this.#target.coordinator();
-      await coordinator.send(OffsetCommit, payload);
+      await coordinator.send(OffsetCommit, { ...payload, topics: this.#withTopicIds(topics) });
       this.#instrumentationEmitter.emit(COMMIT_OFFSETS, payload);
       this.#markCommitted(topics);
 
@@ -275,7 +275,8 @@ export class OffsetTracker {
         await runHooks(this.#hooks.onCommit, payload, 'onCommit', this.#logger);
       }
     } catch (e) {
-      if (isStaleCoordinator(e)) {
+      // A topic id the coordinator does not know (UNKNOWN_TOPIC_ID) means the metadata is stale.
+      if (isStaleCoordinator(e) || isStaleMetadata(e)) {
         await this.#cluster.recover(e);
       }
 
@@ -309,7 +310,10 @@ export class OffsetTracker {
     const { groupId } = this.#target;
     if (groupId !== null) {
       const coordinator = await this.#target.coordinator();
-      ({ responses: consumerOffsets } = await coordinator.send(OffsetFetch, { groupId, topics: pendingPartitions }));
+      const response = await coordinator.send(OffsetFetch, {
+        groups: [{ groupId, ...this.#target.fetchIdentity(), topics: this.#withTopicIds(pendingPartitions) }],
+      });
+      consumerOffsets = committedOffsetsOf(response, groupId);
     } else {
       consumerOffsets = pendingPartitions.map(({ topic, partitions }) => ({
         topic,
@@ -362,7 +366,18 @@ export class OffsetTracker {
    */
   async #sendCommit(groupId: string, topics: TopicOffsets[]): Promise<void> {
     const coordinator = await this.#target.coordinator();
-    await coordinator.send(OffsetCommit, { groupId, ...this.#target.commitIdentity(), topics });
+    await coordinator.send(OffsetCommit, {
+      groupId,
+      ...this.#target.commitIdentity(),
+      topics: this.#withTopicIds(topics),
+    });
+  }
+
+  /** Adds each topic's id from the cluster metadata, where it has one, so the request can address it by id. */
+  #withTopicIds<Topic extends { topic: string }>(
+    topics: readonly Topic[],
+  ): (Topic & { topicId: Buffer | undefined })[] {
+    return topics.map((entry) => ({ ...entry, topicId: this.#cluster.findTopicId(entry.topic) }));
   }
 
   #markCommitted(topics: readonly TopicOffsets[]): void {

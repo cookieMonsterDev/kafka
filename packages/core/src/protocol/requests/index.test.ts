@@ -4,6 +4,7 @@ import { API_KEYS } from './api-keys';
 import { ApiVersions } from './api-versions/index';
 import {
   defineRequestFamily,
+  highestCommonVersion,
   highestVersionBelow,
   lazyRequestFamily,
   lookup,
@@ -87,7 +88,7 @@ describe('protocol/requests', () => {
 
   it('caps at the highest version we implement even if the broker supports more', () => {
     const factory = lookup({ [API_KEYS.ApiVersions]: { maxVersion: 99 } })(ApiVersions);
-    expect(factory({}).request.apiVersion).toBe(4);
+    expect(factory({}).request.apiVersion).toBe(5);
   });
 
   it('throws KafkaServerDoesNotSupportApiKey when the broker never advertised the api', () => {
@@ -183,6 +184,12 @@ describe('protocol/requests', () => {
         transactionTimeout: 30_000,
       }),
     ).toBe(4);
+    expect(
+      negotiatedVersion({ [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 6 } }, InitProducerId, {
+        transactionalId: null,
+        transactionTimeout: 30_000,
+      }),
+    ).toBe(5);
   });
 
   it('selects Kafka 0.11 admin and data-path versions from a recorded ApiVersions map', () => {
@@ -321,6 +328,18 @@ describe('lazyRequestFamily', () => {
   });
 });
 
+describe('highestCommonVersion', () => {
+  it('picks the highest implemented version within the advertised range', () => {
+    expect(highestCommonVersion([0, 1, 2, 3], { minVersion: 1, maxVersion: 2 })).toBe(2);
+    expect(highestCommonVersion([0, 1, 2, 3], { maxVersion: 9 })).toBe(3);
+  });
+
+  it('returns null when the broker is too old or too new for every implemented version', () => {
+    expect(highestCommonVersion([3, 4], { minVersion: 0, maxVersion: 2 })).toBeNull();
+    expect(highestCommonVersion([0, 1], { minVersion: 2, maxVersion: 5 })).toBeNull();
+  });
+});
+
 describe('highestVersionBelow', () => {
   it('picks the highest version below the limit within the advertised range', () => {
     expect(highestVersionBelow(KAFKA_APIS.Produce, [3, 11, 12, 13], 13, { minVersion: 3, maxVersion: 13 })).toBe(12);
@@ -344,6 +363,22 @@ describe('request family hooks', () => {
     expect(Produce.preferVersion?.(nameOnly, 13, advertised)).toBe(12);
     expect(Produce.preferVersion?.(withIds, 13, advertised)).toBe(13);
     expect(Produce.preferVersion?.(nameOnly, 9, advertised)).toBe(9);
+  });
+
+  it('Produce stays below v12 in a transaction outside transaction version 2', () => {
+    const advertised = { minVersion: 0, maxVersion: 13 };
+    const transactional = {
+      acks: -1,
+      timeout: 1000,
+      transactionalId: 'txn',
+      topicData: [{ topic: 't', topicId, partitions: [] }],
+    };
+
+    expect(Produce.preferVersion?.(transactional, 13, advertised)).toBe(11);
+    expect(Produce.preferVersion?.({ ...transactional, isTransactionV2Enabled: false }, 13, advertised)).toBe(11);
+    expect(Produce.preferVersion?.({ ...transactional, isTransactionV2Enabled: true }, 13, advertised)).toBe(13);
+    expect(Produce.preferVersion?.({ ...transactional, transactionalId: null }, 13, advertised)).toBe(13);
+    expect(Produce.preferVersion?.(transactional, 9, advertised)).toBe(9);
   });
 
   it('Fetch merges the shuffled partitions of one topic into one entry', () => {

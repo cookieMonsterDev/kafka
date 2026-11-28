@@ -606,6 +606,62 @@ describe('cluster/Cluster', () => {
     });
   });
 
+  describe('fetchTopicsOffset', () => {
+    it('sends ListOffsets with the requestTimeout as the broker-side timeoutMs', async () => {
+      const cluster = createCluster({ requestTimeout: 12_345 });
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [
+          {
+            topicErrorCode: 0,
+            topic: 'orders',
+            isInternal: false,
+            partitionMetadata: [
+              { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+            ],
+          },
+        ],
+      });
+      const send = vi.fn().mockResolvedValue({
+        throttleTime: 0,
+        clientSideThrottleTime: 0,
+        responses: [
+          { topic: 'orders', partitions: [{ partition: 0, errorCode: 0, timestamp: -1n, offset: 4n, leaderEpoch: 0 }] },
+        ],
+      });
+      vi.spyOn(cluster, 'findBroker').mockResolvedValue({ send } as unknown as Broker);
+
+      await expect(
+        cluster.fetchTopicsOffset([{ topic: 'orders', fromTimestamp: -5n, partitions: [{ partition: 0 }] }]),
+      ).resolves.toEqual([{ topic: 'orders', partitions: [{ partition: 0, offset: 4n }] }]);
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ apiName: 'ListOffsets' }), {
+        isolationLevel: undefined,
+        timeoutMs: 12_345,
+        topics: [{ topic: 'orders', partitions: [{ partition: 0, timestamp: -5n }] }],
+      });
+    });
+
+    it('caps the broker-side timeoutMs at the INT32 maximum', async () => {
+      const cluster = createCluster({ requestTimeout: Number.MAX_SAFE_INTEGER });
+      cluster.brokerPool.metadata = fakeMetadata({
+        topicMetadata: [
+          {
+            topicErrorCode: 0,
+            topic: 'orders',
+            isInternal: false,
+            partitionMetadata: [
+              { partitionErrorCode: 0, partitionId: 0, leader: 1, replicas: [1], isr: [1], offlineReplicas: [] },
+            ],
+          },
+        ],
+      });
+      const send = vi.fn().mockResolvedValue({ throttleTime: 0, clientSideThrottleTime: 0, responses: [] });
+      vi.spyOn(cluster, 'findBroker').mockResolvedValue({ send } as unknown as Broker);
+
+      await cluster.fetchTopicsOffset([{ topic: 'orders', partitions: [{ partition: 0 }] }]);
+      expect(send).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ timeoutMs: 2 ** 31 - 1 }));
+    });
+  });
+
   describe('findBroker', () => {
     it('refreshes metadata and rethrows when the broker pool reports a stale broker', async () => {
       const cluster = createCluster();
@@ -626,6 +682,21 @@ describe('cluster/Cluster', () => {
       const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
 
       await expect(cluster.findBroker({ nodeId: '1' })).rejects.toThrow('closed');
+      expect(refreshSpy).toHaveBeenCalledOnce();
+    });
+
+    it('rediscovers the cluster and rethrows as retriable when a broker answers REBOOTSTRAP_REQUIRED (KIP-1242)', async () => {
+      const cluster = createCluster();
+      const misrouted = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'REBOOTSTRAP_REQUIRED')!.code);
+      vi.spyOn(cluster.brokerPool, 'findBroker').mockRejectedValue(misrouted);
+      const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      // The refresh drops every broker a caller holds, so the caller retries its whole attempt.
+      await expect(cluster.findBroker({ nodeId: '1' })).rejects.toMatchObject({
+        type: 'REBOOTSTRAP_REQUIRED',
+        retriable: true,
+      });
+      expect(misrouted.retriable).toBe(false);
       expect(refreshSpy).toHaveBeenCalledOnce();
     });
 

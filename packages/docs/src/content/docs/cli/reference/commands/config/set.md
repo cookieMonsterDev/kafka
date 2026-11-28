@@ -1,7 +1,7 @@
 ---
 title: 'config set'
 description: 'Set one or more config entries on a resource'
-order: 34
+order: 36
 section: reference
 hidden: true
 commandPath: ['config', 'set']

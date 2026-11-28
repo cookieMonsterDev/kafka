@@ -49,6 +49,8 @@ function kafkaMessage(offset: bigint): KafkaMessage {
   };
 }
 
+const STALE_MEMBER_EPOCH = 113;
+
 function rebalancingError(): KafkaProtocolError {
   return new KafkaProtocolError(createErrorFromCode(REBALANCE_IN_PROGRESS));
 }
@@ -521,6 +523,30 @@ describe('consumer/runner', () => {
     const offsets = { topics: [{ topic: topicName, partitions: [{ offset: 1n, partition }] }] };
     await runner.commitOffsets(offsets);
     expect(consumerGroup.commitOffsets).toHaveBeenCalledWith(offsets);
+  });
+
+  it('retries a commit the coordinator rejected with STALE_MEMBER_EPOCH', async () => {
+    const consumerGroup = fakeConsumerGroup({
+      commitOffsets: vi
+        .fn()
+        .mockRejectedValueOnce(createErrorFromCode(STALE_MEMBER_EPOCH))
+        .mockResolvedValue(undefined),
+    });
+    runner = new Runner({
+      consumerGroup,
+      onCrash: vi.fn(),
+      instrumentationEmitter: new InstrumentationEventEmitter(),
+      logger: silentLogger,
+      eachBatch: vi.fn(async () => undefined),
+      concurrency: 1,
+      retry: { retries: 1, initialRetryTime: 1 },
+    });
+    runner.scheduleFetchManager = vi.fn();
+    await runner.start();
+    const offsets = { topics: [{ topic: topicName, partitions: [{ offset: 1n, partition }] }] };
+
+    await expect(runner.commitOffsets(offsets)).resolves.toBeUndefined();
+    expect(consumerGroup.commitOffsets).toHaveBeenCalledTimes(2);
   });
 
   it('throws when commitOffsets hits a rebalance error', async () => {

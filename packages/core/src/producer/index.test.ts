@@ -44,6 +44,7 @@ function fakeCluster(overrides: Partial<Record<string, unknown>> = {}) {
         [API_KEYS.Produce]: { minVersion: 0, maxVersion: 7 },
         [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 0 },
       },
+      finalizedFeatures: {},
     },
     ...overrides,
   });
@@ -438,32 +439,33 @@ describe('producer', () => {
       await expect(producer.transaction()).rejects.toThrow(fenced);
     });
 
-    it('bumps the epoch before the next transaction when the bump after a V2 commit failed', async () => {
+    it('commits offsets under transaction version 2 with the epoch EndTxn returned, without InitProducerId', async () => {
       const coordinator = withSend({
         ...fakeBroker(),
         addOffsetsToTxn: vi.fn().mockResolvedValue(undefined),
         txnOffsetCommit: vi.fn().mockResolvedValue(undefined),
-        endTxn: vi.fn().mockResolvedValue(undefined),
+        endTxn: vi.fn().mockResolvedValue({ errorCode: 0, producerId: 1000n, producerEpoch: 2 }),
       });
-      const initProducerIdResponse = { producerId: 1000n, producerEpoch: 1 };
-      coordinator.initProducerId
-        .mockResolvedValueOnce(initProducerIdResponse)
-        .mockRejectedValueOnce(new Error('coordinator down'))
-        .mockResolvedValueOnce({ ...initProducerIdResponse, producerEpoch: 2 });
       const cluster = fakeCluster(withSend({ findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) }));
-      cluster.brokerPool.versions[API_KEYS.Produce].maxVersion = 12;
+      cluster.brokerPool.finalizedFeatures = { 'transaction.version': 2 };
       const producer = createProducer({
         cluster: cluster as unknown as Cluster,
         logger: silentLogger,
         transactionalId: 'txn-id',
       });
+      const offsets = { consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] };
 
-      const txn = await producer.transaction();
-      await txn.sendOffsets({ consumerGroupId: 'group', topics: [{ topic: 't', partitions: [] }] });
-      await expect(txn.commit()).resolves.toBeUndefined();
+      const first = await producer.transaction();
+      await first.sendOffsets(offsets);
+      await first.commit();
+      const second = await producer.transaction();
+      await second.sendOffsets(offsets);
 
-      await producer.transaction();
-      expect(coordinator.initProducerId).toHaveBeenCalledTimes(3);
+      expect(coordinator.addOffsetsToTxn).not.toHaveBeenCalled();
+      expect(coordinator.txnOffsetCommit).toHaveBeenLastCalledWith(
+        expect.objectContaining({ producerEpoch: 2, isTransactionV2Enabled: true }),
+      );
+      expect(coordinator.initProducerId).toHaveBeenCalledTimes(1);
     });
   });
 

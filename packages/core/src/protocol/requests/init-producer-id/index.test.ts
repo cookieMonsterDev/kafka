@@ -3,7 +3,7 @@ import { InitProducerId } from './index';
 
 describe('protocol/requests/init-producer-id', () => {
   it('skips v2 during negotiation because Kafka 2.4 and 2.5+ disagree on that layout', () => {
-    expect(InitProducerId.versions).toEqual([0, 1, 3, 4]);
+    expect(InitProducerId.versions).toEqual([0, 1, 3, 4, 5]);
   });
 
   it('still encodes the 2.5+ v2 layout when protocol() is called directly', () => {

@@ -48,8 +48,8 @@ describe('protocol/error-codes', () => {
       expect(error.retriable).toBe(true);
     });
 
-    it('includes official error codes 90-133', () => {
-      for (let code = 90; code <= 133; code++) {
+    it('includes official error codes 90-136', () => {
+      for (let code = 90; code <= 136; code++) {
         expect(ERROR_CODES.some((entry) => entry.code === code)).toBe(true);
       }
     });
@@ -57,6 +57,12 @@ describe('protocol/error-codes', () => {
     it('treats UNKNOWN_TOPIC_ID as retriable', () => {
       const error = createErrorFromCode(100);
       expect(error.type).toBe('UNKNOWN_TOPIC_ID');
+      expect(error.retriable).toBe(true);
+    });
+
+    it('treats STALE_MEMBER_EPOCH as retriable', () => {
+      const error = createErrorFromCode(113);
+      expect(error.type).toBe('STALE_MEMBER_EPOCH');
       expect(error.retriable).toBe(true);
     });
 
@@ -76,6 +82,14 @@ describe('protocol/error-codes', () => {
       const error = createErrorFromCode(133);
       expect(error.type).toBe('SHARE_SESSION_LIMIT_REACHED');
       expect(error.retriable).toBe(true);
+    });
+
+    it.each([
+      [134, 'GROUP_DELETION_FAILED'],
+      [135, 'STREAMS_TOPOLOGY_DESCRIPTION_UPDATE_FAILED'],
+      [136, 'CONTROLLER_ID_NOT_REGISTERED'],
+    ])('maps Kafka 4.4 code %i to non-retriable %s', (code, type) => {
+      expect(createErrorFromCode(code)).toMatchObject({ type, code, retriable: false });
     });
 
     it('falls back to a KAFKA_UNKNOWN_ERROR_CODE placeholder for unknown codes', () => {

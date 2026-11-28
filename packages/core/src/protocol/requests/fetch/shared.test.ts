@@ -9,12 +9,10 @@ import {
   decodeCompactRecordSet,
   decodeRecordSet,
   fetchRequestHasUsableTopicIds,
-  isUsableTopicId,
   parseFetchResponse,
   readFetchPartitionTaggedFields,
   readFetchResponseNodeEndpoints,
   readTopicName,
-  resolveFetchTopicName,
   type FetchRequestOptions,
 } from './shared';
 
@@ -30,15 +28,6 @@ function fetchOptions(overrides: Partial<FetchRequestOptions> = {}): FetchReques
 }
 
 describe('protocol/requests/fetch/shared', () => {
-  describe('isUsableTopicId', () => {
-    it('is true only for a non-zero 16-byte UUID', () => {
-      expect(isUsableTopicId(undefined)).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(16))).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(15, 1))).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(16, 1))).toBe(true);
-    });
-  });
-
   describe('fetchRequestHasUsableTopicIds', () => {
     const usable = Buffer.alloc(16, 1);
     const zero = Buffer.alloc(16);
@@ -66,20 +55,6 @@ describe('protocol/requests/fetch/shared', () => {
           }),
         ),
       ).toBe(true);
-    });
-  });
-
-  describe('resolveFetchTopicName', () => {
-    const ordersId = Buffer.alloc(16, 1);
-    const topics = [
-      { topic: 'orders', topicId: ordersId, partitions: [] },
-      { topic: 'payments', topicId: Buffer.alloc(16, 2), partitions: [] },
-    ];
-
-    it('resolves by topic UUID, then by index, then to an empty string', () => {
-      expect(resolveFetchTopicName(ordersId, 1, topics)).toBe('orders');
-      expect(resolveFetchTopicName(Buffer.alloc(16, 9), 1, topics)).toBe('payments');
-      expect(resolveFetchTopicName(Buffer.alloc(16, 9), 99, topics)).toBe('');
     });
   });
 

@@ -74,6 +74,7 @@ export const API_KEYS = Object.freeze({
   ShareGroupDescribe: 77,
   ShareFetch: 78,
   ShareAcknowledge: 79,
+  StreamsGroupDescribe: 89,
   DescribeShareGroupOffsets: 90,
   AlterShareGroupOffsets: 91,
   DeleteShareGroupOffsets: 92,
@@ -81,12 +82,38 @@ export const API_KEYS = Object.freeze({
   DescribeTopicPartitions: 75,
   AddRaftVoter: 80,
   RemoveRaftVoter: 81,
+  UnregisterController: 94,
+  // Not sent by this client: inter-broker, controller and Kafka Streams APIs, named so that a
+  // broker's advertised versions can be reported by name.
+  Vote: 52,
+  BeginQuorumEpoch: 53,
+  EndQuorumEpoch: 54,
+  AlterPartition: 56,
+  Envelope: 58,
+  FetchSnapshot: 59,
+  BrokerRegistration: 62,
+  BrokerHeartbeat: 63,
+  AllocateProducerIds: 67,
+  ControllerRegistration: 70,
+  UpdateRaftVoter: 82,
+  InitializeShareGroupState: 83,
+  ReadShareGroupState: 84,
+  WriteShareGroupState: 85,
+  DeleteShareGroupState: 86,
+  ReadShareGroupStateSummary: 87,
+  StreamsGroupHeartbeat: 88,
+  StreamsGroupTopologyDescriptionUpdate: 93,
 });
 
 export type ApiKey = (typeof API_KEYS)[keyof typeof API_KEYS];
 
-const NAMES_BY_KEY: ReadonlyMap<number, string> = new Map(Object.entries(API_KEYS).map(([name, key]) => [key, name]));
+const NAMES_BY_KEY: ReadonlyMap<number, string> = new Map([
+  ...Object.entries(API_KEYS).map(([name, key]): [number, string] => [key, name]),
+  // The protocol names api key 10 FindCoordinator, as Kafka's tools print it.
+  [API_KEYS.GroupCoordinator, 'FindCoordinator'],
+]);
 
+/** The name the Kafka protocol gives `apiKey`, such as `FindCoordinator` for 10. */
 export function apiKeyName(apiKey: number): string | undefined {
   return NAMES_BY_KEY.get(apiKey);
 }

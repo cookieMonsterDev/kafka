@@ -1,7 +1,7 @@
 ---
 title: 'cluster raft-voter remove'
 description: 'Remove a voter from the KRaft metadata quorum'
-order: 27
+order: 28
 section: reference
 hidden: true
 commandPath: ['cluster', 'raft-voter', 'remove']

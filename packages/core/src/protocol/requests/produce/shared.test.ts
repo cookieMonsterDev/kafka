@@ -7,10 +7,8 @@ import { decodeRecordBatch, encodeRecordBatch } from '../../records/batch';
 import type * as BatchModule from '../../records/batch';
 import {
   createProduceRequest,
-  isUsableTopicId,
   readProducePartitionTaggedFields,
   readProduceResponseNodeEndpoints,
-  resolveProduceTopicName,
   type ProduceMessage,
 } from './shared';
 
@@ -84,32 +82,6 @@ describe('protocol/requests/produce/shared', () => {
 
     const estimatedBytes = vi.mocked(encodeRecordBatch).mock.calls[0]?.[0]?.estimatedBytes;
     expect(estimatedBytes).toBeGreaterThanOrEqual(recordSet.length);
-  });
-
-  describe('isUsableTopicId', () => {
-    it('is true only for a non-zero 16-byte UUID', () => {
-      expect(isUsableTopicId(undefined)).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(0))).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(8, 1))).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(16))).toBe(false);
-      expect(isUsableTopicId(Buffer.alloc(16, 1))).toBe(true);
-    });
-  });
-
-  describe('resolveProduceTopicName', () => {
-    const ordersId = Buffer.alloc(16, 1);
-    const paymentsId = Buffer.alloc(16, 2);
-    const topicData = [
-      { topic: 'orders', topicId: ordersId, partitions: [] },
-      { topic: 'payments', topicId: paymentsId, partitions: [] },
-    ];
-
-    it('resolves by topic UUID, then by index, then to an empty string', () => {
-      expect(resolveProduceTopicName(paymentsId, 0, topicData)).toBe('payments');
-      expect(resolveProduceTopicName(Buffer.alloc(16, 9), 1, topicData)).toBe('payments');
-      expect(resolveProduceTopicName(Buffer.alloc(16, 9), 99, topicData)).toBe('');
-      expect(resolveProduceTopicName(Buffer.alloc(16, 9), 0, [{ topic: 'anon', partitions: [] }])).toBe('anon');
-    });
   });
 
   describe('createProduceRequest', () => {

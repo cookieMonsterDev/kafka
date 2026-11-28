@@ -1,11 +1,7 @@
 import { Decoder } from '../../../decoder';
 import { compactArray, field, flexibleObject, int32, object, uuid, type ResponseDefinition } from '../../../schema';
-import {
-  parseProduceResponse,
-  readProduceResponseNodeEndpoints,
-  resolveProduceTopicName,
-  type ProduceRequestOptions,
-} from '../shared';
+import { parseProduceResponse, readProduceResponseNodeEndpoints, type ProduceRequestOptions } from '../shared';
+import { requestedTopicName } from '../../topic-ids';
 import { producePartitionSchemaV9, type ProduceResponseV9Body } from '../v9/response';
 
 export interface ProduceResponseV13Body extends ProduceResponseV9Body {
@@ -45,7 +41,7 @@ export function produceResponseV13(
       // holds once the loop below has set `topicName` on every topic, before they are returned.
       const namedTopics = topics as ProduceResponseV13Body['topics'];
       namedTopics.forEach((topic, index) => {
-        topic.topicName = resolveProduceTopicName(topic.topicId, index, options.topicData);
+        topic.topicName = requestedTopicName(topic.topicId, index, options.topicData);
       });
       return { topics: namedTopics, throttleTime: 0, clientSideThrottleTime: throttleTime, nodeEndpoints };
     },

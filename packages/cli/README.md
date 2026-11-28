@@ -25,7 +25,7 @@ map to the `kafka` equivalent.
   - [Group commands](#group-commands)
   - [ACL commands](#acl-commands)
   - [Cluster commands](#cluster-commands)
-  - [Transaction, token, SCRAM, quota, and share group commands](#transaction-token-scram-quota-and-share-group-commands)
+  - [Transaction, token, SCRAM, quota, share group, and streams group commands](#transaction-token-scram-quota-share-group-and-streams-group-commands)
   - [Reaching the rest of the Admin API](#reaching-the-rest-of-the-admin-api)
 - [Shell completion](#shell-completion)
 - [Configuration](#configuration)
@@ -158,7 +158,9 @@ failure exits `4` rather than masking which topics actually went away.
 not a delta, matching `kafka-topics.sh --alter --partitions`. `topic offsets <topic>` prints each
 partition's current high/low watermark, or with `--time earliest|latest|max-timestamp|<ms>`, the
 offset as of that point — the same three named timestamps `kafka-run-class
-kafka.tools.GetOffsetShell` accepts, plus a literal millisecond epoch.
+kafka.tools.GetOffsetShell` accepts, plus a literal millisecond epoch. With
+`--time earliest-local|latest-tiered|earliest-pending-upload` it prints the high/low watermark next
+to that tiered storage offset, or `-1` for a partition without one (Kafka 3.5+, 3.9+, and 4.2+).
 
 `topic delete-records --from-file <path>` deletes every record before the given offset, per
 partition, reading the same JSON shape as `kafka-delete-records.sh --offset-json-file`:
@@ -297,7 +299,7 @@ how many ACLs actually matched and were removed.
 
 ### Cluster commands
 
-Inspect the cluster itself — brokers, controller, metadata quorum, log directories — and run
+Inspect the cluster itself — brokers, controller, metadata quorum, API versions, log directories — and run
 cluster-level operations like feature upgrades, leader elections, reassignments, and quorum
 membership changes.
 
@@ -305,12 +307,14 @@ membership changes.
 kafka cluster info --brokers localhost:9092
 kafka cluster quorum --brokers localhost:9092
 kafka cluster features --brokers localhost:9092
+kafka cluster api-versions --node 1 --brokers localhost:9092
 kafka cluster log-dirs --topic orders --brokers localhost:9092
 kafka cluster update-features --feature kraft.version=1 --brokers localhost:9092 --yes
 kafka cluster elect-leaders --election-type preferred --all-topic-partitions --brokers localhost:9092 --yes
 kafka cluster reassign list --brokers localhost:9092
 kafka cluster reassign execute --from-file reassignment.json --brokers localhost:9092 --yes
 kafka cluster unregister-broker --broker-id 3 --brokers localhost:9092 --yes
+kafka cluster unregister-controller --controller-id 3001 --brokers localhost:9092 --yes
 kafka cluster raft-voter add --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --listener CONTROLLER=localhost:9093 --brokers localhost:9092
 kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-4a5b-8c9d-0123456789ab --brokers localhost:9092 --yes
 ```
@@ -321,6 +325,10 @@ kafka cluster raft-voter remove --voter-id 4 --voter-directory-id 3c48b6f0-1234-
 `cluster info` describes the cluster's brokers, controller, and cluster id. `cluster quorum`
 describes the metadata quorum — each `__cluster_metadata` partition's leader, voters, and
 observers. `cluster features` lists supported vs. finalized feature versions, merged by name.
+`cluster api-versions` lists, for every broker or the one `--node`, each Kafka API with the
+broker's version range and the version this CLI uses, in the `kafka-cluster.sh api-versions` shape
+(KIP-1220): `[usable: <version>]`, `UNSUPPORTED` when the broker lacks an API the CLI implements,
+`[not implemented]` for an API the CLI does not send, and `[unusable: no common version]`.
 `cluster log-dirs` describes every broker's log directories — their volume's total and usable
 bytes (Kafka 3.3+) and whether they are cordoned (Kafka 4.3+), `-` when the broker does not report
 them — and their partition sizes, narrowed with a repeatable `--broker`/`--topic`. The topic filter
@@ -351,14 +359,17 @@ replica between log dirs on the same broker needs a separate command.
 behind confirmation. `cluster raft-voter add --voter-id <id> --voter-directory-id <uuid> --listener
 name=host:port` (repeatable) and `cluster raft-voter remove --voter-id <id> --voter-directory-id
 <uuid>` add or remove a voter from the metadata quorum — `remove` is gated behind confirmation like
-every other removal in this package.
+every other removal in this package. `cluster unregister-controller --controller-id <id>` then
+unregisters a controller removed from the quorum for good (Kafka 4.4+, `metadata.version`
+4.4-IV2 or later), also gated behind confirmation; the active controller cannot unregister itself.
 
 </details>
 
-### Transaction, token, SCRAM, quota, and share group commands
+### Transaction, token, SCRAM, quota, share group, and streams group commands
 
 Everything else the broker's admin API covers that doesn't fit the categories above: in-flight
-transactions, delegation tokens, SCRAM credentials, client quotas, and KIP-932 share groups.
+transactions, delegation tokens, SCRAM credentials, client quotas, KIP-932 share groups, and
+KIP-1071 streams groups.
 
 ```sh
 kafka txn list --state-filter Ongoing --brokers localhost:9092
@@ -378,6 +389,8 @@ kafka share-group list --brokers localhost:9092
 kafka share-group describe orders-readers --brokers localhost:9092
 kafka share-group offsets orders-readers --brokers localhost:9092
 kafka share-group delete orders-readers --brokers localhost:9092 --yes
+kafka streams-group list --brokers localhost:9092
+kafka streams-group describe word-count --brokers localhost:9092
 ```
 
 <details>
@@ -430,9 +443,22 @@ and lag per partition by default; a single `--topic` (or none, for every topic t
 call, but more than one `--topic` filter fans out one call per topic for the same reason. Passing a
 repeatable `--set topic:partition:offset` or `--delete-topic` instead writes new start offsets or
 deletes committed offsets for those topics — each fanned out one call per topic too — both gated
-behind confirmation. `share-group delete <groupIds...>` deletes one or more share groups in a single
-call, gated behind confirmation like `group delete`, with the same per-group partial-failure
-handling.
+behind confirmation. `--from-file <path>` sets start offsets from the headerless CSV that
+`kafka-share-groups.sh --reset-offsets --from-file` reads (KIP-1323): `topic,partition,offset` lines,
+such as a single-group `--export`, or `group,topic,partition,offset` lines, such as a multi-group
+`kafka-consumer-groups.sh` export, filtered to the named group. It uses the same validation and
+confirmation as `--set` and cannot be combined with it; unlike the shell tool, offsets are not
+clamped to the partition's earliest and latest offsets. `share-group delete <groupIds...>` deletes
+one or more share groups in a single call, gated behind confirmation like `group delete`, with the
+same per-group partial-failure handling.
+
+`streams-group list` filters `listGroups` down to streams groups (KIP-1071's `streams` protocol
+type) and shows each group's state. `streams-group describe <groupIds...>` reads back each group's
+state, group and topology epochs, assignor, and member count, fanning out one call per group id
+like `share-group describe`; a group id that is unknown or not a streams group is reported with the
+broker's message, and a partial failure exits `4`. `--topology-description` also reads each group's
+topology description status and, with `--json`, the description itself (Kafka 4.4+; an older broker
+fails the call instead of leaving it out). Streams groups need Kafka 4.2+.
 
 </details>
 

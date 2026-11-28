@@ -1,7 +1,7 @@
 ---
 title: 'group delete-offsets'
 description: "Delete a consumer group's committed offsets on one or more topics"
-order: 37
+order: 39
 section: reference
 hidden: true
 commandPath: ['group', 'delete-offsets']

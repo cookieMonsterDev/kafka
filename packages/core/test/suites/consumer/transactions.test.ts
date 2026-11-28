@@ -4,16 +4,20 @@ import { cooperativeSticky } from '../../../src/consumer/assigners/index';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
 import type { EachMessagePayload } from '../../../src/consumer/types';
+import type { GroupProtocol } from '../../../src/types/index';
 import {
   createCluster,
   createTopic,
   newLogger,
+  recordRequests,
   secureRandom,
   waitFor,
+  waitForCommittedOffset,
   waitForConsumerToJoinGroup,
   waitForMessages,
   testIfKafkaAtLeast_0_11,
   testIfKafkaAtLeast_2_4,
+  testIfKafkaAtLeast_4_4,
 } from '../../helpers/index';
 
 describe('consumer.transactions', () => {
@@ -69,6 +73,61 @@ describe('consumer.transactions', () => {
     await waitForMessages(consumed, { number: 1 });
     expect(consumed.map((c) => c.message.value?.toString())).toEqual(['committed']);
   });
+
+  for (const groupProtocol of ['classic', 'consumer'] satisfies GroupProtocol[]) {
+    testIfKafkaAtLeast_4_4(
+      `commits the offsets of a ${groupProtocol} group member inside a transaction with TxnOffsetCommit v6`,
+      async () => {
+        const groupId = `group-${secureRandom()}`;
+        const outputTopic = `test-topic-${secureRandom()}`;
+        await createTopic({ topic: outputTopic });
+
+        const seed = createProducer({ cluster: createCluster(), logger: newLogger() });
+        await seed.connect();
+        await seed.send({ acks: -1, topic: topicName, messages: [{ value: 'input' }] });
+        await seed.disconnect();
+
+        const recorder = recordRequests();
+        producer = createProducer({
+          cluster: createCluster({ instrumentationEmitter: recorder.instrumentationEmitter }),
+          logger: newLogger(),
+          idempotent: true,
+          transactionalId: `txn-${secureRandom()}`,
+        });
+        consumer = createConsumer({
+          cluster: createCluster(),
+          groupId,
+          groupProtocol,
+          maxWaitTimeInMs: 100,
+          logger: newLogger(),
+        });
+        await producer.connect();
+        await consumer.connect();
+        await consumer.subscribe({ topic: topicName, fromBeginning: true });
+
+        // The producer never writes to the input topic, so it learns the topic's id only to send the offsets.
+        const consumed: EachMessagePayload[] = [];
+        await consumer.run({
+          autoCommit: false,
+          eachMessage: async (event) => {
+            const { topic, partition, message } = event;
+            const transaction = await producer!.transaction();
+            await transaction.send({ topic: outputTopic, messages: [{ value: message.value }] });
+            await transaction.sendOffsets({
+              consumerGroupId: groupId,
+              topics: [{ topic, partitions: [{ partition, offset: message.offset + 1n }] }],
+            });
+            await transaction.commit();
+            consumed.push(event);
+          },
+        });
+        await waitForMessages(consumed, { number: 1 });
+
+        await waitForCommittedOffset({ groupId, topic: topicName, offset: 1n });
+        expect(recorder.distinctVersionsOf('TxnOffsetCommit')).toEqual([6]);
+      },
+    );
+  }
 
   testIfKafkaAtLeast_2_4(
     'auto-commits a processed offset whose transaction aborted, on a partition retained across a rebalance',

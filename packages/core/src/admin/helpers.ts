@@ -2,7 +2,7 @@ import type { Broker } from '../broker/index';
 import { COORDINATOR_LOADING_ERRORS, isStaleMetadata } from '../cluster/error-classifier';
 import type { Cluster } from '../cluster/index';
 import { coordinatorTarget } from '../cluster/run';
-import { KafkaDeleteGroupsError, KafkaMetadataNotLoaded } from '../errors';
+import { KafkaDeleteGroupsError, KafkaMetadataNotLoaded, KafkaNonRetriableError } from '../errors';
 import type { Logger } from '../loggers/index';
 import { CONFIG_RESOURCE_TYPES } from '../protocol/enums/config-resource-types';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
@@ -21,6 +21,15 @@ export interface AdminContext {
 
 export function formatUnknown(value: unknown): string {
   return String(value);
+}
+
+export function assertValidGroupIds(groupIds: unknown): asserts groupIds is string[] {
+  if (!Array.isArray(groupIds)) {
+    throw new KafkaNonRetriableError(`Invalid groupIds array ${formatUnknown(groupIds)}`);
+  }
+  if (groupIds.some((groupId) => typeof groupId !== 'string' || groupId === '')) {
+    throw new KafkaNonRetriableError('Group IDs must be non-empty strings');
+  }
 }
 
 export async function retryOnLeaderNotAvailable<T>(fn: () => Promise<T>, options: WaitForOptions = {}): Promise<T> {

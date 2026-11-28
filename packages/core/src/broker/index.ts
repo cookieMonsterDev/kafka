@@ -4,11 +4,16 @@ import {
   KafkaInvariantViolation,
   KafkaProtocolError,
 } from '../errors';
-import { isUnsupportedVersion } from '../cluster/error-classifier';
+import { isRebootstrapRequired, isUnsupportedVersion } from '../cluster/error-classifier';
 import type { Logger } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { asTypedSend } from '../network/connection';
 import { ApiVersions } from '../protocol/requests/api-versions/index';
+import {
+  finalizedFeatureLevels,
+  type ApiVersionsFeatureFields,
+  type FinalizedFeatureLevels,
+} from '../protocol/requests/api-versions/feature-fields';
 import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response';
 import type { ApiVersionsResponseV3Body } from '../protocol/requests/api-versions/v3/response';
 import { lookup } from '../protocol/requests/index';
@@ -21,6 +26,7 @@ import type {
 } from '../protocol/requests/index';
 import { SaslAuthenticate } from '../protocol/requests/sasl-authenticate/index';
 import { Lock } from '../utils/lock';
+import { supportsMisroutedConnectionCheck } from './capabilities';
 
 type LookupRequest = ReturnType<typeof lookup>;
 
@@ -38,7 +44,14 @@ export interface BrokerOptions {
   connectionPool: ConnectionPool;
   logger: Logger;
   nodeId?: number | null;
+  /**
+   * The cluster the broker belongs to, from metadata. With `nodeId`, ApiVersions v5 asks the
+   * broker to confirm both, so a reused address answers `REBOOTSTRAP_REQUIRED` (KIP-1242).
+   */
+  clusterId?: string | null;
   versions?: BrokerVersions | null;
+  /** The finalized feature levels that came with cached `versions`. */
+  finalizedFeatures?: FinalizedFeatureLevels;
   authenticationTimeout?: number;
   allowAutoTopicCreation?: boolean;
 }
@@ -50,9 +63,15 @@ export interface BrokerOptions {
 export class Broker {
   connectionPool: ConnectionPool;
   nodeId: number | null;
+  clusterId: string | null;
   rootLogger: Logger;
   logger: Logger;
   versions: BrokerVersions | null;
+  /**
+   * The finalized feature levels, such as `transaction.version`, from the same ApiVersions
+   * response as `versions`; empty before ApiVersions v3.
+   */
+  finalizedFeatures: FinalizedFeatureLevels;
   authenticationTimeout: number;
   allowAutoTopicCreation: boolean;
   brokerAddress: string;
@@ -63,15 +82,19 @@ export class Broker {
     connectionPool,
     logger,
     nodeId = null,
+    clusterId = null,
     versions = null,
+    finalizedFeatures = {},
     authenticationTimeout = 10_000,
     allowAutoTopicCreation = true,
   }: BrokerOptions) {
     this.connectionPool = connectionPool;
     this.nodeId = nodeId;
+    this.clusterId = clusterId;
     this.rootLogger = logger;
     this.logger = logger.namespace('Broker');
     this.versions = versions;
+    this.finalizedFeatures = finalizedFeatures;
     this.authenticationTimeout = authenticationTimeout;
     this.allowAutoTopicCreation = allowAutoTopicCreation;
 
@@ -97,8 +120,21 @@ export class Broker {
 
       const connection = await this.connectionPool.getConnection();
 
-      if (!this.versions) {
-        this.versions = await this.apiVersions();
+      // On a Kafka 4.4+ cluster a known broker is asked to confirm its node id and cluster id on every
+      // connect, even with cached versions, so a reused address fails here before any other request.
+      if (
+        this.versions == null ||
+        (this.#expectedIdentity() != null && supportsMisroutedConnectionCheck(this.versions))
+      ) {
+        try {
+          const negotiated = await this.#negotiateApiVersions();
+          this.versions = negotiated.versions;
+          this.finalizedFeatures = negotiated.finalizedFeatures;
+        } catch (e) {
+          // The socket leads to another broker or cluster; keep nothing open on it.
+          if (isRebootstrapRequired(e)) await this.disconnect();
+          throw e;
+        }
       }
       this.connectionPool.setVersions(this.versions);
 
@@ -130,8 +166,19 @@ export class Broker {
     await this.connectionPool.destroy();
   }
 
+  /**
+   * Negotiates the highest ApiVersions version the broker supports and returns its advertised
+   * versions. When the broker's node id and cluster id are known, v5+ asks the broker to confirm
+   * them and rejects with `REBOOTSTRAP_REQUIRED` when it does not (KIP-1242).
+   */
   async apiVersions(): Promise<BrokerVersions> {
-    let response: ApiVersionsResponseV1Body | undefined;
+    return (await this.#negotiateApiVersions()).versions;
+  }
+
+  /** Like {@link apiVersions}, with the finalized feature levels ApiVersions v3+ reports. */
+  async #negotiateApiVersions(): Promise<{ versions: BrokerVersions; finalizedFeatures: FinalizedFeatureLevels }> {
+    let response: (ApiVersionsResponseV1Body & Partial<ApiVersionsFeatureFields>) | undefined;
+    const requestOptions = this.#expectedIdentity() ?? {};
     const availableVersions = [...ApiVersions.versions].sort((a, b) => b - a);
     const oldestVersion = availableVersions[availableVersions.length - 1];
 
@@ -141,8 +188,8 @@ export class Broker {
     for (const candidateVersion of availableVersions) {
       try {
         const apiVersions = ApiVersions.protocol({ version: candidateVersion });
-        response = await this.#sendRequest<ApiVersionsResponseV1Body>({
-          ...apiVersions({}),
+        response = await this.#sendRequest<ApiVersionsResponseV1Body & Partial<ApiVersionsFeatureFields>>({
+          ...apiVersions(requestOptions),
           requestTimeout: this.connectionPool.connectionTimeout,
         });
         break;
@@ -167,7 +214,13 @@ export class Broker {
     for (const version of response.apiVersions) {
       versions[version.apiKey] = { minVersion: version.minVersion, maxVersion: version.maxVersion };
     }
-    return versions;
+    return { versions, finalizedFeatures: finalizedFeatureLevels(response.finalizedFeatures ?? []) };
+  }
+
+  /** The cluster id and node id ApiVersions v5 asks the broker to confirm, once both are known. */
+  #expectedIdentity(): { clusterId: string; nodeId: number } | null {
+    if (this.clusterId == null || this.nodeId == null || this.nodeId < 0) return null;
+    return { clusterId: this.clusterId, nodeId: this.nodeId };
   }
 
   /** ApiVersions v3+ with KIP-584 supported and finalized feature metadata. */

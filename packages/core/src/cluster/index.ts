@@ -1,11 +1,12 @@
 import { supportsBatchedFindCoordinator } from '../broker/capabilities';
 import { Broker } from '../broker/index';
-import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
+import { EARLIEST_OFFSET, INT_32_MAX_VALUE, LATEST_OFFSET } from '../constants';
 import {
   KafkaBrokerNotFound,
   KafkaError,
   KafkaGroupCoordinatorNotFound,
   KafkaMetadataNotLoaded,
+  KafkaProtocolError,
   KafkaTopicMetadataNotLoaded,
 } from '../errors';
 import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
@@ -19,13 +20,15 @@ import type { SocketFactory } from '../network/socket-factory';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import type { CoordinatorType } from '../protocol/enums/coordinator-types';
 import type { IsolationLevel } from '../protocol/enums/isolation-level';
-import { ZERO_TOPIC_ID, type ClusterMetadata } from '../protocol/requests/metadata/shared';
+import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
+import { isUsableTopicId } from '../protocol/requests/topic-ids';
 import type { RetryOptions } from '../retry/index';
 import { retrier } from '../retry/index';
 import {
   closedConnectionAddress,
   isConnectionError,
   isConnectionRefused,
+  isRebootstrapRequired,
   isStaleCoordinator,
   isStaleMetadata,
   isTopicAuthorizationFailed,
@@ -126,6 +129,7 @@ export class Cluster {
   readonly mutatingTargetTopics: Lock;
 
   readonly #committedOffsetsByGroup: CommittedOffsetsByGroup;
+  readonly #requestTimeout: number;
   readonly #connect: () => Promise<void>;
   readonly #refreshMetadata: () => Promise<void>;
   readonly #refreshMetadataIfNecessary: () => Promise<void>;
@@ -188,6 +192,7 @@ export class Cluster {
 
     this.targetTopics = new Set();
     this.mutatingTargetTopics = new Lock({ description: 'updating target topics', timeout: requestTimeout });
+    this.#requestTimeout = requestTimeout;
     this.isolationLevel = isolationLevel;
     this.allowAutoTopicCreation = allowAutoTopicCreation !== false;
     this.brokerPool = new BrokerPool({
@@ -552,6 +557,14 @@ export class Cluster {
     try {
       return await this.brokerPool.findBroker({ nodeId });
     } catch (e) {
+      if (e instanceof KafkaProtocolError && isRebootstrapRequired(e)) {
+        // The broker's address led to another broker or cluster (KIP-1242). This refresh rediscovers
+        // the cluster from the bootstrap brokers and drops every broker the caller may already hold,
+        // so the caller's next attempt, which resolves its brokers again, can succeed.
+        await this.refreshMetadata();
+        throw new KafkaProtocolError(e, { retriable: true });
+      }
+
       // The client probably has stale metadata.
       const { name } = e as Error;
       if (name === 'KafkaBrokerNotFound' || name === 'KafkaLockTimeout' || isConnectionError(e)) {
@@ -584,10 +597,7 @@ export class Cluster {
     }
 
     const topicId = metadata.topicMetadata.find((entry) => entry.topic === topic)?.topicId;
-    if (topicId == null || topicId.length !== 16 || topicId.equals(ZERO_TOPIC_ID)) {
-      return undefined;
-    }
-    return topicId;
+    return isUsableTopicId(topicId) ? topicId : undefined;
   }
 
   findLeaderForPartitions(topic: string, partitions: readonly number[]): Record<number, number[]> {
@@ -743,6 +753,9 @@ export class Cluster {
 
       const { responses: topicOffsets } = await broker.send(ListOffsets, {
         isolationLevel: this.isolationLevel,
+        // Bounds a tiered storage read on the broker by this client's requestTimeout; the field is
+        // an INT32, which a larger requestTimeout would overflow.
+        timeoutMs: Math.min(this.#requestTimeout, INT_32_MAX_VALUE),
         topics: Object.entries(perTopic).map(([topic, partitions]) => ({
           topic,
           partitions: partitions.map(({ partition }) => ({ partition, timestamp: topicTimestamps.get(topic) })),

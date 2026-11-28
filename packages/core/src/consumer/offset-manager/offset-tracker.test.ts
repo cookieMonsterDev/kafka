@@ -7,11 +7,13 @@ import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { createErrorFromCode } from '../../protocol/error-codes';
 import type { TopicOffsetConfiguration } from '../offset-reset';
 import type { ConsumerHooks, MemberAssignment } from '../types';
+import type { GroupProtocol } from '../../types/index';
 import { AssignModeCommitTarget, GroupMemberCommitTarget, type CommitTarget } from './commit-target';
 import { OffsetTracker } from './offset-tracker';
 import { withSend } from '../../broker/test-send';
 
 const NOT_COORDINATOR_FOR_GROUP_CODE = 16;
+const UNKNOWN_TOPIC_ID_CODE = 100;
 const silentLogger = createLogger({ level: LOG_LEVELS.NOTHING, logCreator: () => () => {} });
 
 type TargetKind = 'group member' | 'assign mode';
@@ -28,6 +30,8 @@ interface TrackerOptions {
   autoCommitThreshold?: number | null;
   topicConfigurations?: Record<string, TopicOffsetConfiguration>;
   hooks?: ConsumerHooks;
+  /** Group member only. */
+  groupProtocol?: GroupProtocol;
 }
 
 interface Harness {
@@ -57,7 +61,7 @@ function committedOffsetCalls(): Pick<Cluster, 'committedOffset' | 'markOffsetAs
 
 function createTracker(options: TrackerOptions = {}): Harness {
   const offsetCommit = vi.fn(async () => undefined);
-  const offsetFetch = vi.fn(async () => ({ responses: [] }));
+  const offsetFetch = vi.fn(async () => ({ groups: [] }));
   const coordinator = withSend({
     nodeId: 1,
     isConnected: vi.fn(() => true),
@@ -72,13 +76,14 @@ function createTracker(options: TrackerOptions = {}): Harness {
     recover: vi.fn(async () => undefined),
     defaultOffset: vi.fn(() => -1n),
     fetchTopicsOffset: vi.fn(async () => []),
+    findTopicId: vi.fn(() => undefined),
     ...options.cluster,
   }) as unknown as Cluster;
   const membership: Harness['membership'] = { coordinator, memberId: 'memberId', generationId: 1 };
   const target =
     options.target === 'assign mode'
       ? new AssignModeCommitTarget(cluster, options.groupId === undefined ? 'groupId' : options.groupId)
-      : new GroupMemberCommitTarget(cluster, 'groupId', membership);
+      : new GroupMemberCommitTarget(cluster, 'groupId', membership, options.groupProtocol ?? 'classic');
 
   const tracker = new OffsetTracker({
     cluster,
@@ -101,6 +106,11 @@ function createTracker(options: TrackerOptions = {}): Harness {
     offsetCommit: offsetCommit,
     offsetFetch: offsetFetch,
   });
+}
+
+/** An OffsetFetch response with the committed offsets of the tracker's group. */
+function committedOffsets(topics: { topic: string; partitions: { partition: number; offset: bigint }[] }[]) {
+  return { groups: [{ groupId: 'groupId', topics }] };
 }
 
 const IDENTITY: Record<TargetKind, { memberId: string; groupGenerationId: number }> = {
@@ -164,9 +174,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
       it('does not cache a fallback 0n before resolveOffsets runs', async () => {
         const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 42n }] }]);
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }]),
+        );
         const { tracker } = create({
           assignment: { events: [0] },
           cluster: { fetchTopicsOffset },
@@ -220,9 +230,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
     describe('updateAssignment', () => {
       it('keeps the offsets of retained partitions and forgets revoked ones', async () => {
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 2, offset: 7n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 2, offset: 7n }] }]),
+        );
         const { tracker, target } = create({ assignment: { events: [0, 1] }, coordinator: withSend({ offsetFetch }) });
         target.setCommittedOffset('events', 0, 10n);
         target.setCommittedOffset('events', 1, 20n);
@@ -239,15 +249,21 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
         await tracker.resolveOffsets();
         expect(offsetFetch).toHaveBeenCalledWith({
-          groupId: 'groupId',
-          topics: [{ topic: 'events', partitions: [{ partition: 2 }] }],
+          groups: [
+            {
+              groupId: 'groupId',
+              memberId: null,
+              memberEpoch: -1,
+              topics: [{ topic: 'events', partitions: [{ partition: 2 }] }],
+            },
+          ],
         });
       });
 
       it('looks the committed offset of a gained partition up again', async () => {
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 1, offset: 30n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 1, offset: 30n }] }]),
+        );
         const { tracker, target } = create({ assignment: { events: [0] }, coordinator: withSend({ offsetFetch }) });
         // Left over from an earlier owner or an earlier run on the same client.
         target.setCommittedOffset('events', 1, 12n);
@@ -402,6 +418,48 @@ describe('consumer/offset-manager/offset-tracker', () => {
         await expect(tracker.commitOffsets(offsets)).rejects.toThrow(KafkaProtocolError);
         expect(recover).toHaveBeenCalledWith(expect.objectContaining({ type: 'NOT_COORDINATOR_FOR_GROUP' }));
       });
+
+      it('recovers from an UNKNOWN_TOPIC_ID error through the cluster', async () => {
+        const recover = vi.fn(async () => undefined);
+        const { tracker } = create({
+          assignment: { 'topic-1': [0] },
+          cluster: { recover },
+          coordinator: withSend({
+            offsetCommit: vi.fn(() => {
+              throw createErrorFromCode(UNKNOWN_TOPIC_ID_CODE);
+            }),
+          }),
+        });
+
+        const offsets = { topics: [{ topic: 'topic-1', partitions: [{ partition: 0, offset: 1n }] }] };
+        await expect(tracker.commitOffsets(offsets)).rejects.toThrow(KafkaProtocolError);
+        expect(recover).toHaveBeenCalledWith(expect.objectContaining({ type: 'UNKNOWN_TOPIC_ID' }));
+      });
+
+      it('addresses topics by the id the metadata has, and reports the commit without it', async () => {
+        const topicId = Buffer.alloc(16, 1);
+        const onCommit = vi.fn();
+        const { tracker, offsetCommit } = create({
+          assignment: { 'topic-1': [0], 'topic-2': [0] },
+          cluster: { findTopicId: vi.fn((topic: string) => (topic === 'topic-1' ? topicId : undefined)) },
+          hooks: { onCommit: [onCommit] },
+        });
+        const offsets = {
+          topics: [
+            { topic: 'topic-1', partitions: [{ partition: 0, offset: 1n }] },
+            { topic: 'topic-2', partitions: [{ partition: 0, offset: 2n }] },
+          ],
+        };
+
+        await tracker.commitOffsets(offsets);
+
+        const [sent] = offsetCommit.mock.calls[0] as unknown as [{ topics: { topic: string; topicId?: Buffer }[] }];
+        expect(sent.topics.map(({ topic, topicId: id }) => [topic, id])).toEqual([
+          ['topic-1', topicId],
+          ['topic-2', undefined],
+        ]);
+        expect(onCommit).toHaveBeenCalledWith({ groupId: 'groupId', ...IDENTITY[kind], topics: offsets.topics });
+      });
     });
 
     describe('commitOffsetsIfNecessary', () => {
@@ -451,9 +509,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
     describe('resolveOffsets', () => {
       it('throws without ListOffsets when reset is none and there is no committed offset', async () => {
         const fetchTopicsOffset = vi.fn();
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }]),
+        );
         const { tracker } = create({
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'none' } },
@@ -469,9 +527,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
       it('keeps the group committed offset without ListOffsets', async () => {
         const fetchTopicsOffset = vi.fn();
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: 14n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: 14n }] }]),
+        );
         const { tracker } = create({
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'none' } },
@@ -482,8 +540,14 @@ describe('consumer/offset-manager/offset-tracker', () => {
         await tracker.resolveOffsets();
 
         expect(offsetFetch).toHaveBeenCalledWith({
-          groupId: 'groupId',
-          topics: [{ topic: 'events', partitions: [{ partition: 0 }] }],
+          groups: [
+            {
+              groupId: 'groupId',
+              memberId: null,
+              memberEpoch: -1,
+              topics: [{ topic: 'events', partitions: [{ partition: 0 }] }],
+            },
+          ],
         });
         expect(fetchTopicsOffset).not.toHaveBeenCalled();
         expect(tracker.nextOffset('events', 0)).toBe(14n);
@@ -491,9 +555,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
       it('falls back to the earliest offset when the group has none and autoOffsetReset is earliest', async () => {
         const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 5n }] }]);
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }]),
+        );
         const { tracker } = create({
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'earliest' } },
@@ -511,9 +575,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
 
       it('looks up offsets by timestamp when autoOffsetReset is by_duration', async () => {
         const fetchTopicsOffset = vi.fn(async () => [{ topic: 'events', partitions: [{ partition: 0, offset: 3n }] }]);
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: -1n }] }]),
+        );
         const { tracker } = create({
           assignment: { events: [0] },
           topicConfigurations: { events: { autoOffsetReset: 'by_duration:PT1H' } },
@@ -533,9 +597,9 @@ describe('consumer/offset-manager/offset-tracker', () => {
       });
 
       it('asks for a partition only until its committed offset is known', async () => {
-        const offsetFetch = vi.fn(async () => ({
-          responses: [{ topic: 'events', partitions: [{ partition: 0, offset: 7n }] }],
-        }));
+        const offsetFetch = vi.fn(async () =>
+          committedOffsets([{ topic: 'events', partitions: [{ partition: 0, offset: 7n }] }]),
+        );
         const { tracker } = create({ assignment: { events: [0] }, coordinator: withSend({ offsetFetch }) });
 
         await tracker.resolveOffsets();
@@ -641,6 +705,55 @@ describe('consumer/offset-manager/offset-tracker', () => {
       cluster.markOffsetAsCommitted({ groupId: 'groupId', topic: 'events', partition: 0, offset: 5n });
 
       expect(tracker.uncommittedOffsets()).toEqual({ topics: [] });
+    });
+
+    describe('OffsetFetch member identity', () => {
+      it('sends no member id with the classic protocol', async () => {
+        const { tracker, offsetFetch } = createTracker({ assignment: { events: [0] } });
+
+        await tracker.resolveOffsets();
+
+        expect(offsetFetch).toHaveBeenCalledWith({
+          groups: [{ groupId: 'groupId', memberId: null, memberEpoch: -1, topics: expect.any(Array) }],
+        });
+      });
+
+      it("sends a consumer protocol member's id and epoch, and the topic's id", async () => {
+        const topicId = Buffer.alloc(16, 1);
+        const { tracker, offsetFetch, membership } = createTracker({
+          assignment: { events: [0] },
+          groupProtocol: 'consumer',
+          cluster: { findTopicId: vi.fn(() => topicId) },
+        });
+        membership.generationId = 7;
+
+        await tracker.resolveOffsets();
+
+        expect(offsetFetch).toHaveBeenCalledWith({
+          groups: [
+            {
+              groupId: 'groupId',
+              memberId: 'memberId',
+              memberEpoch: 7,
+              topics: [{ topic: 'events', topicId, partitions: [{ partition: 0 }] }],
+            },
+          ],
+        });
+      });
+
+      it('sends no member id while a consumer protocol member is still joining', async () => {
+        const { tracker, offsetFetch, membership } = createTracker({
+          assignment: { events: [0] },
+          groupProtocol: 'consumer',
+        });
+        membership.generationId = 0;
+
+        await tracker.resolveOffsets();
+
+        expect(offsetFetch).toHaveBeenCalledWith({
+          groups: [{ groupId: 'groupId', memberId: null, memberEpoch: -1, topics: expect.any(Array) }],
+        });
+      });
     });
 
     it('commits a seek at once with auto-commit, then asks the group for the offset again', async () => {

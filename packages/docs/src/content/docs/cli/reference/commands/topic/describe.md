@@ -1,7 +1,7 @@
 ---
 title: 'topic describe'
 description: 'Describe one or more topics'
-order: 60
+order: 64
 section: reference
 hidden: true
 commandPath: ['topic', 'describe']

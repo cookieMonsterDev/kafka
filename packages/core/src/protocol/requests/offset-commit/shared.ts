@@ -15,19 +15,27 @@ export interface OffsetCommitPartitionOptions {
 
 export interface OffsetCommitTopicOptions {
   topic: string;
+  /** The topic's id, which OffsetCommit v10+ sends in place of its name (KIP-848, KIP-516). */
+  topicId?: Buffer | undefined;
   partitions: OffsetCommitPartitionOptions[];
 }
 
+/** First OffsetCommit version that addresses topics by id instead of name. */
+export const OFFSET_COMMIT_TOPIC_ID_MIN_VERSION = 10;
+
 /**
  * Every version defaults a partition's `metadata` to null when omitted.
- * OffsetCommit v6+ also writes `leaderEpoch` (default `-1`); earlier versions ignore the extra field.
+ * OffsetCommit v6+ also writes `leaderEpoch` (default `-1`), and v10+ `topicId`; earlier versions
+ * ignore the extra fields.
  */
 export function withDefaultMetadata(topics: readonly OffsetCommitTopicOptions[]): {
   topic: string;
+  topicId: Buffer | undefined;
   partitions: { partition: number; offset: bigint; leaderEpoch: number; metadata: string | null }[];
 }[] {
-  return topics.map(({ topic, partitions }) => ({
+  return topics.map(({ topic, topicId, partitions }) => ({
     topic,
+    topicId,
     partitions: partitions.map(({ partition, offset, leaderEpoch = -1, metadata = null }) => ({
       partition,
       offset,

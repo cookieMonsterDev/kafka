@@ -34,7 +34,8 @@ import { produceRequestV12 } from './v12/request';
 import { produceResponseV12 } from './v12/response';
 import { produceRequestV13 } from './v13/request';
 import { produceResponseV13 } from './v13/response';
-import { isUsableTopicId, PRODUCE_TOPIC_ID_MIN_VERSION, type ProduceRequestOptions } from './shared';
+import { PRODUCE_TOPIC_ID_MIN_VERSION, PRODUCE_TRANSACTION_V2_MIN_VERSION, type ProduceRequestOptions } from './shared';
+import { isUsableTopicId } from '../topic-ids';
 
 const VERSIONS = {
   0: (options) => ({ request: produceRequestV0(options), response: produceResponseV0 }),
@@ -55,16 +56,30 @@ const VERSIONS = {
 
 const PRODUCE_VERSIONS: readonly number[] = Object.keys(VERSIONS).map(Number);
 
+/**
+ * The lowest Produce version these options cannot be sent with, or `undefined` when every version
+ * works: a transaction outside transaction version 2 stays below v12, and a topic without an id
+ * below v13.
+ */
+function versionLimit(options: ProduceRequestOptions): number | undefined {
+  if (options.transactionalId != null && options.isTransactionV2Enabled !== true) {
+    return PRODUCE_TRANSACTION_V2_MIN_VERSION;
+  }
+  if (!options.topicData.every((topic) => isUsableTopicId(topic.topicId))) return PRODUCE_TOPIC_ID_MIN_VERSION;
+  return undefined;
+}
+
 /** A Produce response; `undefined` with `acks: 0`, where the broker never writes one. */
 export type ProduceResponse = VersionResponse<typeof VERSIONS> | undefined;
 
 /**
  * v0–v2 send MessageSet (magic 0/1, Kafka 0.10). v3+ send RecordBatch v2 (KIP-98).
  * v8 adds record-level errors (KIP-467). v9+ is flexible (KIP-482). v11–v12 add
- * TRANSACTION_ABORTABLE (KIP-890) with the same request body as v10. v13 replaces
- * topic names with topic IDs (KIP-516). Lookup picks the highest overlapping version,
- * so Kafka 4.0 brokers that still advertise `minVersion: 0` (`KAFKA-18659`) negotiate
- * v12, not v2.
+ * TRANSACTION_ABORTABLE (KIP-890) with the same request body as v10; the broker reads a
+ * transactional v12+ as transaction version 2, so a transaction outside it stays on v11, as
+ * in the Java client. v13 replaces topic names with topic IDs (KIP-516). Lookup picks the
+ * highest overlapping version, so Kafka 4.0 brokers that still advertise `minVersion: 0`
+ * (`KAFKA-18659`) negotiate v12, not v2.
  *
  * @see https://kafka.apache.org/44/design/protocol/
  * @see https://kafka.apache.org/44/implementation/messages/
@@ -73,11 +88,13 @@ export const Produce: RequestFamily<ProduceRequestOptions, ProduceResponse> = de
   KAFKA_APIS.Produce,
   VERSIONS,
   {
-    // v13+ requires topic IDs. Name-only callers (and older metadata without IDs) stay on the
-    // highest mutually supported name-based version (v12 on Kafka 4.0).
-    preferVersion: (options, version, advertised) =>
-      version < PRODUCE_TOPIC_ID_MIN_VERSION || options.topicData.every((topic) => isUsableTopicId(topic.topicId))
+    preferVersion: (options, version, advertised) => {
+      // Every caller can send the versions below v12; Produce is hot, so skip the checks for them.
+      if (version < PRODUCE_TRANSACTION_V2_MIN_VERSION) return version;
+      const limit = versionLimit(options);
+      return limit === undefined || version < limit
         ? version
-        : highestVersionBelow(KAFKA_APIS.Produce, PRODUCE_VERSIONS, PRODUCE_TOPIC_ID_MIN_VERSION, advertised),
+        : highestVersionBelow(KAFKA_APIS.Produce, PRODUCE_VERSIONS, limit, advertised);
+    },
   },
 );

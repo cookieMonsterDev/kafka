@@ -1,4 +1,9 @@
-import type { LogDirListResponse, LogDirView } from '../../shared/contracts/cluster';
+import type {
+  ApiVersionsResponse,
+  BrokerApiVersionsView,
+  LogDirListResponse,
+  LogDirView,
+} from '../../shared/contracts/cluster';
 import { sendJson } from '../create-server';
 import type { AdminPool } from '../kafka/admin-pool';
 import type { Router } from '../router';
@@ -60,6 +65,33 @@ export function registerClusterRoutes(router: Router, context: ClusterRouteConte
     logDirs.sort((a, b) => a.brokerId - b.brokerId || a.path.localeCompare(b.path));
 
     const response: LogDirListResponse = { logDirs };
+    sendJson(res, 200, response);
+  });
+
+  /**
+   * `GET /api/cluster/api-versions` — every broker's advertised version range for each Kafka API,
+   * with the version Studio's client negotiates and the APIs it does not implement (KIP-1220).
+   */
+  router.get('/api/cluster/api-versions', async (_req, res) => {
+    const admin = await context.pool.get(context.getActiveProfile());
+    const { brokers } = await admin.describeApiVersions();
+
+    const views: BrokerApiVersionsView[] = brokers.map(({ nodeId, host, port, rack, apis }) => ({
+      nodeId,
+      host,
+      port,
+      rack,
+      apis: apis.map((api) => ({
+        apiKey: api.apiKey,
+        apiName: api.apiName ?? null,
+        brokerVersions: api.brokerVersions ?? null,
+        isImplemented: api.isImplemented,
+        version: api.version ?? null,
+      })),
+    }));
+    views.sort((a, b) => a.nodeId - b.nodeId);
+
+    const response: ApiVersionsResponse = { brokers: views };
     sendJson(res, 200, response);
   });
 }

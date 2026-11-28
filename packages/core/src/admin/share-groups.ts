@@ -7,7 +7,13 @@ import type { DescribeShareGroupOffsetsResponseV1Body } from '../protocol/reques
 import { coordinatorTarget, nodeTarget } from '../cluster/run';
 import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
-import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown, groupByBroker } from './helpers';
+import {
+  assertValidGroupIds,
+  deleteGroupsViaCoordinators,
+  describeGroupsViaCoordinators,
+  formatUnknown,
+  groupByBroker,
+} from './helpers';
 import type {
   AlterShareGroupOffsetsOptions,
   DeleteShareGroupOffsetsOptions,
@@ -34,20 +40,11 @@ export interface ShareGroupsApi {
   deleteShareGroups: (groupIds: string[]) => Promise<DeleteGroupsResult[]>;
 }
 
-function assertNonEmptyGroupIds(groupIds: unknown): asserts groupIds is string[] {
-  if (!Array.isArray(groupIds)) {
-    throw new KafkaNonRetriableError(`Invalid groupIds array ${formatUnknown(groupIds)}`);
-  }
-  if (groupIds.some((groupId) => typeof groupId !== 'string' || groupId === '')) {
-    throw new KafkaNonRetriableError('Group IDs must be non-empty strings');
-  }
-}
-
 export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGroupsApi {
   const retrier = createRetrier(retry);
 
   const describeShareGroups = async (groupIds: string[]): Promise<{ groups: ShareGroupDescribeGroupV1[] }> => {
-    assertNonEmptyGroupIds(groupIds);
+    assertValidGroupIds(groupIds);
     if (groupIds.length === 0) return { groups: [] };
 
     return {
@@ -145,7 +142,7 @@ export function createShareGroupsApi({ cluster, retry }: AdminContext): ShareGro
   };
 
   const deleteShareGroups = async (groupIds: string[]): Promise<DeleteGroupsResult[]> => {
-    assertNonEmptyGroupIds(groupIds);
+    assertValidGroupIds(groupIds);
 
     return deleteGroupsViaCoordinators({
       cluster,

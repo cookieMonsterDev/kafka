@@ -18,7 +18,7 @@ export type OffsetCommitResponseV8Body = OffsetCommitResponseV4Body;
  * Response header v1's trailing TAG_BUFFER is skipped by `Connection` before `decode()` runs.
  * Quota timing follows v4 (KIP-219).
  */
-const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
+export const partitionSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);
 const bodySchema = flexibleObject([field('throttleTime', int32), field('responses', compactArray(topicSchema))]);
 

@@ -198,6 +198,7 @@ export class DemoApi {
       } satisfies ClusterStatus),
     );
     this.request('GET', '/api/cluster/log-dirs', () => json(200, cluster.logDirs()));
+    this.request('GET', '/api/cluster/api-versions', () => json(200, cluster.apiVersions()));
     this.request('GET', '/api/profiles', () =>
       json(200, {
         active: DEMO_PROFILE,
@@ -284,6 +285,10 @@ export class DemoApi {
     this.request('GET', '/api/share-groups', () => json(200, cluster.listShareGroups()));
     this.request('GET', '/api/share-groups/:id', ({ params }) =>
       json(200, cluster.shareGroupDetail(param(params, 'id'))),
+    );
+    this.request('GET', '/api/streams-groups', () => json(200, cluster.listStreamsGroups()));
+    this.request('GET', '/api/streams-groups/:id', ({ params }) =>
+      json(200, cluster.streamsGroupDetail(param(params, 'id'))),
     );
 
     this.request('GET', '/api/acls', () => json(200, { acls: SAMPLE_ACLS } satisfies AclListResponse));

@@ -67,6 +67,11 @@ export interface IdempotenceLedger {
   /** Sends InitProducerId now, without waiting for sends to drain: for connect and between transactions. */
   initProducerId: () => Promise<void>;
   /**
+   * Takes the producer id and epoch the transaction coordinator bumped to as it ended a transaction
+   * (EndTxn v5, KIP-890 part 2): like an epoch bump, it restarts sequences and settles a requested one.
+   */
+  adoptBumpedIdentity: (identity: ProducerIdentity) => void;
+  /**
    * KIP-360: a failed send may have been written, so its sequences can neither be reused nor
    * skipped. Start a new epoch (fresh sequences) before producing again. No-op until initialized.
    */
@@ -148,21 +153,32 @@ export function createIdempotenceLedger({
     return producerId !== NO_PRODUCER_ID;
   }
 
+  function setIdentity(next: ProducerIdentity): void {
+    producerId = next.producerId;
+    producerEpoch = next.producerEpoch;
+    identityVersion += 1;
+    nextSequences.clear();
+    epochBumpRequested = false;
+    // Gates stay: a send still holding one must keep its partition to itself across the bump.
+  }
+
   async function initProducerId(): Promise<void> {
     await initProducerIdLock.acquire();
     try {
       const current = isInitialized() ? { producerId, producerEpoch } : NO_PRODUCER_IDENTITY;
-      const next = await sendInitProducerId(current);
-      producerId = next.producerId;
-      producerEpoch = next.producerEpoch;
-      identityVersion += 1;
-      nextSequences.clear();
-      epochBumpRequested = false;
-      // Gates stay: a send still holding one must keep its partition to itself across the bump.
+      setIdentity(await sendInitProducerId(current));
       logger.debug('Initialized producer id & epoch', { producerId: producerId.toString(), producerEpoch });
     } finally {
       await initProducerIdLock.release();
     }
+  }
+
+  function adoptBumpedIdentity(identity: ProducerIdentity): void {
+    setIdentity(identity);
+    logger.debug('Adopted the producer id & epoch the transaction ended with', {
+      producerId: producerId.toString(),
+      producerEpoch,
+    });
   }
 
   function requestEpochBump(): void {
@@ -344,6 +360,7 @@ export function createIdempotenceLedger({
     getProducerEpoch: () => producerEpoch,
     isInitialized,
     initProducerId,
+    adoptBumpedIdentity,
     requestEpochBump,
     isEpochBumpRequested: () => epochBumpRequested,
     bumpEpochIfRequested,

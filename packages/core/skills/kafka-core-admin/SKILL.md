@@ -79,9 +79,18 @@ const { resources } = await admin.describeConfigs({
 const offsets = await admin.fetchOffsets({ groupId: 'my-group', topics: ['events'] });
 // [{ topic, partitions: [{ partition, offset /* bigint */ }] }]
 
+// Several groups at once, in the order given; a group without topics returns all of its topics.
+const { groups } = await admin.listConsumerGroupOffsets({
+  groups: [{ groupId: 'billing' }, { groupId: 'audit', topics: ['events'] }],
+});
+// [{ groupId, topics: [{ topic, partitions: [{ partition, offset, metadata }] }] }]
+
 await admin.resetOffsets({ groupId: 'my-group', topic: 'events', earliest: true });
 await admin.setOffsets({ groupId: 'my-group', topic: 'events', partitions: [{ partition: 0, offset: 100n }] });
 ```
+
+`listConsumerGroupOffsets` sends one OffsetFetch per group coordinator on Kafka 3.0+ and one per
+group on older brokers. Each group id may appear once; a duplicate throws.
 
 Stop every consumer in the group before resetting or setting its offsets; a running member
 overwrites them with its next commit.
@@ -89,25 +98,39 @@ overwrites them with its next commit.
 ### Topic offsets and partitions
 
 ```ts
+import { OffsetSpecs } from '@cookiemonsterdev/kafka-core';
+
 const watermarks = await admin.fetchTopicOffsets('events'); // offset, high, low as bigint
+const tiered = await admin.fetchTopicOffsets('events', { offsetSpec: OffsetSpecs.LATEST_TIERED });
 await admin.createPartitions({ topicPartitions: [{ topic: 'events', count: 6 }] });
 ```
 
 `count` is the new total. Partitions can only grow, and growing them changes which partition each
 key maps to.
 
+`offsetSpec` picks what `offset` holds; use the `OffsetSpecs` constants, not raw negative numbers.
+`EARLIEST_LOCAL` (3.5+), `LATEST_TIERED` (3.9+), and `EARLIEST_PENDING_UPLOAD` (4.2+) describe
+tiered storage. The last two are `-1n` for a partition without it. An older broker throws
+`KafkaServerDoesNotSupportApiKey`.
+
 ### Check broker support before newer APIs
 
 Methods tied to newer brokers throw `KafkaServerDoesNotSupportApiKey` on older ones:
 `describeTopicPartitions` (4.0+), `describeConsumerGroups` (4.0+, KIP-848 groups),
 share-group methods (4.1+), `describeTransactions` and `describeProducers` (3.0+), KRaft quorum
-methods (3.6+/3.7+). Use `describeClassicGroups` for classic groups.
+methods (3.6+/3.7+), `unregisterController` (4.4+; the cluster's `metadata.version` must be
+4.4-IV2 or later, or it fails with `UNSUPPORTED_VERSION`). Use `describeClassicGroups` for classic groups.
 `alterPartitionReassignments({ allowReplicationFactorChange: false })` needs 4.1+ and throws on
 older brokers rather than allowing the change. `describeLogDirs` returns `totalBytes` /
 `usableBytes` (3.3+) and `isCordoned` (4.3+) only when the broker sends them.
 `listGroups({ types })` needs 3.8+ and throws on older brokers rather than listing every group.
+`describeStreamsGroups` needs 4.2+; its `includeTopologyDescription: true` needs 4.4+ and throws on
+older brokers rather than being ignored.
 On 4.0+ `describeGroups` throws for an unknown or non-classic group (`error.cause.type` is
 `GROUP_ID_NOT_FOUND`); older brokers return it with `state: 'Dead'`.
+To see what each broker supports, `describeApiVersions({ brokerIds? })` returns every Kafka API
+with the broker's `brokerVersions`, `isImplemented`, and the negotiated `version` (absent when
+the two share none), on any broker version.
 
 For ACLs, SCRAM, delegation tokens, transactions, features, and controller bootstrap, read
 [admin operations](references/operations.md).

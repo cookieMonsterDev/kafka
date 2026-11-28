@@ -171,9 +171,17 @@ export const ShareGroupDescribe = lazyRequestFamily(
   KAFKA_APIS.ShareGroupDescribe,
   async () => (await import('./lazy-requests')).ShareGroupDescribe,
 );
+export const StreamsGroupDescribe = lazyRequestFamily(
+  KAFKA_APIS.StreamsGroupDescribe,
+  async () => (await import('./lazy-requests')).StreamsGroupDescribe,
+);
 export const UnregisterBroker = lazyRequestFamily(
   KAFKA_APIS.UnregisterBroker,
   async () => (await import('./lazy-requests')).UnregisterBroker,
+);
+export const UnregisterController = lazyRequestFamily(
+  KAFKA_APIS.UnregisterController,
+  async () => (await import('./lazy-requests')).UnregisterController,
 );
 export const UpdateFeatures = lazyRequestFamily(
   KAFKA_APIS.UpdateFeatures,

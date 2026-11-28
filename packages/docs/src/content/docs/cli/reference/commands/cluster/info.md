@@ -1,7 +1,7 @@
 ---
 title: 'cluster info'
 description: 'Describe the cluster: its brokers, controller, and cluster id'
-order: 23
+order: 24
 section: reference
 hidden: true
 commandPath: ['cluster', 'info']

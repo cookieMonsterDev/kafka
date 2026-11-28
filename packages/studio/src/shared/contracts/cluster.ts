@@ -17,3 +17,30 @@ export interface LogDirListResponse {
   /** Sorted by broker id, then path. */
   readonly logDirs: readonly LogDirView[];
 }
+
+/** One Kafka API on one broker, as `GET /api/cluster/api-versions` reports it. */
+export interface ApiVersionView {
+  readonly apiKey: number;
+  /** `null` for an api key Studio's client cannot name. */
+  readonly apiName: string | null;
+  /** The versions the broker advertises; `null` when it does not support the API. */
+  readonly brokerVersions: { readonly minVersion: number; readonly maxVersion: number } | null;
+  readonly isImplemented: boolean;
+  /** The version Studio's client negotiates; `null` when either side lacks the API or they share no version. */
+  readonly version: number | null;
+}
+
+/** One broker's Kafka APIs. */
+export interface BrokerApiVersionsView {
+  readonly nodeId: number;
+  readonly host: string;
+  readonly port: number;
+  readonly rack: string | null;
+  /** In api key order. */
+  readonly apis: readonly ApiVersionView[];
+}
+
+export interface ApiVersionsResponse {
+  /** Sorted by node id. */
+  readonly brokers: readonly BrokerApiVersionsView[];
+}

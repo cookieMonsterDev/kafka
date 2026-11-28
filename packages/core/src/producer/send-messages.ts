@@ -29,6 +29,11 @@ export interface TransactionTopicPartitions {
 export interface OpenTransaction {
   readonly transactionalId: string;
   /**
+   * Whether the open transaction runs under transaction version 2 (KIP-890 part 2), where Produce
+   * v12+ adds its partitions to the transaction; otherwise Produce stays at v11 or lower.
+   */
+  isTransactionV2Enabled: () => boolean;
+  /**
    * Partitions about to be produced. Returns a promise only when the transaction coordinator must
    * add some of them first; otherwise `undefined`, so the send awaits nothing.
    */
@@ -227,6 +232,7 @@ export function createSendMessages({
         const response = await broker
           .send(Produce, {
             transactionalId: transaction?.transactionalId,
+            isTransactionV2Enabled: transaction?.isTransactionV2Enabled(),
             producerId: ledger.getProducerId(),
             producerEpoch: ledger.getProducerEpoch(),
             acks,

@@ -10,6 +10,8 @@ import { initProducerIdRequestV3 } from './v3/request';
 import { initProducerIdResponseV3 } from './v3/response';
 import { initProducerIdRequestV4 } from './v4/request';
 import { initProducerIdResponseV4 } from './v4/response';
+import { initProducerIdRequestV5 } from './v5/request';
+import { initProducerIdResponseV5 } from './v5/response';
 
 export interface InitProducerIdOptions {
   transactionalId: string | null;
@@ -42,6 +44,10 @@ const VERSIONS = {
     request: initProducerIdRequestV4(withProducerIdentity(values)),
     response: initProducerIdResponseV4,
   }),
+  5: (values) => ({
+    request: initProducerIdRequestV5(withProducerIdentity(values)),
+    response: initProducerIdResponseV5,
+  }),
 } satisfies VersionFactories<InitProducerIdOptions>;
 
 /** An InitProducerId response, for every version. */
@@ -53,10 +59,11 @@ export type InitProducerIdResponse = VersionResponse<typeof VERSIONS>;
  * with those KIP-360 fields and moved flexible encoding to v3. Sending the 2.5+ v2 body to a
  * 2.4 broker fails to parse and the broker closes the connection.
  *
- * Skip v2: Kafka 2.4 (max 2) negotiates v1; Kafka 2.5+ (max 3+) negotiates v3 or v4.
+ * Skip v2: Kafka 2.4 (max 2) negotiates v1; Kafka 2.5+ (max 3+) negotiates v3 or later. v5 (Kafka
+ * 3.8+) tells the broker the client handles TRANSACTION_ABORTABLE (KIP-890).
  * The v2 factory stays so encoder tests can still exercise the 2.5+ layout.
  */
 export const InitProducerId = Object.freeze({
   ...defineRequestFamily(KAFKA_APIS.InitProducerId, VERSIONS),
-  versions: Object.freeze([0, 1, 3, 4]),
+  versions: Object.freeze([0, 1, 3, 4, 5]),
 });

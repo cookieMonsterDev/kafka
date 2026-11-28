@@ -1,4 +1,4 @@
-import type { LogDirListResponse } from '../../../shared/contracts/cluster';
+import type { ApiVersionsResponse, LogDirListResponse } from '../../../shared/contracts/cluster';
 import type { DebugRecord, ScanCoverage, ScanRequest, ScanResult } from '../../../shared/contracts/debug';
 import type { StudioEvent } from '../../../shared/contracts/event';
 import type {
@@ -13,6 +13,8 @@ import type {
   ResetGroupOffsetsResponse,
   ShareGroupDetailResponse,
   ShareGroupListResponse,
+  StreamsGroupDetailResponse,
+  StreamsGroupListResponse,
 } from '../../../shared/contracts/group';
 import type {
   DeleteRecordsRequest,
@@ -34,6 +36,8 @@ import { StudioEventBus, type StudioEventInput } from '../../../server/kafka/eve
 import { encodeText } from '../../lib/debug-api';
 import {
   GROUP_SEEDS,
+  SAMPLE_API_VERSIONS,
+  STREAMS_GROUP_SEEDS,
   TOPIC_SEEDS,
   createRandom,
   type GroupSeed,
@@ -224,6 +228,18 @@ export class DemoCluster {
           isCordoned: false,
         };
       }),
+    };
+  }
+
+  apiVersions(): ApiVersionsResponse {
+    return {
+      brokers: BROKER_IDS.map((nodeId, index) => ({
+        nodeId,
+        host: 'localhost',
+        port: 9092 + index,
+        rack: `rack-${String.fromCharCode(97 + index)}`,
+        apis: SAMPLE_API_VERSIONS,
+      })),
     };
   }
 
@@ -465,6 +481,16 @@ export class DemoCluster {
 
   listShareGroups(): ShareGroupListResponse {
     return { groups: this.groupListings('share') };
+  }
+
+  listStreamsGroups(): StreamsGroupListResponse {
+    return { groups: STREAMS_GROUP_SEEDS.map(({ groupId }) => ({ groupId, protocolType: 'streams' })) };
+  }
+
+  streamsGroupDetail(groupId: string): StreamsGroupDetailResponse {
+    const group = STREAMS_GROUP_SEEDS.find((seed) => seed.groupId === groupId);
+    if (group === undefined) throw new DemoError(404, 'unknown_group', `streams group "${groupId}" not found`);
+    return group;
   }
 
   groupDetail(groupId: string): GroupDetailResponse {

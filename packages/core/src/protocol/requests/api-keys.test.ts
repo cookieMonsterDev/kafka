@@ -36,6 +36,8 @@ describe('protocol/requests/api-keys', () => {
     expect(API_KEYS.DescribeTopicPartitions).toBe(75);
     expect(API_KEYS.AddRaftVoter).toBe(80);
     expect(API_KEYS.RemoveRaftVoter).toBe(81);
+    expect(API_KEYS.StreamsGroupDescribe).toBe(89);
+    expect(API_KEYS.UnregisterController).toBe(94);
   });
 
   it('is frozen', () => {
@@ -46,9 +48,19 @@ describe('protocol/requests/api-keys', () => {
 
   it('resolves a name back from a key', () => {
     expect(apiKeyName(18)).toBe('ApiVersions');
+    expect(apiKeyName(10)).toBe('FindCoordinator');
     expect(apiKeyName(43)).toBe('ElectLeaders');
     expect(apiKeyName(47)).toBe('OffsetDelete');
     expect(apiKeyName(50)).toBe('DescribeUserScramCredentials');
     expect(apiKeyName(9999)).toBeUndefined();
+  });
+
+  it('names every api key up to Kafka 4.4, including APIs this client never sends', () => {
+    const unnamed = Array.from({ length: API_KEYS.UnregisterController + 1 }, (_, apiKey) => apiKey).filter(
+      (apiKey) => apiKeyName(apiKey) === undefined,
+    );
+    expect(unnamed).toEqual([]);
+    expect(apiKeyName(88)).toBe('StreamsGroupHeartbeat');
+    expect(apiKeyName(93)).toBe('StreamsGroupTopologyDescriptionUpdate');
   });
 });

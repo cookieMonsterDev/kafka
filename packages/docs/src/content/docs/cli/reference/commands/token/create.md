@@ -1,7 +1,7 @@
 ---
 title: 'token create'
 description: 'Create a delegation token'
-order: 52
+order: 56
 section: reference
 hidden: true
 commandPath: ['token', 'create']

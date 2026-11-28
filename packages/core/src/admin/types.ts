@@ -6,6 +6,7 @@ import type { AclOperationType } from '../protocol/enums/acl-operation-types';
 import type { AclPermissionType } from '../protocol/enums/acl-permission-types';
 import type { AclResourceType } from '../protocol/enums/acl-resource-types';
 import type { ConfigResourceType } from '../protocol/enums/config-resource-types';
+import type { OffsetSpec } from '../protocol/enums/offset-specs';
 import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
 import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
@@ -19,6 +20,11 @@ import type {
   ConsumerGroupDescribeGroupV1,
   ConsumerGroupDescribeMemberV1,
 } from '../protocol/requests/consumer-group-describe/v1/response';
+import type {
+  StreamsGroupDescribeGroupV1,
+  StreamsGroupDescribeMemberV1,
+} from '../protocol/requests/streams-group-describe/v1/response';
+import type { StreamsTopologyDescription } from '../protocol/requests/streams-group-describe/v0/response';
 import type {
   DescribeTransactionsState,
   DescribeTransactionsTopic,
@@ -44,6 +50,9 @@ export type TransactionTopic = DescribeTransactionsTopic;
 export type TransactionListing = ListTransactionsState;
 export type ConsumerGroupDescription = ConsumerGroupDescribeGroupV1;
 export type ConsumerGroupMemberDescription = ConsumerGroupDescribeMemberV1;
+export type StreamsGroupDescription = StreamsGroupDescribeGroupV1;
+export type StreamsGroupMemberDescription = StreamsGroupDescribeMemberV1;
+export type { StreamsTopologyDescription };
 export type { ListTransactionsOptions };
 
 export const FEATURE_UPDATE_UPGRADE_TYPES = Object.freeze({
@@ -134,6 +143,10 @@ export interface DescribeMetadataQuorumResult {
 
 export interface UnregisterBrokerOptions {
   brokerId: number;
+}
+
+export interface UnregisterControllerOptions {
+  controllerId: number;
 }
 
 export interface AssignReplicasToDirsReplica {
@@ -244,6 +257,15 @@ export interface RemoveMembersFromConsumerGroupResult {
 export type ShareGroupDescription =
   import('../protocol/requests/share-group-describe/v1/response').ShareGroupDescribeGroupV1;
 
+export interface DescribeStreamsGroupsOptions {
+  /**
+   * Ask for each group's topology description (KIP-1331), which the broker returns when a
+   * topology description plugin stored one. Needs StreamsGroupDescribe v1 (Kafka 4.4+); on an
+   * older broker `true` throws instead of being ignored. Defaults to `false`.
+   */
+  includeTopologyDescription?: boolean;
+}
+
 export interface ListShareGroupOffsetsTopicInput {
   topicName: string;
   partitions?: number[];
@@ -294,6 +316,40 @@ export interface LogDirDescription extends DescribeLogDirsResult {
    * negotiates DescribeLogDirs v4 or older.
    */
   isCordoned?: boolean;
+}
+
+/** Options for {@link Admin.describeApiVersions}. */
+export interface DescribeApiVersionsOptions {
+  /** The brokers to describe, by node id; every broker in the cluster metadata when omitted or empty. */
+  brokerIds?: number[];
+}
+
+/** One Kafka API as a broker advertises it and this client implements it. */
+export interface ApiVersionDescription {
+  apiKey: number;
+  /** The protocol's name for the API, such as `Produce`; absent for an api key this client cannot name. */
+  apiName?: string;
+  /** The lowest and highest version the broker advertises; absent when the broker does not support the API. */
+  brokerVersions?: { minVersion: number; maxVersion: number };
+  /** Whether this client implements the API. */
+  isImplemented: boolean;
+  /**
+   * The API version this client negotiates with the broker: the highest version both support. Absent
+   * when the broker does not support the API, this client does not implement it, or the two share
+   * no version. A request whose options need an older version, such as Produce without topic ids,
+   * still goes out at that version.
+   */
+  version?: number;
+}
+
+/** One broker's Kafka APIs, as {@link Admin.describeApiVersions} reports them. */
+export interface BrokerApiVersionsDescription {
+  nodeId: number;
+  host: string;
+  port: number;
+  rack: string | null;
+  /** Every API the broker advertises or this client implements, in api key order. */
+  apis: ApiVersionDescription[];
 }
 
 export interface DescribeReplicaLogDirsReplica {
@@ -409,15 +465,44 @@ export interface SeekInput {
 
 export interface TopicOffset {
   partition: number;
+  /** The offset `offsetSpec` selects; `-1n` when the broker has none, such as without tiered storage. */
   offset: bigint;
   high: bigint;
   low: bigint;
+}
+
+export interface FetchTopicOffsetsOptions {
+  /**
+   * Which offset `offset` holds for each partition. One of `OffsetSpecs`; defaults to
+   * `OffsetSpecs.LATEST`, the high watermark.
+   */
+  offsetSpec?: OffsetSpec;
 }
 
 export interface FetchOffsetsPartition {
   partition: number;
   offset: bigint;
   metadata: string | null;
+}
+
+export interface ListConsumerGroupOffsetsGroupInput {
+  groupId: string;
+  /**
+   * The topics to look up, each with every partition. Omitted or empty, the group's committed
+   * offsets for every topic it has any for.
+   */
+  topics?: string[];
+}
+
+export interface ListConsumerGroupOffsetsOptions {
+  /** Distinct consumer groups; a group id may appear once. */
+  groups: ListConsumerGroupOffsetsGroupInput[];
+}
+
+/** One consumer group's committed offsets; `-1n` for a requested partition it has none for. */
+export interface ConsumerGroupOffsets {
+  groupId: string;
+  topics: { topic: string; partitions: FetchOffsetsPartition[] }[];
 }
 
 export interface ResourceConfigQuery {
@@ -609,7 +694,18 @@ export interface Admin {
     topics?: string[];
     resolveOffsets?: boolean;
   }) => Promise<{ topic: string; partitions: FetchOffsetsPartition[] }[]>;
-  fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
+  /**
+   * The committed offsets of several consumer groups, in `groups` order. A group coordinator on
+   * Kafka 3.0+ answers for all of its groups in one OffsetFetch (KIP-709); an older one gets one
+   * request per group. An error for any group, such as GROUP_AUTHORIZATION_FAILED, rejects the call.
+   */
+  listConsumerGroupOffsets: (options: ListConsumerGroupOffsetsOptions) => Promise<{ groups: ConsumerGroupOffsets[] }>;
+  /**
+   * The high and low watermark of every partition of `topic`, plus the offset `offsetSpec` selects.
+   * A spec the broker is too old for throws `KafkaServerDoesNotSupportApiKey`; `OffsetSpecs` lists
+   * the version each one needs.
+   */
+  fetchTopicOffsets: (topic: string, options?: FetchTopicOffsetsOptions) => Promise<TopicOffset[]>;
   fetchTopicOffsetsByTimestamp: (topic: string, timestamp?: OffsetInput) => Promise<SeekEntry[]>;
   setOffsets: (options: { groupId: string; topic: string; partitions: SeekInput[] }) => Promise<void>;
   resetOffsets: (options: { groupId: string; topic: string; earliest?: boolean }) => Promise<void>;
@@ -639,6 +735,10 @@ export interface Admin {
     options: RemoveMembersFromConsumerGroupOptions,
   ) => Promise<{ members: RemoveMembersFromConsumerGroupResult[] }>;
   describeShareGroups: (groupIds: string[]) => Promise<{ groups: ShareGroupDescription[] }>;
+  describeStreamsGroups: (
+    groupIds: string[],
+    options?: DescribeStreamsGroupsOptions,
+  ) => Promise<{ groups: StreamsGroupDescription[] }>;
   listShareGroupOffsets: (options: ListShareGroupOffsetsOptions) => Promise<{
     groups: import('../protocol/requests/describe-share-group-offsets/v1/response').DescribeShareGroupOffsetsGroupV1[];
   }>;
@@ -689,6 +789,12 @@ export interface Admin {
     topics?: { topic: string; partitions: number[] }[] | null;
     brokerIds?: Array<string | number>;
   }) => Promise<{ brokers: { brokerId: number; logDirs: LogDirDescription[] }[] }>;
+  /**
+   * The Kafka APIs each broker advertises in a fresh ApiVersions response, with the API version this
+   * client negotiates for each (KIP-1220). Lists every API the broker advertises or this client
+   * implements. One unreachable broker rejects the call.
+   */
+  describeApiVersions: (options?: DescribeApiVersionsOptions) => Promise<{ brokers: BrokerApiVersionsDescription[] }>;
   describeReplicaLogDirs: (replicas: DescribeReplicaLogDirsReplica[]) => Promise<{
     replicas: DescribeReplicaLogDirsResult[];
   }>;
@@ -700,6 +806,7 @@ export interface Admin {
   describeFeatures: () => Promise<DescribeFeaturesResult>;
   describeMetadataQuorum: () => Promise<DescribeMetadataQuorumResult>;
   unregisterBroker: (options: UnregisterBrokerOptions) => Promise<void>;
+  unregisterController: (options: UnregisterControllerOptions) => Promise<void>;
   assignReplicasToDirs: (options: AssignReplicasToDirsOptions) => Promise<void>;
   addRaftVoter: (options: AddRaftVoterOptions) => Promise<void>;
   removeRaftVoter: (options: RemoveRaftVoterOptions) => Promise<void>;

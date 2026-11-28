@@ -297,6 +297,7 @@ describe('producer/messageProducer', () => {
       const broker = fakeBroker(1);
       const transaction = {
         transactionalId: 'transactional-id',
+        isTransactionV2Enabled: () => false,
         enrollPartitions: vi.fn((): Promise<void> | undefined => undefined),
         sendFailed: vi.fn(),
       };

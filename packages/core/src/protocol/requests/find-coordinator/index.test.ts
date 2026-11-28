@@ -16,8 +16,8 @@ async function parsed(version: number, options: FindCoordinatorOptions, body: un
 }
 
 describe('protocol/requests/find-coordinator', () => {
-  it('implements versions 0 through 4', () => {
-    expect(FindCoordinator.versions).toEqual([0, 1, 2, 3, 4]);
+  it('implements versions 0 through 5', () => {
+    expect(FindCoordinator.versions).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
   it('sends the coordinator type with every version from 1', async () => {

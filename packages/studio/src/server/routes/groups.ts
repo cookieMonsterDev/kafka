@@ -1,3 +1,4 @@
+import type { KafkaDeleteGroupsError } from '@cookiemonsterdev/kafka-core';
 import {
   deleteGroupOffsetsRequestSchema,
   removeGroupMembersRequestSchema,
@@ -12,9 +13,12 @@ import {
   type ResetGroupOffsetsResponse,
   type ShareGroupDetailResponse,
   type ShareGroupListResponse,
+  type StreamsGroupDetailResponse,
+  type StreamsGroupListResponse,
 } from '../../shared/contracts/group';
 import { sendError, sendJson } from '../create-server';
 import type { AdminPool, PooledAdmin } from '../kafka/admin-pool';
+import { hasErrorName } from '../kafka/has-error-name';
 import { readJsonBody } from '../json';
 import { requireParam, type Router } from '../router';
 
@@ -23,9 +27,13 @@ export interface GroupsRouteContext {
   getActiveProfile(): string | null;
 }
 
-/** Classic and KIP-848 consumer groups both report this `protocolType`; KIP-932 share groups report `share`. */
+/**
+ * Classic and KIP-848 consumer groups both report this `protocolType`; KIP-932 share groups report
+ * `share` and KIP-1071 streams groups report `streams`.
+ */
 const CONSUMER_PROTOCOL_TYPE = 'consumer';
 const SHARE_PROTOCOL_TYPE = 'share';
+const STREAMS_PROTOCOL_TYPE = 'streams';
 
 function listingsByProtocol(
   groups: readonly { readonly groupId: string; readonly protocolType: string }[],
@@ -130,13 +138,24 @@ function isGroupErrored(group: { readonly errorCode: number }): boolean {
   return group.errorCode !== 0;
 }
 
-/** The two `DeleteGroups` failure codes this route recognizes by name — stable identifiers from the Kafka wire protocol, not values this codebase invents. */
-const DELETE_GROUP_ERROR_TYPES: Readonly<Record<number, string>> = {
-  68: 'NON_EMPTY_GROUP',
-  69: 'GROUP_ID_NOT_FOUND',
-};
+/**
+ * `deleteGroups` reports a group it could not delete by throwing `KafkaDeleteGroupsError`, whose
+ * `.groups` holds that group's protocol error. Returns an error naming the group, with that error's
+ * message (the broker's own reason on DeleteGroups v3, Kafka 4.4+) and the protocol error as
+ * `.cause`, whose `type` lets `mapErrorToApiError` answer 404 or 409. Any other error, or one
+ * without that group's protocol error, is returned unchanged.
+ */
+function groupDeletionError(error: unknown, groupId: string): unknown {
+  if (!hasErrorName(error, 'KafkaDeleteGroupsError')) return error;
+  const failure = (error as Partial<KafkaDeleteGroupsError>).groups?.find((group) => group.groupId === groupId);
+  if (failure?.error === undefined) return error;
+  return new Error(`could not delete group "${groupId}": ${failure.error.message}`, { cause: failure.error });
+}
 
-/** Consumer group inspection, offset reset/delete, member removal, and read-only share group inspection (KIP-932). */
+/**
+ * Consumer group inspection, offset reset/delete, member removal, and read-only share group
+ * (KIP-932) and streams group (KIP-1071) inspection.
+ */
 export function registerGroupRoutes(router: Router, context: GroupsRouteContext): void {
   router.get('/api/groups', async (_req, res) => {
     const admin = await context.pool.get(context.getActiveProfile());
@@ -244,10 +263,10 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
   router.delete('/api/groups/:id', async (_req, res, params) => {
     const groupId = requireParam(params, 'id');
     const admin = await context.pool.get(context.getActiveProfile());
-    const [result] = await admin.deleteGroups([groupId]);
-    if (result !== undefined && result.errorCode !== 0) {
-      const type = DELETE_GROUP_ERROR_TYPES[result.errorCode];
-      throw Object.assign(new Error(`could not delete group "${groupId}"`), type !== undefined ? { type } : {});
+    try {
+      await admin.deleteGroups([groupId]);
+    } catch (error) {
+      throw groupDeletionError(error, groupId);
     }
     res.writeHead(204);
     res.end();
@@ -302,6 +321,52 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
           startOffset: partition.startOffset.toString(),
           lag: partition.lag.toString(),
         })),
+      })),
+    };
+    sendJson(res, 200, response);
+  });
+
+  router.get('/api/streams-groups', async (_req, res) => {
+    const admin = await context.pool.get(context.getActiveProfile());
+    const { groups } = await admin.listGroups();
+    const response: StreamsGroupListResponse = { groups: listingsByProtocol(groups, STREAMS_PROTOCOL_TYPE) };
+    sendJson(res, 200, response);
+  });
+
+  router.get('/api/streams-groups/:id', async (_req, res, params) => {
+    const groupId = requireParam(params, 'id');
+    const admin = await context.pool.get(context.getActiveProfile());
+    // An unknown id, or one that is not a streams group, throws GROUP_ID_NOT_FOUND, which the
+    // shared error mapping turns into this same 404.
+    const { groups } = await admin.describeStreamsGroups([groupId]);
+    const group = groups[0];
+    if (group === undefined || isGroupErrored(group)) {
+      sendError(res, 404, 'unknown_group', `streams group "${groupId}" not found`);
+      return;
+    }
+
+    const response: StreamsGroupDetailResponse = {
+      groupId: group.groupId,
+      state: group.groupState,
+      groupEpoch: group.groupEpoch,
+      assignorName: group.assignorName,
+      topologyEpoch: group.topology?.epoch ?? null,
+      subtopologies:
+        group.topology?.subtopologies?.map((subtopology) => ({
+          subtopologyId: subtopology.subtopologyId,
+          sourceTopics: subtopology.sourceTopics,
+          repartitionSinkTopics: subtopology.repartitionSinkTopics,
+          stateChangelogTopics: subtopology.stateChangelogTopics.map((topic) => topic.name),
+          repartitionSourceTopics: subtopology.repartitionSourceTopics.map((topic) => topic.name),
+        })) ?? null,
+      members: group.members.map((member) => ({
+        memberId: member.memberId,
+        processId: member.processId,
+        clientId: member.clientId,
+        clientHost: member.clientHost,
+        activeTasks: member.assignment.activeTasks,
+        standbyTasks: member.assignment.standbyTasks,
+        warmupTasks: member.assignment.warmupTasks,
       })),
     };
     sendJson(res, 200, response);

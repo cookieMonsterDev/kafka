@@ -91,9 +91,11 @@ export const KAFKA_APIS = Object.freeze({
   ShareAcknowledge: kafkaApi('ShareAcknowledge', 0),
   AddRaftVoter: kafkaApi('AddRaftVoter', 0),
   RemoveRaftVoter: kafkaApi('RemoveRaftVoter', 0),
+  StreamsGroupDescribe: kafkaApi('StreamsGroupDescribe', 0),
   DescribeShareGroupOffsets: kafkaApi('DescribeShareGroupOffsets', 0),
   AlterShareGroupOffsets: kafkaApi('AlterShareGroupOffsets', 0),
   DeleteShareGroupOffsets: kafkaApi('DeleteShareGroupOffsets', 0),
+  UnregisterController: kafkaApi('UnregisterController', 0),
 });
 
 /** First flexible version by api key; `undefined` for an API this client does not implement. */

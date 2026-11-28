@@ -1,7 +1,7 @@
 ---
 title: 'topic list'
 description: 'List every topic'
-order: 61
+order: 65
 section: reference
 hidden: true
 commandPath: ['topic', 'list']

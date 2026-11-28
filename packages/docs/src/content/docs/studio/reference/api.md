@@ -17,6 +17,11 @@ HTTP status codes and one envelope:
 A mutating route additionally returns `403` with `{ "error": { "code": "read_only", ... } }` when
 the server was started with `--read-only`.
 
+When the broker refuses `DELETE /api/groups/:id`, the message names the group and the broker's
+reason: `404 unknown_group` for an unknown group, `409 group_not_empty` while it has members, and
+`500 internal_error` otherwise. On Kafka 4.4+ the reason can be the broker's own message; see
+[compatibility](../../../core/reference/compatibility/).
+
 ## Routes
 
 | Method   | Path                                            | What it does                                                 |
@@ -26,6 +31,7 @@ the server was started with `--read-only`.
 | `POST`   | `/api/profiles/active`                          | Switch the active connection profile                         |
 | `GET`    | `/api/cluster`                                  | Connection status                                            |
 | `GET`    | `/api/cluster/log-dirs`                         | Every broker's log dirs: volume usage and cordoning          |
+| `GET`    | `/api/cluster/api-versions`                     | Every broker's API versions and the version Studio uses      |
 | `GET`    | `/api/topics`                                   | List topics with partition/replication counts                |
 | `POST`   | `/api/topics`                                   | Create a topic                                               |
 | `GET`    | `/api/topics/:name`                             | Partitions, ISR, offsets, size, configs                      |
@@ -47,6 +53,8 @@ the server was started with `--read-only`.
 | `POST`   | `/api/groups/:id/members/remove`                | Remove members from a group                                  |
 | `DELETE` | `/api/groups/:id`                               | Delete a group                                               |
 | `GET`    | `/api/share-groups/:id`                         | Share group members and offsets (read-only)                  |
+| `GET`    | `/api/streams-groups`                           | List streams groups (KIP-1071)                               |
+| `GET`    | `/api/streams-groups/:id`                       | Streams group topology, members and tasks (read-only)        |
 | `GET`    | `/api/events`                                   | **SSE** — instrumentation firehose behind the flow board     |
 | `GET`    | `/api/acls`, `/api/quotas`, `/api/transactions` | Read-only cluster inspection                                 |
 

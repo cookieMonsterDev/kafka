@@ -1,7 +1,7 @@
 ---
 title: 'topic offsets'
 description: 'Show partition offsets for a topic'
-order: 62
+order: 66
 section: reference
 hidden: true
 commandPath: ['topic', 'offsets']
@@ -25,14 +25,14 @@ Shared options and defaults: [connection profiles, JSON output, logging and help
 
 ## Defaults
 
-The selected offset query controls whether the result is a single offset or low/high offsets per partition.
+The selected offset query controls whether the result is a single offset or low/high offsets per partition. A tiered storage --time value prints low/high offsets with -1 as the offset of a partition that has none.
 
 ## Flags
 
-| Flag                 | Description                                                                             |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `--brokers <string>` | comma-separated broker list, e.g. localhost:9092                                        |
-| `--time <string>`    | resolve offsets as of "earliest", "latest", "max-timestamp", or a millisecond timestamp |
+| Flag                 | Description                                                                                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--brokers <string>` | comma-separated broker list, e.g. localhost:9092                                                                                                      |
+| `--time <string>`    | resolve offsets as of "earliest", "latest", "max-timestamp", "earliest-local", "latest-tiered", "earliest-pending-upload", or a millisecond timestamp |
 
 ## Examples
 
@@ -40,6 +40,7 @@ The selected offset query controls whether the result is a single offset or low/
 kafka topic offsets orders --brokers localhost:9092
 kafka topic offsets orders --time earliest --brokers localhost:9092
 kafka topic offsets orders --time 1735689600000 --brokers localhost:9092
+kafka topic offsets orders --time latest-tiered --brokers localhost:9092
 ```
 
 ## Output

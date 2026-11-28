@@ -363,7 +363,7 @@ export class ConsumerGroup implements ConsumerGroupHandle, MembershipHost {
     // A group member without a group id never joins, so it has nowhere to commit either.
     const target =
       this.#membership.isGroupMember && groupId !== null
-        ? new GroupMemberCommitTarget(cluster, groupId, this.#membership)
+        ? new GroupMemberCommitTarget(cluster, groupId, this.#membership, groupProtocol)
         : new AssignModeCommitTarget(cluster, groupId);
     this.offsetTracker = new OffsetTracker({
       cluster,

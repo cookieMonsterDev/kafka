@@ -450,12 +450,17 @@ describe('consumer', () => {
 
     it('fetches committed offsets from the group coordinator, grouped by topic', async () => {
       const offsetFetch = vi.fn(async () => ({
-        responses: [
+        groups: [
           {
-            topic: 't',
-            partitions: [
-              { partition: 0, offset: 5n, metadata: 'meta', errorCode: 0 },
-              { partition: 1, offset: -1n, metadata: null, errorCode: 0 },
+            groupId: 'g',
+            topics: [
+              {
+                topic: 't',
+                partitions: [
+                  { partition: 0, offset: 5n, metadata: 'meta' },
+                  { partition: 1, offset: -1n, metadata: null },
+                ],
+              },
             ],
           },
         ],
@@ -471,8 +476,7 @@ describe('consumer', () => {
 
       expect(findGroupCoordinator).toHaveBeenCalledWith({ groupId: 'g' });
       expect(offsetFetch).toHaveBeenCalledWith({
-        groupId: 'g',
-        topics: [{ topic: 't', partitions: [{ partition: 0 }, { partition: 1 }] }],
+        groups: [{ groupId: 'g', topics: [{ topic: 't', partitions: [{ partition: 0 }, { partition: 1 }] }] }],
       });
       expect(result).toEqual([
         { topic: 't', partition: 0, offset: 5n, metadata: 'meta' },
@@ -482,7 +486,7 @@ describe('consumer', () => {
 
     it('normalizes empty offset metadata to null', async () => {
       const offsetFetch = vi.fn(async () => ({
-        responses: [{ topic: 't', partitions: [{ partition: 0, offset: 7n, metadata: '', errorCode: 0 }] }],
+        groups: [{ groupId: 'g', topics: [{ topic: 't', partitions: [{ partition: 0, offset: 7n, metadata: '' }] }] }],
       }));
       const findGroupCoordinator = vi.fn(async () => withSend({ offsetFetch }));
       const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
@@ -494,7 +498,7 @@ describe('consumer', () => {
     });
 
     it('defaults a partition missing from the response to offset -1n and metadata null', async () => {
-      const offsetFetch = vi.fn(async () => ({ responses: [] }));
+      const offsetFetch = vi.fn(async () => ({ groups: [] }));
       const findGroupCoordinator = vi.fn(async () => withSend({ offsetFetch }));
       const cluster = withSend({ ...fakeCluster(), findGroupCoordinator }) as unknown as Cluster;
       const consumer = createConsumer({ cluster, groupId: 'g', logger: silentLogger });

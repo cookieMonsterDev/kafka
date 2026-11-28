@@ -82,6 +82,22 @@ export const SCRAM_MECHANISMS = Object.freeze({
   SCRAM_SHA_512: 2,
 });
 
+export const OFFSET_SPECS = Object.freeze({
+  LATEST: -1n,
+  EARLIEST: -2n,
+  MAX_TIMESTAMP: -3n,
+  EARLIEST_LOCAL: -4n,
+  LATEST_TIERED: -5n,
+  EARLIEST_PENDING_UPLOAD: -6n,
+} as const);
+
+export const STREAMS_TOPOLOGY_DESCRIPTION_STATUSES = Object.freeze({
+  NOT_REQUESTED: 0,
+  NOT_STORED: 1,
+  ERROR: 2,
+  AVAILABLE: 3,
+});
+
 export interface DescribedCode {
   readonly name: string | null;
   readonly code: number;

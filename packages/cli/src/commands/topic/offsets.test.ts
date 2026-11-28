@@ -82,6 +82,28 @@ describe('topicOffsetsCommand', () => {
     expect(fetchTopicOffsetsByTimestamp).toHaveBeenCalledWith('orders', -3n);
   });
 
+  it.each([
+    ['earliest-local', -4n],
+    ['latest-tiered', -5n],
+    ['earliest-pending-upload', -6n],
+  ])('resolves --time %s through fetchTopicOffsets with offsetSpec %s', async (time, offsetSpec) => {
+    const fetchTopicOffsets = vi.fn(async () => [{ partition: 0, offset: -1n, high: 10n, low: 0n }]);
+    const admin = createFakeAdmin({ fetchTopicOffsets, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', time },
+      positionals: ['orders'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    await topicOffsetsCommand.run(context);
+    expect(fetchTopicOffsets).toHaveBeenCalledWith('orders', { offsetSpec });
+    const written = JSON.parse(stdoutWrite.mock.calls[0]?.[0] ?? '{}') as {
+      partitions: { offset: string; high: string }[];
+    };
+    expect(written.partitions[0]).toMatchObject({ offset: '-1', high: '10' });
+  });
+
   it('resolves a numeric --time to a literal millisecond timestamp', async () => {
     const fetchTopicOffsetsByTimestamp = vi.fn(async () => [{ partition: 0, offset: 5n }]);
     const admin = createFakeAdmin({ fetchTopicOffsetsByTimestamp, disconnect: async () => {} });
@@ -98,6 +120,14 @@ describe('topicOffsetsCommand', () => {
   it('rejects an invalid --time value', async () => {
     const { context } = createFakeCommandContext({
       flags: { brokers: 'localhost:9092', time: 'yesterday' },
+      positionals: ['orders'],
+    });
+    await expect(topicOffsetsCommand.run(context)).rejects.toThrow(/--time must be/);
+  });
+
+  it('rejects an inherited property name as --time', async () => {
+    const { context } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092', time: 'constructor' },
       positionals: ['orders'],
     });
     await expect(topicOffsetsCommand.run(context)).rejects.toThrow(/--time must be/);

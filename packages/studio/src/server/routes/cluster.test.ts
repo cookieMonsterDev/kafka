@@ -113,6 +113,74 @@ describe('registerClusterRoutes', () => {
     });
   });
 
+  it('lists the API versions of every broker, sorted by node id', async () => {
+    const describeApiVersions = async (options: unknown) => {
+      expect(options).toBeUndefined();
+      return {
+        brokers: [
+          { nodeId: 2, host: 'kafka-2', port: 9093, rack: 'b', apis: [] },
+          {
+            nodeId: 1,
+            host: 'kafka-1',
+            port: 9092,
+            rack: null,
+            apis: [
+              {
+                apiKey: 0,
+                apiName: 'Produce',
+                brokerVersions: { minVersion: 3, maxVersion: 13 },
+                isImplemented: true,
+                version: 13,
+              },
+              { apiKey: 1, apiName: 'Fetch', isImplemented: true },
+              { apiKey: 999, brokerVersions: { minVersion: 0, maxVersion: 1 }, isImplemented: false },
+            ],
+          },
+        ],
+      };
+    };
+    const context = buildContext({ describeApiVersions });
+
+    await withServer(context, async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/cluster/api-versions`);
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        brokers: [
+          {
+            nodeId: 1,
+            host: 'kafka-1',
+            port: 9092,
+            rack: null,
+            apis: [
+              {
+                apiKey: 0,
+                apiName: 'Produce',
+                brokerVersions: { minVersion: 3, maxVersion: 13 },
+                isImplemented: true,
+                version: 13,
+              },
+              {
+                apiKey: 1,
+                apiName: 'Fetch',
+                brokerVersions: null,
+                isImplemented: true,
+                version: null,
+              },
+              {
+                apiKey: 999,
+                apiName: null,
+                brokerVersions: { minVersion: 0, maxVersion: 1 },
+                isImplemented: false,
+                version: null,
+              },
+            ],
+          },
+          { nodeId: 2, host: 'kafka-2', port: 9093, rack: 'b', apis: [] },
+        ],
+      });
+    });
+  });
+
   it('reports a describeLogDirs failure as an error response', async () => {
     const context = buildContext({
       describeLogDirs: async () => {

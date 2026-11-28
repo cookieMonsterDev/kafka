@@ -190,6 +190,24 @@ describe('producer/idempotenceLedger', () => {
       await next.acquire();
       expect(next.firstSequence(topic, 0)).toBe(0);
     });
+
+    it('restarts sequences and settles a requested bump when it adopts the identity a transaction ended with', async () => {
+      const { ledger, initProducerId } = await initializedLedger();
+      const sent = ledger.lease(records({ 0: 5 }));
+      await sent.acquire();
+      sent.firstSequence(topic, 0);
+      sent.release();
+      ledger.requestEpochBump();
+
+      ledger.adoptBumpedIdentity({ producerId: 1000n, producerEpoch: 2 });
+
+      expect(ledger.getProducerEpoch()).toBe(2);
+      expect(ledger.isEpochBumpRequested()).toBe(false);
+      const next = ledger.lease(records({ 0: 1 }));
+      await next.acquire();
+      expect(next.firstSequence(topic, 0)).toBe(0);
+      expect(initProducerId).toHaveBeenCalledOnce();
+    });
   });
 
   describe('partition gates', () => {

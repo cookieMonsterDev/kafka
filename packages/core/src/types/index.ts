@@ -189,6 +189,10 @@ export interface KafkaConfig {
    * KIP-1102: on `REBOOTSTRAP_REQUIRED` or an exhausted/unreachable broker set, `'rebootstrap'`
    * (the default) drops discovered metadata and reconnects to the original bootstrap broker
    * list; `'none'` keeps retrying the brokers already known to the client.
+   *
+   * KIP-1242: with `'rebootstrap'`, a Kafka 4.4+ broker known from metadata is asked on connect
+   * to confirm its node id and cluster id, and the client rebootstraps when it does not.
+   * `'none'` skips that check.
    */
   metadataRecovery?: MetadataRecovery;
   retry?: RetryOptions;

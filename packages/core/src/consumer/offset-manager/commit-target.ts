@@ -1,6 +1,7 @@
 import type { Broker } from '../../broker/index';
 import type { Cluster } from '../../cluster/index';
 import { KafkaError, KafkaNonRetriableError } from '../../errors';
+import type { GroupProtocol } from '../../types/index';
 import type { GroupMembership } from '../membership/group-membership';
 
 /** The member fields an OffsetCommit carries. */
@@ -8,6 +9,18 @@ export interface CommitIdentity {
   memberId: string;
   groupGenerationId: number;
 }
+
+/**
+ * The member fields an OffsetFetch v9+ carries (KIP-848): a consumer protocol member's id and
+ * epoch, so the coordinator rejects a fetch from a stale member, or none.
+ */
+export interface FetchIdentity {
+  memberId: string | null;
+  memberEpoch: number;
+}
+
+/** An OffsetFetch the coordinator answers without checking who sent it. */
+const NO_FETCH_IDENTITY: FetchIdentity = Object.freeze({ memberId: null, memberEpoch: -1 });
 
 /**
  * Where an offset tracker commits offsets and keeps the committed offsets it knows: the consumer
@@ -23,6 +36,8 @@ export interface CommitTarget {
   readonly isGroupMember: boolean;
   /** Read when each OffsetCommit is sent, so it carries the member's current generation or member epoch. */
   commitIdentity(): CommitIdentity;
+  /** Read when each OffsetFetch is sent, so it carries the member's current member epoch. */
+  fetchIdentity(): FetchIdentity;
   coordinator(): Promise<Broker>;
   committedOffset(topic: string, partition: number): bigint | undefined;
   setCommittedOffset(topic: string, partition: number, offset: bigint): void;
@@ -39,15 +54,18 @@ export class GroupMemberCommitTarget implements CommitTarget {
   readonly groupId: string;
   readonly #cluster: Cluster;
   readonly #membership: Pick<GroupMembership, 'coordinator' | 'memberId' | 'generationId'>;
+  readonly #groupProtocol: GroupProtocol;
 
   constructor(
     cluster: Cluster,
     groupId: string,
     membership: Pick<GroupMembership, 'coordinator' | 'memberId' | 'generationId'>,
+    groupProtocol: GroupProtocol,
   ) {
     this.#cluster = cluster;
     this.groupId = groupId;
     this.#membership = membership;
+    this.#groupProtocol = groupProtocol;
   }
 
   commitIdentity(): CommitIdentity {
@@ -57,6 +75,18 @@ export class GroupMemberCommitTarget implements CommitTarget {
       throw new KafkaError('Consumer group has not joined');
     }
     return { memberId, groupGenerationId: generationId };
+  }
+
+  /**
+   * The classic protocol's coordinator does not check OffsetFetch senders. A consumer protocol
+   * member without a positive epoch is still joining, so it fetches without one, as Java does.
+   */
+  fetchIdentity(): FetchIdentity {
+    const { memberId, generationId: memberEpoch } = this.#membership;
+    if (this.#groupProtocol !== 'consumer' || memberId == null || memberEpoch == null || memberEpoch <= 0) {
+      return NO_FETCH_IDENTITY;
+    }
+    return { memberId, memberEpoch };
   }
 
   async coordinator(): Promise<Broker> {
@@ -107,6 +137,10 @@ export class AssignModeCommitTarget implements CommitTarget {
 
   commitIdentity(): CommitIdentity {
     return ASSIGN_MODE_IDENTITY;
+  }
+
+  fetchIdentity(): FetchIdentity {
+    return NO_FETCH_IDENTITY;
   }
 
   async coordinator(): Promise<Broker> {

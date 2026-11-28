@@ -1,7 +1,7 @@
 ---
 title: 'txn abort'
 description: 'Write an abort marker for one in-flight transaction on a topic partition'
-order: 64
+order: 68
 section: reference
 hidden: true
 commandPath: ['txn', 'abort']

@@ -8,7 +8,9 @@ import {
 } from '../errors';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
+import { Decoder } from '../protocol/decoder';
 import { API_KEYS } from '../protocol/requests/api-keys';
+import type { RequestDefinition } from '../protocol/schema';
 import { Broker } from './index';
 import { CreateTopics, DescribeAcls, ListGroups } from '../protocol/requests/lazy-families';
 import { ConsumerGroupHeartbeat } from '../protocol/requests/consumer-group-heartbeat/index';
@@ -38,7 +40,7 @@ interface FakeConnectionPool {
 
 /** What `Broker` hands `ConnectionPool#send`, as far as these tests look at it. */
 interface SentRequest {
-  request: { apiKey: number; apiVersion: number };
+  request: Pick<RequestDefinition, 'apiKey' | 'apiVersion' | 'encode'>;
   response: { parse(data: unknown): unknown };
 }
 
@@ -174,6 +176,35 @@ describe('broker/Broker', () => {
       expect(pool.setSupportAuthenticationProtocol).toHaveBeenCalledWith(true);
     });
 
+    it('keeps the finalized feature levels ApiVersions v3+ reports', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [],
+        finalizedFeatures: [
+          { name: 'metadata.version', minVersionLevel: 1, maxVersionLevel: 27 },
+          { name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 },
+        ],
+      });
+
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      expect(broker.finalizedFeatures).toEqual({});
+      await broker.connect();
+
+      expect(broker.finalizedFeatures).toEqual({ 'metadata.version': 27, 'transaction.version': 2 });
+    });
+
+    it('has no finalized features when ApiVersions predates v3', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({ errorCode: 0, throttleTime: 0, apiVersions: [] });
+
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+
+      expect(broker.finalizedFeatures).toEqual({});
+    });
+
     it('does not re-fetch api versions when already provided', async () => {
       const pool = createFakeConnectionPool();
       const broker = new Broker({
@@ -186,6 +217,75 @@ describe('broker/Broker', () => {
 
       expect(pool.send).not.toHaveBeenCalled();
       expect(pool.setVersions).toHaveBeenCalledWith(broker.versions);
+    });
+
+    describe('misrouted connection check (KIP-1242)', () => {
+      const identityResponse = {
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [{ apiKey: API_KEYS.ApiVersions, minVersion: 0, maxVersion: 5 }],
+      };
+
+      /** Broker 2 of `cluster-a`, as metadata describes it, with versions cached up to ApiVersions `maxVersion`. */
+      function knownBroker(pool: FakeConnectionPool, maxVersion = 5): Broker {
+        return new Broker({
+          connectionPool: asConnectionPool(pool),
+          logger: silentLogger,
+          nodeId: 2,
+          clusterId: 'cluster-a',
+          versions: { [API_KEYS.ApiVersions]: { maxVersion } },
+        });
+      }
+
+      async function sentIdentity(sent: SentRequest): Promise<{ clusterId: string | null; nodeId: number }> {
+        const decoder = new Decoder((await sent.request.encode()).buffer);
+        decoder.readUVarIntString(); // client software name
+        decoder.readUVarIntString(); // client software version
+        return { clusterId: decoder.readUVarIntString(), nodeId: decoder.readInt32() };
+      }
+
+      it('asks a known broker to confirm its cluster id and node id, even with cached versions', async () => {
+        const pool = createFakeConnectionPool();
+        pool.send.mockResolvedValueOnce(identityResponse);
+        const broker = knownBroker(pool);
+
+        await broker.connect();
+
+        expect(pool.send).toHaveBeenCalledOnce();
+        const sent = pool.send.mock.calls[0]![0];
+        expect(sent.request.apiVersion).toBe(5);
+        await expect(sentIdentity(sent)).resolves.toEqual({ clusterId: 'cluster-a', nodeId: 2 });
+        expect(broker.versions).toEqual({ [API_KEYS.ApiVersions]: { minVersion: 0, maxVersion: 5 } });
+      });
+
+      it('sends a null cluster id and node id -1 from a bootstrap broker', async () => {
+        const pool = createFakeConnectionPool();
+        pool.send.mockResolvedValueOnce(identityResponse);
+        const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+
+        await broker.connect();
+
+        await expect(sentIdentity(pool.send.mock.calls[0]![0])).resolves.toEqual({ clusterId: null, nodeId: -1 });
+      });
+
+      it('does not check again when the cached versions predate ApiVersions v5', async () => {
+        const pool = createFakeConnectionPool();
+
+        await knownBroker(pool, 4).connect();
+
+        expect(pool.send).not.toHaveBeenCalled();
+      });
+
+      it('disconnects and rejects when the broker answers REBOOTSTRAP_REQUIRED', async () => {
+        const pool = createFakeConnectionPool();
+        pool.send.mockRejectedValueOnce(
+          new KafkaProtocolError({ message: 'stale', type: 'REBOOTSTRAP_REQUIRED', code: 129 }),
+        );
+
+        await expect(knownBroker(pool).connect()).rejects.toMatchObject({ type: 'REBOOTSTRAP_REQUIRED' });
+        expect(pool.destroy).toHaveBeenCalledOnce();
+        expect(pool.send).toHaveBeenCalledOnce();
+      });
     });
 
     it('is a no-op if already connected', async () => {

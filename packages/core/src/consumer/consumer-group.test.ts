@@ -2101,11 +2101,12 @@ describe('consumer/consumer-group', () => {
       }
       const offsetCommit = vi.fn(async () => undefined);
       const offsetFetch = vi.fn(async () => ({
-        responses: [{ topic: 'topic1', partitions: [{ partition: 0, offset: 70n }] }],
+        groups: [{ groupId: 'group', topics: [{ topic: 'topic1', partitions: [{ partition: 0, offset: 70n }] }] }],
       }));
       const coordinator = withSend({ consumerGroupHeartbeat, offsetCommit, offsetFetch, isConnected: () => true });
       const cluster = withSend({
         findGroupCoordinator: vi.fn(async () => coordinator),
+        findTopicId: vi.fn(() => topicId),
         findTopicPartitionMetadata: vi.fn(() => [{ partitionId: 0 }, { partitionId: 1 }]),
         ...committedOffsets,
         refreshMetadata: vi.fn(async () => undefined),
@@ -2137,7 +2138,9 @@ describe('consumer/consumer-group', () => {
       expect(consumerGroup.position('topic1', 0)).toBe(42n);
       await consumerGroup.commitOffsets();
       expect(offsetCommit).toHaveBeenCalledWith(
-        expect.objectContaining({ topics: [{ topic: 'topic1', partitions: [{ partition: 0, offset: 42n }] }] }),
+        expect.objectContaining({
+          topics: [{ topic: 'topic1', topicId, partitions: [{ partition: 0, offset: 42n }] }],
+        }),
       );
     });
 
@@ -2151,8 +2154,14 @@ describe('consumer/consumer-group', () => {
       await secondRun.consumerGroup.seekOffsets([{ topic: 'topic1', partitions: [0] }]);
 
       expect(secondRun.offsetFetch).toHaveBeenCalledWith({
-        groupId: 'group',
-        topics: [{ topic: 'topic1', partitions: [{ partition: 0 }, { partition: 1 }] }],
+        groups: [
+          {
+            groupId: 'group',
+            memberId: 'member',
+            memberEpoch: 1,
+            topics: [{ topic: 'topic1', topicId, partitions: [{ partition: 0 }, { partition: 1 }] }],
+          },
+        ],
       });
       expect(secondRun.consumerGroup.position('topic1', 0)).toBe(70n);
     });

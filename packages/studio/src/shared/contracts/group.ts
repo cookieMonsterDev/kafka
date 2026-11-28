@@ -107,3 +107,45 @@ export interface ShareGroupDetailResponse {
   readonly members: readonly GroupMember[];
   readonly offsets: readonly { readonly topic: string; readonly partitions: readonly ShareGroupPartitionOffset[] }[];
 }
+
+export interface StreamsGroupListResponse {
+  readonly groups: readonly GroupListEntry[];
+}
+
+/** A streams group member's tasks in one subtopology, one per partition of its source topics. */
+export interface StreamsGroupTasks {
+  readonly subtopologyId: string;
+  readonly partitions: readonly number[];
+}
+
+export interface StreamsGroupMember {
+  readonly memberId: string;
+  /** The Kafka Streams instance the member belongs to; one instance can run several members. */
+  readonly processId: string;
+  readonly clientId: string;
+  readonly clientHost: string;
+  readonly activeTasks: readonly StreamsGroupTasks[];
+  readonly standbyTasks: readonly StreamsGroupTasks[];
+  readonly warmupTasks: readonly StreamsGroupTasks[];
+}
+
+export interface StreamsGroupSubtopology {
+  readonly subtopologyId: string;
+  readonly sourceTopics: readonly string[];
+  readonly repartitionSinkTopics: readonly string[];
+  readonly stateChangelogTopics: readonly string[];
+  readonly repartitionSourceTopics: readonly string[];
+}
+
+export interface StreamsGroupDetailResponse {
+  readonly groupId: string;
+  readonly state: string;
+  readonly groupEpoch: number;
+  /** `null` before Kafka 4.4, which does not report the assignor. */
+  readonly assignorName: string | null;
+  /** `null` when the group has no topology yet. */
+  readonly topologyEpoch: number | null;
+  /** `null` while the topology is not ready, such as when its source topics are missing. */
+  readonly subtopologies: readonly StreamsGroupSubtopology[] | null;
+  readonly members: readonly StreamsGroupMember[];
+}

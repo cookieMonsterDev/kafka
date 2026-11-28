@@ -1,6 +1,7 @@
 /** The demo cluster's starting state and sample records. Seeded, so every visit opens on the same data. */
 
-import type { GroupMember } from '../../../shared/contracts/group';
+import type { ApiVersionView } from '../../../shared/contracts/cluster';
+import type { GroupMember, StreamsGroupDetailResponse } from '../../../shared/contracts/group';
 import type { ProduceMessage } from '../../../shared/contracts/produce';
 import type { AclEntryView, QuotaEntryView, TransactionListEntry } from '../../../shared/contracts/settings';
 
@@ -239,6 +240,59 @@ export const GROUP_SEEDS: readonly GroupSeed[] = [
   },
 ];
 
+/** Streams groups (KIP-1071) are read-only in the studio, so the demo serves them as they are. */
+export const STREAMS_GROUP_SEEDS: readonly StreamsGroupDetailResponse[] = [
+  {
+    groupId: 'order-totals',
+    state: 'Stable',
+    groupEpoch: 7,
+    assignorName: 'sticky',
+    topologyEpoch: 1,
+    subtopologies: [
+      {
+        subtopologyId: '0',
+        sourceTopics: ['orders'],
+        repartitionSinkTopics: ['order-totals-by-customer-repartition'],
+        stateChangelogTopics: [],
+        repartitionSourceTopics: [],
+      },
+      {
+        subtopologyId: '1',
+        sourceTopics: [],
+        repartitionSinkTopics: [],
+        stateChangelogTopics: ['order-totals-totals-store-changelog'],
+        repartitionSourceTopics: ['order-totals-by-customer-repartition'],
+      },
+    ],
+    members: [
+      {
+        memberId: 'streams-a1',
+        processId: '3f1c9e2a-6b4d-4f0e-9a8b-1c2d3e4f5a6b',
+        clientId: 'order-totals-StreamThread-1',
+        clientHost: '/10.0.11.21',
+        activeTasks: [
+          { subtopologyId: '0', partitions: [0, 1, 2] },
+          { subtopologyId: '1', partitions: [0, 1, 2] },
+        ],
+        standbyTasks: [{ subtopologyId: '1', partitions: [3, 4, 5] }],
+        warmupTasks: [],
+      },
+      {
+        memberId: 'streams-b2',
+        processId: '8a7b6c5d-4e3f-4a1b-8c9d-0e1f2a3b4c5d',
+        clientId: 'order-totals-StreamThread-1',
+        clientHost: '/10.0.11.22',
+        activeTasks: [
+          { subtopologyId: '0', partitions: [3, 4, 5] },
+          { subtopologyId: '1', partitions: [3, 4, 5] },
+        ],
+        standbyTasks: [{ subtopologyId: '1', partitions: [0, 1, 2] }],
+        warmupTasks: [],
+      },
+    ],
+  },
+];
+
 function allow(resourceType: string, resourceName: string, principal: string, operation: string): AclEntryView {
   return {
     resourceType,
@@ -280,4 +334,104 @@ export const SAMPLE_TRANSACTIONS: readonly TransactionListEntry[] = [
   { transactionalId: 'checkout-api-txn-0', producerId: '4001', transactionState: 'Ongoing' },
   { transactionalId: 'checkout-api-txn-1', producerId: '4002', transactionState: 'CompleteCommit' },
   { transactionalId: 'payments-ledger', producerId: '4010', transactionState: 'Empty' },
+];
+
+/** One row of the table below: api key, name, the broker's version range (or `null`s), implemented, version used. */
+function api(
+  apiKey: number,
+  apiName: string,
+  brokerMinVersion: number | null,
+  brokerMaxVersion: number | null,
+  isImplemented: boolean,
+  version: number | null,
+): ApiVersionView {
+  const brokerVersions =
+    brokerMinVersion === null || brokerMaxVersion === null
+      ? null
+      : { minVersion: brokerMinVersion, maxVersion: brokerMaxVersion };
+  return { apiKey, apiName, brokerVersions, isImplemented, version };
+}
+
+/** What a Kafka 4.4 broker advertises, with the versions Studio's client negotiates against it. */
+export const SAMPLE_API_VERSIONS: readonly ApiVersionView[] = [
+  api(0, 'Produce', 0, 13, true, 13),
+  api(1, 'Fetch', 4, 18, true, 18),
+  api(2, 'ListOffsets', 1, 11, true, 11),
+  api(3, 'Metadata', 0, 13, true, 13),
+  api(8, 'OffsetCommit', 2, 10, true, 10),
+  api(9, 'OffsetFetch', 1, 10, true, 10),
+  api(10, 'FindCoordinator', 0, 6, true, 5),
+  api(11, 'JoinGroup', 0, 9, true, 9),
+  api(12, 'Heartbeat', 0, 4, true, 4),
+  api(13, 'LeaveGroup', 0, 5, true, 5),
+  api(14, 'SyncGroup', 0, 5, true, 5),
+  api(15, 'DescribeGroups', 0, 6, true, 6),
+  api(16, 'ListGroups', 0, 5, true, 5),
+  api(17, 'SaslHandshake', 0, 1, true, 1),
+  api(18, 'ApiVersions', 0, 5, true, 5),
+  api(19, 'CreateTopics', 2, 7, true, 7),
+  api(20, 'DeleteTopics', 1, 6, true, 6),
+  api(21, 'DeleteRecords', 0, 2, true, 2),
+  api(22, 'InitProducerId', 0, 5, true, 5),
+  api(23, 'OffsetForLeaderEpoch', 2, 4, true, 4),
+  api(24, 'AddPartitionsToTxn', 0, 5, true, 3),
+  api(25, 'AddOffsetsToTxn', 0, 4, true, 4),
+  api(26, 'EndTxn', 0, 5, true, 5),
+  api(27, 'WriteTxnMarkers', 1, 2, true, 2),
+  api(28, 'TxnOffsetCommit', 0, 6, true, 6),
+  api(29, 'DescribeAcls', 1, 3, true, 3),
+  api(30, 'CreateAcls', 1, 3, true, 3),
+  api(31, 'DeleteAcls', 1, 3, true, 3),
+  api(32, 'DescribeConfigs', 1, 4, true, 4),
+  api(33, 'AlterConfigs', 0, 2, true, 2),
+  api(34, 'AlterReplicaLogDirs', 1, 2, true, 2),
+  api(35, 'DescribeLogDirs', 1, 5, true, 5),
+  api(36, 'SaslAuthenticate', 0, 2, true, 2),
+  api(37, 'CreatePartitions', 0, 3, true, 3),
+  api(38, 'CreateDelegationToken', 1, 3, true, 3),
+  api(39, 'RenewDelegationToken', 1, 2, true, 2),
+  api(40, 'ExpireDelegationToken', 1, 2, true, 2),
+  api(41, 'DescribeDelegationToken', 1, 3, true, 3),
+  api(42, 'DeleteGroups', 0, 3, true, 3),
+  api(43, 'ElectLeaders', 0, 2, true, 2),
+  api(44, 'IncrementalAlterConfigs', 0, 1, true, 1),
+  api(45, 'AlterPartitionReassignments', 0, 1, true, 1),
+  api(46, 'ListPartitionReassignments', 0, 0, true, 0),
+  api(47, 'OffsetDelete', 0, 0, true, 0),
+  api(48, 'DescribeClientQuotas', 0, 1, true, 1),
+  api(49, 'AlterClientQuotas', 0, 1, true, 1),
+  api(50, 'DescribeUserScramCredentials', 0, 0, true, 0),
+  api(51, 'AlterUserScramCredentials', 0, 0, true, 0),
+  api(55, 'DescribeQuorum', 0, 2, true, 2),
+  api(57, 'UpdateFeatures', 0, 2, true, 2),
+  api(60, 'DescribeCluster', 0, 2, true, 2),
+  api(61, 'DescribeProducers', 0, 0, true, 0),
+  api(64, 'UnregisterBroker', 0, 0, true, 0),
+  api(65, 'DescribeTransactions', 0, 0, true, 0),
+  api(66, 'ListTransactions', 0, 2, true, 2),
+  api(68, 'ConsumerGroupHeartbeat', 0, 1, true, 1),
+  api(69, 'ConsumerGroupDescribe', 0, 1, true, 1),
+  api(71, 'GetTelemetrySubscriptions', null, null, true, null),
+  api(72, 'PushTelemetry', null, null, true, null),
+  api(73, 'AssignReplicasToDirs', null, null, true, null),
+  api(74, 'ListConfigResources', 0, 1, true, 1),
+  api(75, 'DescribeTopicPartitions', 0, 0, true, 0),
+  api(76, 'ShareGroupHeartbeat', 1, 1, true, 1),
+  api(77, 'ShareGroupDescribe', 1, 1, true, 1),
+  api(78, 'ShareFetch', 1, 2, true, 2),
+  api(79, 'ShareAcknowledge', 1, 2, true, 2),
+  api(80, 'AddRaftVoter', 0, 1, true, 1),
+  api(81, 'RemoveRaftVoter', 0, 0, true, 0),
+  api(83, 'InitializeShareGroupState', 0, 0, false, null),
+  api(84, 'ReadShareGroupState', 0, 0, false, null),
+  api(85, 'WriteShareGroupState', 0, 1, false, null),
+  api(86, 'DeleteShareGroupState', 0, 0, false, null),
+  api(87, 'ReadShareGroupStateSummary', 0, 1, false, null),
+  api(88, 'StreamsGroupHeartbeat', 0, 1, false, null),
+  api(89, 'StreamsGroupDescribe', 0, 1, true, 1),
+  api(90, 'DescribeShareGroupOffsets', 0, 1, true, 1),
+  api(91, 'AlterShareGroupOffsets', 0, 0, true, 0),
+  api(92, 'DeleteShareGroupOffsets', 0, 0, true, 0),
+  api(93, 'StreamsGroupTopologyDescriptionUpdate', 0, 0, false, null),
+  api(94, 'UnregisterController', 0, 0, true, 0),
 ];

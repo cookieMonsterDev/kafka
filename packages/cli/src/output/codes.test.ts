@@ -10,8 +10,10 @@ import {
   describeCode,
   FEATURE_UPDATE_UPGRADE_TYPES,
   formatCode,
+  OFFSET_SPECS,
   RESOURCE_PATTERN_TYPES,
   SCRAM_MECHANISMS,
+  STREAMS_TOPOLOGY_DESCRIPTION_STATUSES,
 } from './codes';
 
 // Loaded once, in `beforeAll`, rather than per test: importing core is real work (it's not a
@@ -71,9 +73,21 @@ describe('FEATURE_UPDATE_UPGRADE_TYPES', () => {
   });
 });
 
+describe('OFFSET_SPECS', () => {
+  it("deep-equals core's real export", () => {
+    expect(OFFSET_SPECS).toEqual(core.OffsetSpecs);
+  });
+});
+
 describe('SCRAM_MECHANISMS', () => {
   it("deep-equals core's real export", () => {
     expect(SCRAM_MECHANISMS).toEqual(core.ScramMechanisms);
+  });
+});
+
+describe('STREAMS_TOPOLOGY_DESCRIPTION_STATUSES', () => {
+  it("deep-equals core's real export", () => {
+    expect(STREAMS_TOPOLOGY_DESCRIPTION_STATUSES).toEqual(core.StreamsTopologyDescriptionStatuses);
   });
 });
 

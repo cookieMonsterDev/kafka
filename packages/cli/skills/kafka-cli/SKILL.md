@@ -3,8 +3,8 @@ name: kafka-cli
 description: >
   Use when administering an Apache Kafka cluster from a terminal, shell script, or CI job with the
   `kafka` command from @cookiemonsterdev/kafka-cli: checking connectivity, listing, creating,
-  describing, or deleting topics, inspecting consumer or share groups and lag, resetting group
-  offsets, changing configs, managing ACLs, SCRAM users, quotas, delegation tokens, transactions,
+  describing, or deleting topics, inspecting consumer, share, or streams groups and lag, resetting
+  group offsets, changing configs, managing ACLs, SCRAM users, quotas, delegation tokens, transactions,
   or KRaft quorum, setting up kafka.config profiles, or parsing --json output and exit codes.
 metadata:
   purpose: >-
@@ -96,11 +96,12 @@ kafka topic offsets orders
 kafka group list
 kafka group describe my-group
 kafka group offsets my-group
+kafka cluster api-versions --node 1   # each API's broker version range and the version the CLI uses
 kafka config describe --help
 ```
 
-Command families: `topic`, `group`, `share-group`, `config`, `acl`, `scram`, `quota`, `token`,
-`txn`, `cluster`, plus `ping`, `doctor`, `init`, `profiles`, `completion`, `studio`. Run
+Command families: `topic`, `group`, `share-group`, `streams-group`, `config`, `acl`, `scram`,
+`quota`, `token`, `txn`, `cluster`, plus `ping`, `doctor`, `init`, `profiles`, `completion`, `studio`. Run
 `kafka <command> --help` for exact flags before using a command for the first time. For any Admin
 method without its own command, use `kafka admin methods` and `kafka admin call <method>`.
 

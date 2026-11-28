@@ -1,12 +1,14 @@
 import type { Admin } from '@cookiemonsterdev/kafka-core';
 import { parseBrokersFlag } from '../../admin/parse-brokers';
-import { CliUsageError, coerceInteger } from '../../args/coerce';
+import { readTextFile } from '../../admin/read-text-file';
+import { CliUsageError } from '../../args/coerce';
 import type { CommandSpec } from '../../args/define';
 import { EXIT_CODES, exitForBatchResults } from '../../errors/exit-codes';
 import { confirmDestructive } from '../../interaction/confirm';
 import { stringifyJsonSafe } from '../../output/json';
 import { renderTable } from '../../output/table';
 import { mapWithConcurrency } from '../../concurrency';
+import { parseShareGroupOffsetsFile, parseStartOffsetEntry, type StartOffsetEntry } from './offsets-file';
 
 const CONCURRENCY = 8;
 
@@ -26,32 +28,18 @@ interface ReadResult extends TopicResult {
   readonly partitions?: readonly OffsetPartition[];
 }
 
-interface SetEntry {
-  readonly topic: string;
-  readonly partition: number;
-  readonly offset: bigint;
-}
-
-function parseSetFlags(raw: readonly string[]): SetEntry[] {
+function parseSetFlags(raw: readonly string[]): StartOffsetEntry[] {
   return raw.map((entry) => {
     const parts = entry.split(':');
     if (parts.length !== 3) {
       throw new CliUsageError(`--set must be "topic:partition:offset", got "${entry}"`);
     }
-    const [topic, partitionRaw, offsetRaw] = parts as [string, string, string];
-    const partition = coerceInteger(partitionRaw, 'set');
-    let offset: bigint;
-    try {
-      offset = BigInt(offsetRaw);
-    } catch {
-      throw new CliUsageError(`--set offset must be an integer, got "${entry}"`);
-    }
-    return { topic, partition, offset };
+    return parseStartOffsetEntry(parts as [string, string, string], { source: '--set', entry });
   });
 }
 
 function groupSetEntriesByTopic(
-  entries: readonly SetEntry[],
+  entries: readonly StartOffsetEntry[],
 ): Map<string, { partitionIndex: number; startOffset: bigint }[]> {
   const byTopic = new Map<string, { partitionIndex: number; startOffset: bigint }[]>();
   for (const entry of entries) {
@@ -125,17 +113,23 @@ export const shareGroupOffsetsCommand: CommandSpec = {
       brief: '"topic:partition:offset" to set as the new start offset (repeatable)',
     },
     {
+      name: 'from-file',
+      type: 'string',
+      brief: 'path to a kafka-share-groups.sh --from-file CSV of start offsets to set',
+    },
+    {
       name: 'delete-topic',
       type: 'string',
       multiple: true,
       brief: 'delete committed offsets for this topic (repeatable)',
     },
-    { name: 'yes', type: 'boolean', brief: 'confirm --set/--delete-topic without an interactive prompt' },
+    { name: 'yes', type: 'boolean', brief: 'confirm --set/--from-file/--delete-topic without an interactive prompt' },
   ],
   positionals: [{ name: 'groupId', brief: 'share group id' }],
   examples: [
     'share-group offsets orders-readers --brokers localhost:9092',
     'share-group offsets orders-readers --set orders:0:1000 --yes --brokers localhost:9092',
+    'share-group offsets orders-readers --from-file offsets.csv --yes --brokers localhost:9092',
     'share-group offsets orders-readers --delete-topic orders --yes --brokers localhost:9092',
   ],
   exitCodes: [
@@ -151,24 +145,31 @@ export const shareGroupOffsetsCommand: CommandSpec = {
       throw new CliUsageError('share-group offsets requires a group id');
     }
 
-    const setFlags = flags.set as string[] | undefined;
-    const deleteTopics = flags['delete-topic'] as string[] | undefined;
-    const modes = [
-      setFlags !== undefined && setFlags.length > 0,
-      deleteTopics !== undefined && deleteTopics.length > 0,
-    ].filter(Boolean).length;
+    const setFlags = (flags.set as string[] | undefined) ?? [];
+    const fromFile = flags['from-file'] as string | undefined;
+    const deleteTopics = (flags['delete-topic'] as string[] | undefined) ?? [];
+    const modes = [setFlags.length > 0, fromFile !== undefined, deleteTopics.length > 0].filter(Boolean).length;
     if (modes > 1) {
-      throw new CliUsageError('share-group offsets accepts at most one of --set or --delete-topic');
+      throw new CliUsageError('share-group offsets accepts at most one of --set, --from-file, or --delete-topic');
     }
 
     const brokers = parseBrokersFlag(flags.brokers);
 
-    if (setFlags !== undefined && setFlags.length > 0) {
-      const byTopic = groupSetEntriesByTopic(parseSetFlags(setFlags));
+    if (setFlags.length > 0 || fromFile !== undefined) {
+      let startOffsets: StartOffsetEntry[];
+      let target: string;
+      if (fromFile === undefined) {
+        startOffsets = parseSetFlags(setFlags);
+        target = setFlags.join(', ');
+      } else {
+        startOffsets = parseShareGroupOffsetsFile(readTextFile(fromFile, 'from-file'), { path: fromFile, groupId });
+        target = `${String(startOffsets.length)} partition(s) from "${fromFile}"`;
+      }
+      const byTopic = groupSetEntriesByTopic(startOffsets);
       await confirmDestructive({
         runtime,
         yes: flags.yes === true,
-        message: `Set share group "${groupId}"'s start offsets on ${setFlags.join(', ')}?`,
+        message: `Set share group "${groupId}"'s start offsets on ${target}?`,
         confirmDestructive: config.cli.confirmDestructive,
       });
 
@@ -195,7 +196,7 @@ export const shareGroupOffsetsCommand: CommandSpec = {
       }
     }
 
-    if (deleteTopics !== undefined && deleteTopics.length > 0) {
+    if (deleteTopics.length > 0) {
       await confirmDestructive({
         runtime,
         yes: flags.yes === true,

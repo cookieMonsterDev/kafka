@@ -29,6 +29,7 @@ section: reference
 
 ## cluster
 
+- [`cluster api-versions`](./cluster/api-versions/) <span>List the API versions each broker supports and the version this client uses</span>
 - [`cluster elect-leaders`](./cluster/elect-leaders/) <span>Trigger a preferred or unclean leader election on one or more partitions</span>
 - [`cluster features`](./cluster/features/) <span>Describe supported and finalized feature versions</span>
 - [`cluster info`](./cluster/info/) <span>Describe the cluster: its brokers, controller, and cluster id</span>
@@ -39,6 +40,7 @@ section: reference
 - [`cluster reassign execute`](./cluster/reassign-execute/) <span>Execute a partition reassignment from a kafka-reassign-partitions.sh-shaped JSON file</span>
 - [`cluster reassign list`](./cluster/reassign-list/) <span>List every active partition reassignment</span>
 - [`cluster unregister-broker`](./cluster/unregister-broker/) <span>Unregister a broker from the cluster (KRaft broker decommissioning)</span>
+- [`cluster unregister-controller`](./cluster/unregister-controller/) <span>Unregister a controller that was removed from the KRaft quorum for good (Kafka 4.4+)</span>
 - [`cluster update-features`](./cluster/update-features/) <span>Upgrade, safe-downgrade, or unsafe-downgrade one or more finalized feature versions</span>
 
 ## config
@@ -75,6 +77,11 @@ section: reference
 - [`share-group describe`](./share-group/describe/) <span>Describe one or more share groups</span>
 - [`share-group list`](./share-group/list/) <span>List every share group the cluster knows about</span>
 - [`share-group offsets`](./share-group/offsets/) <span>Read, set, or delete a share group’s committed start offsets</span>
+
+## streams-group
+
+- [`streams-group describe`](./streams-group/describe/) <span>Describe one or more streams groups</span>
+- [`streams-group list`](./streams-group/list/) <span>List every streams group the cluster knows about</span>
 
 ## token
 

@@ -3,6 +3,7 @@ import { InstrumentationEventEmitter, type RemoveInstrumentationEventListener } 
 import type { InstrumentationEvent } from '../instrumentation/event';
 import { abortError, rejectOnAbort, type ConnectOptions } from '../utils/abort';
 import { createAclsApi } from './acls';
+import { createApiVersionsApi } from './api-versions';
 import { createConfigsApi } from './configs';
 import { createDelegationTokensApi } from './delegation-tokens';
 import { createFeaturesApi } from './features';
@@ -17,9 +18,11 @@ import { createRaftVotersApi } from './raft-voters';
 import { createReassignmentsApi } from './reassignments';
 import { createScramApi } from './scram';
 import { createShareGroupsApi } from './share-groups';
+import { createStreamsGroupsApi } from './streams-groups';
 import { createTopicsApi } from './topics';
 import { createTransactionsApi } from './transactions';
 import { createUnregisterBrokerApi } from './unregister-broker';
+import { createUnregisterControllerApi } from './unregister-controller';
 import { createAssignReplicasToDirsApi } from './assign-replicas-to-dirs';
 import type { Admin, AdminOptions } from './types';
 
@@ -29,11 +32,14 @@ export type {
   AdminOptions,
   AclEntry,
   AclFilter,
+  ApiVersionDescription,
+  BrokerApiVersionsDescription,
   ConsumerGroupDescription,
   ConsumerGroupMemberDescription,
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
   DelegationToken,
+  DescribeApiVersionsOptions,
   DescribeDelegationTokenOptions,
   DescribeFeaturesResult,
   DescribeMetadataQuorumResult,
@@ -62,12 +68,17 @@ export type {
   RemoveMembersFromConsumerGroupOptions,
   RemoveMembersFromConsumerGroupResult,
   ShareGroupDescription,
+  DescribeStreamsGroupsOptions,
+  StreamsGroupDescription,
+  StreamsGroupMemberDescription,
+  StreamsTopologyDescription,
   ListShareGroupOffsetsOptions,
   AlterShareGroupOffsetsOptions,
   DeleteShareGroupOffsetsOptions,
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  UnregisterControllerOptions,
   AssignReplicasToDirsOptions,
   AssignReplicasToDirsReplica,
   TopicConfig,
@@ -108,13 +119,16 @@ export function createAdmin({
   const scram = createScramApi(context);
   const quotas = createQuotasApi(context);
   const logDirs = createLogDirsApi(context);
+  const apiVersions = createApiVersionsApi(context);
   const features = createFeaturesApi(context);
   const metadataQuorum = createMetadataQuorumApi(context);
   const raftVoters = createRaftVotersApi(context);
   const transactions = createTransactionsApi(context);
   const delegationTokens = createDelegationTokensApi(context);
   const shareGroups = createShareGroupsApi(context);
+  const streamsGroups = createStreamsGroupsApi(context);
   const unregisterBrokerApi = createUnregisterBrokerApi(context);
+  const unregisterControllerApi = createUnregisterControllerApi(context);
   const assignReplicasToDirsApi = createAssignReplicasToDirsApi(context);
 
   const on = (
@@ -160,14 +174,17 @@ export function createAdmin({
     ...scram,
     ...quotas,
     ...logDirs,
+    ...apiVersions,
     ...features,
     ...metadataQuorum,
     ...raftVoters,
     ...unregisterBrokerApi,
+    ...unregisterControllerApi,
     ...assignReplicasToDirsApi,
     ...transactions,
     ...delegationTokens,
     ...shareGroups,
+    ...streamsGroups,
     on,
     logger: () => logger,
     events,

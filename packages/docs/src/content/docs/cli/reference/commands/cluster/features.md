@@ -1,7 +1,7 @@
 ---
 title: 'cluster features'
 description: 'Describe supported and finalized feature versions'
-order: 22
+order: 23
 section: reference
 hidden: true
 commandPath: ['cluster', 'features']

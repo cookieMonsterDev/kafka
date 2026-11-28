@@ -11,11 +11,13 @@ import { findCoordinatorRequestV3 } from './v3/request';
 import { findCoordinatorResponseV3 } from './v3/response';
 import { findCoordinatorRequestV4 } from './v4/request';
 import { findCoordinatorResponseV4 } from './v4/response';
+import { findCoordinatorRequestV5 } from './v5/request';
+import { findCoordinatorResponseV5 } from './v5/response';
 
 export interface FindCoordinatorOptions {
   /**
    * The keys to look up: group ids, or transactional ids with `COORDINATOR_TYPES.TRANSACTION`.
-   * Versions before 4 take exactly one key; v4 (KIP-699) takes several of one type.
+   * Versions before 4 take exactly one key; v4+ (KIP-699) takes several of one type.
    */
   coordinatorKeys: readonly string[];
   /** Ignored by v0, which only finds group coordinators. */
@@ -76,6 +78,13 @@ const VERSIONS = {
       coordinatorType: options.coordinatorType,
     }),
     response: findCoordinatorResponseV4,
+  }),
+  5: (options) => ({
+    request: findCoordinatorRequestV5({
+      coordinatorKeys: [...options.coordinatorKeys],
+      coordinatorType: options.coordinatorType,
+    }),
+    response: findCoordinatorResponseV5,
   }),
 } satisfies VersionFactories<FindCoordinatorOptions>;
 

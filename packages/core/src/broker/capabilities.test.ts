@@ -6,9 +6,11 @@ import {
   supportsClientTelemetry,
   supportsDescribeClusterControllers,
   supportsHeaders,
+  supportsMisroutedConnectionCheck,
   supportsRecordBatch,
   supportsTransactions,
   supportsTransactionV2,
+  supportsTxnOffsetCommitTopicIds,
   supportsZstd,
 } from './capabilities';
 
@@ -40,9 +42,10 @@ describe('broker/capabilities', () => {
     expect(supportsAclPatternType({})).toBe(false);
   });
 
-  it('supportsTransactionV2 when Produce maxVersion is at least 12', () => {
-    expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 11 } })).toBe(false);
-    expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 12 } })).toBe(true);
+  it('supportsTransactionV2 once transaction.version is finalized at 2 or higher', () => {
+    expect(supportsTransactionV2({ 'transaction.version': 1 })).toBe(false);
+    expect(supportsTransactionV2({ 'transaction.version': 2 })).toBe(true);
+    expect(supportsTransactionV2({ 'metadata.version': 27 })).toBe(false);
     expect(supportsTransactionV2({})).toBe(false);
   });
 
@@ -56,5 +59,17 @@ describe('broker/capabilities', () => {
   it('supportsClientTelemetry when GetTelemetrySubscriptions is advertised', () => {
     expect(supportsClientTelemetry({ [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } })).toBe(true);
     expect(supportsClientTelemetry({})).toBe(false);
+  });
+
+  it('supportsMisroutedConnectionCheck when ApiVersions maxVersion is at least 5', () => {
+    expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 4 } })).toBe(false);
+    expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 5 } })).toBe(true);
+    expect(supportsMisroutedConnectionCheck({})).toBe(false);
+  });
+
+  it('supportsTxnOffsetCommitTopicIds when TxnOffsetCommit maxVersion is at least 6', () => {
+    expect(supportsTxnOffsetCommitTopicIds({})).toBe(false);
+    expect(supportsTxnOffsetCommitTopicIds({ [API_KEYS.TxnOffsetCommit]: { maxVersion: 5 } })).toBe(false);
+    expect(supportsTxnOffsetCommitTopicIds({ [API_KEYS.TxnOffsetCommit]: { maxVersion: 6 } })).toBe(true);
   });
 });

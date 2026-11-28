@@ -59,6 +59,10 @@ export { ACL_PERMISSION_TYPES as AclPermissionTypes } from './protocol/enums/acl
 export { RESOURCE_PATTERN_TYPES as ResourcePatternTypes } from './protocol/enums/resource-pattern-types';
 export { SCRAM_MECHANISMS as ScramMechanisms } from './protocol/enums/scram-mechanisms';
 export { FEATURE_UPDATE_UPGRADE_TYPES as FeatureUpdateUpgradeTypes } from './admin/types';
+export { OFFSET_SPECS as OffsetSpecs } from './protocol/enums/offset-specs';
+export { STREAMS_TOPOLOGY_DESCRIPTION_STATUSES as StreamsTopologyDescriptionStatuses } from './protocol/enums/streams-topology-description-statuses';
+export type { StreamsTopologyDescriptionStatus } from './protocol/enums/streams-topology-description-statuses';
+export type { OffsetSpec } from './protocol/enums/offset-specs';
 export { SHARE_ACKNOWLEDGE_TYPE, SHARE_ACQUIRE_MODE } from './share-consumer/index';
 
 export {
@@ -188,6 +192,9 @@ export type {
   ActiveProducerState,
   AclEntry,
   AclFilter,
+  ApiVersionDescription,
+  BrokerApiVersionsDescription,
+  DescribeApiVersionsOptions,
   DescribeFeaturesResult,
   DescribeMetadataQuorumResult,
   DescribeProducersOptions,
@@ -205,17 +212,26 @@ export type {
   ListGroupsOptions,
   FeatureUpdate,
   FeatureUpdateUpgradeType,
+  FetchTopicOffsetsOptions,
+  ListConsumerGroupOffsetsGroupInput,
+  ListConsumerGroupOffsetsOptions,
   ListTransactionsOptions,
   PartitionProducerState,
   AddRaftVoterOptions,
   RemoveRaftVoterOptions,
   UnregisterBrokerOptions,
+  UnregisterControllerOptions,
   AssignReplicasToDirsOptions,
   AssignReplicasToDirsReplica,
   TopicConfig,
   TopicOffset,
   ConsumerGroupDescription,
   ConsumerGroupMemberDescription,
+  ConsumerGroupOffsets,
+  DescribeStreamsGroupsOptions,
+  StreamsGroupDescription,
+  StreamsGroupMemberDescription,
+  StreamsTopologyDescription,
   CreateDelegationTokenOptions,
   CreateDelegationTokenResult,
   DelegationToken,

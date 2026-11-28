@@ -10,6 +10,8 @@ import { apiVersionsRequestV3, type ApiVersionsRequestOptions } from './v3/reque
 import { apiVersionsResponseV3 } from './v3/response';
 import { apiVersionsRequestV4 } from './v4/request';
 import { apiVersionsResponseV4 } from './v4/response';
+import { apiVersionsRequestV5 } from './v5/request';
+import { apiVersionsResponseV5 } from './v5/response';
 
 export type { ApiVersionsRequestOptions };
 
@@ -25,6 +27,11 @@ const VERSIONS = {
   4: (options) => ({
     request: apiVersionsRequestV4(options),
     response: apiVersionsResponseV4,
+    logResponseError: false,
+  }),
+  5: (options) => ({
+    request: apiVersionsRequestV5(options),
+    response: apiVersionsResponseV5,
     logResponseError: false,
   }),
 } satisfies VersionFactories<ApiVersionsRequestOptions>;

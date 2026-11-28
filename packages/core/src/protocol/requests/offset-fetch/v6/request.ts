@@ -1,35 +1,15 @@
-import {
-  compactArray,
-  compactNullableArray,
-  compactString,
-  defineRequest,
-  field,
-  flexibleObject,
-  int32,
-  object,
-} from '../../../schema';
-import type { FieldCodec } from '../../../schema';
+import { compactArray, compactString, defineRequest, field, flexibleObject, int32, object } from '../../../schema';
 import { API_KEYS } from '../../api-keys';
-import type { OffsetFetchTopicOptions } from '../shared';
+import { emptyAsNullCompactArray } from '../shared';
 
 /**
- * Compact array that writes `[]` as wire-null (uvarint 0), matching non-flexible `nullableArray`:
- * empty `topics` means "fetch offsets for every topic the group is subscribed to".
- *
  * Partition indexes stay `[]int32` (no per-element TAG_BUFFER) — they are not a nested struct
  * in the official schema.
  */
-const partitionSchema = object([field('partition', int32)]);
-const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(partitionSchema))]);
+export const partitionIndexesSchema = compactArray(object([field('partition', int32)]));
+const topicSchema = flexibleObject([field('topic', compactString), field('partitions', partitionIndexesSchema)]);
 
-export const compactNullableTopics: FieldCodec<OffsetFetchTopicOptions[]> = {
-  write(encoder, values) {
-    compactNullableArray(topicSchema).write(encoder, values.length === 0 ? null : values);
-  },
-  read(decoder) {
-    return compactNullableArray(topicSchema).read(decoder) ?? [];
-  },
-};
+export const compactNullableTopics = emptyAsNullCompactArray(topicSchema);
 
 /**
  * OffsetFetch Request (Version: 6) => group_id [topics] TAG_BUFFER

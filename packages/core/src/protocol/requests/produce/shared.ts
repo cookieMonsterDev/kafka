@@ -24,16 +24,16 @@ import {
   type ResponseDefinition,
 } from '../../schema';
 import { API_KEYS } from '../api-keys';
+import { requireTopicId } from '../topic-ids';
 
 /** First Produce version that addresses topics by UUID instead of name (KIP-516). */
 export const PRODUCE_TOPIC_ID_MIN_VERSION = 13;
 
-const ZERO_TOPIC_ID = Buffer.alloc(16);
-
-/** True when `topicId` is a non-zero 16-byte UUID the broker can look up. */
-export function isUsableTopicId(topicId: Buffer | undefined): topicId is Buffer {
-  return topicId != null && topicId.length === 16 && !topicId.equals(ZERO_TOPIC_ID);
-}
+/**
+ * First Produce version that adds its partitions to the transaction it writes to, which the broker
+ * allows only under transaction version 2 (KIP-890 part 2).
+ */
+export const PRODUCE_TRANSACTION_V2_MIN_VERSION = 12;
 
 export interface ProduceMessage {
   key?: Buffer | string | null;
@@ -60,6 +60,11 @@ export interface ProduceRequestOptions {
   acks: number;
   timeout: number;
   transactionalId?: string | null;
+  /**
+   * With a `transactionalId`: whether the transaction runs under transaction version 2. Without
+   * it, a transactional Produce is sent at v11 or lower. Defaults to false.
+   */
+  isTransactionV2Enabled?: boolean;
   producerId?: bigint;
   producerEpoch?: number;
   compression?: CompressionType;
@@ -252,12 +257,10 @@ export function createProduceRequest(apiVersion: number, options: ProduceRequest
     const encoder = new Encoder();
 
     if (apiVersion >= PRODUCE_TOPIC_ID_MIN_VERSION) {
-      const encodedTopicData = topicData.map(({ topic, topicId }, index) => {
-        if (!isUsableTopicId(topicId)) {
-          throw new RangeError(`Produce v${apiVersion} requires a 16-byte topicId for topic ${topic}`);
-        }
-        return { topicId, partitions: encodedPartitions[index] ?? [] };
-      });
+      const encodedTopicData = topicData.map((topic, index) => ({
+        topicId: requireTopicId('Produce', apiVersion, topic),
+        partitions: encodedPartitions[index] ?? [],
+      }));
       flexibleRequestBodySchemaV13.write(encoder, { transactionalId, acks, timeout, topicData: encodedTopicData });
       return encoder;
     }
@@ -283,21 +286,6 @@ export interface ProduceTopicResult {
   topicName: string;
   topicId?: Buffer;
   partitions: ProducePartitionResult[];
-}
-
-/**
- * Produce v13 responses carry a topic UUID, not a name. Map back to the name from the request
- * (by id, then by index) so `RecordMetadata.topicName` stays populated.
- */
-export function resolveProduceTopicName(
-  topicId: Buffer,
-  index: number,
-  topicData: readonly ProduceTopicData[],
-): string {
-  const byId = topicData.find((entry) => entry.topicId != null && entry.topicId.equals(topicId));
-  if (byId) return byId.topic;
-  const byIndex = topicData[index];
-  return byIndex?.topic ?? '';
 }
 
 export interface ProduceResponseV3Body {

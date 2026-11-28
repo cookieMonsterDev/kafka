@@ -1,6 +1,7 @@
 import { CircleAlert, Layers, Plug } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, createLazyRoute } from '@tanstack/react-router';
+import { ApiVersionsCard } from '../components/cluster/api-versions-card';
 import { LogDirsCard } from '../components/cluster/log-dirs-card';
 import { PageLayout } from '../components/layout/page';
 import { Button } from '../components/ui/button';
@@ -179,7 +180,12 @@ function ClusterOverview() {
           </CardContent>
         </Card>
 
-        {cluster.data?.connected === true && <LogDirsCard />}
+        {cluster.data?.connected === true && (
+          <>
+            <LogDirsCard />
+            <ApiVersionsCard />
+          </>
+        )}
 
         {/* A topics failure is reported once, by the rail that owns the topic list — repeating it
             here would put the same message on screen twice. */}

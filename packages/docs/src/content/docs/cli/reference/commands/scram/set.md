@@ -1,7 +1,7 @@
 ---
 title: 'scram set'
 description: 'Create or update a SCRAM credential for one or more users'
-order: 47
+order: 49
 section: reference
 hidden: true
 commandPath: ['scram', 'set']

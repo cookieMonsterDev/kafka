@@ -1,23 +1,25 @@
 import { afterEach, beforeEach, describe, expect } from 'vitest';
 import { createConsumer } from '../../../src/consumer/index';
-import { InstrumentationEventEmitter } from '../../../src/instrumentation/emitter';
-import type { InstrumentationEvent } from '../../../src/instrumentation/event';
+import { API_KEYS } from '../../../src/protocol/requests/api-keys';
+import { END_TXN_TRANSACTION_V2_MIN_VERSION } from '../../../src/protocol/requests/end-txn/index';
+import { PRODUCE_TRANSACTION_V2_MIN_VERSION } from '../../../src/protocol/requests/produce/shared';
 import {
-  NETWORK_REQUEST,
-  type NetworkEventMap,
-  type NetworkRequestEvent,
-} from '../../../src/network/instrumentation-events';
+  TXN_OFFSET_COMMIT_TOPIC_ID_MIN_VERSION,
+  TXN_OFFSET_COMMIT_TRANSACTION_V2_MIN_VERSION,
+} from '../../../src/protocol/requests/txn-offset-commit/index';
 import { createProducer } from '../../../src/producer/index';
 import {
   createCluster,
   createTopic,
   newLogger,
+  recordRequests,
   secureRandom,
+  waitForCommittedOffset,
   waitForConsumerToJoinGroup,
   waitForMessages,
   testIfKafkaAtLeast_0_11,
-  testIfKafkaAtLeast_4_0,
   testIfKafkaTransactionV1,
+  testIfKafkaTransactionV2,
 } from '../../helpers/index';
 
 describe('producer.transactions', () => {
@@ -145,20 +147,10 @@ describe('producer.transactions', () => {
     }
   });
 
-  /** KIP-890 part 2: transaction V2 (Produce v12+, Kafka 4.0+) lets Produce itself cover AddPartitionsToTxn. */
-  function countAddPartitionsToTxnRequests() {
-    const instrumentationEmitter = new InstrumentationEventEmitter<NetworkEventMap>();
-    const counter = { value: 0 };
-    instrumentationEmitter.addListener(NETWORK_REQUEST, (event: InstrumentationEvent<NetworkRequestEvent>) => {
-      if (event.payload.apiName === 'AddPartitionsToTxn') counter.value += 1;
-    });
-    return { counter, instrumentationEmitter };
-  }
-
-  testIfKafkaAtLeast_4_0('does not send AddPartitionsToTxn under transaction V2', async () => {
-    const tracker = countAddPartitionsToTxnRequests();
+  testIfKafkaTransactionV2('does not send AddPartitionsToTxn under transaction V2', async () => {
+    const recorder = recordRequests();
     producer = createProducer({
-      cluster: createCluster({ instrumentationEmitter: tracker.instrumentationEmitter }),
+      cluster: createCluster({ instrumentationEmitter: recorder.instrumentationEmitter }),
       logger: newLogger(),
       idempotent: true,
       transactionalId,
@@ -186,23 +178,89 @@ describe('producer.transactions', () => {
     await transaction.commit();
     await waitForMessages(consumed, { number: 1 });
 
-    expect(tracker.counter.value).toBe(0);
+    expect(recorder.versionsOf('AddPartitionsToTxn')).toEqual([]);
+    expect(Math.min(...recorder.versionsOf('Produce'))).toBeGreaterThanOrEqual(PRODUCE_TRANSACTION_V2_MIN_VERSION);
   });
 
-  testIfKafkaTransactionV1('still sends AddPartitionsToTxn on brokers older than transaction V2', async () => {
-    const tracker = countAddPartitionsToTxnRequests();
-    producer = createProducer({
-      cluster: createCluster({ instrumentationEmitter: tracker.instrumentationEmitter }),
-      logger: newLogger(),
-      idempotent: true,
-      transactionalId,
-    });
+  testIfKafkaTransactionV2(
+    'bumps the epoch through EndTxn v5 and adds offsets with TxnOffsetCommit v5+ under transaction V2',
+    async () => {
+      const recorder = recordRequests();
+      const cluster = createCluster({ instrumentationEmitter: recorder.instrumentationEmitter });
+      producer = createProducer({
+        cluster,
+        logger: newLogger(),
+        idempotent: true,
+        transactionalId,
+      });
+      await producer.connect();
+      // The idempotent producer allocates its own producer id on connect.
+      const initProducerIdsAtConnect = recorder.versionsOf('InitProducerId').length;
+      const consumerGroupId = `group-${secureRandom()}`;
+
+      for (const offset of [1n, 2n]) {
+        const transaction = await producer.transaction();
+        await transaction.send({ topic: topicName, messages: [{ key: 'k', value: `v${offset}` }] });
+        await transaction.sendOffsets({
+          consumerGroupId,
+          topics: [{ topic: topicName, partitions: [{ partition: 0, offset }] }],
+        });
+        await transaction.commit();
+      }
+      await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 2n });
+
+      // An aborted transaction leaves the committed offset where it was.
+      const aborted = await producer.transaction();
+      await aborted.sendOffsets({
+        consumerGroupId,
+        topics: [{ topic: topicName, partitions: [{ partition: 0, offset: 3n }] }],
+      });
+      await aborted.abort();
+      const next = await producer.transaction();
+      await next.send({ topic: topicName, messages: [{ key: 'k', value: 'after-abort' }] });
+      await next.commit();
+      await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 2n });
+
+      // Only the first transaction needed InitProducerId; every EndTxn after it carried the bumped epoch.
+      expect(recorder.versionsOf('InitProducerId').length - initProducerIdsAtConnect).toBe(1);
+      expect(recorder.distinctVersionsOf('EndTxn')).toEqual([5]);
+      // Kafka 4.4+ also takes the topic by id (v6, KIP-1319).
+      const txnOffsetCommitMaxVersion = cluster.brokerPool.versions?.[API_KEYS.TxnOffsetCommit]?.maxVersion ?? 0;
+      expect(recorder.distinctVersionsOf('TxnOffsetCommit')).toEqual([
+        Math.min(txnOffsetCommitMaxVersion, TXN_OFFSET_COMMIT_TOPIC_ID_MIN_VERSION),
+      ]);
+      expect(recorder.versionsOf('AddOffsetsToTxn')).toEqual([]);
+      expect(recorder.versionsOf('AddPartitionsToTxn')).toEqual([]);
+    },
+  );
+
+  testIfKafkaTransactionV1('stays below the transaction V2 request versions on brokers older than it', async () => {
+    const recorder = recordRequests();
+    const cluster = createCluster({ instrumentationEmitter: recorder.instrumentationEmitter });
+    producer = createProducer({ cluster, logger: newLogger(), idempotent: true, transactionalId });
     await producer.connect();
+    const consumerGroupId = `group-${secureRandom()}`;
 
     const transaction = await producer.transaction();
     await transaction.send({ topic: topicName, messages: [{ key: 'k', value: 'v1-committed' }] });
+    await transaction.sendOffsets({
+      consumerGroupId,
+      topics: [{ topic: topicName, partitions: [{ partition: 0, offset: 1n }] }],
+    });
     await transaction.commit();
+    await waitForCommittedOffset({ groupId: consumerGroupId, topic: topicName, offset: 1n });
 
-    expect(tracker.counter.value).toBeGreaterThan(0);
+    expect(recorder.versionsOf('AddPartitionsToTxn').length).toBeGreaterThan(0);
+    expect(recorder.versionsOf('AddOffsetsToTxn').length).toBeGreaterThan(0);
+    // The highest version the broker advertises, but none that the broker reads as transaction V2.
+    const expectedVersion = (apiKey: number, transactionV2MinVersion: number) =>
+      Math.min(cluster.brokerPool.versions?.[apiKey]?.maxVersion ?? 0, transactionV2MinVersion - 1);
+    expect(recorder.distinctVersionsOf('EndTxn')).toEqual([
+      expectedVersion(API_KEYS.EndTxn, END_TXN_TRANSACTION_V2_MIN_VERSION),
+    ]);
+    expect(recorder.distinctVersionsOf('TxnOffsetCommit')).toEqual([
+      expectedVersion(API_KEYS.TxnOffsetCommit, TXN_OFFSET_COMMIT_TRANSACTION_V2_MIN_VERSION),
+    ]);
+    expect(Math.max(...recorder.versionsOf('Produce'))).toBeLessThan(PRODUCE_TRANSACTION_V2_MIN_VERSION);
   });
 });

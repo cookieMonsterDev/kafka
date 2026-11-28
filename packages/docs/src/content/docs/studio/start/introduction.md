@@ -16,16 +16,18 @@ implementation, no separate config format.
 
 **Status:** early. The CLI, HTTP server, and web shell run end to end: the studio can browse,
 create, and configure topics; produce messages (single sends and rate-limited bursts); browse and
-tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion)
-and share groups; render a live topology board of cluster activity; and browse read-only ACL,
-client quota, and transaction state. Every session is authenticated, and `--read-only` is enforced
+tail live messages; inspect consumer groups (members, per-partition lag, offset reset, deletion),
+share groups, and streams groups (subtopologies, members, and tasks); render a live topology board
+of cluster activity; and browse read-only ACL, client quota, and transaction state. Every session is authenticated, and `--read-only` is enforced
 by the server, not just hidden in the UI — see [Security](../../reference/api/#security).
 
 ## Finding your way around
 
 The cluster overview shows topic, partition, and broker counts, plus **Studio uptime** (the age
 of the local server process, not the Kafka brokers). Quick actions lead to topics, the producer,
-and consumer groups.
+and consumer groups. Below them, each broker's log directories show their volume usage, and
+**API versions** lists every Kafka API a chosen broker supports with its version range and the
+version Studio uses, marking the APIs Studio does not implement (KIP-1220).
 
 Open a topic and use **Browse messages** or **Produce** to carry that topic into the next screen.
 Configuration has a key filter and an **Overrides only** view; changing these filters keeps pending

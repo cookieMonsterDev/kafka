@@ -111,7 +111,7 @@ describe('admin/share-groups', () => {
       });
       const cluster = fakeRunCluster(
         { node: coordinator },
-        { findGroupCoordinator: vi.fn().mockResolvedValue(coordinator) },
+        { findCoordinators: vi.fn(async ({ keys }: { keys: string[] }) => keys.map(() => coordinator)) },
       );
 
       const result = await makeApi(cluster).listShareGroupOffsets({
@@ -152,8 +152,8 @@ describe('admin/share-groups', () => {
       const cluster = fakeRunCluster(
         { node: (nodeId) => (nodeId === '2' ? second : first) },
         {
-          findGroupCoordinator: vi.fn(async ({ groupId }: { groupId: string }) =>
-            groupId === 'share-b' ? second : first,
+          findCoordinators: vi.fn(async ({ keys }: { keys: string[] }) =>
+            keys.map((groupId) => (groupId === 'share-b' ? second : first)),
           ),
         },
       );
@@ -162,6 +162,8 @@ describe('admin/share-groups', () => {
         groups: [{ groupId: 'share-a' }, { groupId: 'share-b' }, { groupId: 'share-c' }],
       });
 
+      expect(cluster.findCoordinators).toHaveBeenCalledTimes(1);
+      expect(cluster.findCoordinators).toHaveBeenCalledWith({ keys: ['share-a', 'share-b', 'share-c'] });
       expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('1'));
       expect(cluster.resolveTarget).toHaveBeenCalledWith(nodeTarget('2'));
 

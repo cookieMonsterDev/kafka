@@ -32,14 +32,16 @@ describe('broker.groups', () => {
     topicName = `test-topic-${secureRandom()}`;
     seedBroker = new Broker({ connectionPool: createConnectionPool(), logger: newLogger() });
     await seedBroker.connect();
-    const { coordinator: dest } = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
+    const {
+      coordinators: [dest],
+    } = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
       seedBroker!.send(FindCoordinator, {
-        coordinatorKey: groupId,
+        coordinatorKeys: [groupId],
         coordinatorType: COORDINATOR_TYPES.GROUP,
       }),
     );
     coordinator = new Broker({
-      connectionPool: createConnectionPool(advertisedAddress(dest.host, dest.port)),
+      connectionPool: createConnectionPool(advertisedAddress(dest!.host, dest!.port)),
       logger: newLogger(),
     });
     await coordinator.connect();

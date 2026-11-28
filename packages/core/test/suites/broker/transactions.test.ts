@@ -28,14 +28,16 @@ describe('broker.transactions', () => {
     await seedBroker.connect();
     await createTopic({ topic: topicName });
 
-    const dest = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
+    const {
+      coordinators: [dest],
+    } = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
       seedBroker!.send(FindCoordinator, {
-        coordinatorKey: transactionalId,
+        coordinatorKeys: [transactionalId],
         coordinatorType: COORDINATOR_TYPES.TRANSACTION,
       }),
     );
     coordinator = new Broker({
-      connectionPool: createConnectionPool(advertisedAddress(dest.coordinator.host, dest.coordinator.port)),
+      connectionPool: createConnectionPool(advertisedAddress(dest!.host, dest!.port)),
       logger: newLogger(),
     });
     await coordinator.connect();

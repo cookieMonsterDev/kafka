@@ -7,6 +7,7 @@ import { createDefaultSocketFactory } from '../network/socket-factory';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { COORDINATOR_TYPES } from '../protocol/enums/coordinator-types';
 import { createErrorFromCode, ERROR_CODES } from '../protocol/error-codes';
+import { API_KEYS } from '../protocol/requests/api-keys';
 import { Cluster } from './index';
 import { ANY_BROKER, CONTROLLER, coordinatorTarget, leaderTarget, nodeTarget } from './run';
 
@@ -483,9 +484,7 @@ describe('cluster/Cluster', () => {
     function clusterWithCoordinator(cached: Broker, found: { host: string; port: number }) {
       const cluster = createCluster();
       cluster.brokerPool.brokers = { '1': cached };
-      vi.spyOn(cluster, 'findGroupCoordinatorMetadata').mockResolvedValue({
-        coordinator: { nodeId: 1, ...found },
-      } as Awaited<ReturnType<Cluster['findGroupCoordinatorMetadata']>>);
+      vi.spyOn(cluster, 'findCoordinatorsMetadata').mockResolvedValue([{ key: 'group', nodeId: 1, ...found }]);
       vi.spyOn(cluster.brokerPool, 'findBroker').mockImplementation(async ({ nodeId }) => {
         const broker = cluster.brokerPool.brokers[nodeId];
         if (!broker) throw new KafkaBrokerNotFound(`Broker ${nodeId} not found`);
@@ -512,6 +511,98 @@ describe('cluster/Cluster', () => {
 
       await expect(cluster.findGroupCoordinator({ groupId: 'group' })).resolves.toBe(cached);
       expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCoordinators', () => {
+    /** A cluster whose one broker answers FindCoordinator with `send`, advertising up to `maxVersion`. */
+    function clusterWithBroker(maxVersion: number, send: (options: { coordinatorKeys: string[] }) => unknown) {
+      const cluster = createCluster();
+      const broker = {
+        versions: { [API_KEYS.GroupCoordinator]: { minVersion: 0, maxVersion } },
+        send: vi.fn(async (_family: unknown, options: { coordinatorKeys: string[] }) => send(options)),
+      };
+      vi.spyOn(cluster.brokerPool, 'withBroker').mockImplementation(async (callback) =>
+        callback({ nodeId: '1', broker: broker as unknown as Broker }),
+      );
+      vi.spyOn(cluster.brokerPool, 'hasBrokerMoved').mockReturnValue(false);
+      vi.spyOn(cluster, 'findBroker').mockImplementation(
+        async ({ nodeId }) => ({ nodeId: Number(nodeId) }) as unknown as Broker,
+      );
+      return { cluster, broker };
+    }
+
+    const coordinatorOf = (key: string) => ({ key, nodeId: key === 'b' ? 2 : 1, host: 'h', port: 9092 });
+
+    it('looks up every distinct key in one request on a broker with FindCoordinator v4', async () => {
+      const { cluster, broker } = clusterWithBroker(4, ({ coordinatorKeys }) => ({
+        coordinators: coordinatorKeys.map(coordinatorOf),
+      }));
+
+      await expect(cluster.findCoordinators({ keys: ['a', 'b', 'a'] })).resolves.toEqual([
+        { nodeId: 1 },
+        { nodeId: 2 },
+        { nodeId: 1 },
+      ]);
+      expect(broker.send).toHaveBeenCalledOnce();
+      expect(broker.send.mock.calls[0]?.[1]).toEqual({ coordinatorKeys: ['a', 'b'], coordinatorType: 0 });
+    });
+
+    it('sends one request per key to a broker without FindCoordinator v4', async () => {
+      const { cluster, broker } = clusterWithBroker(3, ({ coordinatorKeys }) => ({
+        coordinators: coordinatorKeys.map(coordinatorOf),
+      }));
+
+      await expect(
+        cluster.findCoordinators({ keys: ['a', 'b'], coordinatorType: COORDINATOR_TYPES.TRANSACTION }),
+      ).resolves.toEqual([{ nodeId: 1 }, { nodeId: 2 }]);
+      expect(broker.send.mock.calls.map(([, options]) => options)).toEqual([
+        { coordinatorKeys: ['a'], coordinatorType: COORDINATOR_TYPES.TRANSACTION },
+        { coordinatorKeys: ['b'], coordinatorType: COORDINATOR_TYPES.TRANSACTION },
+      ]);
+    });
+
+    it('fails when the response leaves a key out', async () => {
+      const { cluster } = clusterWithBroker(4, () => ({ coordinators: [coordinatorOf('a')] }));
+
+      await expect(cluster.findCoordinators({ keys: ['a', 'b'] })).rejects.toThrow('No coordinator returned for b');
+    });
+
+    it('sends nothing for no keys', async () => {
+      const { cluster, broker } = clusterWithBroker(4, () => ({ coordinators: [] }));
+
+      await expect(cluster.findCoordinators({ keys: [] })).resolves.toEqual([]);
+      expect(broker.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resolveTargets', () => {
+    it('looks up the coordinators of each type once and resolves other targets on their own', async () => {
+      const cluster = createCluster();
+      const find = vi
+        .spyOn(cluster, 'findCoordinators')
+        .mockImplementation(async ({ keys, coordinatorType }) =>
+          keys.map((key) => ({ key, coordinatorType }) as unknown as Broker),
+        );
+      const node = { nodeId: 3 } as unknown as Broker;
+      vi.spyOn(cluster, 'findBroker').mockResolvedValue(node);
+
+      const resolved = await cluster.resolveTargets([
+        coordinatorTarget('g1'),
+        coordinatorTarget('tx', COORDINATOR_TYPES.TRANSACTION),
+        nodeTarget(3),
+        coordinatorTarget('g2', COORDINATOR_TYPES.GROUP),
+      ]);
+
+      expect(resolved).toEqual([
+        { key: 'g1', coordinatorType: COORDINATOR_TYPES.GROUP },
+        { key: 'tx', coordinatorType: COORDINATOR_TYPES.TRANSACTION },
+        node,
+        { key: 'g2', coordinatorType: COORDINATOR_TYPES.GROUP },
+      ]);
+      expect(find).toHaveBeenCalledTimes(2);
+      expect(find).toHaveBeenCalledWith({ keys: ['g1', 'g2'], coordinatorType: COORDINATOR_TYPES.GROUP });
+      expect(find).toHaveBeenCalledWith({ keys: ['tx'], coordinatorType: COORDINATOR_TYPES.TRANSACTION });
     });
   });
 

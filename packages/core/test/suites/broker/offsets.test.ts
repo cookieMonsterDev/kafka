@@ -68,14 +68,16 @@ describe('broker.offsets', () => {
     });
     expect(listed.responses[0]?.partitions[0]?.offset).toBeGreaterThanOrEqual(0n);
 
-    const dest = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
+    const {
+      coordinators: [dest],
+    } = await retryProtocol('GROUP_COORDINATOR_NOT_AVAILABLE', () =>
       seedBroker!.send(FindCoordinator, {
-        coordinatorKey: groupId,
+        coordinatorKeys: [groupId],
         coordinatorType: COORDINATOR_TYPES.GROUP,
       }),
     );
     coordinator = new Broker({
-      connectionPool: createConnectionPool(advertisedAddress(dest.coordinator.host, dest.coordinator.port)),
+      connectionPool: createConnectionPool(advertisedAddress(dest!.host, dest!.port)),
       logger: newLogger(),
     });
     await coordinator.connect();

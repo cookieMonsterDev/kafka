@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { KafkaInvariantViolation, KafkaMemberIdRequired, KafkaServerDoesNotSupportApiKey } from '../../errors';
-import { COORDINATOR_TYPES } from '../enums/coordinator-types';
 import { API_KEYS } from './api-keys';
 import { ApiVersions } from './api-versions/index';
 import {
@@ -19,7 +18,6 @@ import { DeleteTopics } from './delete-topics/index';
 import { DescribeAcls } from './describe-acls/index';
 import { DescribeConfigs } from './describe-configs/index';
 import { Fetch } from './fetch/index';
-import { FindCoordinator } from './find-coordinator/index';
 import { InitProducerId } from './init-producer-id/index';
 import { JoinGroup } from './join-group/index';
 import { KAFKA_APIS } from './kafka-apis';
@@ -361,14 +359,6 @@ describe('request family hooks', () => {
     expect(prepared?.topics).toHaveLength(1);
     expect(prepared?.topics[0]?.topicId).toBe(topicId);
     expect(prepared?.topics[0]?.partitions.map(({ partition: id }) => id).sort()).toEqual([0, 1, 2]);
-  });
-
-  it('FindCoordinator asks for a group coordinator keyed by the group id by default', () => {
-    expect(FindCoordinator.prepareOptions?.({ groupId: 'g' })).toEqual({
-      groupId: 'g',
-      coordinatorKey: 'g',
-      coordinatorType: COORDINATOR_TYPES.GROUP,
-    });
   });
 
   it('JoinGroup retries once with the member id the broker assigned', () => {

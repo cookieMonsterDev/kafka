@@ -842,6 +842,18 @@ export const ERROR_CODES: readonly ErrorCodeEntry[] = [
     retriable: false,
     message: 'The group could not be deleted',
   },
+  {
+    type: 'STREAMS_TOPOLOGY_DESCRIPTION_UPDATE_FAILED',
+    code: 135,
+    retriable: false,
+    message: 'The broker could not process the topology description update',
+  },
+  {
+    type: 'CONTROLLER_ID_NOT_REGISTERED',
+    code: 136,
+    retriable: false,
+    message: 'The given controller ID was not registered',
+  },
 ];
 
 /** Pre-2.6 name for error code 6. Prefer `NOT_LEADER_OR_FOLLOWER`. */

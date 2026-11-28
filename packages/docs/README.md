@@ -104,6 +104,9 @@ From another section use `../../guides/testing/`; within the same section use
 `./installation/`. Root-absolute `/docs/…` links omit the GitHub Pages base;
 file-relative `../guides/…` resolves to `/docs/core/start/guides/…` and 404s.
 
+`demo: studio` embeds the interactive Studio demo under the page title. How the
+demo is built: [Studio README](../studio/README.md#local-development).
+
 `title`, `description`, and `section` are required. `order` defaults to
 `999`. The schema in `src/content.config.ts` validates this at build time,
 so a typo in frontmatter fails the build instead of rendering a broken page.
@@ -233,6 +236,8 @@ src/components/callout.astro
 src/components/code-tabs.astro
 src/components/ui/*              shadcn components (yours to edit)
 src/components/copy-code.tsx     copy-icon buttons for the install chip and code blocks
+src/components/studio-demo.tsx   framed Studio demo (pages with `demo: studio`)
+src/lib/studio-demo.ts           integration publishing Studio's demo build at /studio-demo/
 src/lib/docs.ts                  sidebar grouping, prev/next, hrefs
 src/lib/utils.ts                 cn() class-merge helper
 src/styles/global.css            Tailwind entry + design tokens

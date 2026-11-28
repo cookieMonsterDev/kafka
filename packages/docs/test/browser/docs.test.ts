@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const commandPath = 'docs/cli/reference/commands/topic/create/';
+const studioDemoPath = 'docs/studio/start/introduction/';
+const studioDemoFrame = 'iframe[title="Kafka Studio interactive demo"]';
 
 test('command navigation expands the active path, filters, and restores the tree', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -73,7 +75,12 @@ test('mobile menu contains focus, closes with Escape, and restores its opener', 
 });
 
 for (const theme of ['dark'] as const) {
-  for (const path of ['docs/core/start/getting-started/', commandPath, 'docs/core/reference/configuration/']) {
+  for (const path of [
+    'docs/core/start/getting-started/',
+    commandPath,
+    'docs/core/reference/configuration/',
+    studioDemoPath,
+  ]) {
     test(`accessibility: ${theme} ${path}`, async ({ page }) => {
       await page.addInitScript((value) => localStorage.setItem('docs-theme', value), theme);
       await page.setViewportSize({ width: 1440, height: 900 });
@@ -85,6 +92,37 @@ for (const theme of ['dark'] as const) {
     });
   }
 }
+
+test('the Studio demo runs on its sample cluster and the toolbar resizes the frame', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(studioDemoPath);
+  const demo = page.frameLocator(studioDemoFrame);
+  await expect(demo.getByText('Connected to a Kafka cluster')).toBeVisible();
+  // Studio scrolls inside its shell; a scrollable document would slide the sidebar out of view.
+  const demoDocument = page.frames().find((frame) => frame.url().includes('/studio-demo/'));
+  expect(await demoDocument?.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBe(0);
+  await demo.getByRole('link', { name: 'Browse topics' }).click();
+  await expect(demo.getByRole('link', { name: 'orders', exact: true })).toBeVisible();
+
+  const frame = page.locator(studioDemoFrame);
+  const mobile = page.getByRole('button', { name: 'Mobile width' });
+  await mobile.click();
+  await expect(mobile).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await frame.boundingBox())?.width).toBe(390);
+  expect(await page.getByRole('link', { name: /Open full screen/ }).getAttribute('href')).toBe(
+    '/kafka/studio-demo/index.html',
+  );
+});
+
+test('the Studio demo frame and its full-screen link work without JavaScript', async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto('http://127.0.0.1:4329/kafka/' + studioDemoPath);
+  await expect(page.locator(studioDemoFrame)).toBeVisible();
+  await expect(page.getByRole('link', { name: /Open full screen/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reset demo' })).toBeHidden();
+  await context.close();
+});
 
 test('mobile menu and search pass accessibility checks', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

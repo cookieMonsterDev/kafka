@@ -352,6 +352,9 @@ importers:
       '@cookiemonsterdev/kafka-core':
         specifier: workspace:^
         version: link:../core
+      '@cookiemonsterdev/kafka-studio':
+        specifier: workspace:^
+        version: link:../studio
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0

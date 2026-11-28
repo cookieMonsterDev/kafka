@@ -4,6 +4,7 @@ import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { chartLanguage, markdownCharts } from './src/lib/rehype-chart.ts';
+import { studioDemo } from './src/lib/studio-demo.ts';
 
 const githubPages = process.env.GITHUB_PAGES === '1';
 
@@ -33,7 +34,7 @@ export default defineConfig({
     syntaxHighlight: { type: 'shiki', excludeLangs: [chartLanguage] },
   },
 
-  integrations: [react(), markdownCharts()],
+  integrations: [react(), markdownCharts(), studioDemo()],
 
   vite: {
     plugins: [tailwindcss()],

@@ -2,6 +2,8 @@
 import { getCollection, render } from 'astro:content';
 import type { GetStaticPaths } from 'astro';
 import DocsLayout from '@/layouts/docs-layout.astro';
+import { StudioDemo } from '@/components/studio-demo';
+import { STUDIO_DEMO_PATH } from '@/lib/studio-demo';
 import { markdownHref, publication, packageVersions } from '@/lib/publication';
 import { withBase } from '@/lib/base';
 import { DEFAULT_DOCS_PACKAGE, docsPackageOf, hrefFor, navLabel, neighbors, pathFor } from '@/lib/docs';
@@ -104,6 +106,7 @@ const breadcrumbs = [
     ]}
   >
     <h1>{entry.data.title}</h1>
+    {entry.data.demo === 'studio' && <StudioDemo client:visible src={withBase(`/${STUDIO_DEMO_PATH}index.html`)} />}
     <Content />
   </article>
 </DocsLayout>

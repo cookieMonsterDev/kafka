@@ -153,6 +153,31 @@ describe('groupDescribeCommand', () => {
     expect(written.groups[0]).toEqual({ groupId: 'g1', ok: false, detail: 'group does not exist' });
   });
 
+  it('reports GROUP_ID_NOT_FOUND from DescribeGroups v6 as a failure with the broker message', async () => {
+    const describeGroups = vi.fn(async () => {
+      // Admin wraps the broker's non-retriable error, so its type is on `cause`.
+      throw Object.assign(new Error('Group g1 is not a classic group.'), {
+        name: 'KafkaNonRetriableError',
+        cause: { name: 'KafkaProtocolError', type: 'GROUP_ID_NOT_FOUND' },
+      });
+    });
+    const admin = createFakeAdmin({ describeGroups, disconnect: async () => {} });
+    const { context, stdoutWrite } = createFakeCommandContext({
+      flags: { brokers: 'localhost:9092' },
+      positionals: ['g1'],
+      openAdmin: async () => admin,
+      format: 'json',
+    });
+
+    const code = await groupDescribeCommand.run(context);
+
+    expect(code).toBe(1);
+    const written = JSON.parse(stdoutWrite.mock.calls[0]![0]) as {
+      groups: { groupId: string; ok: boolean; detail?: string }[];
+    };
+    expect(written.groups[0]).toEqual({ groupId: 'g1', ok: false, detail: 'Group g1 is not a classic group.' });
+  });
+
   it('disconnects even when a single-group call throws', async () => {
     const disconnect = vi.fn(async () => {});
     const admin = createFakeAdmin({

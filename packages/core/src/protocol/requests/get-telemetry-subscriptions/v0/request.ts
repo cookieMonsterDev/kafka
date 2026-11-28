@@ -14,7 +14,7 @@ export interface GetTelemetrySubscriptionsRequestV0Fields {
  * Flexible from v0 (KIP-714). Send the all-zero UUID on the first request; the broker
  * assigns a stable id in the response.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('clientInstanceId', uuid)]);
 

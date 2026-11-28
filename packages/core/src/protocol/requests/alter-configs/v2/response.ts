@@ -26,7 +26,7 @@ export type AlterConfigsResponseV2Body = AlterConfigsResponseV1Body;
  *
  * First flexible version (KIP-482). Same fields as v0/v1. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const resourceSchema = flexibleObject([
   field('errorCode', int16),

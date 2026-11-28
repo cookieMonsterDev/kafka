@@ -10,7 +10,7 @@ Guide: [Errors](../../guides/errors/). Source:
 [`errors.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/errors.ts).
 Broker codes:
 [`protocol/error-codes.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/protocol/error-codes.ts)
-and the [protocol guide](https://kafka.apache.org/43/design/protocol/).
+and the [protocol guide](https://kafka.apache.org/44/design/protocol/).
 
 `isKafkaError` exists in `errors.ts` but is **not** on the public barrel
 (`src/index.ts`). Catch with `instanceof`.

@@ -26,7 +26,7 @@ try {
 
 Public classes are in [`errors.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/errors.ts).
 The catalog is [Errors](../../reference/errors/). Protocol codes:
-[Kafka protocol](https://kafka.apache.org/43/design/protocol/).
+[Kafka protocol](https://kafka.apache.org/44/design/protocol/).
 
 ## Retriable vs not
 

@@ -27,7 +27,7 @@ const resultsSchema = array(resultSchema);
  *
  * `parse` never throws: per-group failures are attached as `.error` on each result.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const deleteGroupsResponseV0: ResponseDefinition<DeleteGroupsResponseV0Body> = {
   decode: async (rawData) => {

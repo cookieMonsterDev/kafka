@@ -16,7 +16,7 @@ export interface PushTelemetryResponseV0Body {
  *
  * Flexible from v0 (KIP-714).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([field('throttleTime', int32), field('errorCode', int16)]);
 

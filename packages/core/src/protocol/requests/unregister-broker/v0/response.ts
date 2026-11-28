@@ -19,7 +19,7 @@ export interface UnregisterBrokerResponseV0Body {
  * Flexible from v0. Quota timing follows KIP-219: the decoded throttle is exposed as
  * `clientSideThrottleTime`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('throttleTime', int32),

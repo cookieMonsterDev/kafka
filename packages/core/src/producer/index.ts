@@ -51,7 +51,7 @@ export interface ProducerOptions {
 
 /**
  * Producer returned by {@link Kafka.producer}.
- * @see https://kafka.apache.org/43/configuration/producer-configs/
+ * @see https://kafka.apache.org/44/configuration/producer-configs/
  */
 export interface Producer {
   connect: (options?: ConnectOptions) => Promise<void>;
@@ -86,7 +86,7 @@ const EVENT_KEYS = Object.keys(events)
 /**
  * User-facing producer: send path, optional transactions, and instrumentation events.
  *
- * @see https://kafka.apache.org/43/configuration/producer-configs/
+ * @see https://kafka.apache.org/44/configuration/producer-configs/
  */
 export function createProducer({
   cluster,

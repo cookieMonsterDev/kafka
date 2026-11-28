@@ -12,7 +12,7 @@ export interface DescribeUserScramCredentialsRequestV0Fields {
  *
  * Flexible from v0. `users: null` (or empty) describes every user.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const userSchema = flexibleObject([field('name', compactString)]);
 export const requestSchema = flexibleObject([field('users', compactNullableArray(userSchema))]);

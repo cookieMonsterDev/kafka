@@ -23,7 +23,7 @@ export interface OffsetDeleteRequestV0Fields {
  *     partitions => partition_index
  *       partition_index => INT32
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = object([field('partitionIndex', int32)]);
 const topicSchema = object([field('name', string), field('partitions', array(partitionSchema))]);

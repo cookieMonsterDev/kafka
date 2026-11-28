@@ -46,7 +46,7 @@ export interface ShareFetchRequestV2Fields {
  * ShareFetch Request (Version: 2) adds ShareAcquireMode (KIP-1206) and IsRenewAck (KIP-1222)
  * after BatchSize. Version 1 remains the stable Kafka 4.1 layout.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partitionIndex', int32),

@@ -12,7 +12,7 @@ export {
  * AlterReplicaLogDirs Request (Version: 1) — wire format identical to v0; only the response's
  * throttling semantics change (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const alterReplicaLogDirsRequestV1 = defineRequest({
   apiKey: API_KEYS.AlterReplicaLogDirs,

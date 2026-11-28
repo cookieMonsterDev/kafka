@@ -30,7 +30,7 @@ import { API_KEYS } from '../../api-keys';
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  * Decoded field names stay `topic` / `replicaAssignment` / `configEntries` to match this client.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const replicaAssignmentSchema = flexibleObject([field('partition', int32), field('replicas', compactArray(int32))]);
 const configEntrySchema = flexibleObject([field('name', compactString), field('value', compactNullableString)]);

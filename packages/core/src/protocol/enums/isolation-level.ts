@@ -1,6 +1,6 @@
 /**
  * Fetch isolation. `READ_COMMITTED` hides aborted transactional records up to the last stable offset.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/#isolation.level
  */
 export const ISOLATION_LEVEL = Object.freeze({
   /** All records are visible, including aborted transactional ones. */

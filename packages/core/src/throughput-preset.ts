@@ -35,7 +35,7 @@ export interface ThroughputPresetConsumer {
  * await kafka.consumer({ groupId }).run({ ...consumer, eachBatch })
  * ```
  *
- * @see https://kafka.apache.org/43/configuration/producer-configs/
+ * @see https://kafka.apache.org/44/configuration/producer-configs/
  */
 export interface ThroughputPreset {
   producer: ThroughputPresetProducer;

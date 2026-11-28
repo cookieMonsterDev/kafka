@@ -8,7 +8,7 @@ section: reference
 Returned by `kafka.admin()`. Source:
 [`admin/types.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/admin/types.ts).
 Guide: [Admin](../../guides/admin/). Apache:
-[basic operations](https://kafka.apache.org/43/operations/basic-kafka-operations/).
+[basic operations](https://kafka.apache.org/44/operations/basic-kafka-operations/).
 
 Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 `bigint | number | string`. Responses use `bigint`.

@@ -10,7 +10,7 @@ import { encodeMessage, type EncodeMessageOptions, type MessageVersion } from '.
  *
  * Messages in a message set are not encoded as an array. They are written in sequence.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  * @see https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-Messagesets
  */
 export function encodeMessageSet({

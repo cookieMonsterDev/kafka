@@ -36,7 +36,7 @@ export interface AlterClientQuotasRequestV0Fields {
  *
  * KIP-546. `remove: true` deletes the quota key; `value` is ignored on the broker then.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const entitySchema = object([field('entityType', string), field('entityName', nullableString)]);
 const opSchema = object([field('key', string), field('value', float64), field('remove', boolean)]);

@@ -70,6 +70,6 @@ const VERSIONS = {
  * synonyms; Kafka 2.5+ v3 documentation (KIP-524); v4 is flexible (KIP-482).
  * Kafka 4.0+ typically advertises 1-4.
  *
- * @see https://kafka.apache.org/43/configuration/topic-configs/
+ * @see https://kafka.apache.org/44/configuration/topic-configs/
  */
 export const DescribeConfigs = defineRequestFamily(KAFKA_APIS.DescribeConfigs, VERSIONS);

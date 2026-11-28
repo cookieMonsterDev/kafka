@@ -22,7 +22,7 @@ export interface IncrementalAlterConfigsResponseV0Body {
  *     resource_type => INT8
  *     resource_name => STRING
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const resourceSchema = object([
   field('errorCode', int16),

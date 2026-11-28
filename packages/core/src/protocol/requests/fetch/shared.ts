@@ -132,7 +132,7 @@ const fetchNodeEndpointsArraySchema = compactArray(fetchNodeEndpointSchema);
  * surfaced today; DivergingEpoch and SnapshotId stay skipped until truncation detection needs
  * them. Each tag's value is `tag:uvarint, size:uvarint, <size> bytes` (KIP-482).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function readFetchPartitionTaggedFields(decoder: Decoder): LeaderIdAndEpoch | null {
   let currentLeader: LeaderIdAndEpoch | null = null;
@@ -150,7 +150,7 @@ export function readFetchPartitionTaggedFields(decoder: Decoder): LeaderIdAndEpo
  * broker addresses for any `currentLeader.leaderId` values in the response the client may not
  * already have cached.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function readFetchResponseNodeEndpoints(decoder: Decoder): FetchNodeEndpoint[] {
   let nodeEndpoints: FetchNodeEndpoint[] = [];
@@ -169,7 +169,7 @@ export function readFetchResponseNodeEndpoints(decoder: Decoder): FetchNodeEndpo
  * and there is nothing partition-level to report), then scan partitions for the first failure.
  * `OFFSET_OUT_OF_RANGE` becomes {@link KafkaOffsetOutOfRange} with topic and partition.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export async function parseFetchResponse<
   T extends {
@@ -219,7 +219,7 @@ const RECORD_BATCH_MAGIC = 2;
  * Mixed 0.10 + 0.11 formats in one response (cluster upgrading the message format) stop on
  * `KafkaUnsupportedMagicByteInMessageSet` so the next fetch can finish the RecordBatch.
  *
- * @see https://kafka.apache.org/43/implementation/messages/
+ * @see https://kafka.apache.org/44/implementation/messages/
  */
 export async function decodeRecordSet(decoder: Decoder, checkCrcs?: boolean): Promise<DecodedRecordBatch['records']> {
   const messagesSize = decoder.readInt32();
@@ -338,7 +338,7 @@ function encodeFetchPartitions(partitions: FetchPartitionRequest[]) {
  * (replicaId -1 / replicaEpoch -1). v17–v18 add tagged replica directory id and high-watermark
  * on partitions, also omitted at consumer defaults.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function createFetchRequest(apiVersion: number, options: FetchRequestOptions): RequestDefinition {
   return {

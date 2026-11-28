@@ -20,7 +20,7 @@ export interface CreateDelegationTokenResponseV0Body {
  * Throttle time is the last field (unlike most admin APIs). Brokers throttle *before*
  * sending the response until version 1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = object([
   field('errorCode', int16),

@@ -16,7 +16,7 @@ export type AddPartitionsToTxnResponseV3Body = AddPartitionsToTxnResponseV2Body;
  *
  * First flexible version (KIP-482). Same fields as v0–v2. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionErrorSchema = flexibleObject([field('partition', int32), field('errorCode', int16)]);
 const topicErrorsSchema = flexibleObject([

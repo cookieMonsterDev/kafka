@@ -59,7 +59,7 @@ export interface DescribeTopicPartitionsResponseV0Body {
  *
  * Flexible from v0. `nextCursor` is a nullable compact struct. Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('errorCode', int16),

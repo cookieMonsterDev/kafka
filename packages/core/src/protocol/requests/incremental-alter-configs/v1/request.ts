@@ -29,7 +29,7 @@ export {
  *
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const configSchema = flexibleObject([
   field('name', compactString),

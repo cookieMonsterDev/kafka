@@ -16,7 +16,7 @@ export interface AlterPartitionReassignmentsRequestV1Options extends AlterPartit
  *
  * v1 adds `allow_replication_factor_change` (KIP-860). Hand-written like v0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const alterPartitionReassignmentsRequestV1: (
   values: AlterPartitionReassignmentsRequestV1Options,

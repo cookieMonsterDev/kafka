@@ -1,6 +1,6 @@
 /**
  * DescribeCluster `endpoint_type` (KIP-919).
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const ENDPOINT_TYPES = Object.freeze({
   UNKNOWN: 0,

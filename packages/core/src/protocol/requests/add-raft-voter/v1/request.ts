@@ -29,7 +29,7 @@ export interface AddRaftVoterRequestV1Fields {
  *
  * Flexible from v0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const listenerSchema = flexibleObject([
   field('name', compactString),

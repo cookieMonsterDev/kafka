@@ -37,7 +37,7 @@ export interface DescribeLogDirsResponseV4Body extends DescribeLogDirsResponseV3
  * v4 adds the volume's total and usable bytes per log dir (KIP-827). Neither counts data in
  * remote storage.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const logDirSchema = flexibleObject([
   field('errorCode', int16),

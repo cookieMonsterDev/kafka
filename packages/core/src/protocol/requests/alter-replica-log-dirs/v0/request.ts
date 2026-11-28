@@ -23,7 +23,7 @@ export interface AlterReplicaLogDirsRequestV0Fields {
  *       topic => STRING
  *       partitions => INT32
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = object([field('topic', string), field('partitions', array(int32))]);
 const dirSchema = object([field('path', string), field('topics', array(topicSchema))]);

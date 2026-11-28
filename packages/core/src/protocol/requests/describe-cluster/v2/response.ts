@@ -43,7 +43,7 @@ export type DescribeClusterResponseV2Body = Omit<DescribeClusterResponseV1Body, 
  *
  * Adds `isFenced` on each broker (KIP-1073). Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

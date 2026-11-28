@@ -58,7 +58,7 @@ export interface CreateTopicsResponseV5Body {
  * tagged field 0 and skipped via the empty TAG_BUFFER. Decoded topic results keep `topic` (not
  * `name`) to match this client. Quota timing follows v3 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const configSchema = flexibleObject([
   field('name', compactString),

@@ -38,7 +38,7 @@ export interface DescribeTopicPartitionsRequestV0Options {
  * API key 75 (KIP-966). Flexible from v0. Topics are identified by name; a null cursor
  * starts from the beginning. `responsePartitionLimit` defaults to 2000.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString)]);
 const cursorSchema = nullableFlexibleObject([field('topic', compactString), field('partitionIndex', int32)]);

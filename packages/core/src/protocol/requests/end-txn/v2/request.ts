@@ -5,7 +5,7 @@ import { API_KEYS } from '../../api-keys';
  * EndTxn Request (Version: 2) — same wire as v0/v1.
  * The bump may return PRODUCER_FENCED on the response.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const requestSchema = object([
   field('transactionalId', string),

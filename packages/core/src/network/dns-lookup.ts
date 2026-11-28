@@ -9,7 +9,7 @@ import net from 'node:net';
  * - `canonicalBootstrap`: follow CNAME (and PTR if needed) so GSSAPI sees the FQDN
  *   (`sasl.kerberos.service.name` / SPN). Matches `resolve_canonical_bootstrap_servers_only`.
  *
- * @see https://kafka.apache.org/43/configuration/producer-configs/#client.dns.lookup
+ * @see https://kafka.apache.org/44/configuration/producer-configs/#client.dns.lookup
  */
 export type ClientDnsLookup = 'useAllDnsIps' | 'canonicalBootstrap';
 

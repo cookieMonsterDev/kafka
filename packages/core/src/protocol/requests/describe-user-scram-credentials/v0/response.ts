@@ -35,7 +35,7 @@ export interface DescribeUserScramCredentialsResponseV0Body {
 /**
  * DescribeUserScramCredentials Response (Version: 0) => throttle_time_ms error_code error_message [results] TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const credentialSchema = flexibleObject([field('mechanism', int8), field('iterations', int32)]);
 const resultSchema = flexibleObject([

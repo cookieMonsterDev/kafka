@@ -22,7 +22,7 @@ export interface ElectLeadersRequestV0Fields {
  * an empty array elects none. Originally named ElectPreferredLeaders.
  * Wire order matches the Java client: TopicPartitions, then TimeoutMs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = object([field('topic', string), field('partitions', array(int32))]);
 export const requestSchema = object([

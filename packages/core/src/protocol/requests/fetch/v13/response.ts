@@ -68,7 +68,7 @@ function decodePartition(checkCrcs?: boolean) {
  * request so consumers stay name-based. DivergingEpoch (tag 0) and SnapshotId (tag 2, v12+)
  * stay skipped; CurrentLeader (tag 1, v12+) and NodeEndpoints (v16+) are decoded (KIP-951).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function fetchResponseV13(
   options: Pick<FetchRequestOptions, 'topics' | 'topicsForResponse' | 'checkCrcs'> = { topics: [] },

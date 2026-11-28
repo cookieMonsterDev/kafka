@@ -54,7 +54,7 @@ export type MetadataResponseV9Body = MetadataResponseV6Body & {
  * Response header v1's trailing TAG_BUFFER is skipped by `Connection` before `decode()` runs.
  * Throttle semantics stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

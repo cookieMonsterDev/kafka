@@ -11,7 +11,7 @@ export interface DescribeClusterRequestV0Fields {
  *
  * Flexible from v0. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('includeClusterAuthorizedOperations', boolean)]);
 

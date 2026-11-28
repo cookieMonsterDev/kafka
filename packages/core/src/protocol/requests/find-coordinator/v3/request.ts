@@ -10,7 +10,7 @@ import { API_KEYS } from '../../api-keys';
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  * This client keeps `apiName: 'GroupCoordinator'` (API key 10).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([field('coordinatorKey', compactString), field('coordinatorType', int8)]);
 

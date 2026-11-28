@@ -32,7 +32,7 @@ export interface ShareAcknowledgeRequestV2Fields {
 /**
  * ShareAcknowledge Request (Version: 2) adds IsRenewAck after ShareSessionEpoch (KIP-1222).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partitionIndex', int32),

@@ -57,7 +57,7 @@ export interface ShareGroupDescribeResponseV1Body {
  * ConsumerGroupDescribe. Assignment structs include topic id and topic name. Quota timing
  * follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicPartitionsSchema = flexibleObject([
   field('topicId', uuid),

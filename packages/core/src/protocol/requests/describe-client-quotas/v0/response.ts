@@ -41,7 +41,7 @@ export interface DescribeClientQuotasResponseV0Body {
  *
  * KIP-546. The wire's throttle_time_ms is client-side (KIP-219); exposed as `clientSideThrottleTime`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const entitySchema = object([field('entityType', string), field('entityName', nullableString)]);
 const valueSchema = object([field('key', string), field('value', float64)]);

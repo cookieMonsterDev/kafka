@@ -20,7 +20,7 @@ export interface MetadataRequestV8Fields {
  * Adds the authorized-operations include flags (KIP-430). Defaults are false so ordinary
  * producer/consumer metadata fetches skip the expensive ACL bitmask.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const requestSchema = object([
   field('topics', nullableArray(string)),

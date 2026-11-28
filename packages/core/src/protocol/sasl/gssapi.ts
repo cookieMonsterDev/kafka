@@ -7,7 +7,7 @@
  * opaque tokens; GSS itself comes from `sasl.gssProvider` or the optional
  * `kerberos` peer.
  *
- * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ * @see https://kafka.apache.org/44/security/authentication-using-sasl/
  * @see https://www.rfc-editor.org/rfc/rfc4752
  */
 import { Decoder } from '../decoder';

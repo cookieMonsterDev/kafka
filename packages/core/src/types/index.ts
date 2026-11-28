@@ -65,7 +65,7 @@ export type { ConnectOptions };
 /** Resolves bootstrap brokers at connect time as `host:port` strings. */
 export type BrokersFunction = () => readonly string[] | Promise<readonly string[]>;
 
-/** Token returned by an OAUTHBEARER provider. @see https://kafka.apache.org/43/security/authentication-using-sasl/ */
+/** Token returned by an OAUTHBEARER provider. @see https://kafka.apache.org/44/security/authentication-using-sasl/ */
 export interface OauthbearerProviderResponse {
   value: string;
 }
@@ -76,7 +76,7 @@ export interface OauthbearerProviderResponse {
  * `tokenHmac` is the password (Buffer values are sent as standard base64), and
  * the client-first message includes `tokenauth=true`.
  *
- * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ * @see https://kafka.apache.org/44/security/authentication-using-sasl/
  */
 export type ScramSaslOptions = { username: string; password: string } | { tokenId: string; tokenHmac: Buffer | string };
 
@@ -109,7 +109,7 @@ export type SaslMechanism = keyof SaslMechanismOptionsMap;
 
 type SaslMechanismOptions<T> = T extends SaslMechanism ? { mechanism: T } & SaslMechanismOptionsMap[T] : never;
 
-/** Built-in SASL options. @see https://kafka.apache.org/43/security/authentication-using-sasl/ */
+/** Built-in SASL options. @see https://kafka.apache.org/44/security/authentication-using-sasl/ */
 export type SaslOptions = SaslMechanismOptions<SaslMechanism>;
 
 /** Custom SASL mechanism with a user-supplied authenticator. */
@@ -121,8 +121,8 @@ export type SaslMechanismProvider = {
 /**
  * Shared client options used by {@link Kafka.producer}, {@link Kafka.consumer}, and {@link Kafka.admin}.
  *
- * @see https://kafka.apache.org/43/getting-started/introduction/
- * @see https://kafka.apache.org/43/security/security-overview/
+ * @see https://kafka.apache.org/44/getting-started/introduction/
+ * @see https://kafka.apache.org/44/security/security-overview/
  */
 export interface KafkaConfig {
   /**
@@ -133,18 +133,18 @@ export interface KafkaConfig {
   brokers?: readonly string[] | BrokersFunction;
   /**
    * Enable TLS. `true` uses default Node TLS options; an object is passed to `tls.connect`.
-   * @see https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/
+   * @see https://kafka.apache.org/44/security/encryption-and-authentication-using-ssl/
    */
   ssl?: TlsConnectionOptions | boolean;
   /**
    * SASL credentials or a custom mechanism provider. SCRAM mechanisms accept
    * either `username`/`password` or delegation-token `tokenId`/`tokenHmac`.
-   * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+   * @see https://kafka.apache.org/44/security/authentication-using-sasl/
    */
   sasl?: SaslOptions | SaslMechanismProvider;
   /**
    * Logical client identifier sent in the request header.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#client.id
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#client.id
    */
   clientId?: string;
   /** Socket connect timeout in milliseconds. Also the initial TLS/TCP setup timeout. */
@@ -152,29 +152,29 @@ export interface KafkaConfig {
   /**
    * Close idle broker sockets after this many milliseconds with no send/receive and no in-flight
    * requests. Default 540_000 (9 minutes). `0` disables idle close.
-   * [connections.max.idle.ms](https://kafka.apache.org/43/configuration/producer-configs/#connections.max.idle.ms)
+   * [connections.max.idle.ms](https://kafka.apache.org/44/configuration/producer-configs/#connections.max.idle.ms)
    */
   connectionsMaxIdleMs?: number;
   /**
    * Cap, in ms, for exponential growth of the connect/TLS handshake timeout after consecutive
    * failures. The initial timeout is {@link KafkaConfig.connectionTimeout}. Default 30_000.
-   * [socket.connection.setup.timeout.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#socket.connection.setup.timeout.max.ms)
+   * [socket.connection.setup.timeout.max.ms](https://kafka.apache.org/44/configuration/producer-configs/#socket.connection.setup.timeout.max.ms)
    */
   socketConnectionSetupTimeoutMaxMs?: number;
   /**
    * How bootstrap hostnames are resolved. Default `'useAllDnsIps'` (every A/AAAA, happy-eyeballs
    * when both families exist). `'canonicalBootstrap'` follows CNAME/PTR so GSSAPI sees the FQDN.
-   * [client.dns.lookup](https://kafka.apache.org/43/configuration/producer-configs/#client.dns.lookup)
+   * [client.dns.lookup](https://kafka.apache.org/44/configuration/producer-configs/#client.dns.lookup)
    */
   clientDnsLookup?: ClientDnsLookup;
   /**
    * Initial wait before reconnecting a dropped socket. Default 50. `0` disables.
-   * [reconnect.backoff.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.ms)
+   * [reconnect.backoff.ms](https://kafka.apache.org/44/configuration/producer-configs/#reconnect.backoff.ms)
    */
   reconnectBackoffMs?: number;
   /**
    * Cap for reconnect backoff. Default 1000.
-   * [reconnect.backoff.max.ms](https://kafka.apache.org/43/configuration/producer-configs/#reconnect.backoff.max.ms)
+   * [reconnect.backoff.max.ms](https://kafka.apache.org/44/configuration/producer-configs/#reconnect.backoff.max.ms)
    */
   reconnectBackoffMaxMs?: number;
   /** SASL handshake timeout in milliseconds. */
@@ -204,7 +204,7 @@ export interface KafkaConfig {
    * KIP-714: after connect, subscribe and push client metrics to the broker when it
    * advertises GetTelemetrySubscriptions (Kafka 3.5+). Default true; the pusher disables
    * itself if the API is missing. Set false to skip the RPCs entirely.
-   * [enable.metrics.push](https://kafka.apache.org/43/configuration/producer-configs/#enable.metrics.push)
+   * [enable.metrics.push](https://kafka.apache.org/44/configuration/producer-configs/#enable.metrics.push)
    */
   enableMetricsPush?: boolean;
   /**
@@ -223,7 +223,7 @@ export interface KafkaConfig {
 
 /**
  * Options for {@link Kafka.producer}.
- * @see https://kafka.apache.org/43/configuration/producer-configs/
+ * @see https://kafka.apache.org/44/configuration/producer-configs/
  */
 export interface ProducerConfig {
   createPartitioner?: CustomPartitioner;
@@ -232,38 +232,38 @@ export interface ProducerConfig {
   metadataMaxAge?: number;
   /**
    * Create the topic when a produce targets one that does not exist.
-   * @see https://kafka.apache.org/43/configuration/broker-configs/#auto.create.topics.enable
+   * @see https://kafka.apache.org/44/configuration/broker-configs/#auto.create.topics.enable
    */
   allowAutoTopicCreation?: boolean;
   /**
    * Assign producer ids and sequence numbers so the broker can deduplicate retries.
    * Defaults to false. Java 3.0+ defaults `enable.idempotence` to true.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#enable.idempotence
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#enable.idempotence
    */
   idempotent?: boolean;
   /**
    * Transactional id that fences zombie producers and enables {@link Producer.transaction}.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#transactional.id
    */
   transactionalId?: string;
   /**
    * Transaction timeout in milliseconds.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#transaction.timeout.ms
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#transaction.timeout.ms
    */
   transactionTimeout?: number;
   /**
    * Cap on in-flight requests per broker connection. Default 5. Pass `null` to uncap.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.in.flight.requests.per.connection
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#max.in.flight.requests.per.connection
    */
   maxInFlightRequests?: number | null;
   /**
    * Default acks for send/sendBatch when the call omits acks. `-1` = all ISR.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#acks
    */
   acks?: number;
   /**
    * Default compression for send/sendBatch when the call omits compression.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.type
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#compression.type
    */
   compression?: CompressionType;
   /**
@@ -271,13 +271,13 @@ export interface ProducerConfig {
    * to the active codec when it honors one. GZIP maps it straight to zlib's `level` (0-9). ZSTD
    * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
    * compression-level concept in this client's codecs and ignore it.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#compression.gzip.level
    */
   compressionLevel?: number;
   /**
    * Delay in ms to wait for more records before sending a Produce request. Default 5. `0` adds no
    * delay: calls made in the same event-loop turn still leave together, as one Produce per broker.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#linger.ms
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#linger.ms
    */
   lingerMs?: number;
   /**
@@ -285,7 +285,7 @@ export interface ProducerConfig {
    * per-partition `batch.size`, it counts the producer's total across all topics and partitions,
    * so the buffer flushes as soon as that total reaches `batchSize`, without waiting out
    * `lingerMs`. Ignored when lingerMs is 0. Default 16384; pass `0` to not flush by size.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#batch.size
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#batch.size
    */
   batchSize?: number;
   /**
@@ -293,7 +293,7 @@ export interface ProducerConfig {
    * a flush frees space, or rejects with `KafkaTimeout` after the send timeout.
    * Unset or 0 means unlimited. Java `buffer.memory` is 32 MiB; this client's
    * constructor stays unlimited unless set (see `throughputPreset()`).
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#buffer.memory
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#buffer.memory
    */
   bufferMemory?: number;
   /**
@@ -304,7 +304,7 @@ export interface ProducerConfig {
    * below) disables the deadline. Keep it comfortably above `lingerMs` plus the per-call
    * `timeout` (or the broker could still be waiting on acks when this fires) and above
    * `retry.maxRetryTime` times however many retries you expect to need.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#delivery.timeout.ms
    */
   deliveryTimeoutMs?: number;
   /**
@@ -314,7 +314,7 @@ export interface ProducerConfig {
    * past the cap is flushed as multiple requests instead, none over the cap. Default 1_048_576
    * (1 MiB), matching Java's default. Distinct from the broker's `MESSAGE_TOO_LARGE` protocol
    * error, which only fires after the broker has accepted bytes on the wire.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#max.request.size
    */
   maxRequestSize?: number;
   /**
@@ -327,7 +327,7 @@ export interface ProducerConfig {
 
 /**
  * Options for {@link Kafka.consumer}.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/
  */
 export interface ConsumerConfig {
   /**
@@ -335,44 +335,44 @@ export interface ConsumerConfig {
    * Required to use {@link Consumer.subscribe}. Optional for {@link Consumer.assign}, which
    * fetches without group membership; set it there only if you plan to call
    * {@link Consumer.commitOffsets}.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.id
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.id
    */
   groupId?: string;
   partitionAssigners?: PartitionAssigner[];
   metadataMaxAge?: number;
   /**
    * Session timeout used by the group coordinator to detect failed members.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#session.timeout.ms
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#session.timeout.ms
    */
   sessionTimeout?: number;
   /**
    * Maximum time for a rebalance to complete.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#max.poll.interval.ms
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#max.poll.interval.ms
    */
   rebalanceTimeout?: number;
   /**
    * How often to send heartbeats to the group coordinator.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#heartbeat.interval.ms
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#heartbeat.interval.ms
    */
   heartbeatInterval?: number;
   /**
    * Cap on bytes returned for a single partition in a Fetch.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#max.partition.fetch.bytes
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#max.partition.fetch.bytes
    */
   maxBytesPerPartition?: number;
   /**
    * Wait for at least this many bytes before returning a Fetch (or `maxWaitTimeInMs`).
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.min.bytes
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#fetch.min.bytes
    */
   minBytes?: number;
   /**
    * Maximum bytes the broker should return for a Fetch.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.bytes
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#fetch.max.bytes
    */
   maxBytes?: number;
   /**
    * How long the broker may wait to accumulate `minBytes`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#fetch.max.wait.ms
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#fetch.max.wait.ms
    */
   maxWaitTimeInMs?: number;
   retry?: ConsumerRetryOptions;
@@ -380,31 +380,31 @@ export interface ConsumerConfig {
   maxInFlightRequests?: number;
   /**
    * When true, use `read_uncommitted` isolation (aborted transactional records are visible).
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#isolation.level
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#isolation.level
    */
   readUncommitted?: boolean;
   /**
    * Consumer rack for fetch-from-closest-replica (KIP-392).
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#client.rack
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#client.rack
    */
   rackId?: string;
   /**
    * Static membership id (KIP-345). When set, the broker can replace this member on restart
    * without bouncing the rest of the group.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.instance.id
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.instance.id
    */
   groupInstanceId?: string;
   /**
    * Default offset reset policy when a subscription omits `autoOffsetReset`.
    * Per-subscription `subscribe({ autoOffsetReset })` overrides this.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
   /**
    * Group membership protocol. `'classic'` (default) uses JoinGroup/SyncGroup.
    * `'consumer'` opts into KIP-848 ConsumerGroupHeartbeat (Kafka 4.0+). Java name:
    * `group.protocol`. Classic remains the default.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: GroupProtocol;
   /**
@@ -412,7 +412,7 @@ export interface ConsumerConfig {
    * meaningful when `groupProtocol` is `'consumer'`; ignored (logged at debug level) otherwise,
    * the same as `sessionTimeout`, `heartbeatInterval`, and `partitionAssigners` are unused under
    * `groupProtocol: 'consumer'`. Broker property: `group.remote.assignor`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.remote.assignor
    */
   groupRemoteAssignor?: GroupRemoteAssignor;
   /**
@@ -429,7 +429,7 @@ export interface ConsumerConfig {
    * proxy, transport bit-flips) then go undetected instead of failing loudly. The check runs in
    * JavaScript (Node.js and Bun ship no native CRC-32C), so it costs one extra pass over every
    * fetched byte.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#check.crcs
    */
   checkCrcs?: boolean;
 }
@@ -441,7 +441,7 @@ export type GroupRemoteAssignor = 'uniform' | 'range';
 
 /**
  * Options for {@link Kafka.shareConsumer} (KIP-932 share groups, Kafka 4.0+).
- * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/
  */
 export interface ShareConsumerConfig {
   groupId: string;
@@ -465,7 +465,7 @@ export interface ShareConsumerConfig {
 
 /**
  * Options for {@link Kafka.admin}.
- * @see https://kafka.apache.org/43/configuration/admin-configs/
+ * @see https://kafka.apache.org/44/configuration/admin-configs/
  */
 export interface AdminConfig {
   retry?: RetryOptions;
@@ -473,7 +473,7 @@ export interface AdminConfig {
    * KIP-919: talk to the KRaft controller quorum without a broker bootstrap list.
    * Mutually exclusive with discovering brokers for this admin instance; producer and consumer
    * still use {@link KafkaConfig.brokers}. Requires DescribeCluster v1 (Kafka 3.7+).
-   * @see https://kafka.apache.org/43/configuration/admin-configs/#bootstrap.controllers
+   * @see https://kafka.apache.org/44/configuration/admin-configs/#bootstrap.controllers
    */
   bootstrapControllers?: readonly string[] | BrokersFunction;
 }

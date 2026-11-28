@@ -10,7 +10,7 @@ import { createStickyAssigner } from './sticky-assigner';
  * consumer group retains all other partitions and automatically performs that settling
  * generation when the assignment revokes partitions.
  *
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export const cooperativeSticky: PartitionAssigner = ({ cluster }: { cluster: Cluster }) =>
   createStickyAssigner({ cluster, name: 'cooperative-sticky', protocolType: 'cooperative', cooperative: true });

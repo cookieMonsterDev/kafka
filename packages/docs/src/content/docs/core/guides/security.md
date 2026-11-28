@@ -18,9 +18,9 @@ const kafka = new Kafka({
 
 `ssl: true` uses Node TLS defaults. Pass a `tls.ConnectionOptions` object for
 certs. See
-[SSL](https://kafka.apache.org/43/security/encryption-and-authentication-using-ssl/)
+[SSL](https://kafka.apache.org/44/security/encryption-and-authentication-using-ssl/)
 and
-[SASL](https://kafka.apache.org/43/security/authentication-using-sasl/).
+[SASL](https://kafka.apache.org/44/security/authentication-using-sasl/).
 Source:
 [`types/index.ts`](https://github.com/cookieMonsterDev/kafka/blob/master/packages/core/src/types/index.ts)
 (`KafkaConfig.ssl` / `sasl`).
@@ -115,7 +115,7 @@ client-first message includes `tokenauth=true` so the broker looks up the
 token instead of a stored SCRAM user. The handshake mechanism stays
 `SCRAM-SHA-256` or `SCRAM-SHA-512`. The broker must enable that SCRAM
 mechanism and `delegation.token.secret.key`. See
-[SASL authentication](https://kafka.apache.org/43/security/authentication-using-sasl/).
+[SASL authentication](https://kafka.apache.org/44/security/authentication-using-sasl/).
 
 ```ts
 const adminKafka = new Kafka({

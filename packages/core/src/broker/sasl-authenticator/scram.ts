@@ -36,7 +36,7 @@ export const DIGESTS = Object.freeze({
  * SCRAM message includes the `tokenauth=true` extension so the broker looks up a
  * delegation token instead of a stored SCRAM user.
  *
- * @see https://kafka.apache.org/43/security/authentication-using-sasl/
+ * @see https://kafka.apache.org/44/security/authentication-using-sasl/
  */
 export const TOKEN_AUTH_EXTENSION = 'tokenauth=true';
 

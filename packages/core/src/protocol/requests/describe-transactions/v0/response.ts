@@ -31,7 +31,7 @@ export interface DescribeTransactionsResponseV0Body {
  *                         transaction_start_time_ms producer_id producer_epoch [topics] TAG_BUFFER
  *   topics => topic [partitions] TAG_BUFFER
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([field('topic', compactString), field('partitions', compactArray(int32))]);
 const transactionStateSchema = flexibleObject([

@@ -32,6 +32,6 @@ const VERSIONS = {
  * ListConfigResources (key 74). v0 lists client metrics names only
  * (ListClientMetricsResources). v1 adds resourceTypes (KIP-1142).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const ListConfigResources = defineRequestFamily(KAFKA_APIS.ListConfigResources, VERSIONS);

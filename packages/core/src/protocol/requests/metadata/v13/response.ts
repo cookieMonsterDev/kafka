@@ -28,7 +28,7 @@ export type MetadataResponseV13Body = MetadataResponseV12Body & {
  * Adds a top-level `errorCode`. Topic `name` remains nullable as of v12. Throttle semantics
  * stay the v6/KIP-219 client-side meaning.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerSchema = flexibleObject([
   field('nodeId', int32),

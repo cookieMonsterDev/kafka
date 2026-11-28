@@ -27,7 +27,7 @@ export type AlterClientQuotasResponseV1Body = AlterClientQuotasResponseV0Body;
  * Flexible form of v0 (KIP-482). Quota timing follows v0 (KIP-219). Response header v1's
  * trailing TAG_BUFFER is skipped by `Connection` before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const entitySchema = flexibleObject([field('entityType', compactString), field('entityName', compactNullableString)]);
 const entrySchema = flexibleObject([

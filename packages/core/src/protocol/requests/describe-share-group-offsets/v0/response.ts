@@ -50,7 +50,7 @@ export interface DescribeShareGroupOffsetsResponseV0Body {
  *
  * Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partitionIndex', int32),

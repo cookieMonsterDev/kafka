@@ -36,7 +36,7 @@ export interface DescribeLogDirsResponseV5Body extends DescribeLogDirsResponseV4
  *
  * v5 adds whether each log dir is cordoned.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const logDirSchema = flexibleObject([
   field('errorCode', int16),

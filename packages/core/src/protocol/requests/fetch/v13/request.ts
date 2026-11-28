@@ -9,6 +9,6 @@ import { createFetchRequest, type FetchRequestOptions } from '../shared';
  *
  * Replaces topic names with topic IDs (KIP-516). May return UNKNOWN_TOPIC_ID.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const fetchRequestV13 = (options: FetchRequestOptions): RequestDefinition => createFetchRequest(13, options);

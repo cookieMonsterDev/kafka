@@ -3,7 +3,7 @@ import type { CompressionType } from '../protocol/compression/index';
 import type { RecordHeaders } from '../protocol/records/record';
 import type { NodeLatencyReader } from './node-latency-tracker';
 
-/** One record to produce. @see https://kafka.apache.org/43/implementation/messages/ */
+/** One record to produce. @see https://kafka.apache.org/44/implementation/messages/ */
 export interface Message {
   key?: Buffer | string | null;
   value: Buffer | string | null;
@@ -18,13 +18,13 @@ export interface TopicMessages {
   messages: readonly Message[];
 }
 
-/** Single-topic produce request. @see https://kafka.apache.org/43/configuration/producer-configs/ */
+/** Single-topic produce request. @see https://kafka.apache.org/44/configuration/producer-configs/ */
 export interface ProducerRecord {
   topic: string;
   messages: readonly Message[];
   /**
    * Acknowledgments required before the request is complete. `0` none, `1` leader, `-1`/`all` ISR.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#acks
    */
   acks?: number;
   timeout?: number;
@@ -33,7 +33,7 @@ export interface ProducerRecord {
    * Passed to the active codec, when it honors one: GZIP maps it to zlib's `level` (0-9); ZSTD
    * maps it to `zlib.constants.ZSTD_c_compressionLevel` (roughly 1-22). Snappy and LZ4 have no
    * compression-level concept in this client's codecs and ignore it.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#compression.gzip.level
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#compression.gzip.level
    */
   compressionLevel?: number;
 }
@@ -42,7 +42,7 @@ export interface ProducerRecord {
 export interface ProducerBatch {
   /**
    * Acknowledgments required before the request is complete. `0` none, `1` leader, `-1`/`all` ISR.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#acks
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#acks
    */
   acks?: number;
   timeout?: number;
@@ -55,7 +55,7 @@ export interface ProducerBatch {
 /**
  * Per-partition Produce response. Offsets are `bigint`; message-set v0/v1 fields are not present.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export interface RecordMetadata {
   topicName: string;
@@ -133,7 +133,7 @@ export interface ProducerHooks {
 
 /**
  * In-flight producer transaction. Exactly one may be active per transactional producer.
- * @see https://kafka.apache.org/43/configuration/producer-configs/#transactional.id
+ * @see https://kafka.apache.org/44/configuration/producer-configs/#transactional.id
  */
 export interface Transaction {
   send(record: ProducerRecord & { signal?: AbortSignal }): Promise<RecordMetadata[]>;

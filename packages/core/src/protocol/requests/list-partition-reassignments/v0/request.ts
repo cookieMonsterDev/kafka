@@ -32,7 +32,7 @@ function encodeTopic({ topic, partitions }: ListPartitionReassignmentsRequestV0T
  * `topics: null` means "list every in-flight reassignment" and is encoded as a compact-array
  * null marker (`0`), not an empty array.
  *
- * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+ * @see https://kafka.apache.org/44/operations/basic-kafka-operations/
  */
 export const listPartitionReassignmentsRequestV0: (
   values: ListPartitionReassignmentsRequestV0Options,

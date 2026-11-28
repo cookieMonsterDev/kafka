@@ -32,7 +32,7 @@ import { API_KEYS } from '../../api-keys';
  * First flexible version (KIP-482). Adds generationId, memberId, and groupInstanceId.
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partition', int32),

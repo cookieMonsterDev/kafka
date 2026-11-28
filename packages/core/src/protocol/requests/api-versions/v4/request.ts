@@ -14,7 +14,7 @@ export type { ApiVersionsRequestOptions };
  * Same compact body as v3. Version 4 exists so the matching response can advertise
  * SupportedFeatures.MinVersion 0 (KAFKA-17011). Request header is v2; response header stays v0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const requestSchema = flexibleObject([
   field('clientSoftwareName', compactString),

@@ -6,7 +6,7 @@ import { API_KEYS } from './api-keys';
  * compact types, tagged fields, request header v2 and response header v1. `null` means the API
  * never becomes flexible.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export interface KafkaApi {
   readonly apiKey: number;

@@ -29,7 +29,7 @@ export interface DescribeDelegationTokenResponseV0Body {
  *     token_id hmac [renewers]
  *   renewers => principal_type principal_name
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const renewerSchema = object([field('principalType', string), field('name', string)]);
 const tokenSchema = object([

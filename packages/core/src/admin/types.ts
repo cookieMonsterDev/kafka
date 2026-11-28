@@ -374,8 +374,8 @@ export interface ResourceConfigEntry {
 
 /**
  * Topic to create via {@link Admin.createTopics}.
- * @see https://kafka.apache.org/43/configuration/topic-configs/
- * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+ * @see https://kafka.apache.org/44/configuration/topic-configs/
+ * @see https://kafka.apache.org/44/operations/basic-kafka-operations/
  */
 export interface TopicConfig {
   topic: string;
@@ -446,7 +446,7 @@ export interface IncrementalResourceConfig {
 
 /**
  * ACL identity and permission.
- * @see https://kafka.apache.org/43/security/authorization-and-acls/
+ * @see https://kafka.apache.org/44/security/authorization-and-acls/
  */
 export interface Acl {
   principal: string;
@@ -578,8 +578,8 @@ export interface AdminOptions {
 
 /**
  * Admin client returned by {@link Kafka.admin}.
- * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
- * @see https://kafka.apache.org/43/configuration/admin-configs/
+ * @see https://kafka.apache.org/44/operations/basic-kafka-operations/
+ * @see https://kafka.apache.org/44/configuration/admin-configs/
  */
 export interface Admin {
   connect: (options?: ConnectOptions) => Promise<void>;

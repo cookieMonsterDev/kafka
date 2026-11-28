@@ -53,7 +53,7 @@ export interface ProduceResponseV8Body {
  *
  * Record-level errors (KIP-467). Throttle semantics match v6 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const bodySchema = object([
   field(

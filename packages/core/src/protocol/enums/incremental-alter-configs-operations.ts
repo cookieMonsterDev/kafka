@@ -1,6 +1,6 @@
 /**
  * `AlterConfigOp.OpType` for IncrementalAlterConfigs (API key 44).
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const INCREMENTAL_ALTER_CONFIGS_OPERATIONS = Object.freeze({
   SET: 0,

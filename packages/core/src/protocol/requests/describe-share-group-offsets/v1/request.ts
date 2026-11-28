@@ -8,7 +8,7 @@ export type DescribeShareGroupOffsetsRequestV1Fields = DescribeShareGroupOffsets
  * DescribeShareGroupOffsets Request (Version: 1) is the same as version 0. Version 1 adds `lag`
  * on the response (KIP-1226).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export { requestSchema };
 

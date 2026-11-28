@@ -117,8 +117,8 @@ function shuffleTopicPartitions(options: FetchRequestOptions): FetchRequestOptio
  * the highest overlapping version, and `preferVersion` falls back to ≤12 when metadata has
  * no topic IDs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
- * @see https://kafka.apache.org/43/implementation/messages/
+ * @see https://kafka.apache.org/44/design/protocol/
+ * @see https://kafka.apache.org/44/implementation/messages/
  */
 export const Fetch = defineRequestFamily(KAFKA_APIS.Fetch, VERSIONS, {
   prepareOptions: shuffleTopicPartitions,

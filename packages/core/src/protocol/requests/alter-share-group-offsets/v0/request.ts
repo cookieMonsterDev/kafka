@@ -27,7 +27,7 @@ export interface AlterShareGroupOffsetsRequestV0Fields {
  *
  * Flexible from v0 (KIP-932).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32), field('startOffset', int64)]);
 const topicSchema = flexibleObject([

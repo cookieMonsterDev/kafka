@@ -38,7 +38,7 @@ const finalizedFeaturesSchema = compactArray(finalizedFeatureSchema);
 /**
  * Parses ApiVersions v3+ body tagged fields (KIP-584 / KIP-482).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function readApiVersionsFeatureFields(decoder: Decoder): ApiVersionsFeatureFields {
   const supportedFeatures: SupportedFeature[] = [];

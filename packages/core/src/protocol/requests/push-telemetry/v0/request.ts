@@ -20,7 +20,7 @@ export interface PushTelemetryRequestV0Fields {
  *
  * `metrics` is OTLP MetricsData v1 protobuf (KIP-714). Flexible from v0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('clientInstanceId', uuid),

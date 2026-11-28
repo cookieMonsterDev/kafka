@@ -17,7 +17,7 @@ export type OffsetDeleteResponseV1Body = OffsetDeleteResponseV0Body;
  * Flexible-version API. Response header v1's trailing TAG_BUFFER is skipped by `Connection`
  * before `decode()` runs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32), field('errorCode', int16)]);
 const topicSchema = flexibleObject([field('name', compactString), field('partitions', compactArray(partitionSchema))]);

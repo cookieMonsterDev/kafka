@@ -1,6 +1,6 @@
 /**
  * SCRAM mechanism codes used by Describe/AlterUserScramCredentials (KIP-554).
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const SCRAM_MECHANISMS = Object.freeze({
   UNKNOWN: 0,

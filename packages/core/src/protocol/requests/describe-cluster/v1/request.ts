@@ -14,7 +14,7 @@ export interface DescribeClusterRequestV1Fields {
  * Adds `endpointType` (KIP-919): 1=brokers, 2=controllers.
  * Flexible-version API. Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('includeClusterAuthorizedOperations', boolean),

@@ -12,7 +12,7 @@ export interface RenewDelegationTokenResponseV0Body {
  *
  * Throttle time is the last field. Brokers throttle before sending until version 1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = object([
   field('errorCode', int16),

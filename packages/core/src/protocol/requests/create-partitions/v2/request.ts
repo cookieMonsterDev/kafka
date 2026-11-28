@@ -27,7 +27,7 @@ import { API_KEYS } from '../../api-keys';
  * match v0 `nullableArray` semantics. Request header v2's trailing TAG_BUFFER is written by
  * `createRequest`, not here.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const brokerIdsSchema = compactArray(int32);
 const assignmentBrokerIds: FieldCodec<number[]> = {

@@ -77,7 +77,7 @@ function decodeTopicResponse(checkCrcs?: boolean) {
  * fields that stay skipped; CurrentLeader (tag 1, KIP-951) is decoded. Topic names remain
  * through v12.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function fetchResponseV12(
   options: Pick<FetchRequestOptions, 'checkCrcs'> = {},

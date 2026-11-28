@@ -10,7 +10,7 @@ import { zstdCodec } from './zstd';
  * equally async `Bun.zstdCompress` unless `KAFKA_BUN_NATIVE=0`. Snappy and LZ4 run the JS
  * codecs on `worker_threads` so compress/decompress does not stall the event
  * loop; optional native `snappy` / `lz4` packages are used when present and async.
- * @see https://kafka.apache.org/43/implementation/messages/
+ * @see https://kafka.apache.org/44/implementation/messages/
  */
 export const COMPRESSION_TYPES = Object.freeze({
   None: 0,

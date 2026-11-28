@@ -16,7 +16,7 @@ export interface StickyPartitionerOptions {
    * instead of picking uniformly at random. Falls back to the plain KIP-794 uniform choice
    * whenever no latency data is available yet (e.g. a node that's never been produced to).
    * Default `true`.
-   * @see https://kafka.apache.org/43/configuration/producer-configs/#partitioner.adaptive.partitioning.enable
+   * @see https://kafka.apache.org/44/configuration/producer-configs/#partitioner.adaptive.partitioning.enable
    */
   adaptive?: boolean;
 }

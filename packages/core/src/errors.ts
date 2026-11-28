@@ -51,7 +51,7 @@ type ErrorLike = { message: string; helpUrl?: string; stack?: string };
 
 /**
  * Base client error. `retriable` is true when the operation can be safely retried.
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export class KafkaError extends Error {
   override readonly name: KafkaErrorName = 'KafkaError';
@@ -104,7 +104,7 @@ export interface KafkaProtocolErrorOptions {
 
 /**
  * Broker error-code response (`type`, `code`, `retriable`).
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export class KafkaProtocolError extends KafkaError {
   override readonly name: KafkaErrorName = 'KafkaProtocolError';
@@ -331,7 +331,7 @@ export class KafkaLockTimeout extends KafkaTimeout {
  * `deliveryTimeoutMs` elapsed before a produce settled — end-to-end, across linger, buffer-memory
  * waits, and every retry, not any single RPC. Non-retriable: no retry starts once the deadline is
  * up, though an attempt already in flight isn't cancelled.
- * @see https://kafka.apache.org/43/configuration/producer-configs/#delivery.timeout.ms
+ * @see https://kafka.apache.org/44/configuration/producer-configs/#delivery.timeout.ms
  */
 export class KafkaDeliveryTimeoutError extends KafkaTimeout {
   override readonly name: KafkaErrorName = 'KafkaDeliveryTimeoutError';
@@ -357,7 +357,7 @@ export interface KafkaMessageTooLargeErrorOptions {
  * slot or reaches the network, so it is distinct from the broker's `MESSAGE_TOO_LARGE` protocol
  * error (`KafkaProtocolError` with `type: 'MESSAGE_TOO_LARGE'`), which the broker can only return
  * after it has already accepted bytes on the wire.
- * @see https://kafka.apache.org/43/configuration/producer-configs/#max.request.size
+ * @see https://kafka.apache.org/44/configuration/producer-configs/#max.request.size
  */
 export class KafkaMessageTooLargeError extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaMessageTooLargeError';
@@ -386,7 +386,7 @@ export class KafkaUnsupportedMagicByteInMessageSet extends KafkaNonRetriableErro
  * legacy MessageSet (magic 0/1) CRC-32 mismatch. Raised only when `ConsumerConfig.checkCrcs` is
  * `true` (the default). Non-retriable: the bytes on the wire were corrupted, so retrying the same
  * fetch would not help.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/#check.crcs
  */
 export class KafkaCorruptRecordError extends KafkaNonRetriableError {
   override readonly name: KafkaErrorName = 'KafkaCorruptRecordError';

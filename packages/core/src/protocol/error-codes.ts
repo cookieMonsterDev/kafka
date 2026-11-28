@@ -8,7 +8,7 @@ export interface ErrorCodeEntry {
   helpUrl?: string;
 }
 
-/** @see https://kafka.apache.org/43/design/protocol/ */
+/** @see https://kafka.apache.org/44/design/protocol/ */
 export const ERROR_CODES: readonly ErrorCodeEntry[] = [
   {
     type: 'UNKNOWN',

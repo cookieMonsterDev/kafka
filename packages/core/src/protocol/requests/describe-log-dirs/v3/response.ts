@@ -15,7 +15,7 @@ export interface DescribeLogDirsResponseV3Body extends DescribeLogDirsResponseV2
  * v3 adds the top-level `error_code`, which reports a failure for the whole request (such as
  * CLUSTER_AUTHORIZATION_FAILED) that v2 signalled only by returning no log dirs.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const responseSchema = flexibleObject([
   field('throttleTime', int32),

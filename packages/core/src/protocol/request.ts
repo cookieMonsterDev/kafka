@@ -22,7 +22,7 @@ export interface CreateRequestOptions {
  * Returns a promise only when `encode` does, so a synchronous body (such as an uncompressed
  * Produce) is framed without a promise hop. A synchronous `encode` failure is thrown.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function createRequest({ correlationId, clientId, request }: CreateRequestOptions): Encoder | Promise<Encoder> {
   const payload = request.encode();

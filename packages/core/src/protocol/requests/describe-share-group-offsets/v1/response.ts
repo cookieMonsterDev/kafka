@@ -28,7 +28,7 @@ export type DescribeShareGroupOffsetsResponseV1Body = DescribeShareGroupOffsetsR
 /**
  * DescribeShareGroupOffsets Response (Version: 1) adds `lag` after leader_epoch (KIP-1226).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([
   field('partitionIndex', int32),

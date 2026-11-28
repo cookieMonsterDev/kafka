@@ -8,7 +8,7 @@ import { API_KEYS } from '../../api-keys';
  *
  * Adds `includeAuthorizedOperations` (KIP-430). Same wire as v4.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = object([field('groupIds', array(string)), field('includeAuthorizedOperations', boolean)]);
 

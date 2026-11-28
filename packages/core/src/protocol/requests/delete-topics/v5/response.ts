@@ -28,7 +28,7 @@ export interface DeleteTopicsResponseV5Body {
  * Adds per-topic ErrorMessage (KIP-599). May return THROTTLING_QUOTA_EXCEEDED.
  * Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicErrorSchema = flexibleObject([
   field('topic', compactString),

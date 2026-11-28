@@ -33,7 +33,7 @@ export interface AlterUserScramCredentialsRequestV0Fields {
  *
  * Flexible from v0. `saltedPassword` is Hi(password, salt, iterations) (RFC 5802).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const deletionSchema = flexibleObject([field('name', compactString), field('mechanism', int8)]);
 const upsertionSchema = flexibleObject([

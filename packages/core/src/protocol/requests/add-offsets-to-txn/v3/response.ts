@@ -12,7 +12,7 @@ export type AddOffsetsToTxnResponseV3Body = AddOffsetsToTxnResponseV2Body;
  *
  * First flexible version (KIP-482). Same fields as v0–v2. Quota timing follows v1 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const bodySchema = flexibleObject([field('throttleTime', int32), field('errorCode', int16)]);
 

@@ -27,7 +27,7 @@ export interface OffsetDeleteResponseV0Body {
  *       partition_index => INT32
  *       error_code => INT16
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = object([field('partitionIndex', int32), field('errorCode', int16)]);
 const topicSchema = object([field('name', string), field('partitions', array(partitionSchema))]);

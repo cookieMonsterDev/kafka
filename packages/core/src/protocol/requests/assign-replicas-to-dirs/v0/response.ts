@@ -40,7 +40,7 @@ export interface AssignReplicasToDirsResponseV0Body {
  * Flexible from v0. Quota timing follows KIP-219: the decoded throttle is exposed as
  * `clientSideThrottleTime`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const partitionSchema = flexibleObject([field('partitionIndex', int32), field('errorCode', int16)]);
 const topicSchema = flexibleObject([field('topicId', uuid), field('partitions', compactArray(partitionSchema))]);

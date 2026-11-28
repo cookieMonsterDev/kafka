@@ -17,7 +17,7 @@ function subscribedTopics(member: GroupMember, fallbackTopics: readonly string[]
 /**
  * Assigns contiguous partition ranges per topic to members subscribed to that topic
  * (Java `RangeAssignor`).
- * @see https://kafka.apache.org/43/design/design/
+ * @see https://kafka.apache.org/44/design/design/
  */
 export const range: PartitionAssigner = ({ cluster }: { cluster: Cluster }): Assigner => {
   const assigner: Assigner = {

@@ -10,7 +10,7 @@ export {
 /**
  * DescribeLogDirs Request (Version: 4) — wire format identical to v2; the response adds volume sizes per log dir (KIP-827).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const describeLogDirsRequestV4 = defineRequest({
   apiKey: API_KEYS.DescribeLogDirs,

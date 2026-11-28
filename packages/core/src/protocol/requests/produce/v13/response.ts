@@ -31,7 +31,7 @@ const bodySchema = object([
  * request's `topicData` so `RecordMetadata` stays name-based. CurrentLeader (partition tag 0)
  * and NodeEndpoints (response tag 0) are decoded (KIP-951), same as v9+.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export function produceResponseV13(
   options: Pick<ProduceRequestOptions, 'topicData'> = { topicData: [] },

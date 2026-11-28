@@ -23,7 +23,7 @@ export interface MetadataRequestV11Fields {
  * still carry topicId + nullable name; Apache: v10–v11 should not use those on the server.
  * v12 and v13 reuse this request body.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('topics', compactNullableArray(topicSchema)),

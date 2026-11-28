@@ -25,7 +25,7 @@ export interface DescribeDelegationTokenResponseV3Body extends Omit<DescribeDele
 /**
  * DescribeDelegationToken Response (Version: 3) adds token requester details on each token.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const renewerSchema = flexibleObject([field('principalType', compactString), field('name', compactString)]);
 const tokenSchema = flexibleObject([

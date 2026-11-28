@@ -38,7 +38,7 @@ export interface ConsumerGroupHeartbeatRequestV0Fields {
  * heartbeat. Member epoch 0 joins, -1 leaves, -2 is a static-member rejoin.
  * Request header v2's trailing TAG_BUFFER is written by `createRequest`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  * @see https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol
  */
 export const requestSchema = flexibleObject([

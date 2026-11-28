@@ -18,7 +18,7 @@ export const DEFAULT_CLIENT_SOFTWARE_VERSION = '0.0.0';
  * First flexible ApiVersions body (KIP-511). The request header is v2 (TAG_BUFFER after
  * client id); the response header stays v0. See `usesFlexibleRequestHeader`.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const requestSchema = flexibleObject([
   field('clientSoftwareName', compactString),

@@ -86,7 +86,7 @@ const EVENT_KEYS = Object.keys(events)
 /**
  * User-facing admin client: topics, groups, ACLs, configs, offsets, reassignments, quotas, log dirs, and tokens.
  *
- * @see https://kafka.apache.org/43/operations/basic-kafka-operations/
+ * @see https://kafka.apache.org/44/operations/basic-kafka-operations/
  */
 export function createAdmin({
   cluster,

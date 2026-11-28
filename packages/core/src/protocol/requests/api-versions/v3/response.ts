@@ -34,7 +34,7 @@ const bodySchema = object([
  * Compact arrays/strings plus tagged fields (KIP-482). KIP-584 feature metadata lives in tags
  * 0–3 on the body TAG_BUFFER. Throttle semantics match v2 (KIP-219).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const apiVersionsResponseV3: ResponseDefinition<ApiVersionsResponseV3Body> = {
   decode: async (rawData) => {

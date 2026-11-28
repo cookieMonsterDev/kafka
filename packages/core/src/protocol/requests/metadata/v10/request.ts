@@ -33,7 +33,7 @@ export interface MetadataRequestV10Fields {
  * should not use topicId or null names on the server — this encoder still writes the fields
  * (zero UUID + name) so the wire is correct. Empty `topics` is a compact null ("all topics").
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const topicSchema = flexibleObject([field('topicId', uuid), field('name', compactNullableString)]);
 export const requestSchema = flexibleObject([

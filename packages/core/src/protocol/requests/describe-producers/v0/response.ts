@@ -54,7 +54,7 @@ export interface DescribeProducersResponseV0Body {
  * Flexible from v0. Response header v1's trailing TAG_BUFFER is skipped by `Connection`.
  * Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const activeProducerSchema = flexibleObject([
   field('producerId', int64),

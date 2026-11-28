@@ -66,8 +66,8 @@ export type ProduceResponse = VersionResponse<typeof VERSIONS> | undefined;
  * so Kafka 4.0 brokers that still advertise `minVersion: 0` (`KAFKA-18659`) negotiate
  * v12, not v2.
  *
- * @see https://kafka.apache.org/43/design/protocol/
- * @see https://kafka.apache.org/43/implementation/messages/
+ * @see https://kafka.apache.org/44/design/protocol/
+ * @see https://kafka.apache.org/44/implementation/messages/
  */
 export const Produce: RequestFamily<ProduceRequestOptions, ProduceResponse> = defineRequestFamily(
   KAFKA_APIS.Produce,

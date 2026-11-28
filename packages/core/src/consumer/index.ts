@@ -75,7 +75,7 @@ export { MemberAssignment, MemberMetadata } from './assigner-protocol';
 export { cooperativeSticky, range, roundRobin, sticky } from './assigners/index';
 export { Batch } from './batch';
 
-/** Subscribe to several topics. @see https://kafka.apache.org/43/configuration/consumer-configs/ */
+/** Subscribe to several topics. @see https://kafka.apache.org/44/configuration/consumer-configs/ */
 export interface ConsumerSubscribeTopics {
   topics: readonly (string | RegExp)[];
   /** When true, start from the earliest offset if the group has no committed position. */
@@ -84,7 +84,7 @@ export interface ConsumerSubscribeTopics {
    * Offset reset policy when there is no committed offset (`auto.offset.reset`).
    * Wins over `fromBeginning` when set. `none` throws instead of resetting.
    * `by_duration:PT1H` (KIP-1106) seeks to the first offset at or after `now - duration`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
 }
@@ -96,7 +96,7 @@ export interface ConsumerSubscribeTopic {
    * Offset reset policy when there is no committed offset (`auto.offset.reset`).
    * Wins over `fromBeginning` when set. `none` throws instead of resetting.
    * `by_duration:PT1H` (KIP-1106) seeks to the first offset at or after `now - duration`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
 }
@@ -127,14 +127,14 @@ export interface ConsumerOptions {
   /**
    * Default offset reset policy for subscriptions that omit `autoOffsetReset`.
    * `'by_duration:PT1H'` (KIP-1106) seeks to the first offset at or after `now - duration`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#auto.offset.reset
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#auto.offset.reset
    */
   autoOffsetReset?: AutoOffsetReset;
   /**
    * Group membership protocol. `'classic'` (default) uses JoinGroup/SyncGroup.
    * `'consumer'` opts into KIP-848 ConsumerGroupHeartbeat (Kafka 4.0+). Java name:
    * `group.protocol`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.protocol
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.protocol
    */
   groupProtocol?: 'classic' | 'consumer';
   /**
@@ -142,21 +142,21 @@ export interface ConsumerOptions {
    * meaningful when `groupProtocol` is `'consumer'`; ignored (logged at debug level) otherwise,
    * the same as `sessionTimeout`, `heartbeatInterval`, and `partitionAssigners` are unused under
    * `groupProtocol: 'consumer'`. Broker property: `group.remote.assignor`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#group.remote.assignor
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#group.remote.assignor
    */
   groupRemoteAssignor?: 'uniform' | 'range';
   /** Ordered async `onConsume`/`onCommit` hooks. See {@link ConsumerHooks}. */
   hooks?: ConsumerHooks;
   /**
    * Verify each fetched record batch's CRC on decode. Default `true`.
-   * @see https://kafka.apache.org/43/configuration/consumer-configs/#check.crcs
+   * @see https://kafka.apache.org/44/configuration/consumer-configs/#check.crcs
    */
   checkCrcs?: boolean;
 }
 
 /**
  * Consumer returned by {@link Kafka.consumer}.
- * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/
  */
 export interface Consumer {
   connect: (options?: ConnectOptions) => Promise<void>;
@@ -230,7 +230,7 @@ const SPECIAL_OFFSETS = new Set([BigInt(EARLIEST_OFFSET), BigInt(LATEST_OFFSET)]
 /**
  * User-facing consumer: group membership, fetch/process loop, pause/resume/seek, and events.
  *
- * @see https://kafka.apache.org/43/configuration/consumer-configs/
+ * @see https://kafka.apache.org/44/configuration/consumer-configs/
  */
 export function createConsumer({
   cluster,

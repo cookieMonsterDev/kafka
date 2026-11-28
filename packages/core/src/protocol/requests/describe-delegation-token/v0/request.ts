@@ -16,7 +16,7 @@ export interface DescribeDelegationTokenRequestV0Fields {
  *
  * `owners` is nullable: empty/null describes every token. Version 1 is the same as version 0.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const ownerSchema = object([field('principalType', string), field('name', string)]);
 export const requestSchema = object([field('owners', nullableArray(ownerSchema))]);

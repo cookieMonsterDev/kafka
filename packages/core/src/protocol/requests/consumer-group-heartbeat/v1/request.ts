@@ -28,7 +28,7 @@ export interface ConsumerGroupHeartbeatRequestV1Fields {
  * Adds `subscribedTopicRegex` (KIP-848) after subscribed topic names. From v1 the consumer must
  * generate its own member id (KIP-1082).
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 export const requestSchema = flexibleObject([
   field('groupId', compactString),

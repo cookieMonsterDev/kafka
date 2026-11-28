@@ -33,7 +33,7 @@ export interface DeleteShareGroupOffsetsResponseV0Body {
  *
  * Quota timing follows KIP-219.
  *
- * @see https://kafka.apache.org/43/design/protocol/
+ * @see https://kafka.apache.org/44/design/protocol/
  */
 const topicSchema = flexibleObject([
   field('topicName', compactString),

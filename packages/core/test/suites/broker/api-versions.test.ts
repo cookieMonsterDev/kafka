@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
+import type { Cluster } from '../../../src/cluster/index';
 import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { lookup } from '../../../src/protocol/requests/index';
 import { Fetch } from '../../../src/protocol/requests/fetch/index';
@@ -7,6 +8,7 @@ import { InitProducerId } from '../../../src/protocol/requests/init-producer-id/
 import { Produce } from '../../../src/protocol/requests/produce/index';
 import {
   connectionOpts,
+  createCluster,
   createConnectionPool,
   newLogger,
   testIfKafkaAtLeast_0_11,
@@ -16,6 +18,7 @@ import {
   testIfKafkaAtLeast_2_4,
   testIfKafkaAtLeast_3_6,
   testIfKafkaAtLeast_4_0,
+  testIfKafkaAtLeast_4_4,
   testIfKafkaEquals_0_11,
   testIfKafkaEquals_1_1,
   testIfKafkaEquals_2_4,
@@ -164,4 +167,60 @@ describe('broker.apiVersions', () => {
       expect(negotiated).toBeGreaterThanOrEqual(3);
     },
   );
+});
+
+describe('broker.apiVersions misrouted connection check (KIP-1242)', () => {
+  let cluster: Cluster | undefined;
+  let broker: Broker | undefined;
+
+  afterEach(async () => {
+    await broker?.disconnect();
+    await cluster?.disconnect();
+  });
+
+  /** The cluster id, one broker's node id and address, and another broker's node id, from metadata. */
+  async function discoverBrokers() {
+    cluster = createCluster();
+    await cluster.connect();
+    await cluster.refreshMetadata();
+    const [nodeId, otherNodeId] = cluster.brokerPool.getNodeIds().map(Number);
+    const { host, port } = cluster.brokerPool.brokers[String(nodeId)]!.connectionPool;
+    return {
+      clusterId: cluster.brokerPool.metadata!.clusterId,
+      nodeId: nodeId!,
+      otherNodeId: otherNodeId!,
+      host,
+      port,
+    };
+  }
+
+  function brokerExpecting(address: { host: string; port: number }, nodeId: number, clusterId: string | null) {
+    return new Broker({ connectionPool: createConnectionPool(address), logger: newLogger(), nodeId, clusterId });
+  }
+
+  it('connects with the expected cluster id and node id, falling back on brokers before Kafka 4.4', async () => {
+    const { clusterId, nodeId, host, port } = await discoverBrokers();
+    broker = brokerExpecting({ host, port }, nodeId, clusterId);
+
+    await broker.connect();
+
+    expect(broker.isConnected()).toBe(true);
+    expect(broker.versions![API_KEYS.Metadata]).toBeDefined();
+  });
+
+  testIfKafkaAtLeast_4_4('Kafka 4.4 answers REBOOTSTRAP_REQUIRED to another cluster id', async () => {
+    const { nodeId, host, port } = await discoverBrokers();
+    broker = brokerExpecting({ host, port }, nodeId, 'another-cluster-id');
+
+    await expect(broker.connect()).rejects.toMatchObject({ type: 'REBOOTSTRAP_REQUIRED' });
+    expect(broker.isConnected()).toBe(false);
+  });
+
+  testIfKafkaAtLeast_4_4('Kafka 4.4 answers REBOOTSTRAP_REQUIRED to another node id', async () => {
+    const { clusterId, otherNodeId, host, port } = await discoverBrokers();
+    broker = brokerExpecting({ host, port }, otherNodeId, clusterId);
+
+    await expect(broker.connect()).rejects.toMatchObject({ type: 'REBOOTSTRAP_REQUIRED' });
+    expect(broker.isConnected()).toBe(false);
+  });
 });

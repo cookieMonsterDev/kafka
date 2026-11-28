@@ -6,6 +6,7 @@ import {
   supportsClientTelemetry,
   supportsDescribeClusterControllers,
   supportsHeaders,
+  supportsMisroutedConnectionCheck,
   supportsRecordBatch,
   supportsTransactions,
   supportsTransactionV2,
@@ -56,5 +57,11 @@ describe('broker/capabilities', () => {
   it('supportsClientTelemetry when GetTelemetrySubscriptions is advertised', () => {
     expect(supportsClientTelemetry({ [API_KEYS.GetTelemetrySubscriptions]: { maxVersion: 0 } })).toBe(true);
     expect(supportsClientTelemetry({})).toBe(false);
+  });
+
+  it('supportsMisroutedConnectionCheck when ApiVersions maxVersion is at least 5', () => {
+    expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 4 } })).toBe(false);
+    expect(supportsMisroutedConnectionCheck({ [API_KEYS.ApiVersions]: { maxVersion: 5 } })).toBe(true);
+    expect(supportsMisroutedConnectionCheck({})).toBe(false);
   });
 });

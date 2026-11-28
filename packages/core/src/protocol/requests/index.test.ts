@@ -87,7 +87,7 @@ describe('protocol/requests', () => {
 
   it('caps at the highest version we implement even if the broker supports more', () => {
     const factory = lookup({ [API_KEYS.ApiVersions]: { maxVersion: 99 } })(ApiVersions);
-    expect(factory({}).request.apiVersion).toBe(4);
+    expect(factory({}).request.apiVersion).toBe(5);
   });
 
   it('throws KafkaServerDoesNotSupportApiKey when the broker never advertised the api', () => {

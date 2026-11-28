@@ -69,3 +69,12 @@ export function supportsBatchedOffsetFetch(versions: BrokerVersions): boolean {
   const offsetFetch = advertised(versions, API_KEYS.OffsetFetch);
   return offsetFetch != null && offsetFetch.maxVersion >= 8;
 }
+
+/**
+ * KIP-1242: ApiVersions v5 carries the cluster id and node id the client expects, so a broker
+ * reached through a reused address can answer `REBOOTSTRAP_REQUIRED`. Kafka 4.4+.
+ */
+export function supportsMisroutedConnectionCheck(versions: BrokerVersions): boolean {
+  const apiVersions = advertised(versions, API_KEYS.ApiVersions);
+  return apiVersions != null && apiVersions.maxVersion >= 5;
+}

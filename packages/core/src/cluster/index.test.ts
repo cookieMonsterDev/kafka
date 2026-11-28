@@ -685,6 +685,21 @@ describe('cluster/Cluster', () => {
       expect(refreshSpy).toHaveBeenCalledOnce();
     });
 
+    it('rediscovers the cluster and rethrows as retriable when a broker answers REBOOTSTRAP_REQUIRED (KIP-1242)', async () => {
+      const cluster = createCluster();
+      const misrouted = createErrorFromCode(ERROR_CODES.find((entry) => entry.type === 'REBOOTSTRAP_REQUIRED')!.code);
+      vi.spyOn(cluster.brokerPool, 'findBroker').mockRejectedValue(misrouted);
+      const refreshSpy = vi.spyOn(cluster, 'refreshMetadata').mockResolvedValue(undefined);
+
+      // The refresh drops every broker a caller holds, so the caller retries its whole attempt.
+      await expect(cluster.findBroker({ nodeId: '1' })).rejects.toMatchObject({
+        type: 'REBOOTSTRAP_REQUIRED',
+        retriable: true,
+      });
+      expect(misrouted.retriable).toBe(false);
+      expect(refreshSpy).toHaveBeenCalledOnce();
+    });
+
     it('returns the broker pool result directly on success', async () => {
       const cluster = createCluster();
       const broker = new Broker({

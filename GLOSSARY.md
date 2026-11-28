@@ -26,6 +26,9 @@ _Avoid_: master, leader
 **Bootstrap controller**:
 A controller address an admin client connects to directly, instead of a bootstrap broker, to manage a KRaft cluster (KIP-919).
 
+**Misrouted connection**:
+A connection that reaches a different broker, or a broker of a different cluster, than the node id and cluster the client expected, for example after a broker's hostname or IP is reused (KIP-1242).
+
 **Metadata**:
 The client's current view of the cluster: its brokers, topics, partitions and partition leaders.
 _Avoid_: topology, cluster state

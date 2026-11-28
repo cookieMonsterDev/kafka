@@ -6,6 +6,7 @@ import {
   KafkaError,
   KafkaGroupCoordinatorNotFound,
   KafkaMetadataNotLoaded,
+  KafkaProtocolError,
   KafkaTopicMetadataNotLoaded,
 } from '../errors';
 import { ClientTelemetryReporter } from '../instrumentation/client-telemetry';
@@ -27,6 +28,7 @@ import {
   closedConnectionAddress,
   isConnectionError,
   isConnectionRefused,
+  isRebootstrapRequired,
   isStaleCoordinator,
   isStaleMetadata,
   isTopicAuthorizationFailed,
@@ -555,6 +557,14 @@ export class Cluster {
     try {
       return await this.brokerPool.findBroker({ nodeId });
     } catch (e) {
+      if (e instanceof KafkaProtocolError && isRebootstrapRequired(e)) {
+        // The broker's address led to another broker or cluster (KIP-1242). This refresh rediscovers
+        // the cluster from the bootstrap brokers and drops every broker the caller may already hold,
+        // so the caller's next attempt, which resolves its brokers again, can succeed.
+        await this.refreshMetadata();
+        throw new KafkaProtocolError(e, { retriable: true });
+      }
+
       // The client probably has stale metadata.
       const { name } = e as Error;
       if (name === 'KafkaBrokerNotFound' || name === 'KafkaLockTimeout' || isConnectionError(e)) {

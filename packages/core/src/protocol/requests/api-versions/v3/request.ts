@@ -4,6 +4,13 @@ import { API_KEYS } from '../../api-keys';
 export interface ApiVersionsRequestOptions {
   clientSoftwareName?: string;
   clientSoftwareVersion?: string;
+  /**
+   * v5+ (KIP-1242): the cluster the client expects the broker to belong to. Pass it together
+   * with `nodeId`, or neither; the broker rejects one without the other. Not written on v0–v4.
+   */
+  clusterId?: string | null;
+  /** v5+ (KIP-1242): the node id the client expects the broker to have, or `-1` when unknown. */
+  nodeId?: number;
 }
 
 /** Matches `@cookiemonsterdev/kafka-core`'s package version; brokers only log this (KIP-511). */

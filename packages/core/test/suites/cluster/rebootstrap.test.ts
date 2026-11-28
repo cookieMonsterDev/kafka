@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import type { Cluster } from '../../../src/cluster/index';
-import { createConnectionPool, createCluster, newLogger } from '../../helpers/index';
+import { nodeTarget } from '../../../src/cluster/run';
+import { createConnectionPool, createCluster, newLogger, testIfKafkaAtLeast_4_4 } from '../../helpers/index';
 
 describe('cluster.rebootstrap (KIP-1102)', () => {
   let cluster: Cluster | undefined;
@@ -43,4 +44,36 @@ describe('cluster.rebootstrap (KIP-1102)', () => {
     expect(cluster.brokerPool.metadata).not.toBeNull();
     expect(cluster.brokerPool.getNodeIds().length).toBeGreaterThan(0);
   });
+
+  testIfKafkaAtLeast_4_4(
+    'rediscovers the cluster when a broker address leads to another broker (KIP-1242)',
+    async () => {
+      cluster = createCluster();
+      await cluster.connect();
+      await cluster.refreshMetadata();
+
+      const [nodeId, otherNodeId] = cluster.brokerPool.getNodeIds();
+      const { host, port } = cluster.brokerPool.brokers[nodeId!]!.connectionPool;
+      const seedBefore = cluster.brokerPool.seedBroker;
+
+      // Simulate the address of broker `nodeId` being reused by broker `otherNodeId`.
+      const reusedAddress = cluster.brokerPool.brokers[otherNodeId!]!.connectionPool;
+      await cluster.brokerPool.brokers[nodeId!]!.disconnect();
+      cluster.brokerPool.brokers[nodeId!] = new Broker({
+        connectionPool: createConnectionPool({ host: reusedAddress.host, port: reusedAddress.port }),
+        logger: newLogger(),
+        nodeId: Number(nodeId),
+        clusterId: cluster.brokerPool.metadata!.clusterId,
+        versions: cluster.brokerPool.versions,
+      });
+
+      // The first attempt meets the reused address, rediscovers the cluster and fails as retriable;
+      // the retry resolves the broker again from the fresh metadata.
+      const reached = await cluster.run(nodeTarget(nodeId!), async (broker) => broker, { retryRetriable: true });
+
+      expect(cluster.brokerPool.seedBroker).not.toBe(seedBefore);
+      expect(reached.nodeId).toBe(Number(nodeId));
+      expect({ host: reached.connectionPool.host, port: reached.connectionPool.port }).toEqual({ host, port });
+    },
+  );
 });

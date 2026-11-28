@@ -105,6 +105,16 @@ Method lists: [Producer API](../producer/), [Consumer API](../consumer/),
 [Admin API](../admin/). The notes below are version floors and protocol keys,
 not a backlog.
 
+**Misrouted connections.** ApiVersions (key 18) v0–v5. On Kafka 4.4+ (v5, KIP-1242),
+when the client connects to a broker known from metadata, it sends the cluster id and
+node id it expects, so a broker reached through a reused hostname or IP answers
+`REBOOTSTRAP_REQUIRED`. The client closes that connection, rediscovers the cluster
+from the bootstrap brokers as with KIP-1102, and looks the broker up again.
+Bootstrap connections send no ids. The check needs `metadataRecovery: 'rebootstrap'`
+(the default); with `'none'` no ids are sent, as in the Java client with
+`metadata.recovery.strategy=none`. Older brokers are not checked: they reject v5 and the
+client falls back to the highest version they support.
+
 **Coordinators.** Group and transaction coordinators are found with
 FindCoordinator (key 10) v0–v4. On Kafka 3.0+ (v4, KIP-699) one request finds
 every coordinator an admin call needs, such as `admin.describeGroups`,

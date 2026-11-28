@@ -28,6 +28,14 @@ async function withServer<T>(context: GroupsRouteContext, run: (baseUrl: string)
   }
 }
 
+function protocolError(type: string, message: string): Error {
+  return Object.assign(new Error(message), { name: 'KafkaProtocolError', type });
+}
+
+function deleteGroupsError(groups: { groupId: string; errorCode: number; error: Error }[]): Error {
+  return Object.assign(new Error('Error in DeleteGroups'), { name: 'KafkaDeleteGroupsError', groups });
+}
+
 const classicMember = {
   memberId: 'm1',
   clientId: 'c1',
@@ -181,18 +189,28 @@ describe('registerGroupRoutes', () => {
     expect(deleteGroups).toHaveBeenCalledWith(['checkout']);
   });
 
-  it('DELETE /api/groups/:id returns 404 when the group does not exist', async () => {
-    const context = buildContext({
-      deleteGroups: async () => [{ groupId: 'missing', errorCode: 69 }],
-    });
+  it.each([
+    [69, 'GROUP_ID_NOT_FOUND', 'The group id was not found', 404, 'unknown_group'],
+    [68, 'NON_EMPTY_GROUP', 'The group is not empty', 409, 'group_not_empty'],
+    [134, 'GROUP_DELETION_FAILED', 'Streams topology plugin failed', 500, 'internal_error'],
+  ])(
+    'DELETE /api/groups/:id answers a group failing with code %i (%s) with its message',
+    async (errorCode, type, message, status, code) => {
+      const context = buildContext({
+        deleteGroups: async () => {
+          throw deleteGroupsError([{ groupId: 'checkout', errorCode, error: protocolError(type, message) }]);
+        },
+      });
 
-    await withServer(context, async (baseUrl) => {
-      const res = await fetch(`${baseUrl}/api/groups/missing`, { method: 'DELETE' });
-      expect(res.status).toBe(404);
-      const body = (await res.json()) as { error: { code: string } };
-      expect(body.error.code).toBe('unknown_group');
-    });
-  });
+      await withServer(context, async (baseUrl) => {
+        const res = await fetch(`${baseUrl}/api/groups/checkout`, { method: 'DELETE' });
+        expect(res.status).toBe(status);
+        await expect(res.json()).resolves.toEqual({
+          error: { code, message: `could not delete group "checkout": ${message}` },
+        });
+      });
+    },
+  );
 
   it('POST /api/groups/:id/members/remove removes the given members', async () => {
     const removeMembersFromConsumerGroup = vi.fn(async () => ({

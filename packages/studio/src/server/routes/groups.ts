@@ -1,3 +1,4 @@
+import type { KafkaDeleteGroupsError } from '@cookiemonsterdev/kafka-core';
 import {
   deleteGroupOffsetsRequestSchema,
   removeGroupMembersRequestSchema,
@@ -15,6 +16,7 @@ import {
 } from '../../shared/contracts/group';
 import { sendError, sendJson } from '../create-server';
 import type { AdminPool, PooledAdmin } from '../kafka/admin-pool';
+import { hasErrorName } from '../kafka/has-error-name';
 import { readJsonBody } from '../json';
 import { requireParam, type Router } from '../router';
 
@@ -130,11 +132,19 @@ function isGroupErrored(group: { readonly errorCode: number }): boolean {
   return group.errorCode !== 0;
 }
 
-/** The two `DeleteGroups` failure codes this route recognizes by name — stable identifiers from the Kafka wire protocol, not values this codebase invents. */
-const DELETE_GROUP_ERROR_TYPES: Readonly<Record<number, string>> = {
-  68: 'NON_EMPTY_GROUP',
-  69: 'GROUP_ID_NOT_FOUND',
-};
+/**
+ * `deleteGroups` reports a group it could not delete by throwing `KafkaDeleteGroupsError`, whose
+ * `.groups` holds that group's protocol error. Returns an error naming the group, with that error's
+ * message (the broker's own reason on DeleteGroups v3, Kafka 4.4+) and the protocol error as
+ * `.cause`, whose `type` lets `mapErrorToApiError` answer 404 or 409. Any other error, or one
+ * without that group's protocol error, is returned unchanged.
+ */
+function groupDeletionError(error: unknown, groupId: string): unknown {
+  if (!hasErrorName(error, 'KafkaDeleteGroupsError')) return error;
+  const failure = (error as Partial<KafkaDeleteGroupsError>).groups?.find((group) => group.groupId === groupId);
+  if (failure?.error === undefined) return error;
+  return new Error(`could not delete group "${groupId}": ${failure.error.message}`, { cause: failure.error });
+}
 
 /** Consumer group inspection, offset reset/delete, member removal, and read-only share group inspection (KIP-932). */
 export function registerGroupRoutes(router: Router, context: GroupsRouteContext): void {
@@ -244,10 +254,10 @@ export function registerGroupRoutes(router: Router, context: GroupsRouteContext)
   router.delete('/api/groups/:id', async (_req, res, params) => {
     const groupId = requireParam(params, 'id');
     const admin = await context.pool.get(context.getActiveProfile());
-    const [result] = await admin.deleteGroups([groupId]);
-    if (result !== undefined && result.errorCode !== 0) {
-      const type = DELETE_GROUP_ERROR_TYPES[result.errorCode];
-      throw Object.assign(new Error(`could not delete group "${groupId}"`), type !== undefined ? { type } : {});
+    try {
+      await admin.deleteGroups([groupId]);
+    } catch (error) {
+      throw groupDeletionError(error, groupId);
     }
     res.writeHead(204);
     res.end();

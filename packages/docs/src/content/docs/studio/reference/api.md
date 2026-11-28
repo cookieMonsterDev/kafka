@@ -17,6 +17,11 @@ HTTP status codes and one envelope:
 A mutating route additionally returns `403` with `{ "error": { "code": "read_only", ... } }` when
 the server was started with `--read-only`.
 
+When the broker refuses `DELETE /api/groups/:id`, the message names the group and the broker's
+reason: `404 unknown_group` for an unknown group, `409 group_not_empty` while it has members, and
+`500 internal_error` otherwise. On Kafka 4.4+ the reason can be the broker's own message; see
+[compatibility](../../../core/reference/compatibility/).
+
 ## Routes
 
 | Method   | Path                                            | What it does                                                 |

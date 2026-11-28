@@ -105,6 +105,9 @@ methods (3.6+/3.7+). Use `describeClassicGroups` for classic groups.
 `alterPartitionReassignments({ allowReplicationFactorChange: false })` needs 4.1+ and throws on
 older brokers rather than allowing the change. `describeLogDirs` returns `totalBytes` /
 `usableBytes` (3.3+) and `isCordoned` (4.3+) only when the broker sends them.
+`listGroups({ types })` needs 3.8+ and throws on older brokers rather than listing every group.
+On 4.0+ `describeGroups` throws for an unknown or non-classic group (`error.cause.type` is
+`GROUP_ID_NOT_FOUND`); older brokers return it with `state: 'Dead'`.
 
 For ACLs, SCRAM, delegation tokens, transactions, features, and controller bootstrap, read
 [admin operations](references/operations.md).

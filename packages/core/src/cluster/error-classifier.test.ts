@@ -13,6 +13,7 @@ import {
   closedConnectionAddress,
   COORDINATOR_LOADING_ERRORS,
   hasTargetMoved,
+  isGroupIdNotFound,
   isRebalancing,
   isRetriableFor,
   isStaleMetadata,
@@ -46,6 +47,14 @@ describe('cluster/error-classifier', () => {
       expect(isStaleMetadata({ type: 'OFFSET_OUT_OF_RANGE' })).toBe(false);
       expect(isStaleMetadata({})).toBe(false);
       expect(isStaleMetadata(undefined)).toBe(false);
+    });
+  });
+
+  describe('isGroupIdNotFound', () => {
+    it('is true only for GROUP_ID_NOT_FOUND', () => {
+      expect(isGroupIdNotFound(errorOfType('GROUP_ID_NOT_FOUND'))).toBe(true);
+      expect(isGroupIdNotFound({ type: 'NON_EMPTY_GROUP' })).toBe(false);
+      expect(isGroupIdNotFound(undefined)).toBe(false);
     });
   });
 

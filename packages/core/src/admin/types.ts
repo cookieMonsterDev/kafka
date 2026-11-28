@@ -29,7 +29,6 @@ import type { DeleteAclsResponseV1Body } from '../protocol/requests/delete-acls/
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
 import type { ElectLeadersResponseV0Body } from '../protocol/requests/elect-leaders/v0/response';
 import type { IncrementalAlterConfigsResponseV1Body } from '../protocol/requests/incremental-alter-configs/v1/response';
-import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { ListPartitionReassignmentsResponseV0Body } from '../protocol/requests/list-partition-reassignments/v0/response';
 import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
 import type { AlterUserScramCredentialsResponseV0Body } from '../protocol/requests/alter-user-scram-credentials/v0/response';
@@ -201,6 +200,28 @@ export interface ForceTerminateTransactionResult {
   errorCode: number;
   producerId?: bigint;
   producerEpoch?: number;
+}
+
+/** One group as `listGroups` reports it. */
+export interface ListedGroup {
+  groupId: string;
+  protocolType: string;
+  /** The group's state, such as `Stable` or `Empty`. Absent when the broker negotiates ListGroups v3 or older. */
+  groupState?: string;
+  /**
+   * The group's type: `classic`, `consumer`, `share` or `streams`. Absent when the broker negotiates
+   * ListGroups v4 or older (before Kafka 3.8).
+   */
+  groupType?: string;
+}
+
+export interface ListGroupsOptions {
+  /**
+   * List only groups of these types (`classic`, `consumer`, `share`, `streams`), matched without
+   * regard to case (KIP-848). Needs ListGroups v5 (Kafka 3.8+); on an older broker a non-empty list
+   * throws instead of being ignored. Omitted or empty lists groups of every type.
+   */
+  types?: string[];
 }
 
 export interface RemoveMembersFromConsumerGroupMember {
@@ -605,7 +626,7 @@ export interface Admin {
     resources: IncrementalResourceConfig[];
     validateOnly?: boolean;
   }) => Promise<{ resources: IncrementalAlterConfigsResponseV1Body['resources'] }>;
-  listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
+  listGroups: (options?: ListGroupsOptions) => Promise<{ groups: ListedGroup[] }>;
   describeGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
   describeClassicGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
   describeConsumerGroups: (groupIds: string[]) => Promise<{ groups: ConsumerGroupDescription[] }>;

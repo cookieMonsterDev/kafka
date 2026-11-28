@@ -158,7 +158,12 @@ ApiVersions (18) v3+ tagged fields (KIP-584) from the active controller.
 member identities. `admin.describeConsumerGroups` uses ConsumerGroupDescribe
 (key 69) via group coordinators and requires Kafka 4.0+. `admin.describeClassicGroups`
 aliases `admin.describeGroups` (DescribeGroups, key 15) for classic JoinGroup
-groups. `admin.describeShareGroups`, `listShareGroupOffsets`,
+groups. DescribeGroups negotiates v0–v6: on v6 (Kafka 4.0+, KIP-1043) an unknown group id,
+or one that is not a classic group, makes `admin.describeGroups` throw (`cause.type` is
+`GROUP_ID_NOT_FOUND`) where older versions returned an empty `Dead` group;
+`consumer.describeGroup()` still returns the `Dead` group. `admin.listGroups` implements ListGroups
+(key 16) v0–v5; its `types` filter (KIP-848) needs v5 (Kafka 3.8+) and throws on an older
+broker instead of being ignored. `admin.describeShareGroups`, `listShareGroupOffsets`,
 `alterShareGroupOffsets`, `deleteShareGroupOffsets`, and `deleteShareGroups`
 implement share-group Admin (keys 77, 90–92, plus DeleteGroups 42) on Kafka 4.1+.
 `admin.describeTopicPartitions` uses

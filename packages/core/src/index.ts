@@ -201,6 +201,8 @@ export type {
   DescribeTopicPartitionsTopic,
   DescribeTopicPartitionsTopicInput,
   LogDirDescription,
+  ListedGroup,
+  ListGroupsOptions,
   FeatureUpdate,
   FeatureUpdateUpgradeType,
   ListTransactionsOptions,

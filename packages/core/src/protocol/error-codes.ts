@@ -857,12 +857,21 @@ export function failure(code: number): boolean {
   return code !== SUCCESS_CODE;
 }
 
+/**
+ * Builds the protocol error for a broker error code. `message`, such as a response's
+ * `error_message` field, replaces the error code's generic message when it is set.
+ */
 export function createErrorFromCode(
   code: number,
-  extras: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> = {},
+  {
+    message,
+    ...extras
+  }: Pick<KafkaProtocolErrorOptions, 'topic' | 'partition' | 'currentLeader' | 'nodeEndpoints'> & {
+    message?: string | null;
+  } = {},
 ): KafkaProtocolError {
   const entry = ERROR_CODES_BY_CODE.get(code) ?? unknownErrorCode(code);
-  return new KafkaProtocolError(entry, extras);
+  return new KafkaProtocolError(message == null ? entry : { ...entry, message }, extras);
 }
 
 export function failIfVersionNotSupported(code: number): void {

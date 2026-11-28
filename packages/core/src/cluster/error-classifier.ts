@@ -90,6 +90,7 @@ const REJECTED_MEMBER_ERRORS: ReadonlySet<string> = new Set(['UNKNOWN_MEMBER_ID'
 const PRODUCER_FENCED_ERRORS: ReadonlySet<string> = new Set(['PRODUCER_FENCED', 'INVALID_PRODUCER_EPOCH']);
 const UNKNOWN_PRODUCER_ID_ERRORS: ReadonlySet<string> = new Set(['UNKNOWN_PRODUCER_ID']);
 const TOPIC_EXISTS_ERRORS: ReadonlySet<string> = new Set(['TOPIC_ALREADY_EXISTS']);
+const GROUP_ID_NOT_FOUND_ERRORS: ReadonlySet<string> = new Set(['GROUP_ID_NOT_FOUND']);
 /** Errors the broker returns although the records may already be on the leader's log. */
 const WRITE_OUTCOME_UNKNOWN_ERRORS: ReadonlySet<string> = new Set([
   'REQUEST_TIMED_OUT',
@@ -164,6 +165,11 @@ export function isTopicAuthorizationFailed(error: unknown): boolean {
 /** The topic to create exists already. */
 export function isTopicAlreadyExists(error: unknown): boolean {
   return hasType(error, TOPIC_EXISTS_ERRORS);
+}
+
+/** The group coordinator does not know the group, or not as a group of the requested type. */
+export function isGroupIdNotFound(error: unknown): boolean {
+  return hasType(error, GROUP_ID_NOT_FOUND_ERRORS);
 }
 
 /** The broker gave up waiting for the request to complete, such as a topic deletion. */

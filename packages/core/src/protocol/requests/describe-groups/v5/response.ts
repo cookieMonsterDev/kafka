@@ -36,7 +36,7 @@ export type DescribeGroupsResponseV5Body = DescribeGroupsResponseV4Body;
  *
  * @see https://kafka.apache.org/43/design/protocol/
  */
-const memberSchema = flexibleObject([
+export const memberSchema = flexibleObject([
   field('memberId', compactString),
   field('groupInstanceId', compactNullableString),
   field('clientId', compactString),

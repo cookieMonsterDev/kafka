@@ -2,21 +2,25 @@ import { KafkaNonRetriableError } from '../errors';
 import type { ConsumerGroupDescribeGroupV1 } from '../protocol/requests/consumer-group-describe/v1/response';
 import type { DescribeGroupsResponseV2Body } from '../protocol/requests/describe-groups/v2/response';
 import type { DeleteGroupsResult } from '../protocol/requests/delete-groups/v0/response';
-import type { ListGroupsResponseV2Body } from '../protocol/requests/list-groups/v2/response';
 import type { OffsetDeleteResponseV0Body } from '../protocol/requests/offset-delete/v0/response';
 import type { LeaveGroupMember } from '../protocol/requests/leave-group/index';
 import { coordinatorTarget } from '../cluster/run';
 import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { deleteGroupsViaCoordinators, describeGroupsViaCoordinators, formatUnknown } from './helpers';
-import type { RemoveMembersFromConsumerGroupOptions, RemoveMembersFromConsumerGroupResult } from './types';
+import type {
+  ListedGroup,
+  ListGroupsOptions,
+  RemoveMembersFromConsumerGroupOptions,
+  RemoveMembersFromConsumerGroupResult,
+} from './types';
 import type { TopicPartitions } from './types';
 import { ConsumerGroupDescribe, ListGroups, OffsetDelete } from '../protocol/requests/lazy-families';
 import { DescribeGroups } from '../protocol/requests/describe-groups/index';
 import { LeaveGroupMembers } from '../protocol/requests/leave-group/index';
 
 export interface GroupsApi {
-  listGroups: () => Promise<{ groups: ListGroupsResponseV2Body['groups'] }>;
+  listGroups: (options?: ListGroupsOptions) => Promise<{ groups: ListedGroup[] }>;
   describeGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
   describeClassicGroups: (groupIds: string[]) => Promise<{ groups: DescribeGroupsResponseV2Body['groups'] }>;
   describeConsumerGroups: (groupIds: string[]) => Promise<{ groups: ConsumerGroupDescribeGroupV1[] }>;
@@ -33,13 +37,20 @@ export interface GroupsApi {
 export function createGroupsApi({ cluster, retry }: AdminContext): GroupsApi {
   const retrier = createRetrier(retry);
 
-  const listGroups = async (): Promise<{ groups: ListGroupsResponseV2Body['groups'] }> => {
+  const listGroups = async ({ types }: ListGroupsOptions = {}): Promise<{ groups: ListedGroup[] }> => {
+    if (
+      types !== undefined &&
+      (!Array.isArray(types) || types.some((type) => typeof type !== 'string' || type === ''))
+    ) {
+      throw new KafkaNonRetriableError(`Invalid types array ${formatUnknown(types)}`);
+    }
+
     await cluster.refreshMetadata();
 
     const responses = await Promise.all(
       Object.keys(cluster.brokerPool.brokers).map(async (nodeId) => {
         const broker = await cluster.findBroker({ nodeId });
-        return broker.send(ListGroups, {});
+        return broker.send(ListGroups, { types });
       }),
     );
 

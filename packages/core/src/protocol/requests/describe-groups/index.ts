@@ -12,6 +12,8 @@ import { describeGroupsRequestV4 } from './v4/request';
 import { describeGroupsResponseV4 } from './v4/response';
 import { describeGroupsRequestV5 } from './v5/request';
 import { describeGroupsResponseV5 } from './v5/response';
+import { describeGroupsRequestV6 } from './v6/request';
+import { describeGroupsResponseV6 } from './v6/response';
 
 export interface DescribeGroupsOptions {
   groupIds: string[];
@@ -40,6 +42,10 @@ const VERSIONS = {
   5: (options) => ({
     request: describeGroupsRequestV5(withAuthorizedOperations(options)),
     response: describeGroupsResponseV5,
+  }),
+  6: (options) => ({
+    request: describeGroupsRequestV6(withAuthorizedOperations(options)),
+    response: describeGroupsResponseV6,
   }),
 } satisfies VersionFactories<DescribeGroupsOptions>;
 

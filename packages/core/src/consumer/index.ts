@@ -1,3 +1,4 @@
+import { isGroupIdNotFound } from '../cluster/error-classifier';
 import type { Cluster, TopicPartitionInfo } from '../cluster/index';
 import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
 import { KafkaNonRetriableError } from '../errors';
@@ -932,7 +933,15 @@ export function createConsumer({
     const coordinator = await cluster.findGroupCoordinator({ groupId });
     const describeRetrier = retrier(retry);
     return describeRetrier(async () => {
-      const { groups } = await coordinator.send(DescribeGroups, { groupIds: [groupId] });
+      let groups;
+      try {
+        ({ groups } = await coordinator.send(DescribeGroups, { groupIds: [groupId] }));
+      } catch (error) {
+        // DescribeGroups v6 (Kafka 4.0+) rejects a group the coordinator does not know as a classic
+        // group. Older brokers describe it as an empty `Dead` group, which this method keeps returning.
+        if (isGroupIdNotFound(error)) return { groupId, members: [], protocol: '', protocolType: '', state: 'Dead' };
+        throw error;
+      }
       const group = groups.find((entry) => entry.groupId === groupId);
       if (!group) {
         throw new KafkaNonRetriableError(`Consumer group ${groupId} not found`);

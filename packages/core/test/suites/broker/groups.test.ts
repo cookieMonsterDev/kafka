@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Broker } from '../../../src/broker/index';
 import { MemberMetadata } from '../../../src/consumer/assigner-protocol';
 import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
-import { advertisedAddress, createConnectionPool, newLogger, retryProtocol, secureRandom } from '../../helpers/index';
+import {
+  advertisedAddress,
+  createConnectionPool,
+  newLogger,
+  retryProtocol,
+  secureRandom,
+  testIfKafkaAtLeast_4_0,
+  testIfKafkaAtMost_3_6,
+} from '../../helpers/index';
 import { DescribeGroups } from '../../../src/protocol/requests/describe-groups/index';
 import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
 import { Heartbeat } from '../../../src/protocol/requests/heartbeat/index';
@@ -78,8 +86,14 @@ describe('broker.groups', () => {
     expect(leave.errorCode).toBe(0);
   });
 
-  it('describes groups', async () => {
+  testIfKafkaAtMost_3_6('describes an unknown group as Dead', async () => {
     const described = await coordinator!.send(DescribeGroups, { groupIds: [groupId] });
-    expect(described.groups[0]?.groupId).toBe(groupId);
+    expect(described.groups[0]).toMatchObject({ groupId, state: 'Dead', errorCode: 0 });
+  });
+
+  testIfKafkaAtLeast_4_0('rejects an unknown group with GROUP_ID_NOT_FOUND on DescribeGroups v6', async () => {
+    await expect(coordinator!.send(DescribeGroups, { groupIds: [groupId] })).rejects.toMatchObject({
+      type: 'GROUP_ID_NOT_FOUND',
+    });
   });
 });

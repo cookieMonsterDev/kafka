@@ -29,6 +29,12 @@ import { requireTopicId } from '../topic-ids';
 /** First Produce version that addresses topics by UUID instead of name (KIP-516). */
 export const PRODUCE_TOPIC_ID_MIN_VERSION = 13;
 
+/**
+ * First Produce version that adds its partitions to the transaction it writes to, which the broker
+ * allows only under transaction version 2 (KIP-890 part 2).
+ */
+export const PRODUCE_TRANSACTION_V2_MIN_VERSION = 12;
+
 export interface ProduceMessage {
   key?: Buffer | string | null;
   value?: Buffer | string | null;
@@ -54,6 +60,11 @@ export interface ProduceRequestOptions {
   acks: number;
   timeout: number;
   transactionalId?: string | null;
+  /**
+   * With a `transactionalId`: whether the transaction runs under transaction version 2. Without
+   * it, a transactional Produce is sent at v11 or lower. Defaults to false.
+   */
+  isTransactionV2Enabled?: boolean;
   producerId?: bigint;
   producerEpoch?: number;
   compression?: CompressionType;

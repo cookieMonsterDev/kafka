@@ -8,6 +8,8 @@ import { addOffsetsToTxnRequestV2 } from './v2/request';
 import { addOffsetsToTxnResponseV2 } from './v2/response';
 import { addOffsetsToTxnRequestV3 } from './v3/request';
 import { addOffsetsToTxnResponseV3 } from './v3/response';
+import { addOffsetsToTxnRequestV4 } from './v4/request';
+import { addOffsetsToTxnResponseV4 } from './v4/response';
 
 export interface AddOffsetsToTxnOptions {
   transactionalId: string;
@@ -21,6 +23,7 @@ const VERSIONS = {
   1: (values) => ({ request: addOffsetsToTxnRequestV1(values), response: addOffsetsToTxnResponseV1 }),
   2: (values) => ({ request: addOffsetsToTxnRequestV2(values), response: addOffsetsToTxnResponseV2 }),
   3: (values) => ({ request: addOffsetsToTxnRequestV3(values), response: addOffsetsToTxnResponseV3 }),
+  4: (values) => ({ request: addOffsetsToTxnRequestV4(values), response: addOffsetsToTxnResponseV4 }),
 } satisfies VersionFactories<AddOffsetsToTxnOptions>;
 
 export const AddOffsetsToTxn = defineRequestFamily(KAFKA_APIS.AddOffsetsToTxn, VERSIONS);

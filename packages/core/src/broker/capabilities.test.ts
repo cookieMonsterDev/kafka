@@ -41,9 +41,10 @@ describe('broker/capabilities', () => {
     expect(supportsAclPatternType({})).toBe(false);
   });
 
-  it('supportsTransactionV2 when Produce maxVersion is at least 12', () => {
-    expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 11 } })).toBe(false);
-    expect(supportsTransactionV2({ [API_KEYS.Produce]: { maxVersion: 12 } })).toBe(true);
+  it('supportsTransactionV2 once transaction.version is finalized at 2 or higher', () => {
+    expect(supportsTransactionV2({ 'transaction.version': 1 })).toBe(false);
+    expect(supportsTransactionV2({ 'transaction.version': 2 })).toBe(true);
+    expect(supportsTransactionV2({ 'metadata.version': 27 })).toBe(false);
     expect(supportsTransactionV2({})).toBe(false);
   });
 

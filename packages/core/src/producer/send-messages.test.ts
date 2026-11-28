@@ -60,9 +60,10 @@ function inMemoryLedger() {
 }
 
 /** A transaction whose calls are mocked; it enrolls partitions without a coordinator round trip. */
-function fakeTransaction(transactionalId = 'transactional-id') {
+function fakeTransaction(transactionalId = 'transactional-id', { transactionV2 = false } = {}) {
   return {
     transactionalId,
+    isTransactionV2Enabled: () => transactionV2,
     enrollPartitions: vi.fn((): Promise<void> | undefined => undefined),
     sendFailed: vi.fn(),
   } satisfies OpenTransaction;
@@ -383,32 +384,42 @@ describe('producer/sendMessages', () => {
     ]);
   });
 
-  it('produces with the transactional id and producer id & epoch when transactional', async () => {
-    const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
-    const cluster = fakeCluster(brokers);
-    const { options } = await idempotentSendOptions({ transaction: fakeTransaction('transactionalid') });
+  it.each([false, true])(
+    'produces with the transactional id, producer id & epoch and transaction version 2 = %s when transactional',
+    async (transactionV2) => {
+      const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
+      const cluster = fakeCluster(brokers);
+      const { options } = await idempotentSendOptions({
+        transaction: fakeTransaction('transactionalid', { transactionV2 }),
+      });
 
-    const sendMessages = createSendMessages({
-      logger: silentLogger,
-      cluster: cluster as unknown as Cluster,
-      partitioner: cyclingPartitioner,
-      ...options,
-      retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
-    });
+      const sendMessages = createSendMessages({
+        logger: silentLogger,
+        cluster: cluster as unknown as Cluster,
+        partitioner: cyclingPartitioner,
+        ...options,
+        retrier: retrier({ retries: 5, initialRetryTime: 1, maxRetryTime: 5 }),
+      });
 
-    await sendMessages({
-      acks: -1,
-      timeout: 30_000,
-      bytes: 0,
-      topicMessages: [{ topic, messages: ninePartitionedMessages() }],
-    });
+      await sendMessages({
+        acks: -1,
+        timeout: 30_000,
+        bytes: 0,
+        topicMessages: [{ topic, messages: ninePartitionedMessages() }],
+      });
 
-    for (const nodeId of [1, 2, 3]) {
-      expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
-        expect.objectContaining({ producerId: 1000n, producerEpoch: 0, transactionalId: 'transactionalid' }),
-      );
-    }
-  });
+      for (const nodeId of [1, 2, 3]) {
+        expect(brokers[nodeId as 1 | 2 | 3].produce).toHaveBeenCalledWith(
+          expect.objectContaining({
+            producerId: 1000n,
+            producerEpoch: 0,
+            transactionalId: 'transactionalid',
+            isTransactionV2Enabled: transactionV2,
+          }),
+        );
+      }
+    },
+  );
 
   it('produces with the producer id & epoch but no transactional id when idempotent', async () => {
     const brokers = { 1: fakeBroker(1), 2: fakeBroker(2), 3: fakeBroker(3) };
@@ -1081,7 +1092,7 @@ describe('producer/sendMessages', () => {
           { coordinator },
           withSend({
             findGroupCoordinator: vi.fn().mockResolvedValue(coordinator),
-            brokerPool: { versions: undefined },
+            brokerPool: { finalizedFeatures: {} },
           }),
         ) as unknown as Cluster,
         transactionalId: 'transactional-id',

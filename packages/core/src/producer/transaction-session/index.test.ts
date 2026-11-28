@@ -4,7 +4,6 @@ import { KafkaNonRetriableError, KafkaProtocolError } from '../../errors';
 import { createLogger, LOG_LEVELS } from '../../loggers/index';
 import { createErrorFromCode, ERROR_CODES } from '../../protocol/error-codes';
 import { COORDINATOR_TYPES } from '../../protocol/enums/coordinator-types';
-import { API_KEYS } from '../../protocol/requests/api-keys';
 import { retrier, type RetryOptions } from '../../retry/index';
 import { createTransactionSession, type TransactionSession } from './index';
 import { ABORT_BEFORE_BEGIN_MESSAGE, ABORT_ONLY_MESSAGE } from './transaction-state-machine';
@@ -23,6 +22,12 @@ const mockInitProducerIdResponse = {
   clientSideThrottleTime: 0,
 };
 
+/** The finalized features of a cluster with transaction version 2 on. */
+const TRANSACTION_V2_FEATURES: Readonly<Record<string, number>> = { 'transaction.version': 2 };
+
+/** An EndTxn v5 response: the producer id and the epoch the coordinator bumped to. */
+const mockBumpedEndTxnResponse = { errorCode: 0, producerId: 1000n, producerEpoch: 2 };
+
 /** Second InitProducerId response, used to assert an epoch bump. */
 const mockBumpedInitProducerIdResponse = {
   ...mockInitProducerIdResponse,
@@ -39,12 +44,12 @@ function fakeBroker() {
   });
 }
 
-/** `transactionV2` mirrors a broker advertising Produce v12 (Kafka 4.0+, KIP-890 part 2). */
+/** `transactionV2` mirrors a cluster that finalized `transaction.version` 2 (Kafka 4.0+, KIP-890 part 2). */
 function fakeCluster(broker: ReturnType<typeof fakeBroker>, { transactionV2 = false } = {}) {
   const cluster = withSend({
     findGroupCoordinator: vi.fn().mockResolvedValue(broker),
     markOffsetAsCommitted: vi.fn(),
-    brokerPool: { versions: transactionV2 ? { [API_KEYS.Produce]: { maxVersion: 12 } } : undefined },
+    brokerPool: { finalizedFeatures: transactionV2 ? TRANSACTION_V2_FEATURES : {} },
   });
   // `Cluster.run` resolves a coordinator target through the lookup EndTxn uses directly, read at
   // call time so a test can replace it.
@@ -263,6 +268,7 @@ describe('producer/transactionSession', () => {
         producerEpoch: mockInitProducerIdResponse.producerEpoch,
         transactionalId,
         transactionResult,
+        isTransactionV2Enabled: false,
       });
       expect(txn.isActive()).toBe(false);
     });
@@ -360,23 +366,72 @@ describe('producer/transactionSession', () => {
       expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: false }));
       await expect(session.begin(fakeSender)).resolves.toBeTruthy();
     });
+
+    it('lets a commit rejected with TRANSACTION_ABORTABLE be aborted and the producer keep going', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(errorOfType('TRANSACTION_ABORTABLE')).mockResolvedValue(undefined);
+      const { session, txn } = await transactionWithPartition(broker);
+
+      await expect(txn.commit()).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
+      await expect(txn.commit()).rejects.toThrow(ABORT_ONLY_MESSAGE);
+      await txn.abort();
+
+      expect(broker.endTxn).toHaveBeenLastCalledWith(expect.objectContaining({ transactionResult: false }));
+      await expect(session.begin(fakeSender)).resolves.toBeTruthy();
+    });
+
+    it('lets an abort rejected with TRANSACTION_ABORTABLE be sent again', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockRejectedValueOnce(errorOfType('TRANSACTION_ABORTABLE')).mockResolvedValue(undefined);
+      const { session, txn } = await transactionWithPartition(broker);
+
+      await expect(txn.abort()).rejects.toMatchObject({ type: 'TRANSACTION_ABORTABLE' });
+      await txn.abort();
+
+      expect(broker.endTxn).toHaveBeenCalledTimes(2);
+      await expect(session.begin(fakeSender)).resolves.toBeTruthy();
+    });
   });
 
   describe('epoch bump', () => {
-    it('bumps the producer epoch after every transaction under transaction V2', async () => {
+    it('takes the producer epoch EndTxn returns under transaction version 2, without InitProducerId', async () => {
       const broker = fakeBroker();
-      broker.initProducerId
-        .mockResolvedValueOnce(mockInitProducerIdResponse)
-        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      broker.endTxn.mockResolvedValue(mockBumpedEndTxnResponse);
       const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
 
       await txn.commit();
 
-      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
-      expect(session.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ isTransactionV2Enabled: true }));
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+      expect(session.ledger.getProducerEpoch()).toBe(mockBumpedEndTxnResponse.producerEpoch);
     });
 
-    it('does not bump the producer epoch when the broker predates transaction V2', async () => {
+    it('takes the new producer id EndTxn returns once the epoch ran out', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockResolvedValue({ errorCode: 0, producerId: 2000n, producerEpoch: 0 });
+      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+
+      await txn.abort();
+
+      expect(session.ledger.getProducerId()).toBe(2000n);
+      expect(session.ledger.getProducerEpoch()).toBe(0);
+    });
+
+    it('settles a requested bump with the epoch EndTxn returns under transaction version 2', async () => {
+      const broker = fakeBroker();
+      broker.endTxn.mockResolvedValue(mockBumpedEndTxnResponse);
+      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+
+      session.ledger.requestEpochBump();
+      session.sendFailed();
+      await txn.abort();
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(1);
+      expect(session.ledger.isEpochBumpRequested()).toBe(false);
+      expect(session.ledger.getProducerEpoch()).toBe(mockBumpedEndTxnResponse.producerEpoch);
+    });
+
+    it('does not bump the producer epoch outside transaction version 2', async () => {
       const broker = fakeBroker();
       const { session, txn } = await transactionWithPartition(broker);
 
@@ -386,13 +441,34 @@ describe('producer/transactionSession', () => {
       expect(session.ledger.getProducerEpoch()).toBe(mockInitProducerIdResponse.producerEpoch);
     });
 
-    it('reports a V2 transaction committed when the bump after it fails, bumping before the next one', async () => {
+    it('bumps the epoch before the first transaction once the cluster turns transaction version 2 on', async () => {
+      const broker = fakeBroker();
+      broker.initProducerId
+        .mockResolvedValueOnce(mockInitProducerIdResponse)
+        .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
+      const cluster = fakeCluster(broker);
+      const session = createSession(cluster);
+      await (await session.begin(fakeSender)).commit();
+
+      cluster.brokerPool.finalizedFeatures = TRANSACTION_V2_FEATURES;
+      const txn = await session.begin(fakeSender);
+
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+      expect(session.ledger.getProducerEpoch()).toBe(mockBumpedInitProducerIdResponse.producerEpoch);
+      expect(session.isTransactionV2Enabled()).toBe(true);
+      await txn.commit();
+      await session.begin(fakeSender);
+      expect(broker.initProducerId).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports a transaction committed when the requested bump after it fails, bumping before the next one', async () => {
       const broker = fakeBroker();
       broker.initProducerId
         .mockResolvedValueOnce(mockInitProducerIdResponse)
         .mockRejectedValueOnce(new Error('coordinator down'))
         .mockResolvedValueOnce(mockBumpedInitProducerIdResponse);
-      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+      const { session, txn } = await transactionWithPartition(broker);
+      session.ledger.requestEpochBump();
 
       await expect(txn.commit()).resolves.toBeUndefined();
       expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
@@ -409,7 +485,8 @@ describe('producer/transactionSession', () => {
         finishBump = resolve;
       });
       broker.initProducerId.mockResolvedValueOnce(mockInitProducerIdResponse).mockReturnValueOnce(bumped);
-      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+      const { session, txn } = await transactionWithPartition(broker);
+      session.ledger.requestEpochBump();
 
       const committed = txn.commit();
       await vi.waitFor(() => expect(broker.initProducerId).toHaveBeenCalledTimes(2));
@@ -438,7 +515,8 @@ describe('producer/transactionSession', () => {
         finishBump = resolve;
       });
       broker.initProducerId.mockResolvedValueOnce(mockInitProducerIdResponse).mockReturnValueOnce(bumped);
-      const { session, txn } = await transactionWithPartition(broker, { transactionV2: true });
+      const { session, txn } = await transactionWithPartition(broker);
+      session.ledger.requestEpochBump();
 
       const committed = txn.commit();
       await vi.waitFor(() => expect(broker.initProducerId).toHaveBeenCalledTimes(2));
@@ -502,6 +580,7 @@ describe('producer/transactionSession', () => {
         producerEpoch: mockInitProducerIdResponse.producerEpoch,
         groupId: consumerGroupId,
         topics: [{ topic, partitions: [{ partition: 0, offset: 5n, metadata: null }] }],
+        isTransactionV2Enabled: false,
       });
       expect(cluster.markOffsetAsCommitted).not.toHaveBeenCalled();
 
@@ -513,6 +592,37 @@ describe('producer/transactionSession', () => {
         partition: 0,
         offset: 5n,
       });
+    });
+
+    it('adds the offsets with TxnOffsetCommit alone under transaction version 2', async () => {
+      const broker = fakeBroker();
+      const cluster = fakeCluster(broker, { transactionV2: true });
+      const txn = await createSession(cluster).begin(fakeSender);
+
+      await txn.sendOffsets({ consumerGroupId, topics });
+
+      expect(broker.addOffsetsToTxn).not.toHaveBeenCalled();
+      expect(broker.txnOffsetCommit).toHaveBeenCalledWith(expect.objectContaining({ isTransactionV2Enabled: true }));
+      await txn.commit();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: true }));
+      expect(cluster.markOffsetAsCommitted).toHaveBeenCalledOnce();
+    });
+
+    it('aborts through EndTxn when TxnOffsetCommit fails under transaction version 2', async () => {
+      const broker = fakeBroker();
+      broker.txnOffsetCommit.mockRejectedValue(errorOfType('TRANSACTION_ABORTABLE'));
+      const session = createSession(fakeCluster(broker, { transactionV2: true }));
+      const txn = await session.begin(fakeSender);
+
+      await expect(txn.sendOffsets({ consumerGroupId, topics })).rejects.toMatchObject({
+        type: 'TRANSACTION_ABORTABLE',
+      });
+      await expect(txn.commit()).rejects.toEqual(new KafkaNonRetriableError(ABORT_ONLY_MESSAGE));
+
+      // The broker may have added the group before it failed, so the abort still reaches it.
+      await txn.abort();
+      expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
+      await expect(session.begin(fakeSender)).resolves.toBeTruthy();
     });
 
     it('does not mark offsets committed when the transaction aborts', async () => {
@@ -615,22 +725,23 @@ describe('producer/transactionSession', () => {
     });
 
     it.each([
-      ['AddOffsetsToTxn', 'addOffsetsToTxn'],
-      ['TxnOffsetCommit', 'txnOffsetCommit'],
-    ] as const)('leaves the transaction abort-only when %s fails', async (_api, request) => {
+      ['AddOffsetsToTxn', 'GROUP_AUTHORIZATION_FAILED', 'addOffsetsToTxn'],
+      ['TxnOffsetCommit', 'GROUP_AUTHORIZATION_FAILED', 'txnOffsetCommit'],
+      ['AddOffsetsToTxn', 'TRANSACTION_ABORTABLE', 'addOffsetsToTxn'],
+      ['TxnOffsetCommit', 'TRANSACTION_ABORTABLE', 'txnOffsetCommit'],
+    ] as const)('leaves the transaction abort-only when %s fails with %s', async (_api, type, request) => {
       const broker = fakeBroker();
-      broker[request].mockRejectedValue(errorOfType('GROUP_AUTHORIZATION_FAILED'));
-      const { txn } = await transactionWithPartition(broker);
+      broker[request].mockRejectedValue(errorOfType(type));
+      const { session, txn } = await transactionWithPartition(broker);
 
-      await expect(txn.sendOffsets({ consumerGroupId, topics })).rejects.toMatchObject({
-        type: 'GROUP_AUTHORIZATION_FAILED',
-      });
+      await expect(txn.sendOffsets({ consumerGroupId, topics })).rejects.toMatchObject({ type });
       expect(txn.isActive()).toBe(false);
       await expect(txn.commit()).rejects.toEqual(new KafkaNonRetriableError(ABORT_ONLY_MESSAGE));
       expect(broker.endTxn).not.toHaveBeenCalled();
 
       await txn.abort();
       expect(broker.endTxn).toHaveBeenCalledWith(expect.objectContaining({ transactionResult: false }));
+      await expect(session.begin(fakeSender)).resolves.toBeTruthy();
     });
 
     it('rejects the next begin until the transaction whose sendOffsets failed is aborted', async () => {
@@ -666,6 +777,19 @@ describe('producer/transactionSession', () => {
       await expect(sending).rejects.toThrow();
 
       expect(next.isActive()).toBe(true);
+    });
+
+    it('retries TxnOffsetCommit under transaction version 2 while the previous transaction is still ending', async () => {
+      const broker = fakeBroker();
+      broker.txnOffsetCommit
+        .mockRejectedValueOnce(errorOfType('CONCURRENT_TRANSACTIONS'))
+        .mockResolvedValueOnce(undefined);
+      const txn = await createSession(fakeCluster(broker, { transactionV2: true }), { initialRetryTime: 1 }).begin(
+        fakeSender,
+      );
+
+      await txn.sendOffsets({ consumerGroupId, topics });
+      expect(broker.txnOffsetCommit).toHaveBeenCalledTimes(2);
     });
 
     it('retries while the group coordinator is still loading', async () => {

@@ -176,6 +176,35 @@ describe('broker/Broker', () => {
       expect(pool.setSupportAuthenticationProtocol).toHaveBeenCalledWith(true);
     });
 
+    it('keeps the finalized feature levels ApiVersions v3+ reports', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [],
+        finalizedFeatures: [
+          { name: 'metadata.version', minVersionLevel: 1, maxVersionLevel: 27 },
+          { name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 },
+        ],
+      });
+
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      expect(broker.finalizedFeatures).toEqual({});
+      await broker.connect();
+
+      expect(broker.finalizedFeatures).toEqual({ 'metadata.version': 27, 'transaction.version': 2 });
+    });
+
+    it('has no finalized features when ApiVersions predates v3', async () => {
+      const pool = createFakeConnectionPool();
+      pool.send.mockResolvedValueOnce({ errorCode: 0, throttleTime: 0, apiVersions: [] });
+
+      const broker = new Broker({ connectionPool: asConnectionPool(pool), logger: silentLogger });
+      await broker.connect();
+
+      expect(broker.finalizedFeatures).toEqual({});
+    });
+
     it('does not re-fetch api versions when already provided', async () => {
       const pool = createFakeConnectionPool();
       const broker = new Broker({

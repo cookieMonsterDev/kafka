@@ -118,7 +118,10 @@ _Avoid_: PID (in prose)
 A counter on the producer id that rises each time the identity is re-initialized.
 
 **Epoch bump**:
-Re-initializing the producer id to get a higher producer epoch, which also restarts sequence numbers (KIP-360).
+Moving the producer to a higher producer epoch, which also restarts sequence numbers: by re-initializing the producer id (KIP-360), or, under transaction version 2, by the transaction coordinator as each transaction ends.
+
+**Transaction version**:
+The cluster-wide level of the transaction protocol, set by a finalized cluster feature. From version 2 (KIP-890), the transaction coordinator adds partitions and offsets to a transaction as they are written and bumps the producer epoch at the end of every transaction.
 
 **Sequence number**:
 A per-partition counter on produced batches that the broker uses to drop duplicate retries.

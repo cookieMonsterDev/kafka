@@ -120,6 +120,24 @@ describe('cluster/BrokerPool', () => {
     expect(destroy).toHaveBeenCalledOnce();
   });
 
+  it("connect keeps the seed broker's finalized feature levels until disconnect", async () => {
+    const pool = fakeConnectionPool({
+      send: vi.fn().mockResolvedValue({
+        errorCode: 0,
+        throttleTime: 0,
+        apiVersions: [],
+        finalizedFeatures: [{ name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 }],
+      }),
+    });
+    const brokerPool = new BrokerPool({ connectionPoolBuilder: fakeBuilder(async () => pool), logger: silentLogger });
+
+    await brokerPool.connect();
+    expect(brokerPool.finalizedFeatures).toEqual({ 'transaction.version': 2 });
+
+    await brokerPool.disconnect();
+    expect(brokerPool.finalizedFeatures).toEqual({});
+  });
+
   it('disconnect tears down the seed broker and every known broker, clearing state', async () => {
     const destroySpy = vi.fn().mockResolvedValue(undefined);
     const pool = fakeConnectionPool({ destroy: destroySpy });
@@ -301,6 +319,7 @@ describe('cluster/BrokerPool', () => {
         errorCode: 0,
         throttleTime: 0,
         apiVersions: Array.from({ length: 50 }, (_, apiKey) => ({ apiKey, minVersion: 0, maxVersion: 99 })),
+        finalizedFeatures: [{ name: 'transaction.version', minVersionLevel: 0, maxVersionLevel: 2 }],
       };
       seedPool.send = vi
         .fn()
@@ -332,6 +351,8 @@ describe('cluster/BrokerPool', () => {
       expect(brokerPool.seedBroker!.connectionPool.rack).toBe('rack-a');
       expect(brokerPool.brokers['2']).toBeDefined();
       expect(brokerPool.brokers['2']).not.toBe(brokerPool.seedBroker);
+      // A broker built from the cached versions keeps the feature levels that came with them.
+      expect(brokerPool.brokers['2']!.finalizedFeatures).toEqual({ 'transaction.version': 2 });
     });
 
     it('refreshMetadataIfNecessary loads metadata when the cache is still empty', async () => {

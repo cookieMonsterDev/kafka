@@ -183,6 +183,12 @@ describe('protocol/requests', () => {
         transactionTimeout: 30_000,
       }),
     ).toBe(4);
+    expect(
+      negotiatedVersion({ [API_KEYS.InitProducerId]: { minVersion: 0, maxVersion: 6 } }, InitProducerId, {
+        transactionalId: null,
+        transactionTimeout: 30_000,
+      }),
+    ).toBe(5);
   });
 
   it('selects Kafka 0.11 admin and data-path versions from a recorded ApiVersions map', () => {
@@ -344,6 +350,22 @@ describe('request family hooks', () => {
     expect(Produce.preferVersion?.(nameOnly, 13, advertised)).toBe(12);
     expect(Produce.preferVersion?.(withIds, 13, advertised)).toBe(13);
     expect(Produce.preferVersion?.(nameOnly, 9, advertised)).toBe(9);
+  });
+
+  it('Produce stays below v12 in a transaction outside transaction version 2', () => {
+    const advertised = { minVersion: 0, maxVersion: 13 };
+    const transactional = {
+      acks: -1,
+      timeout: 1000,
+      transactionalId: 'txn',
+      topicData: [{ topic: 't', topicId, partitions: [] }],
+    };
+
+    expect(Produce.preferVersion?.(transactional, 13, advertised)).toBe(11);
+    expect(Produce.preferVersion?.({ ...transactional, isTransactionV2Enabled: false }, 13, advertised)).toBe(11);
+    expect(Produce.preferVersion?.({ ...transactional, isTransactionV2Enabled: true }, 13, advertised)).toBe(13);
+    expect(Produce.preferVersion?.({ ...transactional, transactionalId: null }, 13, advertised)).toBe(13);
+    expect(Produce.preferVersion?.(transactional, 9, advertised)).toBe(9);
   });
 
   it('Fetch merges the shuffled partitions of one topic into one entry', () => {

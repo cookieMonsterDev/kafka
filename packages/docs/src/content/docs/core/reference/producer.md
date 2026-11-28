@@ -93,11 +93,16 @@ interface Transaction {
 A transaction whose `send` or `sendOffsets` failed, or whose `commit()` the
 broker rejected, can only be aborted: `commit()` and the next
 `producer.transaction()` reject with a `KafkaNonRetriableError` that says so
-until you call `abort()`. If `commit()`/`abort()` fails without a broker answer
+until you call `abort()`. This includes `TRANSACTION_ABORTABLE` (Kafka 3.8+,
+KIP-890): abort, then begin the next transaction. If `commit()`/`abort()` fails without a broker answer
 (for example, the connection dropped), call it again. A producer fenced by a
 newer instance with the same `transactionalId` (`PRODUCER_FENCED` or
 `INVALID_PRODUCER_EPOCH`) rejects every further transaction call; create a new
 producer.
+
+On a cluster with transaction version 2 (Kafka 4.0+), each transaction ends with
+a new producer epoch and needs no AddPartitionsToTxn or AddOffsetsToTxn round trip.
+See [Compatibility](../compatibility/#implemented-surface).
 
 `flush()` sends linger-buffered records. No-op when `lingerMs` is 0.
 

@@ -13,6 +13,13 @@ export interface FinalizedFeature {
   minVersionLevel: number;
 }
 
+/** Each finalized feature's level (its max version level) by feature name; empty before ApiVersions v3. */
+export type FinalizedFeatureLevels = Readonly<Record<string, number>>;
+
+export function finalizedFeatureLevels(finalizedFeatures: readonly FinalizedFeature[]): FinalizedFeatureLevels {
+  return Object.fromEntries(finalizedFeatures.map(({ name, maxVersionLevel }) => [name, maxVersionLevel]));
+}
+
 export interface ApiVersionsFeatureFields {
   supportedFeatures: SupportedFeature[];
   finalizedFeaturesEpoch: bigint;

@@ -11,7 +11,7 @@ import { API_KEYS } from '../../api-keys';
  * Same body as v3. Flexible (KIP-482). Request header v2's trailing TAG_BUFFER is written by
  * `createRequest`, not here.
  */
-const requestSchema = flexibleObject([
+export const requestSchema = flexibleObject([
   field('transactionalId', compactNullableString),
   field('transactionTimeout', int32),
   field('producerId', int64),

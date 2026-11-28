@@ -9,6 +9,11 @@ import type { Logger } from '../loggers/index';
 import type { ConnectionPool } from '../network/connection-pool';
 import { asTypedSend } from '../network/connection';
 import { ApiVersions } from '../protocol/requests/api-versions/index';
+import {
+  finalizedFeatureLevels,
+  type ApiVersionsFeatureFields,
+  type FinalizedFeatureLevels,
+} from '../protocol/requests/api-versions/feature-fields';
 import type { ApiVersionsResponseV1Body } from '../protocol/requests/api-versions/v1/response';
 import type { ApiVersionsResponseV3Body } from '../protocol/requests/api-versions/v3/response';
 import { lookup } from '../protocol/requests/index';
@@ -45,6 +50,8 @@ export interface BrokerOptions {
    */
   clusterId?: string | null;
   versions?: BrokerVersions | null;
+  /** The finalized feature levels that came with cached `versions`. */
+  finalizedFeatures?: FinalizedFeatureLevels;
   authenticationTimeout?: number;
   allowAutoTopicCreation?: boolean;
 }
@@ -60,6 +67,11 @@ export class Broker {
   rootLogger: Logger;
   logger: Logger;
   versions: BrokerVersions | null;
+  /**
+   * The finalized feature levels, such as `transaction.version`, from the same ApiVersions
+   * response as `versions`; empty before ApiVersions v3.
+   */
+  finalizedFeatures: FinalizedFeatureLevels;
   authenticationTimeout: number;
   allowAutoTopicCreation: boolean;
   brokerAddress: string;
@@ -72,6 +84,7 @@ export class Broker {
     nodeId = null,
     clusterId = null,
     versions = null,
+    finalizedFeatures = {},
     authenticationTimeout = 10_000,
     allowAutoTopicCreation = true,
   }: BrokerOptions) {
@@ -81,6 +94,7 @@ export class Broker {
     this.rootLogger = logger;
     this.logger = logger.namespace('Broker');
     this.versions = versions;
+    this.finalizedFeatures = finalizedFeatures;
     this.authenticationTimeout = authenticationTimeout;
     this.allowAutoTopicCreation = allowAutoTopicCreation;
 
@@ -113,7 +127,9 @@ export class Broker {
         (this.#expectedIdentity() != null && supportsMisroutedConnectionCheck(this.versions))
       ) {
         try {
-          this.versions = await this.apiVersions();
+          const negotiated = await this.#negotiateApiVersions();
+          this.versions = negotiated.versions;
+          this.finalizedFeatures = negotiated.finalizedFeatures;
         } catch (e) {
           // The socket leads to another broker or cluster; keep nothing open on it.
           if (isRebootstrapRequired(e)) await this.disconnect();
@@ -156,7 +172,12 @@ export class Broker {
    * them and rejects with `REBOOTSTRAP_REQUIRED` when it does not (KIP-1242).
    */
   async apiVersions(): Promise<BrokerVersions> {
-    let response: ApiVersionsResponseV1Body | undefined;
+    return (await this.#negotiateApiVersions()).versions;
+  }
+
+  /** Like {@link apiVersions}, with the finalized feature levels ApiVersions v3+ reports. */
+  async #negotiateApiVersions(): Promise<{ versions: BrokerVersions; finalizedFeatures: FinalizedFeatureLevels }> {
+    let response: (ApiVersionsResponseV1Body & Partial<ApiVersionsFeatureFields>) | undefined;
     const requestOptions = this.#expectedIdentity() ?? {};
     const availableVersions = [...ApiVersions.versions].sort((a, b) => b - a);
     const oldestVersion = availableVersions[availableVersions.length - 1];
@@ -167,7 +188,7 @@ export class Broker {
     for (const candidateVersion of availableVersions) {
       try {
         const apiVersions = ApiVersions.protocol({ version: candidateVersion });
-        response = await this.#sendRequest<ApiVersionsResponseV1Body>({
+        response = await this.#sendRequest<ApiVersionsResponseV1Body & Partial<ApiVersionsFeatureFields>>({
           ...apiVersions(requestOptions),
           requestTimeout: this.connectionPool.connectionTimeout,
         });
@@ -193,7 +214,7 @@ export class Broker {
     for (const version of response.apiVersions) {
       versions[version.apiKey] = { minVersion: version.minVersion, maxVersion: version.maxVersion };
     }
-    return versions;
+    return { versions, finalizedFeatures: finalizedFeatureLevels(response.finalizedFeatures ?? []) };
   }
 
   /** The cluster id and node id ApiVersions v5 asks the broker to confirm, once both are known. */

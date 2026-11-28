@@ -116,11 +116,38 @@ Bootstrap connections send no ids. The check needs `metadataRecovery: 'rebootstr
 client falls back to the highest version they support.
 
 **Coordinators.** Group and transaction coordinators are found with
-FindCoordinator (key 10) v0–v4. On Kafka 3.0+ (v4, KIP-699) one request finds
+FindCoordinator (key 10) v0–v5. On Kafka 3.0+ (v4, KIP-699) one request finds
 every coordinator an admin call needs, such as `admin.describeGroups`,
 `admin.deleteGroups`, or `admin.describeTransactions` over many IDs; an older
-broker gets one request per distinct ID. v5 (`TRANSACTION_ABORTABLE`, KIP-890) and v6
-(share coordinator keys, KIP-932, which only brokers look up) are not sent.
+broker gets one request per distinct ID. v5 (Kafka 3.8+) tells the broker the client
+handles `TRANSACTION_ABORTABLE` (KIP-890). v6 (share coordinator keys, KIP-932, which
+only brokers look up) is not sent.
+
+**Transactions.** The transactional producer sends InitProducerId (key 22) v0–v5,
+AddPartitionsToTxn (24) v0–v3, AddOffsetsToTxn (25) v0–v4, EndTxn (26) v0–v5, and
+TxnOffsetCommit (28) v0–v5. On Kafka 3.8+ these versions tell the broker the client
+handles `TRANSACTION_ABORTABLE` (KIP-890 part 1). A transaction that fails with it can
+only be aborted, as after any other failed send, `sendOffsets`, or rejected `commit()`;
+after `abort()` the producer begins the next transaction as usual. If the broker rejects
+the `abort()` itself with anything but a fencing error, the transaction stays open for
+another `abort()`, where the Java client fails the producer. AddPartitionsToTxn
+v4 and later batch transactions for checks between brokers, and the broker accepts them
+only from other brokers, so the producer stays on v3, as the Java client does.
+
+Transaction version 2 (KIP-890 part 2) is used when the cluster has finalized the
+`transaction.version` feature at 2 or higher. New Kafka 4.0+ clusters do this by default.
+Under it, Produce v12+ adds partitions to the transaction and TxnOffsetCommit v5 adds the
+group's offsets, so the producer sends no AddPartitionsToTxn or AddOffsetsToTxn. Each
+EndTxn v5 bumps the producer epoch and returns the producer id and epoch for the next
+transaction, so the producer sends InitProducerId only before its first transaction.
+Brokers advertise these versions whatever the feature level is. With
+`transaction.version` below 2, a transactional Produce stays on v11 or lower, and EndTxn
+and TxnOffsetCommit stay on v4 or lower, because the broker reads the newer versions as
+transaction version 2. The producer reads the feature level from the same ApiVersions
+response as the broker's API versions, when it first connects, and keeps it while it
+reuses those versions; create a new producer to pick up a change. If a producer does read
+a new level that turns transaction version 2 on, it bumps its epoch before its first
+transaction under it, as the Java client does.
 
 **Offset lookups.** ListOffsets (key 2) v0–v11. `admin.fetchTopicOffsets`
 takes an `offsetSpec` from `OffsetSpecs`: max timestamp (v7, Kafka 3.0), earliest

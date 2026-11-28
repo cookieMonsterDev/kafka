@@ -3,7 +3,11 @@ import { Broker } from '../../../src/broker/index';
 import type { Cluster } from '../../../src/cluster/index';
 import { API_KEYS } from '../../../src/protocol/requests/api-keys';
 import { lookup } from '../../../src/protocol/requests/index';
+import { supportsTransactionV2 } from '../../../src/broker/capabilities';
+import { COORDINATOR_TYPES } from '../../../src/protocol/enums/coordinator-types';
+import { AddOffsetsToTxn } from '../../../src/protocol/requests/add-offsets-to-txn/index';
 import { Fetch } from '../../../src/protocol/requests/fetch/index';
+import { FindCoordinator } from '../../../src/protocol/requests/find-coordinator/index';
 import { InitProducerId } from '../../../src/protocol/requests/init-producer-id/index';
 import { Produce } from '../../../src/protocol/requests/produce/index';
 import {
@@ -23,6 +27,8 @@ import {
   testIfKafkaEquals_1_1,
   testIfKafkaEquals_2_4,
   testIfKafkaEquals_3_6,
+  testIfKafkaTransactionV1,
+  testIfKafkaTransactionV2,
 } from '../../helpers/index';
 
 const emptyProduce = { acks: 1, timeout: 30_000, topicData: [] };
@@ -154,6 +160,25 @@ describe('broker.apiVersions', () => {
   testIfKafkaAtLeast_3_6('Kafka 3.6+ negotiates InitProducerId v3+ (KIP-360)', () => {
     const initVersion = lookup(broker!.versions!)(InitProducerId)(emptyInitProducerId).request.apiVersion;
     expect(initVersion).toBeGreaterThanOrEqual(3);
+  });
+
+  testIfKafkaTransactionV1('brokers older than transaction V2 do not finalize transaction.version 2', () => {
+    expect(supportsTransactionV2(broker!.finalizedFeatures)).toBe(false);
+  });
+
+  testIfKafkaTransactionV2('Kafka 4.0+ finalizes transaction.version 2 and negotiates the KIP-890 versions', () => {
+    expect(supportsTransactionV2(broker!.finalizedFeatures)).toBe(true);
+
+    const negotiate = lookup(broker!.versions!);
+    expect(negotiate(InitProducerId)(emptyInitProducerId).request.apiVersion).toBe(5);
+    expect(
+      negotiate(FindCoordinator)({ coordinatorKeys: ['txn'], coordinatorType: COORDINATOR_TYPES.TRANSACTION }).request
+        .apiVersion,
+    ).toBe(5);
+    expect(
+      negotiate(AddOffsetsToTxn)({ transactionalId: 'txn', producerId: 0n, producerEpoch: 0, groupId: 'g' }).request
+        .apiVersion,
+    ).toBe(4);
   });
 
   testIfKafkaAtLeast_4_0(

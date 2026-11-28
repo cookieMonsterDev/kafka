@@ -1,5 +1,9 @@
+import type { FinalizedFeatureLevels } from '../protocol/requests/api-versions/feature-fields';
 import { API_KEYS } from '../protocol/requests/api-keys';
 import type { BrokerVersions } from '../protocol/requests/index';
+
+/** The finalized feature that sets the transaction protocol version (KIP-890). */
+const TRANSACTION_VERSION_FEATURE = 'transaction.version';
 
 function advertised(versions: BrokerVersions, apiKey: number) {
   return versions[apiKey];
@@ -35,12 +39,12 @@ export function supportsAclPatternType(versions: BrokerVersions): boolean {
 }
 
 /**
- * KIP-890 transaction protocol V2: Produce itself covers `AddPartitionsToTxn`, and the producer
- * epoch bumps on every transaction. Both land together on Produce v12 (Kafka 4.0).
+ * KIP-890 part 2: transaction version 2 is on once the cluster finalizes `transaction.version` at 2
+ * or higher (Kafka 4.0+). Brokers advertise its request versions either way, so the feature level
+ * decides, as in the Java client.
  */
-export function supportsTransactionV2(versions: BrokerVersions): boolean {
-  const produce = advertised(versions, API_KEYS.Produce);
-  return produce != null && produce.maxVersion >= 12;
+export function supportsTransactionV2(finalizedFeatures: FinalizedFeatureLevels): boolean {
+  return (finalizedFeatures[TRANSACTION_VERSION_FEATURE] ?? 0) >= 2;
 }
 
 /**

@@ -2,6 +2,7 @@ import { supportsTransactionV2 } from '../../broker/capabilities';
 import type { Broker } from '../../broker/index';
 import type { Cluster, TopicOffsets } from '../../cluster/index';
 import {
+  CONCURRENT_TRANSACTIONS_ERRORS,
   COORDINATOR_LOADING_ERRORS,
   isProducerFenced,
   STALE_METADATA_ERRORS,
@@ -31,9 +32,14 @@ import { TxnOffsetCommit } from '../../protocol/requests/txn-offset-commit/index
 
 /**
  * TxnOffsetCommit also retries while the group coordinator is still loading, or does not know a
- * topic yet; a moved coordinator is looked up again by `Cluster.run`.
+ * topic yet, and while the previous transaction is still ending, which v5 can report since it adds
+ * the group to the transaction itself; a moved coordinator is looked up again by `Cluster.run`.
  */
-const TXN_OFFSET_COMMIT_RETRY_ON = unionOf(COORDINATOR_LOADING_ERRORS, STALE_METADATA_ERRORS);
+const TXN_OFFSET_COMMIT_RETRY_ON = unionOf(
+  COORDINATOR_LOADING_ERRORS,
+  STALE_METADATA_ERRORS,
+  CONCURRENT_TRANSACTIONS_ERRORS,
+);
 
 type TransactionCall = 'send' | 'commit' | 'abort';
 
@@ -114,6 +120,12 @@ export function createTransactionSession({
   /** The epoch bump that runs once a transaction ended; the next transaction begins only after it. */
   let postTransactionBump: Promise<void> | undefined;
 
+  /**
+   * Whether the open (or last) transaction runs under transaction version 2, read from the cluster
+   * as it begins and kept until the next begins; `undefined` before the first.
+   */
+  let isTransactionV2: boolean | undefined;
+
   const stateMachine = new TransactionStateMachine({ logger });
   stateMachine.on('transition', ({ to }: TransitionEvent) => {
     if (to === TRANSACTION_STATES.READY) {
@@ -141,10 +153,12 @@ export function createTransactionSession({
     return cluster.findGroupCoordinator({ groupId: transactionalId, coordinatorType: COORDINATOR_TYPES.TRANSACTION });
   }
 
-  /** KIP-890 part 2: Produce v12+ (Kafka 4.0+) covers AddPartitionsToTxn and bumps the epoch every transaction. */
+  /**
+   * KIP-890 part 2: under transaction version 2, Produce and TxnOffsetCommit add their partitions
+   * and offsets to the transaction, and EndTxn bumps the producer epoch on every transaction.
+   */
   function isTransactionV2Enabled(): boolean {
-    const versions = cluster.brokerPool.versions;
-    return versions != null && supportsTransactionV2(versions);
+    return isTransactionV2 === true;
   }
 
   /** Whether the transaction holds partitions or offsets, so ending it needs EndTxn. */
@@ -199,6 +213,11 @@ export function createTransactionSession({
     if (postTransactionBump) await postTransactionBump;
     assertCanBegin();
 
+    const isNextTransactionV2 = supportsTransactionV2(cluster.brokerPool.finalizedFeatures);
+    // Like the Java client, bump the epoch once the cluster turns transaction version 2 on, so the
+    // coordinator fences whatever is left of the earlier transactions.
+    if (isNextTransactionV2 && isTransactionV2 === false) ledger.requestEpochBump();
+
     // The producer id is initialized once; later transactions only bump the epoch when requested.
     if (!ledger.isInitialized()) await ledger.initProducerId();
     await ledger.bumpEpochIfRequested();
@@ -208,6 +227,7 @@ export function createTransactionSession({
     const handle: TransactionHandle = { sender: createSender() };
     stateMachine.transitionTo(TRANSACTION_STATES.TRANSACTING);
     open = handle;
+    isTransactionV2 = isNextTransactionV2;
 
     return {
       send: guard(handle, 'send', handle.sender.send),
@@ -306,21 +326,22 @@ export function createTransactionSession({
       return;
     }
 
-    await retry(async (bail, retryCount, retryTime) => {
+    const ended = await retry(async (bail, retryCount, retryTime) => {
       try {
         // Looked up on every attempt so a moved coordinator (NOT_COORDINATOR, disconnect) is re-discovered.
         const broker = await findTransactionCoordinator();
-        await broker.send(EndTxn, {
+        return await broker.send(EndTxn, {
           producerId: ledger.getProducerId(),
           producerEpoch: ledger.getProducerEpoch(),
           transactionalId,
           transactionResult,
+          isTransactionV2Enabled: isTransactionV2Enabled(),
         });
       } catch (e) {
         const error = e as Error & { retriable?: boolean };
         if (!error.retriable) {
           bail(error);
-          return;
+          return undefined;
         }
         logger.debug('EndTxn failed, retrying', { error: error.message, transactionalId, retryCount, retryTime });
         throw error;
@@ -339,14 +360,17 @@ export function createTransactionSession({
       }
       throw error;
     });
+    // KIP-890 part 2: EndTxn v5 bumped the producer epoch (or allocated a new producer id once the
+    // epoch ran out), so the next transaction starts from it without InitProducerId.
+    if (ended?.producerId !== undefined && ended.producerId >= 0n && ended.producerEpoch !== undefined) {
+      ledger.adoptBumpedIdentity({ producerId: ended.producerId, producerEpoch: ended.producerEpoch });
+    }
     if (transactionResult) {
       for (const committedOffset of offsetsToMarkCommitted) cluster.markOffsetAsCommitted(committedOffset);
     }
     stateMachine.transitionTo(TRANSACTION_STATES.READY);
 
-    // KIP-890 part 2: transaction V2 bumps the producer epoch on every transaction (not just on
-    // fencing recovery), so the next transaction starts from a fresh epoch.
-    if (isTransactionV2Enabled() || ledger.isEpochBumpRequested()) {
+    if (ledger.isEpochBumpRequested()) {
       postTransactionBump = bumpEpochAfterTransaction().finally(() => {
         postTransactionBump = undefined;
       });
@@ -388,19 +412,23 @@ export function createTransactionSession({
   async function addOffsetsToTransaction({ consumerGroupId, topics }: SendOffsetsOptions): Promise<void> {
     // Kept from the start, so a call still running when its transaction ends cannot add to the next one.
     const transactionOffsets = offsetsToMarkCommitted;
+    const usesTransactionV2 = isTransactionV2Enabled();
 
-    await cluster.run(
-      coordinatorTarget(transactionalId, COORDINATOR_TYPES.TRANSACTION),
-      (transactionCoordinator) =>
-        transactionCoordinator.send(AddOffsetsToTxn, {
-          transactionalId,
-          producerId: ledger.getProducerId(),
-          producerEpoch: ledger.getProducerEpoch(),
-          groupId: consumerGroupId,
-        }),
-      { retrier: retry, retryOn: TRANSACTION_COORDINATOR_BUSY_ERRORS },
-    );
-
+    // KIP-890 part 2: under transaction version 2, TxnOffsetCommit v5 adds the group to the
+    // transaction itself, so the transaction needs EndTxn from here on, even if that request fails.
+    if (!usesTransactionV2) {
+      await cluster.run(
+        coordinatorTarget(transactionalId, COORDINATOR_TYPES.TRANSACTION),
+        (transactionCoordinator) =>
+          transactionCoordinator.send(AddOffsetsToTxn, {
+            transactionalId,
+            producerId: ledger.getProducerId(),
+            producerEpoch: ledger.getProducerEpoch(),
+            groupId: consumerGroupId,
+          }),
+        { retrier: retry, retryOn: TRANSACTION_COORDINATOR_BUSY_ERRORS },
+      );
+    }
     hasOffsetsAddedToTransaction = true;
 
     const requestTopics = topics.map(({ topic, partitions }) => ({
@@ -417,6 +445,7 @@ export function createTransactionSession({
           producerEpoch: ledger.getProducerEpoch(),
           groupId: consumerGroupId,
           topics: requestTopics,
+          isTransactionV2Enabled: usesTransactionV2,
         }),
       { retrier: retry, retryOn: TXN_OFFSET_COMMIT_RETRY_ON },
     );
@@ -432,6 +461,7 @@ export function createTransactionSession({
     transactionalId,
     ledger,
     begin,
+    isTransactionV2Enabled,
     enrollPartitions,
     sendFailed,
     flush: async () => {

@@ -4,6 +4,7 @@ import { KafkaBrokerNotFound, KafkaConnectionError, KafkaNonRetriableError, Kafk
 import type { Logger } from '../loggers/index';
 import { ENDPOINT_TYPES } from '../protocol/enums/endpoint-types';
 import type { BrokerVersions } from '../protocol/requests/index';
+import type { FinalizedFeatureLevels } from '../protocol/requests/api-versions/feature-fields';
 import type { ClusterMetadata } from '../protocol/requests/metadata/shared';
 import { arrayDiff } from '../utils/array-diff';
 import { shuffle } from '../utils/shuffle';
@@ -102,6 +103,8 @@ export class BrokerPool {
   metadata: ClusterMetadata | null = null;
   metadataExpireAt: number | null = null;
   versions: BrokerVersions | null = null;
+  /** The seed broker's finalized feature levels, read when the pool connects. */
+  finalizedFeatures: FinalizedFeatureLevels = {};
   readonly usingBootstrapControllers: boolean;
 
   /** Tail of the queue that serializes read-await-write updates of `brokers`. */
@@ -121,6 +124,7 @@ export class BrokerPool {
     connectionPool: Broker['connectionPool'];
     logger: Logger;
     versions?: BrokerVersions | null;
+    finalizedFeatures?: FinalizedFeatureLevels;
     nodeId?: number | null;
     clusterId?: string | null;
   }) => Broker;
@@ -172,6 +176,7 @@ export class BrokerPool {
       try {
         await this.seedBroker!.connect();
         this.versions = this.seedBroker!.versions;
+        this.finalizedFeatures = this.seedBroker!.finalizedFeatures;
       } catch (e) {
         const error = e as Error & { retriable?: boolean };
         const isMisrouted = isRebootstrapRequired(error);
@@ -205,6 +210,7 @@ export class BrokerPool {
     this.brokers = {};
     this.metadata = null;
     this.versions = null;
+    this.finalizedFeatures = {};
   }
 
   removeBroker({ host, port }: { host: string; port: number }): void {
@@ -285,6 +291,7 @@ export class BrokerPool {
           nextBrokers[key] = this.#createBroker({
             logger: this.rootLogger,
             versions: this.versions,
+            finalizedFeatures: this.finalizedFeatures,
             connectionPool: await this.connectionPoolBuilder.build({ host, port, rack }),
             nodeId,
             clusterId,
@@ -418,6 +425,7 @@ export class BrokerPool {
       const broker = this.#createBroker({
         logger: this.rootLogger,
         versions: this.versions,
+        finalizedFeatures: this.finalizedFeatures,
         connectionPool: await this.connectionPoolBuilder.build(endpoint),
         nodeId: endpoint.nodeId,
         clusterId: this.#expectedClusterId(metadata),

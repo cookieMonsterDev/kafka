@@ -486,6 +486,12 @@ export const testIfKafkaAtLeast_4_4 = testIfKafkaVersion('4.4', kafkaVersionAtLe
 /** Transactions exist from Kafka 0.11; transaction V2 (KIP-890, `AddPartitionsToTxn` skip) takes over from Kafka 4.0. */
 export const testIfKafkaTransactionV1 = kafkaVersionAtLeast('0.11') && kafkaVersionAtMost('3.6') ? it : it.skip;
 
+/**
+ * Transaction version 2 (KIP-890 part 2): the Kafka 4.0+ stacks here are formatted with
+ * `transaction.version` 2, so a transaction bumps the producer epoch through EndTxn v5.
+ */
+export const testIfKafkaTransactionV2 = testIfKafkaAtLeast_4_0;
+
 export {
   DEFAULT_KAFKA_VERSION,
   getKafkaVersion,

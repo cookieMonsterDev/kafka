@@ -112,6 +112,16 @@ every coordinator an admin call needs, such as `admin.describeGroups`,
 broker gets one request per distinct ID. v5 (`TRANSACTION_ABORTABLE`, KIP-890) and v6
 (share coordinator keys, KIP-932, which only brokers look up) are not sent.
 
+**Offset lookups.** ListOffsets (key 2) v0–v11. `admin.fetchTopicOffsets`
+takes an `offsetSpec` from `OffsetSpecs`: max timestamp (v7, Kafka 3.0), earliest
+local offset (v8, 3.5), latest tiered offset (v9, 3.9, KIP-1005), and earliest
+pending upload offset (v11, 4.2, KIP-1023). A spec the broker is too old for
+throws `KafkaServerDoesNotSupportApiKey`. The same check covers
+`admin.fetchTopicOffsetsByTimestamp` and `kafka topic offsets --time max-timestamp`:
+on a broker older than 3.0, the max timestamp lookup throws instead of being read as
+a timestamp. From v10 (Kafka 4.0, KIP-1075) the request carries the client's
+`requestTimeout` as the broker's limit for reading tiered storage.
+
 **Consumer.** Range, RoundRobin, Sticky, and CooperativeSticky are built in
 (`PartitionAssigners`). The default assigner is still round-robin. Classic
 JoinGroup/SyncGroup remains the default membership protocol. Fetch uses

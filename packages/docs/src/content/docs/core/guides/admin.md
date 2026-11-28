@@ -55,6 +55,30 @@ The method returns **one page**. Pass `nextCursor` back to continue; it does
 not loop internally. Topics are selected by name (optional `topicId` on input
 is accepted and ignored on the wire).
 
+### Tiered storage offsets
+
+With [tiered storage](https://kafka.apache.org/44/operations/tiered-storage/),
+`fetchTopicOffsets` can also report where each partition's data sits. Pass an
+`offsetSpec` from `OffsetSpecs`; `offset` then holds that offset next to `high`
+and `low`:
+
+```ts
+import { OffsetSpecs } from '@cookiemonsterdev/kafka-core';
+
+const offsets = await admin.fetchTopicOffsets('events', { offsetSpec: OffsetSpecs.LATEST_TIERED });
+for (const { partition, offset } of offsets) {
+  console.log(partition, offset === -1n ? 'nothing in tiered storage' : offset);
+}
+```
+
+`EARLIEST_LOCAL` (Kafka 3.5+) is the first offset on the leader's local disk,
+`LATEST_TIERED` (3.9+) the last offset copied to tiered storage, and
+`EARLIEST_PENDING_UPLOAD` (4.2+) the first offset not copied yet. Without tiered
+storage, `EARLIEST_LOCAL` equals `low` and the other two are `-1n`. An older
+broker throws `KafkaServerDoesNotSupportApiKey`. On Kafka 4.0+ the broker waits
+on tiered storage for up to the client's `requestTimeout` before it fails the
+lookup with `REQUEST_TIMED_OUT`.
+
 ## Configs
 
 Prefer `incrementalAlterConfigs` (Kafka 2.3+). `alterConfigs` remains for older

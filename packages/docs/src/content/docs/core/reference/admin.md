@@ -27,14 +27,27 @@ Offset inputs (`seek`, `deleteTopicRecords`, `setOffsets`) accept
 
 ## Offsets
 
-| Method                                                | Notes                               |
-| ----------------------------------------------------- | ----------------------------------- |
-| `fetchTopicOffsets(topic)`                            | `offset`, `high`, `low` as `bigint` |
-| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                     |
-| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                     |
-| `setOffsets({ groupId, topic, partitions })`          |                                     |
-| `resetOffsets({ groupId, topic, earliest? })`         |                                     |
-| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)               |
+| Method                                                | Notes                                                            |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| `fetchTopicOffsets(topic, { offsetSpec? })`           | `offset`, `high`, `low` as `bigint`; `offsetSpec` picks `offset` |
+| `fetchTopicOffsetsByTimestamp(topic, timestamp?)`     |                                                                  |
+| `fetchOffsets({ groupId, topics?, resolveOffsets? })` |                                                                  |
+| `setOffsets({ groupId, topic, partitions })`          |                                                                  |
+| `resetOffsets({ groupId, topic, earliest? })`         |                                                                  |
+| `deleteGroupOffsets({ groupId, topics })`             | OffsetDelete (key 47)                                            |
+
+`offsetSpec` is one of `OffsetSpecs` and defaults to `OffsetSpecs.LATEST`. Each
+spec needs a minimum ListOffsets (key 2) version and throws
+`KafkaServerDoesNotSupportApiKey` on an older broker:
+
+| `OffsetSpecs`             | `offset` holds                                                 | Kafka |
+| ------------------------- | -------------------------------------------------------------- | ----- |
+| `LATEST`                  | The high watermark (last stable offset under `read_committed`) | any   |
+| `EARLIEST`                | The log start offset                                           | any   |
+| `MAX_TIMESTAMP`           | The offset of the message with the largest timestamp           | 3.0+  |
+| `EARLIEST_LOCAL`          | The first offset on the leader's local disk                    | 3.5+  |
+| `LATEST_TIERED`           | The last offset in tiered storage, or `-1n`                    | 3.9+  |
+| `EARLIEST_PENDING_UPLOAD` | The first offset not yet in tiered storage, or `-1n`           | 4.2+  |
 
 ## Groups, configs, cluster
 

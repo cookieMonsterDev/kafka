@@ -1,6 +1,6 @@
 import { supportsBatchedFindCoordinator } from '../broker/capabilities';
 import { Broker } from '../broker/index';
-import { EARLIEST_OFFSET, LATEST_OFFSET } from '../constants';
+import { EARLIEST_OFFSET, INT_32_MAX_VALUE, LATEST_OFFSET } from '../constants';
 import {
   KafkaBrokerNotFound,
   KafkaError,
@@ -126,6 +126,7 @@ export class Cluster {
   readonly mutatingTargetTopics: Lock;
 
   readonly #committedOffsetsByGroup: CommittedOffsetsByGroup;
+  readonly #requestTimeout: number;
   readonly #connect: () => Promise<void>;
   readonly #refreshMetadata: () => Promise<void>;
   readonly #refreshMetadataIfNecessary: () => Promise<void>;
@@ -188,6 +189,7 @@ export class Cluster {
 
     this.targetTopics = new Set();
     this.mutatingTargetTopics = new Lock({ description: 'updating target topics', timeout: requestTimeout });
+    this.#requestTimeout = requestTimeout;
     this.isolationLevel = isolationLevel;
     this.allowAutoTopicCreation = allowAutoTopicCreation !== false;
     this.brokerPool = new BrokerPool({
@@ -743,6 +745,9 @@ export class Cluster {
 
       const { responses: topicOffsets } = await broker.send(ListOffsets, {
         isolationLevel: this.isolationLevel,
+        // Bounds a tiered storage read on the broker by this client's requestTimeout; the field is
+        // an INT32, which a larger requestTimeout would overflow.
+        timeoutMs: Math.min(this.#requestTimeout, INT_32_MAX_VALUE),
         topics: Object.entries(perTopic).map(([topic, partitions]) => ({
           topic,
           partitions: partitions.map(({ partition }) => ({ partition, timestamp: topicTimestamps.get(topic) })),

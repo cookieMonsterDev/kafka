@@ -86,6 +86,12 @@ The offset just after the last message replicated to all in-sync replicas: the e
 **Last stable offset**:
 The offset before which no transaction is still open: the end of what a `read_committed` consumer may read.
 
+**Tiered storage**:
+Keeping a topic's older log segments in remote storage, such as an object store, while the leader's local disk keeps only the recent ones (KIP-405).
+
+**Offset spec**:
+Which offset an offset lookup returns for each partition, such as the earliest, the latest, the one with the largest timestamp, or a tiered storage boundary.
+
 **Isolation level**:
 Whether a consumer reads messages from open or aborted transactions (`read_uncommitted`) or only committed ones (`read_committed`).
 

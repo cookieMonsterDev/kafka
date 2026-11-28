@@ -6,6 +6,7 @@ import type { AclOperationType } from '../protocol/enums/acl-operation-types';
 import type { AclPermissionType } from '../protocol/enums/acl-permission-types';
 import type { AclResourceType } from '../protocol/enums/acl-resource-types';
 import type { ConfigResourceType } from '../protocol/enums/config-resource-types';
+import type { OffsetSpec } from '../protocol/enums/offset-specs';
 import type { ResourcePatternType } from '../protocol/enums/resource-pattern-types';
 import type { AlterClientQuotasResponseV1Body } from '../protocol/requests/alter-client-quotas/v1/response';
 import type { AlterConfigsResponseV1Body } from '../protocol/requests/alter-configs/v1/response';
@@ -409,9 +410,18 @@ export interface SeekInput {
 
 export interface TopicOffset {
   partition: number;
+  /** The offset `offsetSpec` selects; `-1n` when the broker has none, such as without tiered storage. */
   offset: bigint;
   high: bigint;
   low: bigint;
+}
+
+export interface FetchTopicOffsetsOptions {
+  /**
+   * Which offset `offset` holds for each partition. One of `OffsetSpecs`; defaults to
+   * `OffsetSpecs.LATEST`, the high watermark.
+   */
+  offsetSpec?: OffsetSpec;
 }
 
 export interface FetchOffsetsPartition {
@@ -609,7 +619,12 @@ export interface Admin {
     topics?: string[];
     resolveOffsets?: boolean;
   }) => Promise<{ topic: string; partitions: FetchOffsetsPartition[] }[]>;
-  fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
+  /**
+   * The high and low watermark of every partition of `topic`, plus the offset `offsetSpec` selects.
+   * A spec the broker is too old for throws `KafkaServerDoesNotSupportApiKey`; `OffsetSpecs` lists
+   * the version each one needs.
+   */
+  fetchTopicOffsets: (topic: string, options?: FetchTopicOffsetsOptions) => Promise<TopicOffset[]>;
   fetchTopicOffsetsByTimestamp: (topic: string, timestamp?: OffsetInput) => Promise<SeekEntry[]>;
   setOffsets: (options: { groupId: string; topic: string; partitions: SeekInput[] }) => Promise<void>;
   resetOffsets: (options: { groupId: string; topic: string; earliest?: boolean }) => Promise<void>;

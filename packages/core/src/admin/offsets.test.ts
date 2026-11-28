@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Cluster } from '../cluster/index';
 import { KafkaNonRetriableError } from '../errors';
+import { OFFSET_SPECS } from '../protocol/enums/offset-specs';
 import { createLogger, LOG_LEVELS } from '../loggers/index';
 import { createOffsetsApi } from './offsets';
 import { withSend } from '../broker/test-send';
@@ -88,6 +89,63 @@ describe('admin/offsets', () => {
         expect.objectContaining({ retryOn: STALE_METADATA_ERRORS }),
       );
       expect(cluster.recover).toHaveBeenCalledWith(error);
+    });
+
+    it('looks up the offsetSpec first and returns it as offset next to the watermarks', async () => {
+      const partitionOffsets = (offsets: readonly bigint[]) => [
+        { topic: 'orders', partitions: offsets.map((offset, partition) => ({ partition, offset })) },
+      ];
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }, { partitionId: 1 }]),
+          fetchTopicsOffset: vi
+            .fn()
+            .mockResolvedValueOnce(partitionOffsets([7n, -1n]))
+            .mockResolvedValueOnce(partitionOffsets([10n, 20n]))
+            .mockResolvedValueOnce(partitionOffsets([0n, 5n])),
+        },
+      );
+
+      await expect(
+        makeApi(cluster).fetchTopicOffsets('orders', { offsetSpec: OFFSET_SPECS.LATEST_TIERED }),
+      ).resolves.toEqual([
+        { partition: 0, offset: 7n, high: 10n, low: 0n },
+        { partition: 1, offset: -1n, high: 20n, low: 5n },
+      ]);
+      expect(cluster.fetchTopicsOffset).toHaveBeenNthCalledWith(1, [
+        { topic: 'orders', fromTimestamp: -5n, partitions: [{ partition: 0 }, { partition: 1 }] },
+      ]);
+      expect(cluster.fetchTopicsOffset).toHaveBeenCalledTimes(3);
+    });
+
+    it('answers OFFSET_SPECS.EARLIEST from the low watermark lookup', async () => {
+      const cluster = fakeRunCluster(
+        {},
+        {
+          addTargetTopic: vi.fn().mockResolvedValue(undefined),
+          refreshMetadataIfNecessary: vi.fn().mockResolvedValue(undefined),
+          findTopicPartitionMetadata: vi.fn().mockReturnValue([{ partitionId: 0 }]),
+          fetchTopicsOffset: vi
+            .fn()
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 10n }] }])
+            .mockResolvedValueOnce([{ topic: 'orders', partitions: [{ partition: 0, offset: 3n }] }]),
+        },
+      );
+
+      await expect(
+        makeApi(cluster).fetchTopicOffsets('orders', { offsetSpec: OFFSET_SPECS.EARLIEST }),
+      ).resolves.toEqual([{ partition: 0, offset: 3n, high: 10n, low: 3n }]);
+      expect(cluster.fetchTopicsOffset).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects an offsetSpec that is not one of OFFSET_SPECS', async () => {
+      const api = makeApi({});
+      await expect(api.fetchTopicOffsets('orders', { offsetSpec: 1_735_689_600_000n as never })).rejects.toThrow(
+        'Invalid offsetSpec 1735689600000',
+      );
     });
   });
 

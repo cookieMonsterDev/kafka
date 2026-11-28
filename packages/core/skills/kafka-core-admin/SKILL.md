@@ -89,12 +89,20 @@ overwrites them with its next commit.
 ### Topic offsets and partitions
 
 ```ts
+import { OffsetSpecs } from '@cookiemonsterdev/kafka-core';
+
 const watermarks = await admin.fetchTopicOffsets('events'); // offset, high, low as bigint
+const tiered = await admin.fetchTopicOffsets('events', { offsetSpec: OffsetSpecs.LATEST_TIERED });
 await admin.createPartitions({ topicPartitions: [{ topic: 'events', count: 6 }] });
 ```
 
 `count` is the new total. Partitions can only grow, and growing them changes which partition each
 key maps to.
+
+`offsetSpec` picks what `offset` holds; use the `OffsetSpecs` constants, not raw negative numbers.
+`EARLIEST_LOCAL` (3.5+), `LATEST_TIERED` (3.9+), and `EARLIEST_PENDING_UPLOAD` (4.2+) describe
+tiered storage. The last two are `-1n` for a partition without it. An older broker throws
+`KafkaServerDoesNotSupportApiKey`.
 
 ### Check broker support before newer APIs
 

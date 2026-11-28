@@ -3,6 +3,8 @@ import { createAdmin } from '../../../src/admin/index';
 import { EARLIEST_OFFSET } from '../../../src/constants';
 import { createConsumer } from '../../../src/consumer/index';
 import { createProducer } from '../../../src/producer/index';
+import { KafkaServerDoesNotSupportApiKey } from '../../../src/errors';
+import { OFFSET_SPECS } from '../../../src/protocol/enums/offset-specs';
 import {
   createCluster,
   createModPartitioner,
@@ -10,6 +12,8 @@ import {
   generateMessages,
   newLogger,
   secureRandom,
+  testIfKafkaAtLeast_4_2,
+  testIfKafkaAtMost_3_6,
   waitForConsumerToJoinGroup,
   waitForMessages,
 } from '../../helpers/index';
@@ -119,6 +123,35 @@ describe('admin.offsets', () => {
 
     const fromFuture = await admin.fetchTopicOffsetsByTimestamp(topicName, 4_102_444_800_000n);
     expect(fromFuture).toEqual([{ partition: 0, offset: 5n }]);
+  });
+
+  testIfKafkaAtLeast_4_2('looks up the tiered storage offsets of a topic without tiered storage', async () => {
+    const cluster = createCluster();
+    admin = createAdmin({ cluster, logger: newLogger() });
+    producer = createProducer({ cluster, logger: newLogger() });
+    await admin.connect();
+    await producer.connect();
+    await producer.send({ acks: 1, topic: topicName, messages: generateMessages({ number: 5 }) });
+
+    const watermarks = { partition: 0, high: 5n, low: 0n };
+    await expect(admin.fetchTopicOffsets(topicName, { offsetSpec: OFFSET_SPECS.EARLIEST_LOCAL })).resolves.toEqual([
+      { ...watermarks, offset: 0n },
+    ]);
+    await expect(admin.fetchTopicOffsets(topicName, { offsetSpec: OFFSET_SPECS.LATEST_TIERED })).resolves.toEqual([
+      { ...watermarks, offset: -1n },
+    ]);
+    await expect(
+      admin.fetchTopicOffsets(topicName, { offsetSpec: OFFSET_SPECS.EARLIEST_PENDING_UPLOAD }),
+    ).resolves.toEqual([{ ...watermarks, offset: -1n }]);
+  });
+
+  testIfKafkaAtMost_3_6('rejects a tiered storage offset spec the broker is too old for', async () => {
+    admin = createAdmin({ cluster: createCluster(), logger: newLogger() });
+    await admin.connect();
+
+    await expect(
+      admin.fetchTopicOffsets(topicName, { offsetSpec: OFFSET_SPECS.EARLIEST_PENDING_UPLOAD }),
+    ).rejects.toThrow(KafkaServerDoesNotSupportApiKey);
   });
 
   it('sets a committed offset that a new consumer member picks up', async () => {

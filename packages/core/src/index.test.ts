@@ -12,6 +12,7 @@ import {
   Kafka,
   KafkaError,
   KafkaNonRetriableError,
+  OffsetSpecs,
   PartitionAssigners,
   Partitioners,
   ResourcePatternTypes,
@@ -61,6 +62,8 @@ describe('public surface', () => {
     expect(ResourcePatternTypes.LITERAL).toBe(3);
     expect(ScramMechanisms.SCRAM_SHA_256).toBe(1);
     expect(ScramMechanisms.SCRAM_SHA_512).toBe(2);
+    expect(OffsetSpecs.LATEST_TIERED).toBe(-5n);
+    expect(Object.isFrozen(OffsetSpecs)).toBe(true);
   });
 
   it('exports the CRC32C implementation diagnostic', () => {

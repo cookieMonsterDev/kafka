@@ -7,11 +7,12 @@ import { STALE_METADATA_ERRORS } from '../cluster/error-classifier';
 import { retrier as createRetrier } from '../retry/index';
 import type { AdminContext } from './helpers';
 import { findTopicPartitions, isConsumerGroupIdle } from './helpers';
-import type { FetchOffsetsPartition, SeekEntry, SeekInput, TopicOffset } from './types';
+import type { FetchOffsetsPartition, FetchTopicOffsetsOptions, SeekEntry, SeekInput, TopicOffset } from './types';
 import { OffsetFetch } from '../protocol/requests/offset-fetch/index';
+import { OFFSET_SPECS } from '../protocol/enums/offset-specs';
 
 export interface OffsetsApi {
-  fetchTopicOffsets: (topic: string) => Promise<TopicOffset[]>;
+  fetchTopicOffsets: (topic: string, options?: FetchTopicOffsetsOptions) => Promise<TopicOffset[]>;
   fetchTopicOffsetsByTimestamp: (topic: string, timestamp?: bigint | number | string) => Promise<SeekEntry[]>;
   fetchOffsets: (options: {
     groupId: string;
@@ -22,6 +23,8 @@ export interface OffsetsApi {
   setOffsets: (options: { groupId: string; topic: string; partitions: SeekInput[] }) => Promise<void>;
 }
 
+const OFFSET_SPEC_VALUES: ReadonlySet<bigint> = new Set(Object.values(OFFSET_SPECS));
+
 function toTimestamp(timestamp: bigint | number | string | undefined): bigint | undefined {
   if (timestamp == null) return undefined;
   if (typeof timestamp === 'bigint') return timestamp;
@@ -31,9 +34,15 @@ function toTimestamp(timestamp: bigint | number | string | undefined): bigint | 
 export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): OffsetsApi {
   const retrier = createRetrier(retry);
 
-  const fetchTopicOffsets = async (topic: string): Promise<TopicOffset[]> => {
+  const fetchTopicOffsets = async (
+    topic: string,
+    { offsetSpec = OFFSET_SPECS.LATEST }: FetchTopicOffsetsOptions = {},
+  ): Promise<TopicOffset[]> => {
     if (!topic || typeof topic !== 'string') {
       throw new KafkaNonRetriableError(`Invalid topic ${topic}`);
+    }
+    if (!OFFSET_SPEC_VALUES.has(offsetSpec)) {
+      throw new KafkaNonRetriableError(`Invalid offsetSpec ${String(offsetSpec)}`);
     }
 
     // The partition leaders are looked up inside, so `run` resolves no target; a topic the
@@ -47,6 +56,11 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
         const metadata = cluster.findTopicPartitionMetadata(topic);
         const partitions = metadata.map((entry) => ({ partition: entry.partitionId }));
 
+        // First, so a spec the broker is too old for fails before the watermark lookups.
+        const isWatermark = offsetSpec === OFFSET_SPECS.LATEST || offsetSpec === OFFSET_SPECS.EARLIEST;
+        const specOffsets = isWatermark
+          ? undefined
+          : await cluster.fetchTopicsOffset([{ topic, fromTimestamp: offsetSpec, partitions }]);
         const high = await cluster.fetchTopicsOffset([{ topic, fromBeginning: false, partitions }]);
         const low = await cluster.fetchTopicsOffset([{ topic, fromBeginning: true, partitions }]);
 
@@ -54,10 +68,12 @@ export function createOffsetsApi({ cluster, rootLogger, retry }: AdminContext): 
         const lowTopic = low.pop();
         const highPartitions = highTopic?.partitions ?? [];
         const lowPartitions = lowTopic?.partitions ?? [];
+        const watermarkPartitions = offsetSpec === OFFSET_SPECS.EARLIEST ? lowPartitions : highPartitions;
+        const specPartitions = specOffsets === undefined ? watermarkPartitions : (specOffsets.pop()?.partitions ?? []);
 
         return highPartitions.map(({ partition, offset }) => ({
           partition,
-          offset,
+          offset: specPartitions.find((entry) => entry.partition === partition)!.offset,
           high: offset,
           low: lowPartitions.find((entry) => entry.partition === partition)!.offset,
         }));
